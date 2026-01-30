@@ -52,21 +52,11 @@
         .section-title {
             font-weight: 700;
             margin-bottom: 20px;
-            border-right: 4px solid #fe7900;
+            border-right: 4px solid var(--primary-500);
             padding-right: 10px;
         }
 
-        .table-custom thead th {
-            background-color: #fe7900;
-            color: white;
-            font-weight: 500;
-            border: none;
-        }
-
-        .table-custom tbody tr:hover {
-            background-color: #fff3e0;
-        }
-
+        /* .table-custom من sidebar.css (هوية cockpit) */
         .rank-badge {
             width: 30px;
             height: 30px;
@@ -399,7 +389,7 @@
                 </div>
                 <!-- Update Button -->
                 <div class="col-md-1 col-lg-1">
-                    <button class="btn btn-primary btn-sm w-100 fw-bold" onclick="updatePage()">
+                    <button class="btn-primary w-100 fw-bold" onclick="updatePage()">
                         <span class="d-none d-md-inline">🔄</span>
                         <span class="d-md-none">تحديث</span>
                     </button>
@@ -620,7 +610,7 @@
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                        <button type="button" class="btn-secondary" data-bs-dismiss="modal">إلغاء</button>
                         <button type="button" class="btn btn-success fw-bold" onclick="exportSelectedEmployees()">
                             📥 تصدير المحددين
                         </button>

@@ -49,26 +49,16 @@
         .section-title {
             font-weight: 700;
             margin-bottom: 20px;
-            border-right: 4px solid #fe7900;
+            border-right: 4px solid var(--primary-500);
             padding-right: 10px;
         }
 
-        .table-custom thead th {
-            background-color: #fe7900;
-            color: white;
-            font-weight: 500;
-            border: none;
-        }
-
-        .table-hover tbody tr:hover {
-            background-color: #fff3e0;
-            cursor: pointer;
-        }
+        /* .table-custom و .table-hover من sidebar.css (هوية cockpit) */
 
         .stat-card {
-            background: linear-gradient(135deg, #fe7900 0%, #ff9933 100%);
+            background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-400) 100%);
             color: white;
-            border-radius: 12px;
+            border-radius: var(--radius-2xl);
             padding: 20px;
             text-align: center;
             height: 100%;

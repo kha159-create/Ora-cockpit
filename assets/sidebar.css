@@ -1,7 +1,7 @@
-/* ========== Orange Dashboard - Cockpit-style Layout (RTL) ========== */
+/* ========== Orange Dashboard - هوية Cockpit (من مشروع cockpit) ========== */
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap');
 
-/* Design tokens from cockpit */
+/* Design tokens من cockpit — نفس الهوية في كل الصفحات */
 :root {
     --sidebar-width: 268px;
     --primary-50: #fff7ed;
@@ -12,6 +12,8 @@
     --primary-500: #f97316;
     --primary-600: #ea580c;
     --primary-700: #c2410c;
+    --primary-800: #9a3412;
+    --primary-900: #7c2d12;
     --neutral-50: #f8fafc;
     --neutral-100: #f1f5f9;
     --neutral-200: #e2e8f0;
@@ -26,10 +28,24 @@
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
     --radius-lg: 0.75rem;
     --radius-xl: 1rem;
     --radius-2xl: 1.5rem;
     --sidebar-active: #ea580c;
+    /* هوية cockpit */
+    --background: var(--neutral-50);
+    --card-background: #ffffff;
+    --text-heading: var(--neutral-900);
+    --text-body: var(--neutral-700);
+    --text-muted: var(--neutral-500);
+    --border-color: var(--neutral-200);
+    --input-border: var(--neutral-300);
+    --secondary: var(--neutral-100);
+    --secondary-hover: var(--neutral-200);
+    --accent-red: #ef4444;
 }
 
 body.app-with-sidebar {
@@ -344,6 +360,176 @@ body.app-with-sidebar {
     box-shadow: var(--shadow-md);
     border: 1px solid var(--neutral-200);
     padding: 1.25rem;
+}
+
+/* ========== هوية cockpit: أزرار، مدخلات، جداول، KPI حديث ========== */
+.btn-primary {
+    padding: 0.75rem 1.5rem;
+    color: #fff;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    box-shadow: var(--shadow-md);
+    transition: all 0.2s ease;
+}
+.btn-primary:hover {
+    background: linear-gradient(135deg, #ea580c, #dc2626);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-1px);
+}
+.btn-primary:disabled {
+    background: #fed7aa;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-secondary {
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    border-radius: var(--radius-lg);
+    background: var(--secondary);
+    color: var(--text-body);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s ease;
+}
+.btn-secondary:hover {
+    background: var(--secondary-hover);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+.btn-danger {
+    padding: 0.75rem 1.5rem;
+    color: #fff;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, var(--accent-red), #dc2626);
+    box-shadow: var(--shadow-md);
+    transition: all 0.2s ease;
+}
+.btn-danger:hover {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-1px);
+}
+
+.label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--text-body);
+}
+
+.input {
+    display: block;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-lg);
+    background: var(--card-background);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s ease;
+}
+.input:focus {
+    outline: none;
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+}
+
+/* جداول — نفس هوية cockpit */
+.table-cockpit thead th,
+.th-cockpit {
+    padding: 1rem 1.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: linear-gradient(135deg, var(--neutral-50), var(--neutral-100));
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+}
+html[dir="rtl"] .table-cockpit thead th,
+html[dir="rtl"] .th-cockpit { text-align: right; }
+
+.table-cockpit tbody td,
+.td-cockpit {
+    padding: 1rem 1.5rem;
+    font-size: 0.875rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-body);
+}
+.table-cockpit tbody tr:last-child td,
+.table-cockpit tbody tr:last-child .td-cockpit { border-bottom: 0; }
+.table-cockpit tbody tr:hover {
+    background-color: var(--primary-50);
+}
+
+/* توافق: .table-custom نفس هوية cockpit */
+.table-custom thead th,
+.table-custom th {
+    padding: 1rem 1.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: linear-gradient(135deg, var(--neutral-50), var(--neutral-100)) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-muted) !important;
+}
+.table-custom tbody tr:hover {
+    background-color: var(--primary-50) !important;
+}
+.table-custom tbody td {
+    color: var(--text-body);
+}
+
+/* بطاقة KPI حديثة (cockpit) */
+.modern-kpi-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius-2xl);
+    background: linear-gradient(135deg, var(--card-background), var(--primary-50));
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--neutral-200);
+    padding: 1.25rem;
+    transition: all 0.3s ease;
+}
+.modern-kpi-card:hover {
+    box-shadow: var(--shadow-2xl);
+    border-color: var(--primary-200);
+    transform: translateY(-4px);
+}
+
+.kpi-icon-container {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem;
+    border-radius: var(--radius-xl);
+    color: #fff;
+    background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+    box-shadow: var(--shadow-md);
+}
+
+.kpi-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    line-height: 1.2;
+}
+
+.kpi-title {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    line-height: 1.4;
 }
 
 /* تسميات الأقسام الثانوية (مثل "أداء العام الحالي") */
