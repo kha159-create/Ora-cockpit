@@ -10,6 +10,9 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <!-- Sidebar layout -->
+    <link rel="stylesheet" href="assets/sidebar.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
         :root {
@@ -197,60 +200,44 @@
     </style>
 </head>
 
-<body>
+<body class="app-with-sidebar">
 
-    <!-- Top Bar -->
-    <nav class="navbar mb-4 sticky-top">
-        <div class="container-fluid position-relative">
-            <!-- Left: Brand -->
-            <span class="navbar-brand"><span class="brand-orange">ORANGE</span> DASHBOARD</span>
+    <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
+    <button type="button" class="sidebar-toggle" aria-label="فتح القائمة"><i class="fas fa-bars"></i></button>
 
-            <!-- Center: Today's Sales (Clickable) - DESKTOP ONLY -->
-            <div class="position-absolute top-50 start-50 translate-middle d-none d-md-block">
-                <button onclick="filterToday()"
-                    class="btn btn-white border shadow-sm d-flex align-items-center gap-2 px-3 py-2"
-                    title="اضغط لعرض مبيعات اليوم" style="border-radius: 50px;">
-                    <span class="fw-bold text-dark" style="font-size: 0.95rem;">
-                        🛒 مبيعات اليوم: <span class="text-primary today-sales-val">0</span>
-                    </span>
-                    <span class="text-muted border-start ps-2" style="font-size: 0.85rem;" id="lastUpdate">...</span>
-                </button>
-            </div>
-
-            <!-- Right: Actions -->
-            <div class="d-flex gap-2">
-                <!-- Mobile Today's Sales (Hidden on Desktop) -->
-                <button onclick="filterToday()"
-                    class="btn btn-light border btn-sm d-md-none fw-bold text-primary d-flex align-items-center gap-1">
-                    🛒 <span class="today-sales-val">0</span>
-                </button>
-
-                <!-- Mobile Widget Link -->
-                <a href="widget.html" class="btn btn-outline-warning btn-sm fw-bold" title="متابعة مبيعات اليوم">
-                    📱 <span class="d-none d-lg-inline">متابعة مبيعات اليوم</span>
-                </a>
-
-                <a href="employees.html" class="btn btn-outline-primary btn-sm fw-bold">
-                    👥 <span class="d-none d-lg-inline">أداء الموظفين</span>
-                </a>
-                <a href="product_analysis.html" class="btn btn-outline-primary btn-sm fw-bold">
-                    📦 <span class="d-none d-lg-inline">تحليل المنتجات</span>
-                </a>
-                <button onclick="openPdfModal()" class="btn btn-warning btn-sm fw-bold text-white">
-                    📄 <span class="d-none d-lg-inline">PDF</span>
-                </button>
-                <button onclick="showExcelModal()" class="btn btn-success btn-sm fw-bold text-white">
-                    📊 <span class="d-none d-lg-inline">Excel</span>
-                </button>
-                <!-- Target Setting (Sales Manager Only) -->
-                <button id="btnSetTarget" onclick="window.location.href='target_setting.html'"
-                    class="btn btn-primary btn-sm fw-bold text-white" style="display: none;">
-                    🎯 <span class="d-none d-lg-inline">Target</span>
-                </button>
-                <button onclick="logout()" class="btn btn-danger btn-sm fw-bold">خروج</button>
-            </div>
+    <aside class="sidebar">
+        <div class="sidebar-brand"><span class="brand-orange">ORANGE</span> DASHBOARD</div>
+        <nav class="sidebar-nav">
+            <a href="index.html" class="nav-link"><i class="fas fa-home"></i> الرئيسية</a>
+            <a href="employees.html" class="nav-link"><i class="fas fa-users"></i> أداء الموظفين</a>
+            <a href="product_analysis.html" class="nav-link"><i class="fas fa-box"></i> تحليل المنتجات</a>
+            <a href="branch_details.html" class="nav-link"><i class="fas fa-store"></i> تفاصيل الفروع</a>
+            <a href="target_setting.html" class="nav-link"><i class="fas fa-bullseye"></i> الأهداف</a>
+            <a href="chatbot.html" class="nav-link"><i class="fas fa-comments"></i> الشات بوت</a>
+            <a href="stagnant_products.html" class="nav-link"><i class="fas fa-pause-circle"></i> المنتجات الراكدة</a>
+            <a href="offers_analysis.html" class="nav-link"><i class="fas fa-tags"></i> تحليل العروض</a>
+            <a href="data_audit.html" class="nav-link"><i class="fas fa-clipboard-check"></i> تدقيق البيانات</a>
+            <a href="admin_targets.html" class="nav-link"><i class="fas fa-cog"></i> إعدادات الأهداف</a>
+            <a href="widget.html" class="nav-link"><i class="fas fa-chart-line"></i> متابعة مبيعات اليوم</a>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="#" class="nav-link" onclick="event.preventDefault(); logout(); return false;"><i class="fas fa-sign-out-alt"></i> خروج</a>
         </div>
-    </nav>
+    </aside>
+
+    <div class="app-wrap">
+        <main class="main-content">
+            <div class="main-topbar d-flex flex-wrap align-items-center gap-2">
+                <button onclick="filterToday()" class="btn btn-white border shadow-sm btn-sm d-flex align-items-center gap-2" title="اضغط لعرض مبيعات اليوم">
+                    <span class="fw-bold text-dark">مبيعات اليوم: <span class="text-primary today-sales-val">0</span></span>
+                    <span class="text-muted small" id="lastUpdate">...</span>
+                </button>
+                <a href="widget.html" class="btn btn-outline-warning btn-sm fw-bold">متابعة مبيعات اليوم</a>
+                <button onclick="openPdfModal()" class="btn btn-warning btn-sm fw-bold text-white">PDF</button>
+                <button onclick="showExcelModal()" class="btn btn-success btn-sm fw-bold text-white">Excel</button>
+                <button id="btnSetTarget" onclick="window.location.href='target_setting.html'" class="btn btn-primary btn-sm fw-bold text-white" style="display: none;">Target</button>
+            </div>
+            <div class="main-content-inner">
 
     <!-- jsPDF & Autotable -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -717,7 +704,10 @@
             </div>
         </div>
 
-    </div>
+    </div><!-- /container-fluid -->
+            </div><!-- /main-content-inner -->
+        </main><!-- /main-content -->
+    </div><!-- /app-wrap -->
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -1799,6 +1789,7 @@
             </div>
         </div>
     </div>
+    <script src="assets/sidebar.js"></script>
 </body>
 
 </html>

@@ -214,9 +214,11 @@
             color: white;
         }
     </style>
+    <link rel="stylesheet" href="assets/sidebar.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
-<body>
+<body class="app-with-sidebar">
 
     <!-- Login Overlay -->
     <div id="loginOverlay">
@@ -233,6 +235,32 @@
             <p id="loginError" style="color:red; display:none; margin-top:10px;">بيانات خاطئة</p>
         </div>
     </div>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <button type="button" class="sidebar-toggle" aria-label="فتح القائمة"><i class="fas fa-bars"></i></button>
+    <aside class="sidebar">
+        <div class="sidebar-brand"><span class="brand-orange">ORANGE</span> DASHBOARD</div>
+        <nav class="sidebar-nav">
+            <a href="index.html" class="nav-link"><i class="fas fa-home"></i> الرئيسية</a>
+            <a href="employees.html" class="nav-link"><i class="fas fa-users"></i> أداء الموظفين</a>
+            <a href="product_analysis.html" class="nav-link"><i class="fas fa-box"></i> تحليل المنتجات</a>
+            <a href="branch_details.html" class="nav-link"><i class="fas fa-store"></i> تفاصيل الفروع</a>
+            <a href="target_setting.html" class="nav-link"><i class="fas fa-bullseye"></i> الأهداف</a>
+            <a href="chatbot.html" class="nav-link"><i class="fas fa-comments"></i> الشات بوت</a>
+            <a href="stagnant_products.html" class="nav-link"><i class="fas fa-pause-circle"></i> المنتجات الراكدة</a>
+            <a href="offers_analysis.html" class="nav-link"><i class="fas fa-tags"></i> تحليل العروض</a>
+            <a href="data_audit.html" class="nav-link"><i class="fas fa-clipboard-check"></i> تدقيق البيانات</a>
+            <a href="admin_targets.html" class="nav-link"><i class="fas fa-cog"></i> إعدادات الأهداف</a>
+            <a href="widget.html" class="nav-link"><i class="fas fa-chart-line"></i> متابعة مبيعات اليوم</a>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="#" class="nav-link" onclick="event.preventDefault(); window.location.href='login.html'; return false;"><i class="fas fa-sign-out-alt"></i> خروج</a>
+        </div>
+    </aside>
+
+    <div class="app-wrap">
+        <main class="main-content">
+            <div class="main-content-inner">
 
     <!-- Main Content -->
     <div id="appContent" style="filter: blur(5px); pointer-events: none;">
@@ -254,8 +282,13 @@
         </div>
     </div>
 
+            </div><!-- /main-content-inner -->
+        </main><!-- /main-content -->
+    </div><!-- /app-wrap -->
+
     <!-- Logic Script -->
     <script src="admin_logic.js"></script>
+    <script src="assets/sidebar.js"></script>
 </body>
 
 </html>
