@@ -1,0 +1,15 @@
+# سجلات السينك
+sync_fork_log.txt
+
+# بايثون
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.venv/
+venv/
+
+# نظام
+.DS_Store
+Thumbs.db
+*.log
