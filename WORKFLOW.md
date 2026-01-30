@@ -1,5 +1,19 @@
 # Ora-cockpit — طريقة العمل والرفع
 
+## المسارات (لا نغيّرها ولا نربط مشاريع جديدة)
+
+| الدور | محلي | جت هب |
+|-------|------|--------|
+| **مشروعنا (نشتغل عليه)** | `C:\Users\Orange1\Desktop\Ora-cockpit` | https://github.com/kha159-create/Ora-cockpit |
+| **نأخذ منه التصاميم** | `C:\Users\Orange1\Desktop\cockpit` | — (مرجع فقط، لا ربط) |
+| **المشروع الأصلي (اللي ماخذين منه)** | `C:\Users\Orange1\Desktop\orangettdata222` | https://github.com/ALAAWF2/orange-dashboard |
+
+- **Ora-cockpit** = مشروعنا. كل التعديلات والرفع هنا.
+- **cockpit** = نستوحى منه التصاميم فقط (لا نغيّر مساره ولا نربطه).
+- **orangettdata222** = نسخة محلية من المشروع الأصلي orange-dashboard (اللي فوركناه).
+
+---
+
 ## الإعداد (تم ✓)
 - **origin** = الـ fork عندك: https://github.com/kha159-create/Ora-cockpit
 - **upstream** = المشروع الأصلي: https://github.com/ALAAWF2/orange-dashboard
