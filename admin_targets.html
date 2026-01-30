@@ -268,17 +268,17 @@
 
     <!-- Main Content -->
     <div id="appContent" style="filter: blur(5px); pointer-events: none;">
-        <div class="header">
+        <header class="header page-header" style="margin-bottom: var(--space-section, 1.5rem);">
             <div>
-                <h1>إدارة المستهدفات</h1>
-                <p style="color:var(--text-secondary); margin: 5px 0;">تحكم كامل بمستهدفات الفروع والموظفين</p>
+                <h1 class="page-title" style="color: var(--accent); margin: 0;">إدارة المستهدفات</h1>
+                <p class="page-subtitle" style="color: var(--text-secondary); margin: 5px 0;">تحكم كامل بمستهدفات الفروع والموظفين</p>
             </div>
             <div class="controls">
                 <label>الشهر:</label>
                 <input type="month" id="targetMonth">
                 <button class="refresh-btn" onclick="fetchData()">تحديث البيانات</button>
             </div>
-        </div>
+        </header>
 
         <div id="storesContainer" class="grid-container">
             <!-- Stores will be loaded here -->

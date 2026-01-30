@@ -195,8 +195,13 @@
 
     <div class="container-fluid px-4">
 
+        <header class="page-header">
+            <h1 class="page-title">تحليل العروض</h1>
+            <p class="page-subtitle">أداء العروض والخصومات حسب الفترة والمعرض</p>
+        </header>
+
         <!-- Filter Bar -->
-        <div class="filter-bar">
+        <div class="page-filters filter-bar">
             <div class="row align-items-center g-3">
                 <!-- Period Toggle -->
                 <div class="col-md-6">
@@ -267,7 +272,8 @@
         </div>
 
         <!-- Summary Stats -->
-        <div class="row mb-4" id="summaryStats">
+        <section class="page-section">
+        <div class="row" id="summaryStats">
             <div class="col-md-2">
                 <div class="stat-card">
                     <h6 class="opacity-75 small">إجمالي العروض</h6>
@@ -387,6 +393,7 @@
                 </table>
             </div>
         </div>
+        </section>
 
     </div>
 

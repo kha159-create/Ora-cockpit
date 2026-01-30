@@ -142,8 +142,14 @@
         }
     </script>
     <div class="container-fluid px-4">
+
+        <header class="page-header">
+            <h1 class="page-title">المنتجات الراكدة</h1>
+            <p class="page-subtitle">منتجات لم تُبَع خلال الفترة المحددة — حسب المعرض والمنطقة</p>
+        </header>
+
         <!-- Filter Bar -->
-        <div class="filter-bar">
+        <div class="page-filters filter-bar">
             <div class="row align-items-center g-3">
                 <div class="col-md-6">
                     <h5 class="mb-0 fw-bold text-muted">تصفية البيانات:</h5>
@@ -163,8 +169,10 @@
                 </div>
             </div>
         </div>
+
         <!-- Summary Stats -->
-        <div class="row mb-4" id="summaryStats">
+        <section class="page-section">
+        <div class="row" id="summaryStats">
             <div class="col-md-3">
                 <div class="stat-card">
                     <h6 class="opacity-75 small">عدد الأصناف الراكدة</h6>
@@ -190,8 +198,9 @@
                 </div>
             </div>
         </div>
+
         <!-- Stagnant Table -->
-        <div class="card-custom p-3">
+        <div class="cockpit-section card-custom p-3">
             <h5 class="section-title">📦 قائمة المنتجات الراكدة</h5>
             <div class="table-responsive">
                 <table class="table table-hover align-middle" id="stagnantTable">
@@ -219,6 +228,7 @@
                 </table>
             </div>
         </div>
+        </section>
     </div>
     <!-- Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

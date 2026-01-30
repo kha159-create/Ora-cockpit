@@ -102,13 +102,12 @@
         <main class="main-content">
             <div class="main-content-inner">
 
-    <div class="container mb-5">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <h2 class="fw-bold mb-0" id="branchName">جاري التحميل...</h2>
-                <small class="text-muted" id="reportDate"></small>
-            </div>
-        </div>
+    <div class="container-fluid px-4">
+        <header class="page-header">
+            <h1 class="page-title">تفاصيل الفرع</h1>
+            <p class="page-subtitle mb-2">مبيعات الأمس والشهر للموظفين — <span id="branchName">جاري التحميل...</span></p>
+            <small class="text-muted" id="reportDate"></small>
+        </header>
 
         <div id="loadingErrors" class="text-center my-5">
             <div class="spinner-border text-primary" role="status"></div>
@@ -116,6 +115,7 @@
         </div>
 
         <div id="content" style="display: none;">
+            <section class="page-section">
             <div class="row">
                 <!-- Left: Yesterday -->
                 <div class="col-lg-6 mb-4">
@@ -173,6 +173,7 @@
                     </div>
                 </div>
             </div>
+            </section>
         </div>
     </div>
 

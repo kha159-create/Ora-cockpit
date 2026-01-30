@@ -121,8 +121,14 @@
 
     <div class="container-fluid px-4">
 
+        <header class="page-header">
+            <h1 class="page-title">تحليل المنتجات</h1>
+            <p class="page-subtitle">أداء الفئات والمنتجات حسب الفترة والمعرض</p>
+        </header>
+
         <!-- Controls -->
-        <div class="row align-items-center mb-4">
+        <div class="page-filters">
+        <div class="row align-items-center g-2">
             <div class="col-md-6">
                 <!-- Period Toggle -->
                 <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
@@ -188,10 +194,12 @@
                 </div>
             </div>
         </div>
+        </div>
 
         <!-- Summary Section -->
+        <section class="page-section">
         <h5 class="section-title">ملخص أداء الفئات والمنتجات (Category & Product Performance)</h5>
-        <div class="row mb-4">
+        <div class="row">
             <!-- Top Products per Category -->
             <div class="col-md-6">
                 <div class="card-custom p-3" style="height: 450px; overflow-y: auto;">
@@ -236,10 +244,9 @@
                 </div>
             </div>
         </div>
+        </section>
 
     </div>
-
-
 
     <!-- Offers List Modal -->
     <div class="modal fade" id="offersListModal" tabindex="-1" aria-hidden="true">
