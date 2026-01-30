@@ -394,6 +394,15 @@
                     style="font-size: 0.95rem;"></span>
             </div>
 
+            <!-- فلتر مدير المنطقة -->
+            <div class="mb-3">
+                <label class="form-label small text-muted fw-bold mb-1">مدير المنطقة</label>
+                <select id="managerFilterWidget" class="form-select form-select-sm" onchange="renderWidget()"
+                    style="max-width: 280px;">
+                    <option value="all">الكل</option>
+                </select>
+            </div>
+
             <!-- KPI Cards -->
             <div class="row g-2 mb-3">
                 <div class="col-6">
@@ -500,22 +509,63 @@
             return true;
         }
 
-        // Get User Allowed Branches
+        // Populate Manager Filter (مدير المنطقة)
+        function populateManagerFilter() {
+            const sel = document.getElementById('managerFilterWidget');
+            if (!sel || !rawData || !rawData.store_meta) return;
+
+            const managers = new Set();
+            Object.values(rawData.store_meta).forEach(meta => {
+                if (meta && meta.manager && meta.manager !== 'online') {
+                    managers.add(meta.manager);
+                }
+            });
+
+            const currentVal = sel.value;
+            sel.innerHTML = '<option value="all">الكل</option>';
+            Array.from(managers).sort((a, b) => (a || '').localeCompare(b || '', 'ar')).forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.textContent = m;
+                sel.appendChild(opt);
+            });
+
+            if (currentVal && Array.from(managers).includes(currentVal)) {
+                sel.value = currentVal;
+            }
+            if (currentUser.role !== 'Admin' && currentUser.name) {
+                sel.value = currentUser.name;
+                sel.disabled = true;
+            } else {
+                sel.disabled = false;
+            }
+        }
+
+        // Get User Allowed Branches (respects manager filter)
         function getUserAllowedBranches() {
             if (!rawData || !rawData.store_meta) return [];
 
-            const storeIds = Object.keys(rawData.stores || {});
+            let storeIds = Object.keys(rawData.stores || {});
 
-            // Admin sees all
-            if (currentUser.role === 'Admin') {
-                return storeIds;
+            // By role: Admin sees all, others only their branches
+            if (currentUser.role !== 'Admin') {
+                storeIds = storeIds.filter(sid => {
+                    const meta = rawData.store_meta[sid];
+                    return meta && meta.manager === currentUser.name;
+                });
             }
 
-            // Filter by manager name
-            return storeIds.filter(sid => {
-                const meta = rawData.store_meta[sid];
-                return meta && meta.manager === currentUser.name;
-            });
+            // فلتر مدير المنطقة
+            const managerFilter = document.getElementById('managerFilterWidget');
+            const selectedManager = managerFilter ? managerFilter.value : 'all';
+            if (selectedManager && selectedManager !== 'all') {
+                storeIds = storeIds.filter(sid => {
+                    const meta = rawData.store_meta[sid];
+                    return meta && meta.manager === selectedManager;
+                });
+            }
+
+            return storeIds;
         }
 
         // Load Data
@@ -539,6 +589,7 @@
                     document.getElementById('lastUpdate').textContent = shortTime;
                 }
 
+                populateManagerFilter();
                 renderWidget();
             } catch (e) {
                 console.error('Error loading data:', e);
