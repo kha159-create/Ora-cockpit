@@ -228,6 +228,86 @@ body.app-with-sidebar {
     border-color: var(--primary-200);
 }
 
+/* ---------- Cockpit-style section cards (صفحة الموظفين / المعارض) ---------- */
+.cockpit-section {
+    background: #ffffff;
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--neutral-200);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.cockpit-section:last-child {
+    margin-bottom: 0;
+}
+
+/* Gradient summary bar — موظفين (أزرق) */
+.area-summary-card {
+    background: linear-gradient(to left, rgba(239, 246, 255, 0.9), rgba(219, 234, 254, 0.9));
+    border: 2px solid rgba(96, 165, 250, 0.5);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.area-summary-card.orange {
+    background: linear-gradient(to left, rgba(255, 237, 213, 0.9), rgba(254, 215, 170, 0.9));
+    border-color: rgba(249, 115, 22, 0.5);
+}
+
+.area-summary-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--neutral-900);
+    margin-bottom: 0.35rem;
+}
+
+.area-summary-meta {
+    font-size: 0.875rem;
+    color: var(--neutral-600);
+    margin-bottom: 0;
+}
+
+.area-summary-value {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--neutral-900);
+}
+
+/* تناسق الخط والحجم مع cockpit */
+.main-content-inner,
+.app-wrap {
+    font-size: 0.9375rem;
+}
+
+.section-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    border-right: 4px solid var(--primary-500);
+    padding-right: 0.75rem;
+}
+
+/* Employee 360 offcanvas — تناسق مع cockpit */
+.offcanvas .insight-card {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--neutral-200);
+}
+
+.offcanvas .insight-value {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--neutral-800);
+}
+
+.offcanvas .insight-label {
+    font-size: 0.875rem;
+    color: var(--neutral-600);
+}
+
 /* Mobile */
 .sidebar-overlay {
     display: none;

@@ -32,5 +32,10 @@ git merge upstream/main
 git push origin main
 ```
 
+## ⚠️ مهم — لا تضيع تعديلاتك
+- **لا تضغط أبداً على "Discard X commits" على GitHub** — هذا يمسح كوميتاتك من الـ fork.
+- **السحب يكون دائماً من جهازك:** `git fetch upstream` ثم `git merge upstream/main` (أو `git rebase upstream/main`) ثم `git push origin main`. بهذا التحديثات تروح لـ fork عندك فقط ولا ترسل شيء للمشروع الأصلي.
+- السكربت `sync_fork.bat` يسحب التحديثات تلقائياً كل 15 دقيقة (إذا فعّلت المهمة المجدولة).
+
 ---
 المجلد الجاهز للتعديل: `C:\Users\Orange1\Desktop\Ora-cockpit`

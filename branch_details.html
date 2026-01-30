@@ -13,11 +13,15 @@
             --orange-dark: #cc6100;
             --dark-bg: #1a1a1a;
             --card-radius: 12px;
+            --radius-2xl: 1.5rem;
+            --neutral-50: #f8fafc;
+            --neutral-200: #e2e8f0;
+            --neutral-900: #0f172a;
         }
 
         body {
             font-family: 'Cairo', sans-serif;
-            background-color: #f8f9fa;
+            background-color: var(--neutral-50, #f8f9fa);
         }
 
         .navbar {
@@ -31,18 +35,21 @@
             font-size: 1.5rem;
         }
 
-        .card {
-            border-radius: var(--card-radius);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-            transition: transform 0.2s;
-            border: none;
+        .card.branch-card {
+            border-radius: var(--radius-2xl, 1.5rem);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            border: 1px solid var(--neutral-200, #e2e8f0);
+            overflow: hidden;
         }
 
-        .card-header {
-            background: linear-gradient(45deg, var(--orange-primary), #ff9a3b);
-            color: white;
+        .card.branch-card .card-header {
+            background: linear-gradient(to left, rgba(255, 237, 213, 0.95), rgba(254, 215, 170, 0.95));
+            border: none;
+            border-bottom: 2px solid rgba(249, 115, 22, 0.4);
+            color: var(--neutral-900, #0f172a);
             font-weight: 700;
-            border-radius: var(--card-radius) var(--card-radius) 0 0 !important;
+            font-size: 1rem;
+            padding: 1rem 1.25rem;
         }
 
         .table thead th {
@@ -112,8 +119,8 @@
             <div class="row">
                 <!-- Left: Yesterday -->
                 <div class="col-lg-6 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header py-3">
+                    <div class="card branch-card h-100">
+                        <div class="card-header">
                             📅 مبيعات الأمس (<span id="dateYesterday">--</span>)
                         </div>
                         <div class="card-body p-0">
@@ -140,8 +147,8 @@
 
                 <!-- Right: Month to Date -->
                 <div class="col-lg-6 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header py-3 bg-secondary">
+                    <div class="card branch-card h-100">
+                        <div class="card-header">
                             📅 مبيعات الشهر (<span id="dateMonth">--</span>)
                         </div>
                         <div class="card-body p-0">
