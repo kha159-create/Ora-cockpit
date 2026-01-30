@@ -39,11 +39,35 @@ body.app-with-sidebar {
     transition: transform 0.25s ease, width 0.2s ease;
 }
 
+/* Brand: logo box + title */
 .sidebar-brand {
     padding: 1rem 1.25rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.sidebar-brand-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #fe7900, #ff9a3b);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 1rem;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(254, 121, 0, 0.35);
+    flex-shrink: 0;
+}
+
+.sidebar-brand-text {
     font-weight: 800;
     font-size: 1.1rem;
+    color: #fff;
+    line-height: 1.2;
 }
 
 .sidebar-brand .brand-orange {
@@ -54,31 +78,45 @@ body.app-with-sidebar {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 0.75rem 0;
+    padding: 0.75rem 0.5rem;
 }
 
 .sidebar-nav .nav-link {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.7rem 1.25rem;
+    padding: 0.7rem 1rem;
+    margin-bottom: 2px;
     color: var(--sidebar-text);
     text-decoration: none;
     font-weight: 500;
-    font-size: 0.95rem;
-    border-right: 3px solid transparent;
-    transition: background 0.2s, color 0.2s, border-color 0.2s;
+    font-size: 0.9rem;
+    border-radius: 12px;
+    border-right: none;
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+    position: relative;
 }
 
 .sidebar-nav .nav-link:hover {
-    background: var(--sidebar-hover);
+    background: rgba(254, 121, 0, 0.15);
     color: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .sidebar-nav .nav-link.active {
-    background: var(--sidebar-hover);
+    background: linear-gradient(90deg, rgba(254, 121, 0, 0.35), rgba(254, 121, 0, 0.15));
     color: var(--sidebar-active);
-    border-right-color: var(--sidebar-active);
+    box-shadow: 0 2px 10px rgba(254, 121, 0, 0.2);
+}
+
+.sidebar-nav .nav-link.active::before {
+    content: '';
+    position: absolute;
+    right: 0.75rem;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--sidebar-active);
 }
 
 .sidebar-nav .nav-link i,
@@ -87,6 +125,11 @@ body.app-with-sidebar {
     text-align: center;
     font-size: 1rem;
     opacity: 0.9;
+    flex-shrink: 0;
+}
+
+.sidebar-nav .nav-link.active i {
+    opacity: 1;
 }
 
 .sidebar-footer {
