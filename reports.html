@@ -12,8 +12,6 @@
         .report-card { border-radius: var(--radius-2xl); box-shadow: var(--shadow-lg); border: 1px solid var(--neutral-200); overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
         .report-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-xl); border-color: var(--primary-200); }
         .report-card .card-body { padding: 1.25rem; }
-        .report-card .card-title { font-weight: 700; color: var(--neutral-900); margin-bottom: 0.5rem; }
-        .report-card .card-text { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem; }
     </style>
 </head>
 
@@ -51,11 +49,9 @@
             <div class="main-topbar d-flex flex-wrap align-items-center justify-content-between gap-2 w-100">
                 <span class="fw-bold text-dark">التقارير</span>
                 <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span class="fw-bold text-dark">مبيعات اليوم: <span class="text-primary" id="reportsTodaySales">0</span></span>
-                    <span class="text-muted small" id="reportsLastUpdate">--:--</span>
-                    <a href="index.html" class="btn btn-warning btn-sm fw-bold text-white">PDF</a>
-                    <a href="index.html" class="btn btn-success btn-sm fw-bold text-white">Excel</a>
-                    <a href="widget.html" class="btn btn-outline-warning btn-sm fw-bold">متابعة مبيعات اليوم</a>
+                    <span class="fw-bold text-dark">آخر تحديث: <span class="text-primary" id="reportsLastUpdate">--:--</span></span>
+                    <a href="index.html#pdf" class="btn btn-warning btn-sm fw-bold text-white">PDF</a>
+                    <a href="index.html#excel" class="btn btn-success btn-sm fw-bold text-white">Excel</a>
                 </div>
             </div>
             <div class="main-content-inner">
@@ -63,79 +59,31 @@
     <div class="container-fluid px-4">
         <header class="page-header">
             <h1 class="page-title">التقارير</h1>
-            <p class="page-subtitle">وصول سريع إلى جميع التقارير والتصديرات</p>
+            <p class="page-subtitle">تصدير التقارير PDF و Excel فقط</p>
         </header>
 
         <section class="page-section">
         <div class="row g-4">
             <div class="col-12 col-md-6 col-lg-4">
-                <a href="index.html" class="text-decoration-none">
+                <a href="index.html#pdf" class="text-decoration-none">
                     <div class="card report-card h-100">
-                        <div class="card-body">
-                            <i class="fas fa-chart-line fa-2x text-primary mb-2"></i>
-                            <h5 class="card-title">لوحة التحكم</h5>
-                            <p class="card-text">ملخص شامل للمبيعات، الفروع، والزوار مع مقارنة السنة الحالية والسابقة.</p>
-                            <span class="btn btn-sm btn-outline-primary">عرض</span>
+                        <div class="card-body text-center">
+                            <i class="fas fa-file-pdf fa-3x text-danger mb-3"></i>
+                            <h5 class="card-title">تصدير PDF</h5>
+                            <p class="card-text text-muted">تصدير تقرير المبيعات والفروع بصيغة PDF</p>
+                            <span class="btn btn-warning btn-sm fw-bold text-white">تصدير PDF</span>
                         </div>
                     </div>
                 </a>
             </div>
             <div class="col-12 col-md-6 col-lg-4">
-                <a href="yesterday_report.html" class="text-decoration-none">
+                <a href="index.html#excel" class="text-decoration-none">
                     <div class="card report-card h-100">
-                        <div class="card-body">
-                            <i class="fas fa-calendar-day fa-2x text-primary mb-2"></i>
-                            <h5 class="card-title">تقرير أمس</h5>
-                            <p class="card-text">تقرير مبيعات الأمس للموظفين والمعارض مع مقارنة بالعام الماضي وزرّي تصدير PDF.</p>
-                            <span class="btn btn-sm btn-outline-primary">عرض</span>
-                        </div>
-                    </div>
-                </a>
-            </div>
-            <div class="col-12 col-md-6 col-lg-4">
-                <a href="branch_details.html" class="text-decoration-none">
-                    <div class="card report-card h-100">
-                        <div class="card-body">
-                            <i class="fas fa-store fa-2x text-primary mb-2"></i>
-                            <h5 class="card-title">تفاصيل الفروع</h5>
-                            <p class="card-text">جدول كامل بجميع الفروع مع إمكانية التوسيع لعرض تفاصيل الموظفين عند النقر.</p>
-                            <span class="btn btn-sm btn-outline-primary">عرض</span>
-                        </div>
-                    </div>
-                </a>
-            </div>
-            <div class="col-12 col-md-6 col-lg-4">
-                <a href="index.html#earlyWarning" class="text-decoration-none">
-                    <div class="card report-card h-100">
-                        <div class="card-body">
-                            <i class="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
-                            <h5 class="card-title">الإنذار المبكر</h5>
-                            <p class="card-text">فروع في خطر عدم تحقيق الهدف حسب الوقت المنقضي من الشهر.</p>
-                            <span class="btn btn-sm btn-outline-primary">عرض</span>
-                        </div>
-                    </div>
-                </a>
-            </div>
-            <div class="col-12 col-md-6 col-lg-4">
-                <a href="target_setting.html" class="text-decoration-none">
-                    <div class="card report-card h-100">
-                        <div class="card-body">
-                            <i class="fas fa-bullseye fa-2x text-primary mb-2"></i>
-                            <h5 class="card-title">التارجت (الأهداف)</h5>
-                            <p class="card-text">تحديد الأهداف الشهرية للموظفين والفروع.</p>
-                            <span class="btn btn-sm btn-outline-primary">عرض</span>
-                        </div>
-                    </div>
-                </a>
-            </div>
-            <div class="col-12 col-md-6 col-lg-4">
-                <a href="widget.html" class="text-decoration-none">
-                    <div class="card report-card h-100">
-                        <div class="card-body">
-                            <i class="fas fa-sun fa-2x text-warning mb-2"></i>
-                            <h5 class="card-title">متابعة مبيعات اليوم</h5>
-                            <p class="card-text">متابعة حية لمبيعات اليوم عبر الويدجت.</p>
-                            <span class="btn btn-sm btn-outline-primary">عرض</span>
+                        <div class="card-body text-center">
+                            <i class="fas fa-file-excel fa-3x text-success mb-3"></i>
+                            <h5 class="card-title">تصدير Excel</h5>
+                            <p class="card-text text-muted">تصدير البيانات بصيغة Excel</p>
+                            <span class="btn btn-success btn-sm fw-bold text-white">تصدير Excel</span>
                         </div>
                     </div>
                 </a>
@@ -151,26 +99,21 @@
         if (!currentUser) window.location.href = 'login.html';
         function logout() { localStorage.removeItem('currentUser'); window.location.href = 'login.html'; }
 
-        function updateTodaySales() {
+        function updateLastUpdate() {
             fetch('management_data.json?t=' + Date.now())
                 .then(r => r.json())
                 .then(data => {
-                    const el = document.getElementById('reportsTodaySales');
                     const timeEl = document.getElementById('reportsLastUpdate');
-                    if (!el) return;
-                    let total = 0;
-                    const today = new Date().toISOString().slice(0, 10);
-                    (data.sales || []).forEach(([d,s,v]) => { if (d === today) total += v; });
-                    el.textContent = total.toLocaleString('ar-EG');
-                    if (timeEl) timeEl.textContent = (data.metadata?.generated_at?.split(' ')[1] || '').slice(0,5) || '--:--';
+                    if (!timeEl) return;
+                    timeEl.textContent = data.metadata?.generated_at || '--:--';
                 })
                 .catch(() => {
-                    const el = document.getElementById('reportsTodaySales');
-                    if (el) el.textContent = '0';
+                    const timeEl = document.getElementById('reportsLastUpdate');
+                    if (timeEl) timeEl.textContent = '--:--';
                 });
         }
-        updateTodaySales();
-        setInterval(updateTodaySales, 60000);
+        updateLastUpdate();
+        setInterval(updateLastUpdate, 60000);
     </script>
     <script src="assets/sidebar.js"></script>
             </div>

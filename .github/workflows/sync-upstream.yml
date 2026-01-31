@@ -21,11 +21,11 @@ jobs:
           git remote add upstream https://github.com/ALAAWF2/orange-dashboard.git 2>/dev/null || true
           git fetch upstream main
 
-      - name: Merge upstream
+      - name: Merge upstream (prefer ours on conflicts)
         run: |
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git merge upstream/main --no-edit
+          git merge upstream/main --no-edit -X ours
 
       - name: Push
         run: git push origin main

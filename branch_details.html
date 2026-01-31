@@ -212,18 +212,26 @@
             document.getElementById('branchName').textContent = branchName;
         }
 
+        const currentUser = JSON.parse(localStorage.getItem('currentUser')) || { role: 'Admin' };
+        function isStoreAccessible(sid, storeMeta) {
+            if (currentUser.role === 'Admin') return true;
+            const meta = storeMeta[sid];
+            return meta && meta.manager === currentUser.name;
+        }
+
         async function init() {
             const errDiv = document.getElementById('loadingErrors');
             const pickerDiv = document.getElementById('storePicker');
 
             if (!sid) {
-                // No sid: show store picker instead of error
                 try {
                     const res = await fetch('management_data.json');
                     if (!res.ok) throw new Error("File not found");
                     const mgmt = await res.json();
                     const stores = mgmt.stores || {};
-                    const storeList = Object.entries(stores).map(([id, name]) => ({ id, name }));
+                    const meta = mgmt.store_meta || {};
+                    let storeList = Object.entries(stores).map(([id, name]) => ({ id, name }));
+                    if (currentUser.role !== 'Admin') storeList = storeList.filter(s => isStoreAccessible(s.id, meta));
                     storeList.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
                     const sel = document.getElementById('storeSelect');
@@ -484,6 +492,7 @@
                 let list = [];
                 const allIds = new Set([...Object.keys(branchSales), ...Object.keys(prevSales), ...Object.keys(branchTarget)]);
                 allIds.forEach(sid => {
+                    if (currentUser.role !== 'Admin' && !isStoreAccessible(sid, storeMeta)) return;
                     const val = branchSales[sid]||0, prevVal = prevSales[sid]||0;
                     const target = branchTarget[sid]||0;
                     const trans = branchTrans[sid]||0;

@@ -65,6 +65,13 @@
         .top10-btn { color: var(--neutral-600); border: 1px solid var(--neutral-300); font-weight: 500; font-family: 'Cairo', sans-serif; padding: 0.4rem 0.75rem; border-radius: var(--radius-lg); transition: all 0.2s; }
         .top10-btn:hover { color: var(--primary-600); border-color: var(--primary-400); background: var(--primary-50); }
         .top10-btn.active { background: linear-gradient(135deg, var(--primary-500), var(--primary-600)); color: #fff; border-color: var(--primary-600); }
+        .top-progress-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--neutral-100); }
+        .top-progress-item:last-child { border-bottom: none; }
+        .top-progress-name { flex: 0 0 45%; font-weight: 600; color: var(--neutral-800); font-size: 0.9rem; }
+        .top-progress-bar-wrap { flex: 1; min-width: 0; }
+        .top-progress-bar { height: 20px; border-radius: 10px; background: var(--neutral-200); overflow: hidden; }
+        .top-progress-bar-fill { height: 100%; border-radius: 10px; background: linear-gradient(90deg, var(--primary-400), var(--primary-600)); transition: width 0.4s ease; }
+        .top-progress-pct { flex: 0 0 60px; text-align: left; font-weight: 700; color: var(--neutral-800); font-size: 0.9rem; }
     </style>
 </head>
 
@@ -103,16 +110,16 @@
             <div class="main-topbar d-flex flex-wrap align-items-center justify-content-between gap-2 w-100">
                 <span class="fw-bold text-dark">لوحة التحكم</span>
                 <div class="d-flex flex-wrap align-items-center gap-2">
-                    <button onclick="filterToday()" class="btn btn-white border shadow-sm btn-sm d-flex align-items-center gap-2" title="اضغط لعرض مبيعات اليوم">
+                    <button id="liveBtn" onclick="toggleLive()" class="btn btn-sm btn-outline-warning fw-bold text-nowrap" title="اضغط لعرض مبيعات اليوم">
+                        <i class="fas fa-circle me-1 live-dot" style="font-size:0.5rem; opacity:0.6;"></i> لايف
+                    </button>
+                    <div id="liveSalesPanel" class="d-flex align-items-center gap-2 px-3 py-2 rounded-2" style="display: none !important; background: var(--primary-50); border: 1px solid var(--primary-200);">
                         <span class="fw-bold text-dark">مبيعات اليوم: <span class="text-primary today-sales-val">0</span></span>
                         <span class="text-muted small" id="lastUpdate">...</span>
-                    </button>
-                    <a href="widget.html" class="btn btn-outline-warning btn-sm fw-bold">متابعة مبيعات اليوم</a>
-                    <button onclick="openPdfModal()" class="btn btn-warning btn-sm fw-bold text-white">PDF</button>
-                    <button onclick="showExcelModal()" class="btn btn-success btn-sm fw-bold text-white">Excel</button>
+                    </div>
+                    <a href="yesterday_report.html" class="btn btn-outline-primary btn-sm fw-bold text-nowrap">تقرير أمس</a>
                     <button id="btnSetTarget" onclick="window.location.href='target_setting.html'" class="btn-primary fw-bold" style="display: none;">Target</button>
                 </div>
-                <a href="yesterday_report.html" class="btn btn-outline-primary btn-sm fw-bold text-nowrap">تقرير أمس</a>
             </div>
             <div class="main-content-inner">
 
@@ -136,6 +143,26 @@
         function logout() {
             localStorage.removeItem('currentUser');
             window.location.href = 'login.html';
+        }
+
+        let livePanelVisible = false;
+        function toggleLive() {
+            livePanelVisible = !livePanelVisible;
+            const panel = document.getElementById('liveSalesPanel');
+            const btn = document.getElementById('liveBtn');
+            if (livePanelVisible) {
+                panel.style.display = 'flex';
+                btn.classList.remove('btn-outline-warning');
+                btn.classList.add('btn-warning', 'text-white');
+                btn.querySelector('.live-dot').style.opacity = '1';
+                filterToday();
+                calculateTodayHeader();
+            } else {
+                panel.style.display = 'none';
+                btn.classList.remove('btn-warning', 'text-white');
+                btn.classList.add('btn-outline-warning');
+                btn.querySelector('.live-dot').style.opacity = '0.6';
+            }
         }
     </script>
 
@@ -231,6 +258,7 @@
                     <div class="kpi-value" id="totalSales">0</div>
                     <div class="kpi-sub">السنة الحالية / السابقة: <span id="prevSales">0</span></div>
                     <div class="kpi-sub"><span id="salesGrowthVal">0%</span> النسبة</div>
+                    <div class="kpi-sub mt-1" style="font-size: 0.75rem;"><span id="growthAbs" class="fw-bold">0</span> قيمة النمو</div>
                 </div>
             </div>
             <div class="col-6 col-lg">
@@ -267,7 +295,6 @@
                         </div>
                     </div>
                     <div class="kpi-sub text-muted">Target: <span id="targetVal">0</span></div>
-                    <div class="kpi-sub mt-1" style="font-size: 0.75rem;"><span id="growthAbs" class="fw-bold">0</span> قيمة النمو</div>
                 </div>
             </div>
         </div>
@@ -297,8 +324,8 @@
                             <button type="button" class="btn btn-sm top10-btn" data-metric="growth" data-target="stores" onclick="setTop10Metric('growth','stores')">نمو</button>
                         </div>
                     </div>
-                    <div class="chart-container" style="min-height: 280px;">
-                        <canvas id="top10StoresChart"></canvas>
+                    <div class="top-progress-list" id="top10StoresList" style="min-height: 280px;">
+                        <div class="text-muted text-center py-4">جار التحميل...</div>
                     </div>
                 </div>
             </div>
@@ -313,8 +340,8 @@
                             <button type="button" class="btn btn-sm top10-btn" data-metric="avgInv" data-target="employees" onclick="setTop10Metric('avgInv','employees')">معدل فاتورة</button>
                         </div>
                     </div>
-                    <div class="chart-container" style="min-height: 280px;">
-                        <canvas id="top10EmployeesChart"></canvas>
+                    <div class="top-progress-list" id="top10EmployeesList" style="min-height: 280px;">
+                        <div class="text-muted text-center py-4">جار التحميل...</div>
                     </div>
                 </div>
             </div>
@@ -529,7 +556,7 @@
                 if (valA > valB) return -1;
                 return 0;
             });
-            renderTop10Chart('top10StoresChart', list.slice(0, 10), m);
+            renderTopProgressList('top10StoresList', list.slice(0, 10), m);
         }
 
         async function loadTopEmployees() {
@@ -565,23 +592,37 @@
             let m = top10MetricEmployees;
             let list = [...window.employeeListForTop10];
             list.sort((a, b) => (b[m] || 0) - (a[m] || 0));
-            renderTop10Chart('top10EmployeesChart', list.slice(0, 10), m);
+            renderTopProgressList('top10EmployeesList', list.slice(0, 10), m);
         }
 
         function renderTop10EmployeesPlaceholder() {
-            const ctx = document.getElementById('top10EmployeesChart');
-            if (!ctx) return;
-            const c = ctx.getContext('2d');
-            if (charts['top10emp']) charts['top10emp'].destroy();
-            charts['top10emp'] = new Chart(c, {
-                type: 'bar', data: { labels: [], datasets: [{ label: '', data: [] }] },
-                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-            });
-            const wrap = ctx.parentElement;
-            let msg = wrap.querySelector('.no-data-msg');
-            if (!msg) { msg = document.createElement('p'); msg.className = 'no-data-msg text-muted text-center py-5 mb-0'; wrap.style.position = 'relative'; wrap.appendChild(msg); }
-            msg.textContent = 'لا توجد بيانات. انتقل لصفحة أداء الموظفين للتفاصيل.';
-            msg.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:100%;';
+            const wrap = document.getElementById('top10EmployeesList');
+            if (!wrap) return;
+            wrap.innerHTML = '<div class="text-muted text-center py-5">لا توجد بيانات. انتقل لصفحة أداء الموظفين للتفاصيل.</div>';
+        }
+
+        function renderTopProgressList(containerId, list, metric) {
+            const wrap = document.getElementById(containerId);
+            if (!wrap) return;
+            if (list.length === 0) { wrap.innerHTML = '<div class="text-muted text-center py-5">No data to display</div>'; return; }
+            const maxVal = Math.max(...list.map(d => {
+                let v = d[metric];
+                if (typeof v === 'number') return v;
+                if (typeof v === 'string') return 0;
+                return 0;
+            }), 1);
+            wrap.innerHTML = list.map((d, i) => {
+                let v = d[metric] != null ? (typeof d[metric] === 'number' ? d[metric] : parseFloat(d[metric]) || 0) : 0;
+                let pct = (metric === 'ach' || metric === 'growth') ? Math.min(Math.max(v, 0), 120) : (maxVal > 0 ? (v / maxVal) * 100 : 0);
+                let displayVal = typeof v === 'number' ? (metric === 'ach' || metric === 'growth' ? v.toFixed(1) + '%' : v.toLocaleString()) : v;
+                return `<div class="top-progress-item">
+                    <span class="top-progress-name">${(i+1)}-${d.name}</span>
+                    <div class="top-progress-bar-wrap">
+                        <div class="top-progress-bar"><div class="top-progress-bar-fill" style="width:${pct}%"></div></div>
+                    </div>
+                    <span class="top-progress-pct">${displayVal}</span>
+                </div>`;
+            }).join('');
         }
 
         function setSort(col) {
@@ -721,6 +762,8 @@
 
                 updateDashboard();
                 loadTopEmployees();
+                if (window.location.hash === '#pdf') setTimeout(function(){ if (typeof openPdfModal==='function') openPdfModal(); }, 300);
+                if (window.location.hash === '#excel') setTimeout(function(){ if (typeof showExcelModal==='function') showExcelModal(); }, 300);
             } catch (e) { console.error(e); loadTopEmployees(); }
         }
 
@@ -1105,6 +1148,16 @@
             // Cust Value
             let custValue = curr.visitors > 0 ? curr.sales / curr.visitors : 0;
             document.getElementById('totalCustValue').textContent = custValue.toFixed(0);
+
+            // Trans Growth
+            let transGrowth = prev.trans > 0 ? ((curr.trans - prev.trans) / prev.trans) * 100 : 0;
+            let tGEl = document.getElementById('transGrowth');
+            if (tGEl) { tGEl.textContent = (transGrowth > 0 ? '+' : '') + transGrowth.toFixed(1) + '%'; tGEl.className = 'kpi-sub ' + (transGrowth >= 0 ? 'text-success-custom fw-bold' : 'text-danger-custom fw-bold'); }
+
+            // Visitors Growth
+            let visitorsGrowth = prev.visitors > 0 ? ((curr.visitors - prev.visitors) / prev.visitors) * 100 : 0;
+            let vGEl = document.getElementById('visitorsGrowth');
+            if (vGEl) { vGEl.textContent = (visitorsGrowth > 0 ? '+' : '') + visitorsGrowth.toFixed(1) + '%'; vGEl.className = 'kpi-sub ' + (visitorsGrowth >= 0 ? 'text-success-custom fw-bold' : 'text-danger-custom fw-bold'); }
 
             // --- 4. Update KPI Cards (Previous) ---
             fmt(document.getElementById('prevSales'), prev.sales);

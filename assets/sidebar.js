@@ -48,13 +48,35 @@
         });
     }
 
+    function applyRoleVisibility() {
+        try {
+            var cu = localStorage.getItem('currentUser');
+            if (!cu) return;
+            var user = JSON.parse(cu);
+            var role = user.role || '';
+            var name = user.name || '';
+
+            document.querySelectorAll('.sidebar-nav .nav-link[href*="admin_targets"]').forEach(function (a) {
+                a.style.display = (role === 'Admin') ? '' : 'none';
+            });
+            document.querySelectorAll('.sidebar-nav .nav-link[href*="data_audit"]').forEach(function (a) {
+                a.style.display = (role === 'Auditor') ? '' : 'none';
+            });
+            document.querySelectorAll('.sidebar-nav .nav-link[href*="target_setting"]').forEach(function (a) {
+                a.style.display = (role === 'Admin' || name === 'Sales Manager') ? '' : 'none';
+            });
+        } catch (e) {}
+    }
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
             setActiveLink();
             initMobileToggle();
+            applyRoleVisibility();
         });
     } else {
         setActiveLink();
         initMobileToggle();
+        applyRoleVisibility();
     }
 })();
