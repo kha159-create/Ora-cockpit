@@ -1238,7 +1238,7 @@
                 let absGrowth = val - prevVal;
 
                 branchList.push({
-                    name, val, prevVal, growth, absGrowth, target, trans, visitors, prevVisitors, ach, avgInv, conv, custVal, dailyReq
+                    sid, name, val, prevVal, growth, absGrowth, target, trans, visitors, prevVisitors, ach, avgInv, conv, custVal, dailyReq
                 });
             });
 
@@ -1393,9 +1393,150 @@
             });
         }
 
+        // --- Branch Daily Details Popup ---
+        function showBranchDailyDetails(storeId, storeName) {
+            if (!rawData || !window.dashboardState) {
+                alert("البيانات غير جاهزة بعد");
+                return;
+            }
+
+            const startDate = new Date(window.dashboardState.start);
+            const endDate = new Date(window.dashboardState.end);
+
+            // Update Modal Title
+            document.getElementById('branchDailyTitle').textContent = storeName;
+            document.getElementById('branchDailyPeriod').textContent =
+                `${startDate.toLocaleDateString('en-CA')} إلى ${endDate.toLocaleDateString('en-CA')}`;
+
+            // Day names for display
+            const dayNames = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+
+            // Calculate Remaining Days for Daily Req
+            const nowForReq = new Date();
+            const lastDayOfMonth = new Date(nowForReq.getFullYear(), nowForReq.getMonth() + 1, 0).getDate();
+            let remainingDays = lastDayOfMonth - nowForReq.getDate() + 1;
+            if (remainingDays < 1) remainingDays = 1;
+
+            // Build table rows
+            let rows = [];
+            let grandTotalSales = 0, grandSalesLY = 0, grandVisitors = 0, grandVisitorsLY = 0, grandTrans = 0, grandTarget = 0;
+
+            let loopDate = new Date(startDate);
+            while (loopDate <= endDate) {
+                const dateStr = loopDate.toLocaleDateString('en-CA');
+                const dayData = getDayData(storeId, dateStr);
+
+                const sales = dayData.sales || 0;
+                const visitors = dayData.visitors || 0;
+                const trans = dayData.trans || 0;
+                const target = dayData.target || 0;
+
+                // Last Year Data
+                let lyDate = new Date(loopDate);
+                lyDate.setFullYear(loopDate.getFullYear() - 1);
+                const lyDateStr = lyDate.toLocaleDateString('en-CA');
+                const lyData = getDayData(storeId, lyDateStr);
+
+                const salesLY = lyData.sales || 0;
+                const visitorsLY = lyData.visitors || 0;
+
+                // Calculations
+                const growth = salesLY > 0 ? ((sales - salesLY) / salesLY * 100) : (sales > 0 ? 100 : 0);
+                const avgInv = trans > 0 ? Math.round(sales / trans) : 0;
+                const conv = visitors > 0 ? ((trans / visitors) * 100) : 0;
+
+                // Day name
+                const dayName = dayNames[loopDate.getDay()];
+
+                rows.push({
+                    date: dateStr,
+                    dayName,
+                    sales, salesLY, growth, trans, avgInv, visitors, visitorsLY, conv
+                });
+
+                grandTotalSales += sales;
+                grandSalesLY += salesLY;
+                grandVisitors += visitors;
+                grandVisitorsLY += visitorsLY;
+                grandTrans += trans;
+                grandTarget += target;
+
+                loopDate.setDate(loopDate.getDate() + 1);
+            }
+
+            // Update KPIs
+            const achPct = grandTarget > 0 ? ((grandTotalSales / grandTarget) * 100) : 0;
+            let dailyReq = 0;
+            if (grandTarget > grandTotalSales) {
+                dailyReq = (grandTarget - grandTotalSales) / remainingDays;
+            }
+
+            document.getElementById('bdTotalSales').textContent = grandTotalSales.toLocaleString();
+            document.getElementById('bdTarget').textContent = grandTarget.toLocaleString();
+            document.getElementById('bdAchievement').textContent = achPct.toFixed(1) + '%';
+            document.getElementById('bdAchievement').className = achPct >= 100 ? 'fs-4 fw-bold text-success' : 'fs-4 fw-bold text-warning';
+            document.getElementById('bdDailyReq').textContent = Math.round(dailyReq).toLocaleString();
+
+            // Render Table Body
+            const tbody = document.getElementById('branchDailyBody');
+            tbody.innerHTML = rows.map(r => `
+                <tr>
+                    <td class="text-center">${r.date}</td>
+                    <td class="text-center">${r.dayName}</td>
+                    <td class="text-center fw-bold">${r.sales.toLocaleString()}</td>
+                    <td class="text-center text-muted">${r.salesLY.toLocaleString()}</td>
+                    <td class="text-center ${r.growth >= 0 ? 'text-success' : 'text-danger'} fw-bold">${r.growth > 0 ? '+' : ''}${r.growth.toFixed(1)}%</td>
+                    <td class="text-center">${r.trans.toLocaleString()}</td>
+                    <td class="text-center">${r.avgInv.toLocaleString()}</td>
+                    <td class="text-center">${r.visitors.toLocaleString()}</td>
+                    <td class="text-center text-muted">${r.visitorsLY.toLocaleString()}</td>
+                    <td class="text-center">${r.conv.toFixed(1)}%</td>
+                </tr>
+            `).join('');
+
+            // Render Footer (Totals)
+            const grandGrowth = grandSalesLY > 0 ? ((grandTotalSales - grandSalesLY) / grandSalesLY * 100) : 0;
+            const grandAvgInv = grandTrans > 0 ? Math.round(grandTotalSales / grandTrans) : 0;
+            const grandConv = grandVisitors > 0 ? ((grandTrans / grandVisitors) * 100) : 0;
+
+            document.getElementById('branchDailyFoot').innerHTML = `
+                <tr>
+                    <td class="text-center" colspan="2">الإجمالي</td>
+                    <td class="text-center">${grandTotalSales.toLocaleString()}</td>
+                    <td class="text-center">${grandSalesLY.toLocaleString()}</td>
+                    <td class="text-center ${grandGrowth >= 0 ? 'text-success' : 'text-danger'}">${grandGrowth > 0 ? '+' : ''}${grandGrowth.toFixed(1)}%</td>
+                    <td class="text-center">${grandTrans.toLocaleString()}</td>
+                    <td class="text-center">${grandAvgInv.toLocaleString()}</td>
+                    <td class="text-center">${grandVisitors.toLocaleString()}</td>
+                    <td class="text-center">${grandVisitorsLY.toLocaleString()}</td>
+                    <td class="text-center">${grandConv.toFixed(1)}%</td>
+                </tr>
+            `;
+
+            // Show Modal
+            const modal = new bootstrap.Modal(document.getElementById('branchDailyModal'));
+            modal.show();
+        }
+
 
 
         // --- Helpers ---
+        // Helper: Get daily data for a specific store and date
+        function getDayData(storeId, dateStr) {
+            if (!rawData) return { sales: 0, target: 0, visitors: 0, trans: 0 };
+            const findValue = (arr) => {
+                if (!arr) return 0;
+                const item = arr.find(row => row[0] === dateStr && row[1] == storeId);
+                return item ? item[2] : 0;
+            };
+            return {
+                sales: findValue(rawData.sales),
+                target: findValue(rawData.targets),
+                visitors: findValue(rawData.visitors),
+                trans: findValue(rawData.transactions)
+            };
+        }
+
         function fmt(el, v) { el.textContent = v.toLocaleString(undefined, { maximumFractionDigits: 0 }); }
         function valFmt(v) { return v.toLocaleString(undefined, { maximumFractionDigits: 0 }); } // Explicit helper if needed
 

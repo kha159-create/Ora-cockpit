@@ -4,56 +4,148 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مدقق البيانات | Data Audit</title>
-    <!-- Bootstrap 5 RTL -->
+    <title>مركز التقارير | Reports Center</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <!-- Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <style>
         :root {
-            --bs-primary: #fe7900;
-            --font-main: 'Tajawal', sans-serif;
+            --orange: #fe7900;
+            --dark: #1a1a2e;
+            --glass: rgba(255, 255, 255, 0.95);
         }
 
         body {
-            font-family: var(--font-main);
-            background-color: #f8f9fa;
+            font-family: 'Tajawal', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
         }
 
-        .navbar-brand {
-            font-weight: 800;
+        .navbar {
+            background: var(--glass) !important;
+            backdrop-filter: blur(10px);
         }
 
         .brand-orange {
-            color: #fe7900;
+            color: var(--orange);
         }
 
-        .card {
-            border: none;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-            transition: transform 0.2s;
-        }
-
-        .card-header {
-            background-color: white;
-            border-bottom: 1px solid #f0f0f0;
-            font-weight: 700;
-            padding: 15px;
-        }
-
-        .status-badge {
-            font-size: 0.8em;
-            padding: 5px 10px;
+        .report-section {
+            background: var(--glass);
             border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
         }
 
-        .table-custom th {
-            background-color: #f8f9fa;
+        .section-title {
+            color: var(--dark);
+            font-weight: 800;
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title i {
+            color: var(--orange);
+            font-size: 1.5rem;
+        }
+
+        .report-card {
+            background: linear-gradient(145deg, #f8f9fa, #ffffff);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid #e9ecef;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            height: 100%;
+        }
+
+        .report-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(254, 121, 0, 0.15);
+            border-color: var(--orange);
+        }
+
+        .report-card h6 {
+            font-weight: 700;
+            color: var(--dark);
+            margin-bottom: 8px;
+        }
+
+        .report-card p {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-bottom: 15px;
+        }
+
+        .btn-export {
+            background: linear-gradient(135deg, var(--orange), #ff9a3c);
+            border: none;
+            color: white;
             font-weight: 600;
+            padding: 8px 20px;
+            border-radius: 25px;
+        }
+
+        .btn-export:hover {
+            background: linear-gradient(135deg, #e06800, var(--orange));
+            color: white;
+            transform: scale(1.05);
+        }
+
+        .filter-bar {
+            background: var(--glass);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+
+        .form-select,
+        .form-control {
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+
+        .form-select:focus,
+        .form-control:focus {
+            border-color: var(--orange);
+            box-shadow: 0 0 0 0.2rem rgba(254, 121, 0, 0.15);
+        }
+
+        .badge-count {
+            background: var(--orange);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+
+        .loading {
+            display: none;
+        }
+
+        .loading.show {
+            display: inline-block;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .animate-pulse {
+            animation: pulse 1.5s infinite;
         }
     </style>
     <link rel="stylesheet" href="assets/sidebar.css">
@@ -129,384 +221,451 @@
                         <span><i class="fas fa-store me-2"></i>تدقيق المعارض (Management Data)</span>
                         <span class="badge bg-secondary" id="mgmtCount">Checking...</span>
                     </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>نوع الخطأ</th>
-                                        <th>التفاصيل</th>
-                                        <th>التاريخ</th>
-                                        <th>القيمة</th>
-                                        <th>الحالة</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="mgmtIssuesBody">
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted">جاري فحص البيانات...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="report-card">
+                        <h6><i class="fas fa-trophy text-warning me-2"></i>ترتيب المبيعات</h6>
+                        <p>أفضل الموظفين حسب إجمالي المبيعات</p>
+                        <button class="btn btn-export btn-sm" onclick="exportEmployeeRanking()"><i
+                                class="fas fa-file-excel me-1"></i>تصدير</button>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="report-card">
+                        <h6><i class="fas fa-calendar-day text-success me-2"></i>مبيعات يومية</h6>
+                        <p>تفاصيل مبيعات كل موظف يومياً</p>
+                        <button class="btn btn-export btn-sm" onclick="exportEmployeeDailySales()"><i
+                                class="fas fa-file-excel me-1"></i>تصدير</button>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="report-card">
+                        <h6><i class="fas fa-link text-info me-2"></i>ربط الموظفين</h6>
+                        <p>أسماء الموظفين وكيف مربوطين بالنظام</p>
+                        <button class="btn btn-export btn-sm" onclick="exportEmployeeMapping()"><i
+                                class="fas fa-file-excel me-1"></i>تصدير</button>
                     </div>
                 </div>
             </div>
-
-            <!-- 2. Employee Duplicate Check -->
-            <div class="col-md-6">
-                <div class="card h-100 border-start border-4 border-danger">
-                    <div class="card-header d-flex justify-content-between text-danger">
-                        <span><i class="fas fa-users me-2"></i>تكرار الموظفين (Duplicates)</span>
-                        <span class="badge bg-secondary" id="dupCount">Checking...</span>
-                    </div>
-                    <div class="card-body">
-                        <p class="small text-muted mb-2">
-                            <strong>شرح:</strong> هذا ليس تكرار الفواتير (وهو طبيعي)، بل هو
-                            <span class="text-danger fw-bold">خطأ تقني</span>
-                            يعني أن الموظف له تقريرين مبيعات إجمالي لنفس اليوم! (يجب أن يكون له سطر واحد فقط يجمع كل
-                            فواتيره).
-                        </p>
-                        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
-                            <table class="table table-sm table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>الموظف</th>
-                                        <th>التاريخ</th>
-                                        <th>المعرض</th>
-                                        <th>تكرار</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="dupBody">
-                                    <tr>
-                                        <td colspan="4" class="text-center text-muted">جاري الفحص...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 3. Missing Employees (From Script) -->
-            <div class="col-md-6">
-                <div class="card h-100 border-start border-4 border-info">
-                    <div class="card-header d-flex justify-content-between text-info">
-                        <span><i class="fas fa-user-slash me-2"></i>موظفين غير مسجلين (Missing Mapping)</span>
-                        <span class="badge bg-secondary" id="missingCount">Checking...</span>
-                    </div>
-                    <div class="card-body">
-                        <div class="alert alert-light border small mb-2">
-                            <i class="fas fa-info-circle text-info"></i>
-                            يتم تحديث هذه القائمة عبر سكريبت <code>check_missing_emp.py</code>
-                        </div>
-                        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
-                            <table class="table table-sm">
-                                <thead>
-                                    <tr>
-                                        <th>Sales Group ID</th>
-                                        <th>آخر ظهور</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="missingBody">
-                                    <tr>
-                                        <td colspan="2" class="text-center text-muted">لا يوجد بيانات (شغل السكريبت
-                                            أولاً)</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 4. Raw Data Browser -->
-            <div class="col-12">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-light">
-                        <i class="fas fa-database me-2"></i> تصفح البيانات الخام (Raw Data)
-                    </div>
-                    <div class="card-body">
-                        <div class="d-flex gap-2">
-                            <button onclick="viewRawData('management_data.json')" class="btn btn-outline-secondary">
-                                <i class="fas fa-file-code me-1"></i> Management Data
-                            </button>
-                            <button onclick="viewRawData('employees_data.json')" class="btn btn-outline-secondary">
-                                <i class="fas fa-file-code me-1"></i> Employees Data
-                            </button>
-                            <button onclick="viewRawData('audit_missing_emp.json')" class="btn btn-outline-secondary">
-                                <i class="fas fa-file-code me-1"></i> Audit Report
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
         </div>
         </section>
     </div>
 
-    <!-- Raw Data Modal -->
-    <div class="modal fade" id="rawModal" tabindex="-1">
-        <div class="modal-dialog modal-xl modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="rawModalTitle">File View</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <!-- Target Reports -->
+        <div class="report-section">
+            <h5 class="section-title"><i class="fas fa-bullseye"></i> تقارير التارجت</h5>
+            <div class="row g-3">
+                <div class="col-md-4 col-lg-3">
+                    <div class="report-card">
+                        <h6><i class="fas fa-store text-primary me-2"></i>تارجت المعارض</h6>
+                        <p>التارجت vs الفعلي لكل معرض</p>
+                        <button class="btn btn-export btn-sm" onclick="exportStoreTargets()"><i
+                                class="fas fa-file-excel me-1"></i>تصدير</button>
+                    </div>
                 </div>
-                <div class="modal-body bg-light">
-                    <pre id="rawContent" style="font-size: 0.8rem;"></pre>
+                <div class="col-md-4 col-lg-3">
+                    <div class="report-card">
+                        <h6><i class="fas fa-user-check text-success me-2"></i>تارجت الموظفين</h6>
+                        <p>التارجت vs الفعلي لكل موظف</p>
+                        <button class="btn btn-export btn-sm" onclick="exportEmployeeTargets()"><i
+                                class="fas fa-file-excel me-1"></i>تصدير</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Raw Data Reports -->
+        <div class="report-section">
+            <h5 class="section-title"><i class="fas fa-database"></i> البيانات الخام (Raw Data)</h5>
+            <div class="row g-3">
+                <div class="col-md-4 col-lg-3">
+                    <div class="report-card">
+                        <h6><i class="fas fa-coins text-warning me-2"></i>كل المبيعات</h6>
+                        <p>جميع سجلات المبيعات الخام</p>
+                        <button class="btn btn-export btn-sm" onclick="exportRawSales()"><i
+                                class="fas fa-file-excel me-1"></i>تصدير</button>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="report-card">
+                        <h6><i class="fas fa-receipt text-info me-2"></i>كل الفواتير</h6>
+                        <p>جميع سجلات الفواتير الخام</p>
+                        <button class="btn btn-export btn-sm" onclick="exportRawTransactions()"><i
+                                class="fas fa-file-excel me-1"></i>تصدير</button>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="report-card">
+                        <h6><i class="fas fa-walking text-success me-2"></i>كل الزوار</h6>
+                        <p>جميع سجلات الزوار الخام</p>
+                        <button class="btn btn-export btn-sm" onclick="exportRawVisitors()"><i
+                                class="fas fa-file-excel me-1"></i>تصدير</button>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="report-card">
+                        <h6><i class="fas fa-user-tie text-primary me-2"></i>كل بيانات الموظفين</h6>
+                        <p>جميع سجلات الموظفين الخام</p>
+                        <button class="btn btn-export btn-sm" onclick="exportRawEmployees()"><i
+                                class="fas fa-file-excel me-1"></i>تصدير</button>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="report-card">
+                        <h6><i class="fas fa-building text-secondary me-2"></i>بيانات المعارض</h6>
+                        <p>أسماء ومعلومات كل المعارض</p>
+                        <button class="btn btn-export btn-sm" onclick="exportStoreInfo()"><i
+                                class="fas fa-file-excel me-1"></i>تصدير</button>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="report-card">
+                        <h6><i class="fas fa-tags text-danger me-2"></i>تحليل العروض</h6>
+                        <p>بيانات العروض والخصومات</p>
+                        <button class="btn btn-export btn-sm" onclick="exportOffersData()"><i
+                                class="fas fa-file-excel me-1"></i>تصدير</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Reports -->
+        <div class="report-section">
+            <h5 class="section-title"><i class="fas fa-cog"></i> تقارير النظام</h5>
+            <div class="row g-3">
+                <div class="col-md-4 col-lg-3">
+                    <div class="report-card">
+                        <h6><i class="fas fa-exclamation-triangle text-danger me-2"></i>تدقيق البيانات</h6>
+                        <p>الأخطاء والنواقص في البيانات</p>
+                        <button class="btn btn-export btn-sm" onclick="exportDataAudit()"><i
+                                class="fas fa-file-excel me-1"></i>تصدير</button>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="report-card">
+                        <h6><i class="fas fa-user-slash text-warning me-2"></i>موظفين غير مسجلين</h6>
+                        <p>IDs غير مربوطين بالنظام</p>
+                        <button class="btn btn-export btn-sm" onclick="exportMissingEmployees()"><i
+                                class="fas fa-file-excel me-1"></i>تصدير</button>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Session Check
+        // Global Data
+        let mgmtData = null;
+        let empData = null;
+
+        // Auth
         const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-        // ... (auth logic) ...
+        if (currentUser) {
+            document.getElementById('userDisplay').textContent = `مرحباً، ${currentUser.name}`;
+        }
+        function logout() { localStorage.removeItem('currentUser'); window.location.href = 'login.html'; }
 
-        // ... (Existing variables) ...
-        const rawModal = new bootstrap.Modal(document.getElementById('rawModal'));
+        // Set Default Dates
+        const today = new Date();
+        const startOfYear = new Date(today.getFullYear(), 0, 1);
+        document.getElementById('startDate').value = startOfYear.toISOString().split('T')[0];
+        document.getElementById('endDate').value = today.toISOString().split('T')[0];
+        document.getElementById('yearFilter').value = today.getFullYear();
 
-        async function viewRawData(filename) {
-            document.getElementById('rawModalTitle').textContent = filename;
-            document.getElementById('rawContent').textContent = "Loading...";
-            rawModal.show();
-
+        // Load Data
+        async function loadAllData() {
+            const status = document.getElementById('dataStatus');
+            status.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>جاري تحميل البيانات...';
             try {
-                const res = await fetch(filename + '?t=' + Date.now());
-                const json = await res.json();
-                document.getElementById('rawContent').textContent = JSON.stringify(json, null, 2);
-            } catch (e) {
-                document.getElementById('rawContent').textContent = "Error loading file: " + e.message;
-            }
-        }
-        if (!currentUser || currentUser.role !== 'Auditor') {
-            // Strict Access Control
-            // window.location.href = 'login.html'; // Valid for prod, commented for now to allow dev testing safely
-        }
-        document.getElementById('userDisplay').textContent = `مرحباً، ${currentUser ? currentUser.name : 'Guest'}`;
-
-        function logout() {
-            localStorage.removeItem('currentUser');
-            window.location.href = 'login.html';
-        }
-
-        // --- Audit Logic ---
-
-        async function runAudit() {
-            console.log("Starting Audit...");
-            const filter = document.getElementById('dateFilter').value;
-
-            try {
-                // Clear previous states
-                document.getElementById('mgmtIssuesBody').innerHTML = '<tr><td colspan="5" class="text-center text-muted">جاري الفحص...</td></tr>';
-
-                // Load Data concurrently
-                const [mgmtRes, empRes, missingRes] = await Promise.allSettled([
+                const [mgmtRes, empRes] = await Promise.all([
                     fetch('management_data.json?t=' + Date.now()),
-                    fetch('employees_data.json?t=' + Date.now()),
-                    fetch('audit_missing_emp.json?t=' + Date.now())
+                    fetch('employees_data.json?t=' + Date.now())
                 ]);
-
-                // 1. Management Data Audit
-                if (mgmtRes.status === 'fulfilled') {
-                    const data = await mgmtRes.value.json();
-                    window.mgmtData = data;
-                    auditManagementData(data, filter);
-                } else {
-                    console.error("Failed to load management_data.json");
-                }
-
-                // 2. Employee Duplicates
-                if (empRes.status === 'fulfilled') {
-                    const data = await empRes.value.json();
-                    auditEmployeeDuplicates(data); // Can also apply filter if needed, but sticking to mgmt for now
-                }
-
-                // 3. Missing Employees
-                if (missingRes.status === 'fulfilled') {
-                    const data = await missingRes.value.json();
-                    renderMissingEmployees(data);
-                } else {
-                    document.getElementById('missingBody').innerHTML = `<tr><td colspan="2" class="text-center text-warning">ملف التقرير غير موجود (audit_missing_emp.json)</td></tr>`;
-                }
-
+                mgmtData = await mgmtRes.json();
+                empData = await empRes.json();
+                const salesCount = mgmtData.sales?.length || 0;
+                const empCount = Object.keys(empData.employee_names || {}).length;
+                status.innerHTML = `<span class="text-success"><i class="fas fa-check-circle me-2"></i>تم التحميل: ${salesCount.toLocaleString()} سجل مبيعات، ${empCount} موظف</span>`;
             } catch (e) {
-                console.error("Audit Error:", e);
-                document.getElementById('globalAlerts').innerHTML = `<div class="alert alert-danger">حدث خطأ أثناء الفحص: ${e.message}</div>`;
+                status.innerHTML = `<span class="text-danger"><i class="fas fa-times-circle me-2"></i>خطأ: ${e.message}</span>`;
             }
         }
 
-        function getStoreName(id) {
-            if (window.mgmtData && window.mgmtData.stores && window.mgmtData.stores[id]) {
-                return `${window.mgmtData.stores[id]} (${id})`;
-            }
-            return id;
+        // Helpers
+        function getDateRange() {
+            return { start: document.getElementById('startDate').value, end: document.getElementById('endDate').value };
+        }
+        function inRange(d) { const r = getDateRange(); return d >= r.start && d <= r.end; }
+        function getStoreName(id) { return mgmtData?.stores?.[id] || id; }
+        function getEmpName(id) { return empData?.employee_names?.[id] || id; }
+        function downloadExcel(data, filename, sheetName = 'Sheet1') {
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, sheetName);
+            XLSX.writeFile(wb, filename);
+        }
+        function checkData() { if (!mgmtData) { alert('الرجاء تحميل البيانات أولاً'); return false; } return true; }
+
+        // STORE REPORTS
+        function exportStoreDailySales() {
+            if (!checkData()) return;
+            const rows = [];
+            const salesMap = {}, transMap = {}, visMap = {};
+            mgmtData.sales?.forEach(([d, s, v]) => { if (inRange(d)) salesMap[`${d}_${s}`] = (salesMap[`${d}_${s}`] || 0) + v; });
+            mgmtData.transactions?.forEach(([d, s, v]) => { if (inRange(d)) transMap[`${d}_${s}`] = (transMap[`${d}_${s}`] || 0) + v; });
+            mgmtData.visitors?.forEach(([d, s, v]) => { if (inRange(d)) visMap[`${d}_${s}`] = (visMap[`${d}_${s}`] || 0) + v; });
+            Object.keys(salesMap).forEach(k => {
+                const [d, s] = k.split('_');
+                const meta = mgmtData.store_meta?.[s] || {};
+                rows.push({ 'التاريخ': d, 'المعرض': getStoreName(s), 'المدينة': meta.city || '-', 'المدير': meta.manager || '-', 'المبيعات': salesMap[k], 'الفواتير': transMap[k] || 0, 'الزوار': visMap[k] || 0 });
+            });
+            rows.sort((a, b) => a['التاريخ'].localeCompare(b['التاريخ']));
+            downloadExcel(rows, `Store_Daily_${getDateRange().start}_${getDateRange().end}.xlsx`, 'Daily Sales');
         }
 
-        // --- Logic: Management Data ---
-        function auditManagementData(data, filterType) {
-            const issues = [];
-            const sales = data.sales || [];
-            const visitors = data.visitors || [];
-
-            // Helper: Date Logic
-            const today = new Date().toISOString().split('T')[0];
-            const currentMonthPrefix = onPageLoadMonth();
-
-            // Index Visitors for O(1) lookup
-            const visitorMap = new Map();
-            visitors.forEach(rec => {
-                const [date, storeId, val] = rec;
-                visitorMap.set(`${storeId}|${date}`, val);
-            });
-
-            // Stores to ignore for "Zero Visitors" check (No footfall logic)
-            const IGNORE_ZERO_VISITORS = ['0', '1013']; // 0=Warehouse, 1013=Platforms
-
-            sales.forEach(rec => {
-                const [date, storeId, val] = rec;
-
-                // --- Filter Logic ---
-                if (filterType === 'current_month') {
-                    // 1. Must match current month (YYYY-MM)
-                    if (!date.startsWith(currentMonthPrefix)) return;
-                    // 2. Exclude Today (Data incomplete)
-                    if (date === today) return;
-                }
-
-                const storeName = getStoreName(storeId);
-
-                // --- Audit Checks ---
-
-                // 1. Check Negative Sales
-                if (val < 0) {
-                    issues.push({
-                        type: 'Negative Sales 🔻',
-                        detail: `مبيعات بالسالب في ${storeName} (ربما مرتجعات؟)`,
-                        date: date,
-                        val: val.toLocaleString(),
-                        severity: 'danger'
-                    });
-                }
-
-                // 2. Check Zero Visitors (Anomaly)
-                // Logic: If Sales > 0 AND Visitors is 0 or missing
-                // EXCLUSION: Skip if store is in ignore list
-                if (val > 0 && !IGNORE_ZERO_VISITORS.includes(String(storeId))) {
-                    const vizCount = visitorMap.get(`${storeId}|${date}`) || 0;
-                    if (vizCount === 0) {
-                        issues.push({
-                            type: 'Zero Visitors 👻',
-                            detail: `مبيعات (${val.toLocaleString()}) بدون زوار! في ${storeName}`,
-                            date: date,
-                            val: 0,
-                            severity: 'warning'
-                        });
-                    }
+        function exportStoreMonthlySummary() {
+            if (!checkData()) return;
+            const year = document.getElementById('yearFilter').value;
+            const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+            const storeMonthly = {};
+            mgmtData.sales?.forEach(([d, s, v]) => {
+                if (d.startsWith(year)) {
+                    const m = d.substring(5, 7);
+                    if (!storeMonthly[s]) storeMonthly[s] = {};
+                    storeMonthly[s][m] = (storeMonthly[s][m] || 0) + v;
                 }
             });
-
-            renderIssues(issues, 'mgmtIssuesBody', 'mgmtCount');
+            const rows = Object.entries(storeMonthly).map(([s, data]) => {
+                const row = { 'المعرض': getStoreName(s) };
+                months.forEach(m => row[`شهر ${m}`] = data[m] || 0);
+                row['الإجمالي'] = months.reduce((sum, m) => sum + (data[m] || 0), 0);
+                return row;
+            });
+            rows.sort((a, b) => b['الإجمالي'] - a['الإجمالي']);
+            downloadExcel(rows, `Store_Monthly_${year}.xlsx`, 'Monthly Summary');
         }
 
-        function onPageLoadMonth() {
-            const d = new Date();
-            const m = d.getMonth() + 1;
-            return `${d.getFullYear()}-${m < 10 ? '0' + m : m}`;
+        function exportYearlyComparison() {
+            if (!checkData()) return;
+            const year = parseInt(document.getElementById('yearFilter').value);
+            const prevYear = year - 1;
+            const storeData = {};
+            mgmtData.sales?.forEach(([d, s, v]) => {
+                const y = parseInt(d.substring(0, 4));
+                if (y === year || y === prevYear) {
+                    if (!storeData[s]) storeData[s] = { current: 0, prev: 0 };
+                    if (y === year) storeData[s].current += v;
+                    else storeData[s].prev += v;
+                }
+            });
+            const rows = Object.entries(storeData).map(([s, data]) => ({
+                'المعرض': getStoreName(s), [`مبيعات ${year}`]: data.current, [`مبيعات ${prevYear}`]: data.prev,
+                'الفرق': data.current - data.prev, 'نسبة النمو': data.prev > 0 ? ((data.current - data.prev) / data.prev * 100).toFixed(1) + '%' : 'N/A'
+            }));
+            downloadExcel(rows, `Yearly_Comparison_${year}_vs_${prevYear}.xlsx`, 'Comparison');
         }
 
-        // --- Logic: Employee Duplicates ---
-        function auditEmployeeDuplicates(data) {
-            const history = data.history || {};
-            const duplicates = [];
+        function exportConversionRates() {
+            if (!checkData()) return;
+            const storeData = {};
+            mgmtData.transactions?.forEach(([d, s, v]) => { if (inRange(d)) { if (!storeData[s]) storeData[s] = { t: 0, v: 0 }; storeData[s].t += v; } });
+            mgmtData.visitors?.forEach(([d, s, v]) => { if (inRange(d)) { if (!storeData[s]) storeData[s] = { t: 0, v: 0 }; storeData[s].v += v; } });
+            const rows = Object.entries(storeData).map(([s, data]) => ({
+                'المعرض': getStoreName(s), 'الفواتير': data.t, 'الزوار': data.v,
+                'نسبة التحويل': data.v > 0 ? ((data.t / data.v) * 100).toFixed(2) + '%' : '0%'
+            }));
+            rows.sort((a, b) => parseFloat(b['نسبة التحويل']) - parseFloat(a['نسبة التحويل']));
+            downloadExcel(rows, `Conversion_Rates_${getDateRange().start}_${getDateRange().end}.xlsx`, 'Conversion');
+        }
 
-            // Loop through all stores
-            for (const [storeId, records] of Object.entries(history)) {
-
-                const seen = new Map();
-
-                records.forEach(rec => {
-                    const date = rec[0];
-                    const name = rec[1];
-                    const key = `${name}|${date}`;
-
-                    if (seen.has(key)) {
-                        duplicates.push({
-                            name: name,
-                            date: date,
-                            store: getStoreName(storeId), // Use Name
-                            count: 2
-                        });
-                    } else {
-                        seen.set(key, true);
+        // EMPLOYEE REPORTS
+        function exportEmployeeYearlySales() {
+            if (!empData) { alert('الرجاء تحميل البيانات أولاً'); return; }
+            const year = document.getElementById('yearFilter').value;
+            const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+            const empMonthly = {};
+            Object.values(empData.history || {}).forEach(records => {
+                records.forEach(([d, e, s]) => {
+                    if (d.startsWith(year)) {
+                        const m = d.substring(5, 7);
+                        if (!empMonthly[e]) empMonthly[e] = {};
+                        empMonthly[e][m] = (empMonthly[e][m] || 0) + s;
                     }
                 });
-            }
-
-            const tbody = document.getElementById('dupBody');
-            document.getElementById('dupCount').textContent = duplicates.length;
-
-            if (duplicates.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-success fw-bold"><i class="fas fa-check-double me-1"></i> لا يوجد سجلات مكررة (نظيف)</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = duplicates.map(d => `
-                <tr>
-                    <td class="fw-bold">${d.name}</td>
-                    <td>${d.date}</td>
-                    <td class="small">${d.store}</td>
-                    <td class="text-danger fw-bold">تكرار السجل! ⚠️</td>
-                </tr>
-            `).join('');
+            });
+            const rows = Object.entries(empMonthly).map(([e, data]) => {
+                const row = { 'الموظف': getEmpName(e), 'الكود': e };
+                months.forEach(m => row[`شهر ${m}`] = data[m] || 0);
+                row['الإجمالي'] = months.reduce((sum, m) => sum + (data[m] || 0), 0);
+                return row;
+            });
+            rows.sort((a, b) => b['الإجمالي'] - a['الإجمالي']);
+            downloadExcel(rows, `Employee_Yearly_${year}.xlsx`, 'Yearly Sales');
         }
 
-        // --- Logic: Missing Employees ---
-        function renderMissingEmployees(data) {
-            const list = data.missing_sales_groups || [];
-            const tbody = document.getElementById('missingBody');
-            document.getElementById('missingCount').textContent = list.length;
-
-            if (list.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="2" class="text-center text-success">سليم (Clean)</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = list.map(item => `
-                <tr>
-                    <td><code>${item}</code></td>
-                    <td class="text-muted">-</td>
-                </tr>
-            `).join('');
+        function exportEmployeeRanking() {
+            if (!empData) { alert('الرجاء تحميل البيانات أولاً'); return; }
+            const empTotals = {};
+            Object.entries(empData.history || {}).forEach(([storeId, records]) => {
+                records.forEach(([d, e, s, t]) => {
+                    if (inRange(d)) {
+                        if (!empTotals[e]) empTotals[e] = { sales: 0, trans: 0, store: storeId };
+                        empTotals[e].sales += s;
+                        empTotals[e].trans += (t || 0);
+                    }
+                });
+            });
+            const rows = Object.entries(empTotals).map(([e, data], i) => ({
+                'الترتيب': 0, 'الموظف': getEmpName(e), 'الكود': e, 'المعرض': getStoreName(data.store),
+                'إجمالي المبيعات': data.sales, 'عدد الفواتير': data.trans,
+                'متوسط الفاتورة': data.trans > 0 ? Math.round(data.sales / data.trans) : 0
+            }));
+            rows.sort((a, b) => b['إجمالي المبيعات'] - a['إجمالي المبيعات']);
+            rows.forEach((r, i) => r['الترتيب'] = i + 1);
+            downloadExcel(rows, `Employee_Ranking_${getDateRange().start}_${getDateRange().end}.xlsx`, 'Ranking');
         }
 
-        function renderIssues(issues, bodyId, countId) {
-            const tbody = document.getElementById(bodyId);
-            document.getElementById(countId).textContent = issues.length;
-
-            if (issues.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-success"><i class="fas fa-check-circle me-1"></i> البيانات سليمة</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = issues.map(i => `
-                <tr class="table-${i.severity || 'warning'}">
-                    <td class="fw-bold">${i.type}</td>
-                    <td>${i.detail}</td>
-                    <td>${i.date}</td>
-                    <td>${i.val}</td>
-                    <td><span class="badge bg-danger">للمراجعة</span></td>
-                </tr>
-            `).join('');
+        function exportEmployeeDailySales() {
+            if (!empData) { alert('الرجاء تحميل البيانات أولاً'); return; }
+            const rows = [];
+            Object.entries(empData.history || {}).forEach(([storeId, records]) => {
+                records.forEach(([d, e, s, t]) => {
+                    if (inRange(d)) rows.push({ 'التاريخ': d, 'المعرض': getStoreName(storeId), 'الموظف': getEmpName(e), 'الكود': e, 'المبيعات': s, 'الفواتير': t || 0 });
+                });
+            });
+            rows.sort((a, b) => a['التاريخ'].localeCompare(b['التاريخ']));
+            downloadExcel(rows, `Employee_Daily_${getDateRange().start}_${getDateRange().end}.xlsx`, 'Daily Sales');
         }
 
-        // Auto-run on load
-        runAudit();
+        function exportEmployeeMapping() {
+            if (!empData) { alert('الرجاء تحميل البيانات أولاً'); return; }
+            const empStats = {};
+            Object.entries(empData.history || {}).forEach(([storeId, records]) => {
+                records.forEach(([d, e, s]) => {
+                    if (!empStats[e]) empStats[e] = { store: storeId, count: 0, firstDate: d, lastDate: d, total: 0 };
+                    empStats[e].count++;
+                    empStats[e].total += s;
+                    if (d < empStats[e].firstDate) empStats[e].firstDate = d;
+                    if (d > empStats[e].lastDate) empStats[e].lastDate = d;
+                });
+            });
+            const rows = Object.entries(empStats).map(([e, data]) => ({
+                'الكود': e, 'الاسم': getEmpName(e), 'المعرض': getStoreName(data.store),
+                'عدد السجلات': data.count, 'إجمالي المبيعات': data.total,
+                'أول نشاط': data.firstDate, 'آخر نشاط': data.lastDate
+            }));
+            downloadExcel(rows, `Employee_Mapping.xlsx`, 'Mapping');
+        }
 
+        // TARGET REPORTS
+        function exportStoreTargets() {
+            if (!checkData()) return;
+            const year = document.getElementById('yearFilter').value;
+            const rows = [];
+            const targets = mgmtData.targets || {};
+            const actualSales = {};
+            mgmtData.sales?.forEach(([d, s, v]) => { if (d.startsWith(year)) actualSales[s] = (actualSales[s] || 0) + v; });
+            Object.entries(targets).forEach(([storeId, monthlyTargets]) => {
+                const yearTotal = Object.entries(monthlyTargets).filter(([m]) => m.startsWith(year)).reduce((sum, [, v]) => sum + v, 0);
+                const actual = actualSales[storeId] || 0;
+                rows.push({ 'المعرض': getStoreName(storeId), 'التارجت': yearTotal, 'الفعلي': actual, 'الفرق': actual - yearTotal, 'نسبة التحقيق': yearTotal > 0 ? ((actual / yearTotal) * 100).toFixed(1) + '%' : 'N/A' });
+            });
+            downloadExcel(rows, `Store_Targets_${year}.xlsx`, 'Targets');
+        }
+
+        function exportEmployeeTargets() {
+            if (!empData) { alert('الرجاء تحميل البيانات أولاً'); return; }
+            const year = document.getElementById('yearFilter').value;
+            const rows = [];
+            const targets = empData.targets || {};
+            const actualSales = {};
+            Object.values(empData.history || {}).forEach(records => {
+                records.forEach(([d, e, s]) => { if (d.startsWith(year)) actualSales[e] = (actualSales[e] || 0) + s; });
+            });
+            Object.entries(targets).forEach(([empId, monthlyTargets]) => {
+                const yearTotal = Object.entries(monthlyTargets).filter(([m]) => m.startsWith(year)).reduce((sum, [, v]) => sum + v, 0);
+                const actual = actualSales[empId] || 0;
+                rows.push({ 'الموظف': getEmpName(empId), 'الكود': empId, 'التارجت': yearTotal, 'الفعلي': actual, 'الفرق': actual - yearTotal, 'نسبة التحقيق': yearTotal > 0 ? ((actual / yearTotal) * 100).toFixed(1) + '%' : 'N/A' });
+            });
+            downloadExcel(rows, `Employee_Targets_${year}.xlsx`, 'Targets');
+        }
+
+        // RAW DATA EXPORTS
+        function exportRawSales() {
+            if (!checkData()) return;
+            const rows = mgmtData.sales?.filter(([d]) => inRange(d)).map(([d, s, v]) => ({ 'التاريخ': d, 'كود المعرض': s, 'المعرض': getStoreName(s), 'المبيعات': v })) || [];
+            downloadExcel(rows, `Raw_Sales_${getDateRange().start}_${getDateRange().end}.xlsx`, 'Sales');
+        }
+
+        function exportRawTransactions() {
+            if (!checkData()) return;
+            const rows = mgmtData.transactions?.filter(([d]) => inRange(d)).map(([d, s, v]) => ({ 'التاريخ': d, 'كود المعرض': s, 'المعرض': getStoreName(s), 'الفواتير': v })) || [];
+            downloadExcel(rows, `Raw_Transactions_${getDateRange().start}_${getDateRange().end}.xlsx`, 'Transactions');
+        }
+
+        function exportRawVisitors() {
+            if (!checkData()) return;
+            const rows = mgmtData.visitors?.filter(([d]) => inRange(d)).map(([d, s, v]) => ({ 'التاريخ': d, 'كود المعرض': s, 'المعرض': getStoreName(s), 'الزوار': v })) || [];
+            downloadExcel(rows, `Raw_Visitors_${getDateRange().start}_${getDateRange().end}.xlsx`, 'Visitors');
+        }
+
+        function exportRawEmployees() {
+            if (!empData) { alert('الرجاء تحميل البيانات أولاً'); return; }
+            const rows = [];
+            Object.entries(empData.history || {}).forEach(([storeId, records]) => {
+                records.filter(([d]) => inRange(d)).forEach(rec => {
+                    rows.push({ 'التاريخ': rec[0], 'كود المعرض': storeId, 'المعرض': getStoreName(storeId), 'كود الموظف': rec[1], 'الموظف': getEmpName(rec[1]), 'المبيعات': rec[2], 'الفواتير': rec[3] || 0 });
+                });
+            });
+            downloadExcel(rows, `Raw_Employees_${getDateRange().start}_${getDateRange().end}.xlsx`, 'Employees');
+        }
+
+        function exportStoreInfo() {
+            if (!checkData()) return;
+            const rows = Object.entries(mgmtData.stores || {}).map(([id, name]) => {
+                const meta = mgmtData.store_meta?.[id] || {};
+                return { 'الكود': id, 'الاسم': name, 'المدينة': meta.city || '-', 'المدير': meta.manager || '-', 'النوع': meta.type || '-', 'المنطقة': meta.area || '-' };
+            });
+            downloadExcel(rows, `Store_Info.xlsx`, 'Stores');
+        }
+
+        function exportOffersData() {
+            if (!checkData()) return;
+            const offers = mgmtData.offers_analysis || [];
+            if (offers.length === 0) { alert('لا توجد بيانات عروض'); return; }
+            downloadExcel(offers, `Offers_Data.xlsx`, 'Offers');
+        }
+
+        // SYSTEM REPORTS
+        function exportDataAudit() {
+            if (!checkData()) return;
+            const issues = [];
+            const visitorMap = new Map();
+            mgmtData.visitors?.forEach(([d, s, v]) => visitorMap.set(`${s}|${d}`, v));
+            mgmtData.sales?.filter(([d]) => inRange(d)).forEach(([d, s, v]) => {
+                if (v < 0) issues.push({ 'النوع': 'مبيعات سالبة', 'المعرض': getStoreName(s), 'التاريخ': d, 'القيمة': v });
+                if (v > 0 && !['0', '1013'].includes(String(s)) && !visitorMap.get(`${s}|${d}`)) {
+                    issues.push({ 'النوع': 'مبيعات بدون زوار', 'المعرض': getStoreName(s), 'التاريخ': d, 'القيمة': v });
+                }
+            });
+            if (issues.length === 0) { alert('لا توجد مشاكل في البيانات'); return; }
+            downloadExcel(issues, `Data_Audit_${getDateRange().start}_${getDateRange().end}.xlsx`, 'Audit');
+        }
+
+        async function exportMissingEmployees() {
+            try {
+                const res = await fetch('audit_missing_emp.json');
+                const data = await res.json();
+                const list = data.missing_sales_groups || [];
+                if (list.length === 0) { alert('لا يوجد موظفين غير مسجلين'); return; }
+                const rows = list.map(id => ({ 'Sales Group ID': id }));
+                downloadExcel(rows, `Missing_Employees.xlsx`, 'Missing');
+            } catch (e) { alert('لا يوجد ملف audit_missing_emp.json'); }
+        }
+
+        // Auto-load on page load
+        loadAllData();
     </script>
 
     </div><!-- /container-fluid -->
