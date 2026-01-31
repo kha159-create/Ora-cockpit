@@ -45,7 +45,6 @@
         </div>
         <nav class="sidebar-nav">
             <a href="index.html" class="nav-link"><i class="fas fa-home"></i> الرئيسية</a>
-            <a href="reports.html" class="nav-link"><i class="fas fa-file-alt"></i> التقارير</a>
             <a href="employees.html" class="nav-link"><i class="fas fa-users"></i> أداء الموظفين</a>
             <a href="product_analysis.html" class="nav-link"><i class="fas fa-box"></i> تحليل المنتجات</a>
             <a href="branch_details.html" class="nav-link"><i class="fas fa-store"></i> تفاصيل الفروع</a>
@@ -76,6 +75,32 @@
         <div id="loadingErrors" class="text-center my-5">
             <div class="spinner-border text-primary" role="status"></div>
             <p class="mt-2">جاري استدعاء البيانات...</p>
+        </div>
+
+        <!-- Store Picker (when sid is missing - e.g. from sidebar) -->
+        <div id="storePicker" class="mb-4" style="display: none;">
+            <div class="card border-0 shadow-sm" style="border-radius: var(--radius-2xl); overflow: hidden;">
+                <div class="card-header py-3" style="background: linear-gradient(to left, rgba(255, 237, 213, 0.95), rgba(254, 215, 170, 0.95)); border: none; color: var(--neutral-900); font-weight: 700;">
+                    <i class="fas fa-store me-2"></i>اختر الفرع / المعرض لعرض التفاصيل
+                </div>
+                <div class="card-body p-4">
+                    <p class="text-muted mb-3">اختر فرعاً من القائمة أدناه للاطلاع على مبيعات الأمس والشهر حسب الموظفين:</p>
+                    <div class="row g-2 mb-3">
+                        <div class="col-12 col-md-6 col-lg-4">
+                            <label class="form-label small fw-bold text-muted">الفرع / المعرض</label>
+                            <select id="storeSelect" class="form-select" style="font-weight: 600;">
+                                <option value="">-- اختر الفرع --</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6 col-lg-4 d-flex align-items-end">
+                            <button type="button" class="btn btn-primary w-100" onclick="goToSelectedStore()">
+                                <i class="fas fa-external-link-alt me-2"></i>عرض التفاصيل
+                            </button>
+                        </div>
+                    </div>
+                    <small class="text-muted">أو انتقل من <a href="index.html">لوحة التحكم</a> واضغط على اسم الفرع في جدول التفاصيل.</small>
+                </div>
+            </div>
         </div>
 
         <div id="content" style="display: none;">
@@ -155,9 +180,32 @@
 
         async function init() {
             const errDiv = document.getElementById('loadingErrors');
+            const pickerDiv = document.getElementById('storePicker');
 
             if (!sid) {
-                errDiv.innerHTML = `<div class="alert alert-danger">رقم الفرع غير موجود (Store ID Missing)</div>`;
+                // No sid: show store picker instead of error
+                try {
+                    const res = await fetch('management_data.json');
+                    if (!res.ok) throw new Error("File not found");
+                    const mgmt = await res.json();
+                    const stores = mgmt.stores || {};
+                    const storeList = Object.entries(stores).map(([id, name]) => ({ id, name }));
+                    storeList.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+                    const sel = document.getElementById('storeSelect');
+                    storeList.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s.id;
+                        opt.textContent = s.name || s.id;
+                        sel.appendChild(opt);
+                    });
+
+                    errDiv.style.display = 'none';
+                    pickerDiv.style.display = 'block';
+                    document.getElementById('branchName').textContent = 'اختر فرعاً لعرض التفاصيل';
+                } catch (e) {
+                    errDiv.innerHTML = `<div class="alert alert-warning">لم يتم العثور على قائمة الفروع. تأكد من وجود ملف management_data.json. يمكنك أيضاً الوصول لتفاصيل الفرع من <a href="index.html">لوحة التحكم</a> بالنقر على اسم الفرع.</div>`;
+                }
                 return;
             }
 
@@ -337,6 +385,14 @@
                     <td>${totalT > 0 ? (totalS / totalT).toFixed(0) : 0}</td>
                 </tr>
             `;
+        }
+
+        function goToSelectedStore() {
+            const sel = document.getElementById('storeSelect');
+            const storeId = sel.value;
+            const storeName = sel.options[sel.selectedIndex]?.text || storeId;
+            if (!storeId) return;
+            window.location.href = `branch_details.html?sid=${encodeURIComponent(storeId)}&name=${encodeURIComponent(storeName)}`;
         }
 
         init();
