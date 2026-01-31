@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="assets/sidebar.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .report-card { border-radius: var(--radius-2xl); box-shadow: var(--shadow-lg); border: 1px solid var(--neutral-200); overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
+        .report-card { border-radius: var(--radius-2xl); box-shadow: var(--shadow-lg); border: 1px solid var(--neutral-200); overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; }
         .report-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-xl); border-color: var(--primary-200); }
         .report-card .card-body { padding: 1.25rem; }
     </style>
@@ -27,7 +27,6 @@
         <nav class="sidebar-nav">
             <a href="index.html" class="nav-link"><i class="fas fa-home"></i> الرئيسية</a>
             <a href="reports.html" class="nav-link active"><i class="fas fa-file-alt"></i> التقارير</a>
-            <a href="yesterday_report.html" class="nav-link"><i class="fas fa-calendar-day"></i> تقرير أمس</a>
             <a href="employees.html" class="nav-link"><i class="fas fa-users"></i> أداء الموظفين</a>
             <a href="product_analysis.html" class="nav-link"><i class="fas fa-box"></i> تحليل المنتجات</a>
             <a href="branch_details.html" class="nav-link"><i class="fas fa-store"></i> تفاصيل الفروع</a>
@@ -37,7 +36,6 @@
             <a href="offers_analysis.html" class="nav-link"><i class="fas fa-tags"></i> تحليل العروض</a>
             <a href="data_audit.html" class="nav-link"><i class="fas fa-clipboard-check"></i> تدقيق البيانات</a>
             <a href="admin_targets.html" class="nav-link"><i class="fas fa-cog"></i> إعدادات الأهداف</a>
-            <a href="widget.html" class="nav-link"><i class="fas fa-chart-line"></i> متابعة مبيعات اليوم</a>
         </nav>
         <div class="sidebar-footer">
             <a href="#" class="nav-link" onclick="event.preventDefault(); logout(); return false;"><i class="fas fa-sign-out-alt"></i> خروج</a>
@@ -50,8 +48,6 @@
                 <span class="fw-bold text-dark">التقارير</span>
                 <div class="d-flex flex-wrap align-items-center gap-2">
                     <span class="fw-bold text-dark">آخر تحديث: <span class="text-primary" id="reportsLastUpdate">--:--</span></span>
-                    <a href="index.html#pdf" class="btn btn-warning btn-sm fw-bold text-white">PDF</a>
-                    <a href="index.html#excel" class="btn btn-success btn-sm fw-bold text-white">Excel</a>
                 </div>
             </div>
             <div class="main-content-inner">
@@ -59,61 +55,176 @@
     <div class="container-fluid px-4">
         <header class="page-header">
             <h1 class="page-title">التقارير</h1>
-            <p class="page-subtitle">تصدير التقارير PDF و Excel فقط</p>
+            <p class="page-subtitle">جميع أنواع التقارير PDF و Excel - اضغط على البطاقة لاختيار نوع التقرير</p>
         </header>
 
         <section class="page-section">
         <div class="row g-4">
             <div class="col-12 col-md-6 col-lg-4">
-                <a href="index.html#pdf" class="text-decoration-none">
-                    <div class="card report-card h-100">
-                        <div class="card-body text-center">
-                            <i class="fas fa-file-pdf fa-3x text-danger mb-3"></i>
-                            <h5 class="card-title">تصدير PDF</h5>
-                            <p class="card-text text-muted">تصدير تقرير المبيعات والفروع بصيغة PDF</p>
-                            <span class="btn btn-warning btn-sm fw-bold text-white">تصدير PDF</span>
-                        </div>
+                <div class="card report-card h-100" onclick="openReportModal('pdf')">
+                    <div class="card-body text-center">
+                        <i class="fas fa-file-pdf fa-3x text-danger mb-3"></i>
+                        <h5 class="card-title">تقارير PDF</h5>
+                        <p class="card-text text-muted">لوحة التحكم، تقرير أمس للمعارض، تقرير أمس للموظفين</p>
+                        <span class="btn btn-warning btn-sm fw-bold text-white">اختر وتصدير PDF</span>
                     </div>
-                </a>
+                </div>
             </div>
             <div class="col-12 col-md-6 col-lg-4">
-                <a href="index.html#excel" class="text-decoration-none">
-                    <div class="card report-card h-100">
-                        <div class="card-body text-center">
-                            <i class="fas fa-file-excel fa-3x text-success mb-3"></i>
-                            <h5 class="card-title">تصدير Excel</h5>
-                            <p class="card-text text-muted">تصدير البيانات بصيغة Excel</p>
-                            <span class="btn btn-success btn-sm fw-bold text-white">تصدير Excel</span>
-                        </div>
+                <div class="card report-card h-100" onclick="openReportModal('excel')">
+                    <div class="card-body text-center">
+                        <i class="fas fa-file-excel fa-3x text-success mb-3"></i>
+                        <h5 class="card-title">تقارير Excel</h5>
+                        <p class="card-text text-muted">مبيعات المعارض، مبيعات الموظفين</p>
+                        <span class="btn btn-success btn-sm fw-bold text-white">اختر وتصدير Excel</span>
                     </div>
-                </a>
+                </div>
             </div>
         </div>
         </section>
 
     </div>
 
+    <div id="hiddenFilters" style="display:none;">
+        <select id="managerFilter"><option value="all">الكل</option></select>
+        <select id="cityFilter"><option value="all">الكل</option></select>
+        <select id="typeFilter"><option value="all">الكل</option></select>
+        <select id="branchFilter"><option value="all">الكل</option></select>
+    </div>
+    <div class="modal fade" id="excelDateModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold">تصدير Excel - مبيعات المعارض</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">من تاريخ</label>
+                        <input type="date" id="excelStartDate" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">إلى تاريخ</label>
+                        <input type="date" id="excelEndDate" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="button" class="btn btn-success fw-bold" onclick="runExcelExport()">تصدير</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="reportTypeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="reportModalTitle">اختر نوع التقرير</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="reportModalBody">
+                    <!-- filled by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="users.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="assets/amiri_font.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="pdf_export.js"></script>
+    <script src="pdf_export_employees.js"></script>
+    <script src="excel_export.js"></script>
     <script>
         const currentUser = JSON.parse(localStorage.getItem('currentUser'));
         if (!currentUser) window.location.href = 'login.html';
         function logout() { localStorage.removeItem('currentUser'); window.location.href = 'login.html'; }
+
+        let rawData = null;
+        fetch('management_data.json?t=' + Date.now()).then(r=>r.json()).then(d=>{ rawData=d; window.rawData=d; }).catch(()=>{});
 
         function updateLastUpdate() {
             fetch('management_data.json?t=' + Date.now())
                 .then(r => r.json())
                 .then(data => {
                     const timeEl = document.getElementById('reportsLastUpdate');
-                    if (!timeEl) return;
-                    timeEl.textContent = data.metadata?.generated_at || '--:--';
+                    if (timeEl) timeEl.textContent = data.metadata?.generated_at || '--:--';
                 })
-                .catch(() => {
-                    const timeEl = document.getElementById('reportsLastUpdate');
-                    if (timeEl) timeEl.textContent = '--:--';
-                });
+                .catch(() => {});
         }
         updateLastUpdate();
         setInterval(updateLastUpdate, 60000);
+
+        function openReportModal(type) {
+            const modal = new bootstrap.Modal(document.getElementById('reportTypeModal'));
+            const body = document.getElementById('reportModalBody');
+            const title = document.getElementById('reportModalTitle');
+            if (type === 'pdf') {
+                title.textContent = 'اختر تقرير PDF';
+                body.innerHTML = `
+                    <div class="d-flex flex-column gap-2">
+                        <button onclick="doPdfReport('dashboard')" class="btn btn-warning fw-bold text-white w-100">
+                            <i class="fas fa-chart-line me-2"></i> تقرير لوحة التحكم (PDF)
+                        </button>
+                        <button onclick="doPdfReport('yesterday-stores')" class="btn btn-warning fw-bold text-white w-100">
+                            <i class="fas fa-store me-2"></i> تقرير أمس للمعارض (PDF)
+                        </button>
+                        <button onclick="doPdfReport('yesterday-employees')" class="btn btn-warning fw-bold text-white w-100">
+                            <i class="fas fa-users me-2"></i> تقرير أمس للموظفين (PDF)
+                        </button>
+                    </div>
+                `;
+            } else {
+                title.textContent = 'اختر تقرير Excel';
+                body.innerHTML = `
+                    <div class="d-flex flex-column gap-2">
+                        <button onclick="doExcelReport('store')" class="btn btn-success fw-bold text-white w-100">
+                            <i class="fas fa-store me-2"></i> مبيعات المعارض (Excel)
+                        </button>
+                        <button onclick="doExcelReport('employee')" class="btn btn-success fw-bold text-white w-100">
+                            <i class="fas fa-users me-2"></i> مبيعات الموظفين (Excel)
+                        </button>
+                    </div>
+                `;
+            }
+            modal.show();
+        }
+
+        function doPdfReport(reportType) {
+            bootstrap.Modal.getInstance(document.getElementById('reportTypeModal'))?.hide();
+            if (!rawData) { alert('جار تحميل البيانات... حاول مرة أخرى'); return; }
+            window.rawData = rawData;
+            if (reportType === 'dashboard') {
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                const end = new Date(today);
+                end.setHours(23,59,59,999);
+                window.dashboardState = { start: today, end: end };
+                if (typeof generatePDF === 'function') generatePDF('all', false);
+            } else if (reportType === 'yesterday-stores') {
+                const y = new Date();
+                y.setDate(y.getDate()-1);
+                y.setHours(0,0,0,0);
+                const yEnd = new Date(y);
+                yEnd.setHours(23,59,59,999);
+                window.dashboardState = { start: y, end: yEnd };
+                if (typeof generatePDF === 'function') generatePDF('all', false);
+            } else if (reportType === 'yesterday-employees') {
+                fetch('employees_data.json?t='+Date.now()).then(r=>r.json()).then(ed=>{
+                    window.historyData = ed.history || {};
+                    window.storeMeta = rawData?.store_meta || {};
+                    if (typeof generateEmployeePDF === 'function') generateEmployeePDF();
+                }).catch(()=>alert('تعذر تحميل بيانات الموظفين'));
+            }
+        }
+
+        function doExcelReport(type) {
+            bootstrap.Modal.getInstance(document.getElementById('reportTypeModal'))?.hide();
+            if (type === 'store') window.location.href = 'index.html#excel';
+            else window.location.href = 'employees.html';
+        }
     </script>
     <script src="assets/sidebar.js"></script>
             </div>

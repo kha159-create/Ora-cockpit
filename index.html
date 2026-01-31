@@ -72,6 +72,26 @@
         .top-progress-bar { height: 20px; border-radius: 10px; background: var(--neutral-200); overflow: hidden; }
         .top-progress-bar-fill { height: 100%; border-radius: 10px; background: linear-gradient(90deg, var(--primary-400), var(--primary-600)); transition: width 0.4s ease; }
         .top-progress-pct { flex: 0 0 60px; text-align: left; font-weight: 700; color: var(--neutral-800); font-size: 0.9rem; }
+        .growth-chart-card { background: #fff; border-radius: var(--radius-2xl); box-shadow: var(--shadow-lg); border: 1px solid var(--neutral-200); }
+        .growth-chart-accent { width: 4px; height: 24px; background: var(--primary-500); border-radius: 2px; }
+        .growth-chart-label { color: var(--neutral-500); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .growth-chart-title { font-weight: 700; font-size: 1.1rem; color: var(--neutral-800); font-style: italic; }
+        .chart-metric-btn { padding: 0.4rem 1rem; border-radius: 999px; border: none; background: var(--neutral-200); color: var(--neutral-600); font-weight: 600; font-size: 0.9rem; transition: all 0.2s; }
+        .chart-metric-btn:hover { background: var(--neutral-300); color: var(--neutral-800); }
+        .chart-metric-btn.active { background: linear-gradient(135deg, var(--primary-500), var(--primary-600)); color: #fff; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .legend-dot.bg-orange { background: var(--primary-500); }
+        .legend-dot.bg-dark { background: #1e293b; }
+        .kpi-modern { background: #fff; border-radius: var(--radius-xl); box-shadow: 0 4px 12px rgba(0,0,0,0.06); border: 1px solid var(--neutral-100); padding: 1rem 1.25rem; height: 100%; position: relative; overflow: hidden; }
+        .kpi-modern .kpi-icon { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1rem; margin-bottom: 0.5rem; }
+        .kpi-modern .kpi-title { font-size: 0.75rem; text-transform: uppercase; color: var(--neutral-500); font-weight: 600; letter-spacing: 0.5px; }
+        .kpi-modern .kpi-value { font-size: 1.35rem; font-weight: 800; color: var(--neutral-900); margin: 0.25rem 0; }
+        .kpi-modern .kpi-sub { font-size: 0.8rem; color: var(--neutral-500); }
+        .kpi-modern .kpi-badge { display: inline-flex; align-items: center; gap: 4px; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.8rem; font-weight: 700; }
+        .kpi-modern .kpi-badge.pos { background: #dcfce7; color: #166534; }
+        .kpi-modern .kpi-badge.neg { background: #fee2e2; color: #b91c1c; }
+        .kpi-modern .kpi-progress { height: 6px; border-radius: 3px; background: var(--neutral-200); margin-top: 0.5rem; overflow: hidden; }
+        .kpi-modern .kpi-progress-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--primary-400), var(--primary-600)); transition: width 0.3s; }
     </style>
 </head>
 
@@ -88,7 +108,6 @@
         <nav class="sidebar-nav">
             <a href="index.html" class="nav-link"><i class="fas fa-home"></i> الرئيسية</a>
             <a href="reports.html" class="nav-link"><i class="fas fa-file-alt"></i> التقارير</a>
-            <a href="yesterday_report.html" class="nav-link"><i class="fas fa-calendar-day"></i> تقرير أمس</a>
             <a href="employees.html" class="nav-link"><i class="fas fa-users"></i> أداء الموظفين</a>
             <a href="product_analysis.html" class="nav-link"><i class="fas fa-box"></i> تحليل المنتجات</a>
             <a href="branch_details.html" class="nav-link"><i class="fas fa-store"></i> تفاصيل الفروع</a>
@@ -98,7 +117,6 @@
             <a href="offers_analysis.html" class="nav-link"><i class="fas fa-tags"></i> تحليل العروض</a>
             <a href="data_audit.html" class="nav-link"><i class="fas fa-clipboard-check"></i> تدقيق البيانات</a>
             <a href="admin_targets.html" class="nav-link"><i class="fas fa-cog"></i> إعدادات الأهداف</a>
-            <a href="widget.html" class="nav-link"><i class="fas fa-chart-line"></i> متابعة مبيعات اليوم</a>
         </nav>
         <div class="sidebar-footer">
             <a href="#" class="nav-link" onclick="event.preventDefault(); logout(); return false;"><i class="fas fa-sign-out-alt"></i> خروج</a>
@@ -117,7 +135,7 @@
                         <span class="fw-bold text-dark">مبيعات اليوم: <span class="text-primary today-sales-val">0</span></span>
                         <span class="text-muted small" id="lastUpdate">...</span>
                     </div>
-                    <a href="yesterday_report.html" class="btn btn-outline-primary btn-sm fw-bold text-nowrap">تقرير أمس</a>
+                    <button onclick="openYesterdayReportModal()" class="btn btn-outline-primary btn-sm fw-bold text-nowrap">تقرير أمس</button>
                     <button id="btnSetTarget" onclick="window.location.href='target_setting.html'" class="btn-primary fw-bold" style="display: none;">Target</button>
                 </div>
             </div>
@@ -129,6 +147,7 @@
     <!-- Arabic Font Base64 -->
     <script src="assets/amiri_font.js"></script>
     <script src="pdf_export.js"></script>
+    <script src="pdf_export_employees.js"></script>
     <!-- SheetJS for Excel -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="excel_export.js"></script>
@@ -248,63 +267,88 @@
             </div>
         </div>
 
-        <!-- Row 1: KPI Cards (Current + Prev Year merged - cockpit design) -->
+        <!-- Row 1: KPI Cards - تصميم الصورة -->
         <section class="page-section">
         <span class="section-label">المؤشرات (<span id="currYearTitle">...</span>)</span>
         <div class="row g-3 mb-4">
             <div class="col-6 col-lg">
-                <div class="kpi-card modern-kpi-card kpi-no-border">
-                    <div class="kpi-title">المبيعات (Sales)</div>
+                <div class="kpi-modern">
+                    <div class="kpi-icon" style="background: linear-gradient(135deg, var(--primary-400), var(--primary-600)); color:#fff;"><i class="fas fa-chart-line"></i></div>
+                    <div class="kpi-title">المبيعات الإجمالية</div>
                     <div class="kpi-value" id="totalSales">0</div>
-                    <div class="kpi-sub">السنة الحالية / السابقة: <span id="prevSales">0</span></div>
-                    <div class="kpi-sub"><span id="salesGrowthVal">0%</span> النسبة</div>
-                    <div class="kpi-sub mt-1" style="font-size: 0.75rem;"><span id="growthAbs" class="fw-bold">0</span> قيمة النمو</div>
+                    <div class="kpi-sub">الحصة مقابل <span id="prevSales">0</span></div>
+                    <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
+                        <span id="salesGrowthVal" class="kpi-badge pos">0%</span>
+                        <span class="kpi-sub">السنة الماضية: <span id="prevSalesDisp">0</span></span>
+                    </div>
+                    <div class="kpi-sub mt-1"><span id="growthAbs" class="fw-bold">0</span> قيمة النمو</div>
+                    <div class="kpi-progress"><div id="salesAchBar" class="kpi-progress-fill" style="width:0%"></div></div>
+                    <div class="kpi-sub mt-1"><span id="salesAchPct">0</span>% محقق</div>
                 </div>
             </div>
             <div class="col-6 col-lg">
-                <div class="kpi-card modern-kpi-card kpi-no-border">
-                    <div class="kpi-title">قيمة العميل (Cust Value)</div>
+                <div class="kpi-modern">
+                    <div class="kpi-icon" style="background: #7c3aed; color:#fff;"><i class="fas fa-bolt"></i></div>
+                    <div class="kpi-title">قيمة العميل</div>
                     <div class="kpi-value" id="totalCustValue">0</div>
-                    <div class="kpi-sub text-muted">السابق: <span id="prevCustValue">0</span></div>
-                    <div class="kpi-sub"><span id="custValueGrowth">0%</span> النسبة</div>
+                    <div class="kpi-sub">السابق: <span id="prevCustValue">0</span></div>
+                    <span id="custValueGrowth" class="kpi-badge pos">0%</span>
                 </div>
             </div>
             <div class="col-6 col-lg">
-                <div class="kpi-card modern-kpi-card kpi-no-border">
-                    <div class="kpi-title">الفواتير (Transactions)</div>
+                <div class="kpi-modern">
+                    <div class="kpi-icon" style="background: #7c3aed; color:#fff;"><i class="fas fa-receipt"></i></div>
+                    <div class="kpi-title">الفواتير</div>
                     <div class="kpi-value" id="totalTrans">0</div>
-                    <div class="kpi-sub text-muted">Avg: <span id="avgTicket" class="fw-bold">0</span> | السابق: <span id="prevTrans">0</span> (Avg: <span id="prevAvgTicket">0</span>)</div>
-                    <div class="kpi-sub"><span id="transGrowth">0%</span> النسبة</div>
+                    <div class="kpi-sub">متوسط: <span id="avgTicket" class="fw-bold">0</span> | السابق: <span id="prevTrans">0</span></div>
+                    <span id="transGrowth" class="kpi-badge pos">0%</span>
                 </div>
             </div>
             <div class="col-6 col-lg">
-                <div class="kpi-card modern-kpi-card kpi-no-border">
-                    <div class="kpi-title">الزوار (Visitors)</div>
+                <div class="kpi-modern">
+                    <div class="kpi-icon" style="background: #7c3aed; color:#fff;"><i class="fas fa-users"></i></div>
+                    <div class="kpi-title">الزوار</div>
                     <div class="kpi-value" id="totalVisitors">0</div>
-                    <div class="kpi-sub text-muted">Conv: <span id="convRate" class="fw-bold">0%</span> | السابق: <span id="prevVisitors">0</span> (<span id="prevConvRate">0%</span> conv)</div>
-                    <div class="kpi-sub"><span id="visitorsGrowth">0%</span> النسبة</div>
+                    <div class="kpi-sub">Conv: <span id="convRate" class="fw-bold">0%</span> | السابق: <span id="prevVisitors">0</span></div>
+                    <span id="visitorsGrowth" class="kpi-badge pos">0%</span>
                 </div>
             </div>
             <div class="col-6 col-lg">
-                <div class="kpi-card modern-kpi-card kpi-no-border">
-                    <div class="kpi-title">تحقيق الهدف (Target)</div>
+                <div class="kpi-modern">
+                    <div class="kpi-icon" style="background: linear-gradient(135deg, var(--primary-400), var(--primary-600)); color:#fff;"><i class="fas fa-bullseye"></i></div>
+                    <div class="kpi-title">تحقيق الهدف</div>
                     <div class="d-flex align-items-center justify-content-between">
                         <span class="kpi-value" id="targetPct">0%</span>
-                        <div style="width: 50px; height: 50px;">
-                            <canvas id="miniGauge"></canvas>
-                        </div>
+                        <div style="width: 50px; height: 50px;"><canvas id="miniGauge"></canvas></div>
                     </div>
-                    <div class="kpi-sub text-muted">Target: <span id="targetVal">0</span></div>
+                    <div class="kpi-sub">الهدف: <span id="targetVal">0</span></div>
                 </div>
             </div>
         </div>
         </section>
 
-        <!-- Daily Sales Performance - بالكامل full width -->
+        <!-- بطاقة الأداء اليومي - تصميم TOTAL PORTFOLIO ANALYSIS بدون عنوان -->
         <section class="page-section">
-        <h5 class="section-title">أداء المبيعات اليومي (Daily Sales Performance)</h5>
-        <div class="chart-container p-4 w-100" style="background: var(--card-background); border-radius: var(--radius-2xl); box-shadow: var(--shadow-lg); border: 1px solid var(--neutral-200); width: 100%;">
-            <canvas id="trendChart"></canvas>
+        <div class="growth-chart-card p-4 w-100">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="growth-chart-accent"></span>
+                    <span class="growth-chart-label">مسار النمو</span>
+                    <span class="growth-chart-title">تحليل المحفظة الكلي</span>
+                </div>
+                <div class="d-flex gap-1 chart-metric-btns">
+                    <button type="button" class="chart-metric-btn active" data-metric="sales" onclick="setTrendMetric('sales')">مبيعات</button>
+                    <button type="button" class="chart-metric-btn" data-metric="visitors" onclick="setTrendMetric('visitors')">زوار</button>
+                    <button type="button" class="chart-metric-btn" data-metric="target" onclick="setTrendMetric('target')">هدف</button>
+                </div>
+            </div>
+            <div class="chart-container" style="min-height: 350px;">
+                <canvas id="trendChart"></canvas>
+            </div>
+            <div class="chart-legend mt-2 d-flex gap-4 justify-content-center flex-wrap">
+                <span class="d-inline-flex align-items-center gap-2"><span class="legend-dot bg-orange"></span><span id="trendLegend1">السنة الحالية</span></span>
+                <span class="d-inline-flex align-items-center gap-2"><span class="legend-dot bg-dark"></span><span id="trendLegend2">السنة السابقة</span></span>
+            </div>
         </div>
         </section>
 
@@ -525,7 +569,19 @@
         let dailySort = { col: 'salesY', asc: false };
         let top10MetricStores = 'val';
         let top10MetricEmployees = 'val';
+        let trendChartMetric = 'sales';
         window.employeeListForTop10 = [];
+
+        function setTrendMetric(m) {
+            trendChartMetric = m;
+            document.querySelectorAll('.chart-metric-btn').forEach(b => { b.classList.toggle('active', b.dataset.metric === m); });
+            if (window.lastTrendData) {
+                const {curr, prev, cYear, pYear} = window.lastTrendData;
+                let currData = m === 'visitors' ? (curr.monthlyVisitors || {}) : (m === 'target' ? (curr.monthlyTarget || {}) : curr.monthly);
+                let prevData = m === 'visitors' ? (prev.monthlyVisitors || {}) : (m === 'target' ? (prev.monthlyTarget || {}) : prev.monthly);
+                renderTrendChart(currData, prevData, cYear, pYear);
+            }
+        }
 
         function setTop10Metric(m, target) {
             if (target === 'stores') {
@@ -563,11 +619,17 @@
             try {
                 const res = await fetch('employees_data.json?t=' + Date.now());
                 const ed = await res.json();
+                const storeMeta = (rawData && rawData.store_meta) || {};
                 const history = ed.history || {};
                 const targets = ed.targets || {};
                 const empNames = ed.employee_names || {};
+                const selManager = currentUser.role !== 'Admin' ? currentUser.name : null;
                 let agg = {};
                 Object.keys(history).forEach(sid => {
+                    if (selManager) {
+                        const meta = storeMeta[sid];
+                        if (!meta || meta.manager !== selManager) return;
+                    }
                     (history[sid] || []).forEach(r => {
                         let [d, rawName, sales, trans] = r;
                         if (!rawName || rawName === 'None') return;
@@ -1025,7 +1087,7 @@
             // --- 2. Aggregation Function ---
             const calcStats = (start, end, filters = {}) => {
                 let sales = 0, trans = 0, visitors = 0, target = 0;
-                let monthly = {};
+                let monthly = {}, monthlyVisitors = {}, monthlyTarget = {};
                 let branchSales = {};
                 let branchTrans = {};
                 let branchVisitors = {};
@@ -1072,6 +1134,8 @@
                 rawData.targets.forEach(([d, s, v]) => {
                     if (filterFn(d, s)) {
                         target += v;
+                        let m = new Date(d).getMonth() + 1;
+                        monthlyTarget[m] = (monthlyTarget[m] || 0) + v;
                         branchTarget[s] = (branchTarget[s] || 0) + v;
                     }
                 });
@@ -1090,7 +1154,7 @@
                     }
                 });
 
-                return { sales, trans, visitors, target, monthly, branchSales, branchTrans, branchVisitors, branchTarget };
+                return { sales, trans, visitors, target, monthly, monthlyVisitors, monthlyTarget, branchSales, branchTrans, branchVisitors, branchTarget };
             };
 
             // Calculate Current (Filtered) for Display
@@ -1130,8 +1194,7 @@
             // Growth
             let growth = prev.sales > 0 ? ((curr.sales - prev.sales) / prev.sales) * 100 : 0;
             let gEl = document.getElementById('salesGrowthVal');
-            gEl.textContent = (growth > 0 ? '+' : '') + growth.toFixed(1) + '%';
-            gEl.className = growth >= 0 ? 'text-success-custom fw-bold' : 'text-danger-custom fw-bold';
+            if (gEl) { gEl.textContent = (growth > 0 ? '+' : '') + growth.toFixed(1) + '%'; gEl.className = 'kpi-badge ' + (growth >= 0 ? 'pos' : 'neg'); }
 
             // Rates
             let avgTicket = curr.trans > 0 ? curr.sales / curr.trans : 0;
@@ -1160,7 +1223,8 @@
             if (vGEl) { vGEl.textContent = (visitorsGrowth > 0 ? '+' : '') + visitorsGrowth.toFixed(1) + '%'; vGEl.className = 'kpi-sub ' + (visitorsGrowth >= 0 ? 'text-success-custom fw-bold' : 'text-danger-custom fw-bold'); }
 
             // --- 4. Update KPI Cards (Previous) ---
-            fmt(document.getElementById('prevSales'), prev.sales);
+            fmt(document.getElementById('targetSalesRef'), curr.target);
+            fmt(document.getElementById('prevSalesDisp'), prev.sales);
             fmt(document.getElementById('prevTrans'), prev.trans);
             fmt(document.getElementById('prevVisitors'), prev.visitors);
 
@@ -1179,7 +1243,7 @@
             // Cust Value Growth
             let custValueGrowth = prevCustValue > 0 ? ((custValue - prevCustValue) / prevCustValue) * 100 : 0;
             let cVGEl = document.getElementById('custValueGrowth');
-            if (cVGEl) { cVGEl.textContent = (custValueGrowth > 0 ? '+' : '') + custValueGrowth.toFixed(1) + '%'; cVGEl.className = 'kpi-sub ' + (custValueGrowth >= 0 ? 'text-success-custom' : 'text-danger-custom'); }
+            if (cVGEl) { cVGEl.textContent = (custValueGrowth > 0 ? '+' : '') + custValueGrowth.toFixed(1) + '%'; cVGEl.className = 'kpi-badge ' + (custValueGrowth >= 0 ? 'pos' : 'neg'); }
 
             // Absolute Growth
             let absGrowth = curr.sales - prev.sales;
@@ -1188,10 +1252,12 @@
             absGEl.className = absGrowth >= 0 ? 'fw-bold fs-4 text-success' : 'fw-bold fs-4 text-danger';
 
             // --- 4. Trend Chart ---
-            // Extract Year for Chart Labels from starts
             let cYear = currentStart.getFullYear();
             let pYear = prevStart.getFullYear();
-            renderTrendChart(curr.monthly, prev.monthly, cYear, pYear);
+            window.lastTrendData = { curr, prev, cYear, pYear };
+            let currData = trendChartMetric === 'visitors' ? (curr.monthlyVisitors || {}) : (trendChartMetric === 'target' ? (curr.monthlyTarget || {}) : curr.monthly);
+            let prevData = trendChartMetric === 'visitors' ? (prev.monthlyVisitors || {}) : (trendChartMetric === 'target' ? (prev.monthlyTarget || {}) : prev.monthly);
+            renderTrendChart(currData, prevData, cYear, pYear);
 
             // --- 5. Top 10 Chart & Table ---
             // Prepare Branch Data
@@ -1709,6 +1775,8 @@
                 selManager = currentUser.name;
             }
 
+            if (!rawData || !rawData.store_meta) return;
+
             Object.keys(rawData.store_meta).forEach(sid => {
                 const meta = rawData.store_meta[sid];
                 if (meta.type !== 'Showroom') return;
@@ -1721,68 +1789,6 @@
 
                 accessibleStores.push({ id: sid, name: name });
             });
-
-            // Sort by Name
-            accessibleStores.sort((a, b) => a.name.localeCompare(b.name));
-
-            accessibleStores.forEach(s => {
-                const opt = document.createElement('option');
-                opt.value = s.id;
-                opt.textContent = s.name;
-                sel.appendChild(opt);
-            });
-        }
-
-        function triggerPdfExport() {
-            const storeId = document.getElementById('pdfStoreSelect').value;
-            const isDetailed = document.getElementById('pdfDetailedCheck').checked;
-
-            // Close modal
-            const modalEl = document.getElementById('pdfExportModal');
-            const modal = bootstrap.Modal.getInstance(modalEl);
-            if (modal) modal.hide();
-
-            // Call function in pdf_export.js
-            generatePDF(storeId, isDetailed);
-        }
-
-
-        // ==========================================
-        // PDF EXPORT UI HELPERS
-        // ==========================================
-
-        function openPdfModal() {
-            populatePdfStoreSelect();
-            new bootstrap.Modal('#pdfExportModal').show();
-        }
-
-        function populatePdfStoreSelect() {
-            const sel = document.getElementById('pdfStoreSelect');
-            sel.innerHTML = '<option value="all">الكل (ملخص عام)</option>';
-
-            // Use rawData.store_meta directly but respect permissions
-            let accessibleStores = [];
-
-            // Respect Manager Filter
-            let selManager = document.getElementById('managerFilter').value;
-            if (currentUser.role !== 'Admin') {
-                selManager = currentUser.name;
-            }
-
-            if (rawData && rawData.store_meta) {
-                Object.keys(rawData.store_meta).forEach(sid => {
-                    const meta = rawData.store_meta[sid];
-                    if (meta.type !== 'Showroom') return;
-
-                    // Manager Check
-                    if (selManager !== 'all' && meta.manager !== selManager) return;
-
-                    // Name priority: rawData.stores[sid] > meta.name_ar > sid
-                    const name = (rawData.stores && rawData.stores[sid]) || meta.name_ar || meta.name || sid;
-
-                    accessibleStores.push({ id: sid, name: name });
-                });
-            }
 
             // Sort by Name
             accessibleStores.sort((a, b) => a.name.localeCompare(b.name));
@@ -1835,6 +1841,27 @@
                 <div class="modal-footer">
                     <button type="button" class="btn-secondary" data-bs-dismiss="modal">إغلاق</button>
                     <button type="button" class="btn-primary" onclick="triggerPdfExport()">تصدير</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="yesterdayReportModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">تقرير أمس</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">اختر نوع التقرير لتصدير PDF:</p>
+                    <div class="d-flex flex-column gap-2">
+                        <button onclick="downloadYesterdayPdfStores()" class="btn btn-warning fw-bold text-white">
+                            <i class="fas fa-file-pdf me-2"></i> تقرير أمس للمعارض (PDF)
+                        </button>
+                        <button onclick="downloadYesterdayPdfEmployees()" class="btn btn-warning fw-bold text-white">
+                            <i class="fas fa-file-pdf me-2"></i> تقرير أمس للموظفين (PDF)
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
