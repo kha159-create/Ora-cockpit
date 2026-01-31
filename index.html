@@ -61,6 +61,7 @@
         .risk-med { background-color: var(--primary-50); color: var(--primary-700); }
         .risk-low { background-color: #e8f5e9; color: #2e7d32; }
         .progress-micro { height: 6px; border-radius: 3px; background: var(--neutral-200); margin-top: 4px; }
+        .top10-btn.active { background: linear-gradient(135deg, var(--primary-500), var(--primary-600)); color: #fff; border-color: var(--primary-600); }
     </style>
 </head>
 
@@ -134,127 +135,118 @@
             <p class="page-subtitle">نظرة عامة على المبيعات والأداء حسب الفترة والفروع</p>
         </header>
 
-        <!-- Advanced Filter Bar -->
+        <!-- Advanced Filter Bar (cockpit style) -->
         <div class="page-filters">
-            <div class="row align-items-center g-3">
-
-                <!-- Filter Mode -->
-                <div class="col-md-auto">
-                    <label class="form-label small text-muted fw-bold">نوع التقرير</label>
-                    <select id="filterMode" class="form-select form-select-sm" onchange="toggleFilterMode()">
-                        <option value="standard">سنوي / شهري</option>
-                        <option value="custom" selected>فترة مخصصة (Custom Range)</option>
-                    </select>
-                </div>
-
-                <!-- Standard Filters (Year/Month) -->
-                <div id="stdFilters" class="col-md-auto d-flex gap-2">
-                    <div id="yearFilterContainer">
-                        <label class="form-label small text-muted fw-bold">السنة</label>
-                        <select id="yearFilter" class="form-select form-select-sm" onchange="updateDashboard()">
-                            <option value="2026" selected>2026</option>
-                            <option value="2025">2025</option>
-                            <option value="2024">2024</option>
-                        </select>
-                    </div>
-                    <div id="monthFilterContainer">
-                        <label class="form-label small text-muted fw-bold">الشهر</label>
-                        <select id="monthFilter" class="form-select form-select-sm" onchange="updateDashboard()">
-                            <option value="all">كل السنة</option>
-                            <!-- JS Populated -->
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Custom Filters (Date Range) -->
-                <div id="customFilters" class="col-md-auto gap-2" style="display: none;">
-                    <div>
-                        <label class="form-label small text-muted fw-bold">من تاريخ</label>
-                        <input type="date" id="startDate" class="form-control form-control-sm">
-                    </div>
-                    <div>
-                        <label class="form-label small text-muted fw-bold">إلى تاريخ</label>
-                        <input type="date" id="endDate" class="form-control form-control-sm">
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-xl-6">
+                    <div class="d-flex flex-wrap align-items-end gap-3 p-3 rounded-xl" style="background: var(--neutral-50); border: 1px solid var(--border-color);">
+                        <div>
+                            <label class="form-label small text-muted fw-bold mb-1">نوع التقرير</label>
+                            <select id="filterMode" class="form-select form-select-sm input" onchange="toggleFilterMode()">
+                                <option value="standard">سنوي / شهري</option>
+                                <option value="custom" selected>فترة مخصصة (Custom Range)</option>
+                            </select>
+                        </div>
+                        <div id="stdFilters" class="d-flex gap-2 flex-wrap">
+                            <div id="yearFilterContainer">
+                                <label class="form-label small text-muted fw-bold mb-1">السنة</label>
+                                <select id="yearFilter" class="form-select form-select-sm input" onchange="updateDashboard()">
+                                    <option value="2026" selected>2026</option>
+                                    <option value="2025">2025</option>
+                                    <option value="2024">2024</option>
+                                </select>
+                            </div>
+                            <div id="monthFilterContainer">
+                                <label class="form-label small text-muted fw-bold mb-1">الشهر</label>
+                                <select id="monthFilter" class="form-select form-select-sm input" onchange="updateDashboard()">
+                                    <option value="all">كل السنة</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="customFilters" class="d-flex gap-2 flex-wrap" style="display: none;">
+                            <div>
+                                <label class="form-label small text-muted fw-bold mb-1">من تاريخ</label>
+                                <input type="date" id="startDate" class="form-control form-control-sm input">
+                            </div>
+                            <div>
+                                <label class="form-label small text-muted fw-bold mb-1">إلى تاريخ</label>
+                                <input type="date" id="endDate" class="form-control form-control-sm input">
+                            </div>
+                        </div>
                     </div>
                 </div>
-
-                <!-- Manager Filter -->
-                <div class="col-md">
-                    <label class="form-label small text-muted fw-bold">مدير المنطقة (Manager)</label>
-                    <select id="managerFilter" class="form-select form-select-sm" onchange="updateDashboard()">
-                        <option value="all">الكل</option>
-                    </select>
-                </div>
-
-                <!-- City Filter -->
-                <div class="col-md">
-                    <label class="form-label small text-muted fw-bold">المدينة (City)</label>
-                    <select id="cityFilter" class="form-select form-select-sm" onchange="updateDashboard()">
-                        <option value="all">الكل</option>
-                    </select>
-                </div>
-
-                <!-- Type Filter (Showroom/Online) -->
-                <div class="col-md">
-                    <label class="form-label small text-muted fw-bold">نوع المعرض (Type)</label>
-                    <select id="typeFilter" class="form-select form-select-sm" onchange="updateDashboard()">
-                        <option value="all">الكل</option>
-                        <option value="Showroom">معارض</option>
-                        <option value="Online">أونلاين</option>
-                    </select>
-                </div>
-
-                <!-- Branch Filter -->
-                <div class="col-md">
-                    <label class="form-label small text-muted fw-bold">المعرض / الفرع</label>
-                    <select id="branchFilter" class="form-select form-select-sm" onchange="updateDashboard()">
-                        <option value="all">كافة الفروع</option>
-                        <!-- JS Populated -->
-                    </select>
-                </div>
-
-                <div class="col-md-auto align-self-end">
-                    <button class="btn-primary w-100 fw-bold" onclick="updateDashboard()">عرض التقرير 🔄</button>
+                <div class="col-12 col-xl-6">
+                    <div class="d-flex flex-wrap align-items-end gap-3 p-3 rounded-xl" style="background: var(--neutral-50); border: 1px solid var(--border-color);">
+                        <div id="managerFilterWrap">
+                            <label class="form-label small text-muted fw-bold mb-1">مدير المنطقة</label>
+                            <select id="managerFilter" class="form-select form-select-sm input" onchange="updateDashboard()">
+                                <option value="all">الكل</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label small text-muted fw-bold mb-1">المدينة</label>
+                            <select id="cityFilter" class="form-select form-select-sm input" onchange="updateDashboard()">
+                                <option value="all">الكل</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label small text-muted fw-bold mb-1">نوع المعرض</label>
+                            <select id="typeFilter" class="form-select form-select-sm input" onchange="updateDashboard()">
+                                <option value="all">الكل</option>
+                                <option value="Showroom">معارض</option>
+                                <option value="Online">أونلاين</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label small text-muted fw-bold mb-1">الفرع</label>
+                            <select id="branchFilter" class="form-select form-select-sm input" onchange="updateDashboard()">
+                                <option value="all">كافة الفروع</option>
+                            </select>
+                        </div>
+                        <button class="btn-primary fw-bold px-4" onclick="updateDashboard()">عرض التقرير 🔄</button>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Row 1: High Level KPIs (Current) -->
+        <!-- Row 1: KPI Cards (Current + Prev Year merged - cockpit design) -->
         <section class="page-section">
-        <span class="section-label">أداء العام الحالي (<span id="currYearTitle">...</span>)</span>
-        <div class="row g-3 mb-3">
-            <div class="col">
+        <span class="section-label">المؤشرات (<span id="currYearTitle">...</span>)</span>
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-lg">
                 <div class="kpi-card modern-kpi-card border-bottom border-4 border-warning">
                     <div class="kpi-title">المبيعات (Sales)</div>
                     <div class="kpi-value" id="totalSales">0</div>
                     <div class="kpi-sub">
-                        <span id="salesGrowthVal">0%</span>
-                        vs <span id="prevYearLabel">Prev Year</span>
+                        <span id="salesGrowthVal">0%</span> vs <span id="prevYearLabel">Prev Year</span>
                     </div>
+                    <div class="kpi-sub text-muted mt-1" style="font-size: 0.75rem;">السابق: <span id="prevSales">0</span></div>
                 </div>
             </div>
-            <div class="col">
+            <div class="col-6 col-lg">
                 <div class="kpi-card modern-kpi-card border-bottom border-4 border-dark">
                     <div class="kpi-title">قيمة العميل (Cust Value)</div>
                     <div class="kpi-value" id="totalCustValue">0</div>
                     <div class="kpi-sub text-muted">Sales / Visitors</div>
                 </div>
             </div>
-            <div class="col">
+            <div class="col-6 col-lg">
                 <div class="kpi-card modern-kpi-card border-bottom border-4 border-primary">
                     <div class="kpi-title">الفواتير (Transactions)</div>
                     <div class="kpi-value" id="totalTrans">0</div>
                     <div class="kpi-sub text-muted">Avg Invoice: <span id="avgTicket" class="fw-bold">0</span></div>
+                    <div class="kpi-sub text-muted mt-1" style="font-size: 0.75rem;">السابق: <span id="prevTrans">0</span> (Avg: <span id="prevAvgTicket">0</span>)</div>
                 </div>
             </div>
-            <div class="col">
+            <div class="col-6 col-lg">
                 <div class="kpi-card modern-kpi-card border-bottom border-4 border-info">
                     <div class="kpi-title">الزوار (Visitors)</div>
                     <div class="kpi-value" id="totalVisitors">0</div>
                     <div class="kpi-sub text-muted">Conv. Rate: <span id="convRate" class="fw-bold">0%</span></div>
+                    <div class="kpi-sub text-muted mt-1" style="font-size: 0.75rem;">السابق: <span id="prevVisitors">0</span> (<span id="prevConvRate">0%</span> conv)</div>
                 </div>
             </div>
-            <div class="col">
+            <div class="col-6 col-lg">
                 <div class="kpi-card modern-kpi-card border-bottom border-4 border-success">
                     <div class="kpi-title">تحقيق الهدف (Target)</div>
                     <div class="d-flex align-items-center justify-content-between">
@@ -264,62 +256,25 @@
                         </div>
                     </div>
                     <div class="kpi-sub text-muted">Target: <span id="targetVal">0</span></div>
+                    <div class="kpi-sub mt-1" style="font-size: 0.75rem;"><span id="growthAbs" class="fw-bold">0</span> قيمة النمو</div>
                 </div>
             </div>
         </div>
         </section>
 
-        <!-- Row 2: Previous Year KPIs -->
-        <section class="page-section">
-        <span class="section-label">أداء العام السابق (<span id="prevYearTitle">...</span>)</span>
-        <div class="row g-3 mb-4">
-            <div class="col-md-3">
-                <div class="kpi-card bg-light">
-                    <div class="kpi-title text-muted">مبيعات العام السابق</div>
-                    <div class="kpi-value text-secondary" id="prevSales" style="font-size: 1.5rem;">0</div>
-                </div>
+        <!-- تقرير أمس -->
+        <section class="page-section" id="dailyAccordion">
+        <div class="analysis-card mb-4" style="border-radius: var(--radius-2xl); overflow: hidden; box-shadow: var(--shadow-lg); border: 1px solid var(--neutral-200);">
+            <div class="analysis-header" style="background: linear-gradient(135deg, var(--primary-50), #fff);">
+                <h6 class="m-0 fw-bold" style="color: var(--primary-600);">
+                    📊 تقرير أمس &nbsp;<span id="dailyReportTitle" class="text-muted fw-normal" style="font-size: 0.85rem;">جار التحميل...</span>
+                </h6>
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDaily" aria-expanded="false" aria-controls="collapseDaily">
+                    <i class="fas fa-chevron-down"></i> عرض
+                </button>
             </div>
-            <div class="col-md-3">
-                <div class="kpi-card bg-light">
-                    <div class="kpi-title text-muted">فواتير العام السابق</div>
-                    <div class="kpi-value text-secondary" id="prevTrans" style="font-size: 1.5rem;">0</div>
-                    <div class="kpi-sub text-muted">Avg Invoice: <span id="prevAvgTicket">0</span></div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="kpi-card bg-light">
-                    <div class="kpi-title text-muted">زوار العام السابق</div>
-                    <div class="kpi-value text-secondary" id="prevVisitors" style="font-size: 1.5rem;">0</div>
-                    <div class="kpi-sub text-muted">Conv. Rate: <span id="prevConvRate">0%</span></div>
-                </div>
-            </div>
-            <!-- Growth Amount -->
-            <div class="col-md-3">
-                <div class="kpi-card bg-light d-flex align-items-center justify-content-center">
-                    <div class="text-center">
-                        <div class="kpi-title text-muted">قيمة النمو (Growth Value)</div>
-                        <div class="fw-bold fs-4" id="growthAbs">0</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        </section>
-
-        <!-- Row 2.5: Daily Report (Accordion) -->
-        <section class="page-section">
-        <div class="accordion mb-4 text-center" id="dailyAccordion">
-            <div class="accordion-item border-0 shadow-sm" style="border-radius: var(--card-radius); overflow: hidden;">
-                <h2 class="accordion-header" id="headingDaily">
-                    <button class="accordion-button collapsed fw-bold text-primary bg-white" type="button"
-                        data-bs-toggle="collapse" data-bs-target="#collapseDaily" aria-expanded="false"
-                        aria-controls="collapseDaily">
-                        📊 التقرير اليومي: &nbsp;<span id="dailyReportTitle" class="text-dark">جار التحميل...</span>
-                    </button>
-                </h2>
-                <div id="collapseDaily" class="accordion-collapse collapse" aria-labelledby="headingDaily"
-                    data-bs-parent="#dailyAccordion">
-                    <div class="accordion-body p-0">
-                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+            <div id="collapseDaily" class="accordion-collapse collapse" aria-labelledby="headingDaily" data-bs-parent="#dailyAccordion">
+                <div class="accordion-body p-0" style="max-height: 400px; overflow-y: auto;">
                             <!-- Daily Table -->
                             <table class="table table-striped table-hover mb-0 align-middle">
                                 <thead class="table-light sticky-top" style="z-index: 1;">
@@ -347,8 +302,6 @@
                                     <!-- JS -->
                                 </tbody>
                             </table>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -364,9 +317,18 @@
                     <canvas id="trendChart"></canvas>
                 </div>
             </div>
-            <!-- Top 10 -->
+            <!-- تفاصيل الأفرع - Top 10 -->
             <div class="col-md-4">
-                <h5 class="section-title">أعلى 10 فروع (Top 10)</h5>
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                    <h5 class="section-title mb-0">تفاصيل الأفرع (Top 10)</h5>
+                    <div class="d-flex flex-wrap gap-1">
+                        <button type="button" class="btn btn-sm btn-outline-primary top10-btn active" data-metric="val" onclick="setTop10Metric('val')">بيع</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary top10-btn" data-metric="ach" onclick="setTop10Metric('ach')">تحقيق</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary top10-btn" data-metric="avgInv" onclick="setTop10Metric('avgInv')">معدل فاتورة</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary top10-btn" data-metric="visitors" onclick="setTop10Metric('visitors')">زوار</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary top10-btn" data-metric="growth" onclick="setTop10Metric('growth')">نمو</button>
+                    </div>
+                </div>
                 <div class="chart-container">
                     <canvas id="top10Chart"></canvas>
                 </div>
@@ -598,6 +560,30 @@
 
         let currentSort = { col: 'val', asc: false }; // Default: Sales Desc
         let dailySort = { col: 'salesY', asc: false }; // Daily Report Sort
+        let top10Metric = 'val'; // Top 10 chart: val|ach|avgInv|visitors|growth
+
+        function setTop10Metric(m) {
+            top10Metric = m;
+            document.querySelectorAll('.top10-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.metric === m);
+            });
+            if (window.branchListForTop10) renderTop10FromBranchList();
+        }
+
+        function renderTop10FromBranchList() {
+            if (!window.branchListForTop10) return;
+            let list = [...window.branchListForTop10];
+            list.sort((a, b) => {
+                let valA = a[top10Metric];
+                let valB = b[top10Metric];
+                if (typeof valA === 'string') valA = (valA || '').toLowerCase();
+                if (typeof valB === 'string') valB = (valB || '').toLowerCase();
+                if (valA < valB) return 1;
+                if (valA > valB) return -1;
+                return 0;
+            });
+            renderTop10(list.slice(0, 10), top10Metric);
+        }
 
         function setSort(col) {
             if (currentSort.col === col) {
@@ -705,8 +691,8 @@
 
                 // Apply Permissions
                 if (currentUser.role !== 'Admin') {
-                    // Hide Manager Filter
-                    document.getElementById('managerFilter').parentElement.style.display = 'none';
+                    const mWrap = document.getElementById('managerFilterWrap');
+                    if (mWrap) mWrap.style.display = 'none';
                     // Force Select (Visual)
                     mSelect.value = currentUser.name;
                     mSelect.disabled = true;
@@ -991,8 +977,7 @@
             // console.log("Prev", prevStart, prevEnd);
 
             // Update Titles
-            document.getElementById('currYearTitle').textContent = `(${toYMD(currentStart)} - ${toYMD(currentEnd)})`;
-            document.getElementById('prevYearTitle').textContent = `(${toYMD(prevStart)} - ${toYMD(prevEnd)})`;
+            document.getElementById('currYearTitle').textContent = `${toYMD(currentStart)} - ${toYMD(currentEnd)}`;
 
             // --- 2. Aggregation Function ---
             const calcStats = (start, end, filters = {}) => {
@@ -1208,8 +1193,9 @@
                 return 0;
             });
 
-            // Render Top 10 Chart
-            renderTop10(branchList.slice(0, 10));
+            // Render Top 10 Chart (with metric toggle)
+            window.branchListForTop10 = branchList;
+            renderTop10FromBranchList();
 
             // Render Table
             const tbody = document.getElementById('detailsTableBody');
@@ -1449,17 +1435,20 @@
             });
         }
 
-        function renderTop10(data) {
+        const top10Labels = { val: 'المبيعات', ach: 'التحقيق %', avgInv: 'معدل الفاتورة', visitors: 'الزوار', growth: 'النمو %' };
+        function renderTop10(data, metric) {
+            metric = metric || top10Metric;
             const ctx = document.getElementById('top10Chart').getContext('2d');
             if (charts['top10']) charts['top10'].destroy();
+            const values = data.map(d => d[metric] != null ? (typeof d[metric] === 'number' ? d[metric] : parseFloat(d[metric]) || 0) : 0);
 
             charts['top10'] = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: data.map(d => d.name),
                     datasets: [{
-                        label: 'المبيعات',
-                        data: data.map(d => d.val),
+                        label: top10Labels[metric] || metric,
+                        data: values,
                         backgroundColor: '#198754',
                         borderRadius: 4,
                         barThickness: 20
