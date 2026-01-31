@@ -61,6 +61,9 @@
         .risk-med { background-color: var(--primary-50); color: var(--primary-700); }
         .risk-low { background-color: #e8f5e9; color: #2e7d32; }
         .progress-micro { height: 6px; border-radius: 3px; background: var(--neutral-200); margin-top: 4px; }
+        .kpi-no-border { border-bottom: none !important; }
+        .top10-btn { color: var(--neutral-600); border: 1px solid var(--neutral-300); font-weight: 500; font-family: 'Cairo', sans-serif; padding: 0.4rem 0.75rem; border-radius: var(--radius-lg); transition: all 0.2s; }
+        .top10-btn:hover { color: var(--primary-600); border-color: var(--primary-400); background: var(--primary-50); }
         .top10-btn.active { background: linear-gradient(135deg, var(--primary-500), var(--primary-600)); color: #fff; border-color: var(--primary-600); }
     </style>
 </head>
@@ -71,9 +74,13 @@
     <button type="button" class="sidebar-toggle" aria-label="فتح القائمة"><i class="fas fa-bars"></i></button>
 
     <aside class="sidebar">
-        <div class="sidebar-brand"><span class="brand-orange">ORANGE</span> DASHBOARD</div>
+        <div class="sidebar-brand">
+            <div class="sidebar-brand-logo">O</div>
+            <span class="sidebar-brand-text"><span class="brand-orange">ORANGE</span> DASHBOARD</span>
+        </div>
         <nav class="sidebar-nav">
             <a href="index.html" class="nav-link"><i class="fas fa-home"></i> الرئيسية</a>
+            <a href="reports.html" class="nav-link"><i class="fas fa-file-alt"></i> التقارير</a>
             <a href="employees.html" class="nav-link"><i class="fas fa-users"></i> أداء الموظفين</a>
             <a href="product_analysis.html" class="nav-link"><i class="fas fa-box"></i> تحليل المنتجات</a>
             <a href="branch_details.html" class="nav-link"><i class="fas fa-store"></i> تفاصيل الفروع</a>
@@ -214,40 +221,39 @@
         <span class="section-label">المؤشرات (<span id="currYearTitle">...</span>)</span>
         <div class="row g-3 mb-4">
             <div class="col-6 col-lg">
-                <div class="kpi-card modern-kpi-card border-bottom border-4 border-warning">
+                <div class="kpi-card modern-kpi-card kpi-no-border">
                     <div class="kpi-title">المبيعات (Sales)</div>
                     <div class="kpi-value" id="totalSales">0</div>
-                    <div class="kpi-sub">
-                        <span id="salesGrowthVal">0%</span> vs <span id="prevYearLabel">Prev Year</span>
-                    </div>
-                    <div class="kpi-sub text-muted mt-1" style="font-size: 0.75rem;">السابق: <span id="prevSales">0</span></div>
+                    <div class="kpi-sub">السنة الحالية / السابقة: <span id="prevSales">0</span></div>
+                    <div class="kpi-sub"><span id="salesGrowthVal">0%</span> النسبة</div>
                 </div>
             </div>
             <div class="col-6 col-lg">
-                <div class="kpi-card modern-kpi-card border-bottom border-4 border-dark">
+                <div class="kpi-card modern-kpi-card kpi-no-border">
                     <div class="kpi-title">قيمة العميل (Cust Value)</div>
                     <div class="kpi-value" id="totalCustValue">0</div>
-                    <div class="kpi-sub text-muted">Sales / Visitors</div>
+                    <div class="kpi-sub text-muted">السابق: <span id="prevCustValue">0</span></div>
+                    <div class="kpi-sub"><span id="custValueGrowth">0%</span> النسبة</div>
                 </div>
             </div>
             <div class="col-6 col-lg">
-                <div class="kpi-card modern-kpi-card border-bottom border-4 border-primary">
+                <div class="kpi-card modern-kpi-card kpi-no-border">
                     <div class="kpi-title">الفواتير (Transactions)</div>
                     <div class="kpi-value" id="totalTrans">0</div>
-                    <div class="kpi-sub text-muted">Avg Invoice: <span id="avgTicket" class="fw-bold">0</span></div>
-                    <div class="kpi-sub text-muted mt-1" style="font-size: 0.75rem;">السابق: <span id="prevTrans">0</span> (Avg: <span id="prevAvgTicket">0</span>)</div>
+                    <div class="kpi-sub text-muted">Avg: <span id="avgTicket" class="fw-bold">0</span> | السابق: <span id="prevTrans">0</span> (Avg: <span id="prevAvgTicket">0</span>)</div>
+                    <div class="kpi-sub"><span id="transGrowth">0%</span> النسبة</div>
                 </div>
             </div>
             <div class="col-6 col-lg">
-                <div class="kpi-card modern-kpi-card border-bottom border-4 border-info">
+                <div class="kpi-card modern-kpi-card kpi-no-border">
                     <div class="kpi-title">الزوار (Visitors)</div>
                     <div class="kpi-value" id="totalVisitors">0</div>
-                    <div class="kpi-sub text-muted">Conv. Rate: <span id="convRate" class="fw-bold">0%</span></div>
-                    <div class="kpi-sub text-muted mt-1" style="font-size: 0.75rem;">السابق: <span id="prevVisitors">0</span> (<span id="prevConvRate">0%</span> conv)</div>
+                    <div class="kpi-sub text-muted">Conv: <span id="convRate" class="fw-bold">0%</span> | السابق: <span id="prevVisitors">0</span> (<span id="prevConvRate">0%</span> conv)</div>
+                    <div class="kpi-sub"><span id="visitorsGrowth">0%</span> النسبة</div>
                 </div>
             </div>
             <div class="col-6 col-lg">
-                <div class="kpi-card modern-kpi-card border-bottom border-4 border-success">
+                <div class="kpi-card modern-kpi-card kpi-no-border">
                     <div class="kpi-title">تحقيق الهدف (Target)</div>
                     <div class="d-flex align-items-center justify-content-between">
                         <span class="kpi-value" id="targetPct">0%</span>
@@ -307,39 +313,59 @@
         </div>
         </section>
 
-        <!-- Row 3: Charts -->
+        <!-- Daily Sales Performance - بالكامل full width -->
         <section class="page-section">
-        <div class="row">
-            <!-- Monthly Trend -->
-            <div class="col-md-8">
-                <h5 class="section-title">الأداء الشهري (Monthly Trend)</h5>
-                <div class="chart-container">
-                    <canvas id="trendChart"></canvas>
-                </div>
-            </div>
-            <!-- تفاصيل الأفرع - Top 10 -->
-            <div class="col-md-4">
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-                    <h5 class="section-title mb-0">تفاصيل الأفرع (Top 10)</h5>
-                    <div class="d-flex flex-wrap gap-1">
-                        <button type="button" class="btn btn-sm btn-outline-primary top10-btn active" data-metric="val" onclick="setTop10Metric('val')">بيع</button>
-                        <button type="button" class="btn btn-sm btn-outline-primary top10-btn" data-metric="ach" onclick="setTop10Metric('ach')">تحقيق</button>
-                        <button type="button" class="btn btn-sm btn-outline-primary top10-btn" data-metric="avgInv" onclick="setTop10Metric('avgInv')">معدل فاتورة</button>
-                        <button type="button" class="btn btn-sm btn-outline-primary top10-btn" data-metric="visitors" onclick="setTop10Metric('visitors')">زوار</button>
-                        <button type="button" class="btn btn-sm btn-outline-primary top10-btn" data-metric="growth" onclick="setTop10Metric('growth')">نمو</button>
+        <h5 class="section-title">أداء المبيعات اليومي (Daily Sales Performance)</h5>
+        <div class="chart-container p-4 w-100" style="background: var(--card-background); border-radius: var(--radius-2xl); box-shadow: var(--shadow-lg); border: 1px solid var(--neutral-200); width: 100%;">
+            <canvas id="trendChart"></canvas>
+        </div>
+        </section>
+
+        <!-- Top Stores + Top Employees (بطاقتين جنباً لجنب) -->
+        <section class="page-section">
+        <div class="row g-4">
+            <!-- Top Stores by Achievement -->
+            <div class="col-12 col-lg-6">
+                <div class="cockpit-section p-4 h-100">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+                        <h5 class="section-title mb-0">أعلى الفروع (Top Stores)</h5>
+                        <div class="d-flex flex-wrap gap-1">
+                            <button type="button" class="btn btn-sm top10-btn active" data-metric="val" data-target="stores" onclick="setTop10Metric('val','stores')">بيع</button>
+                            <button type="button" class="btn btn-sm top10-btn" data-metric="ach" data-target="stores" onclick="setTop10Metric('ach','stores')">تحقيق</button>
+                            <button type="button" class="btn btn-sm top10-btn" data-metric="avgInv" data-target="stores" onclick="setTop10Metric('avgInv','stores')">معدل فاتورة</button>
+                            <button type="button" class="btn btn-sm top10-btn" data-metric="visitors" data-target="stores" onclick="setTop10Metric('visitors','stores')">زوار</button>
+                            <button type="button" class="btn btn-sm top10-btn" data-metric="growth" data-target="stores" onclick="setTop10Metric('growth','stores')">نمو</button>
+                        </div>
+                    </div>
+                    <div class="chart-container" style="min-height: 280px;">
+                        <canvas id="top10StoresChart"></canvas>
                     </div>
                 </div>
-                <div class="chart-container">
-                    <canvas id="top10Chart"></canvas>
+            </div>
+            <!-- Top Employees by Achievement -->
+            <div class="col-12 col-lg-6">
+                <div class="cockpit-section p-4 h-100">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+                        <h5 class="section-title mb-0">أعلى الموظفين (Top Employees)</h5>
+                        <div class="d-flex flex-wrap gap-1">
+                            <button type="button" class="btn btn-sm top10-btn" data-metric="ach" data-target="employees" onclick="setTop10Metric('ach','employees')">تحقيق</button>
+                            <button type="button" class="btn btn-sm top10-btn active" data-metric="val" data-target="employees" onclick="setTop10Metric('val','employees')">بيع</button>
+                            <button type="button" class="btn btn-sm top10-btn" data-metric="avgInv" data-target="employees" onclick="setTop10Metric('avgInv','employees')">معدل فاتورة</button>
+                        </div>
+                    </div>
+                    <div class="chart-container" style="min-height: 280px;">
+                        <canvas id="top10EmployeesChart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
+        </section>
 
-        <!-- Row 3.5: Advanced Analysis (Growth, Gap, Risk) -->
-        <h5 class="section-title">التحليل المتقدم (Advanced Analysis)</h5>
+        <!-- التحليل المتقدم -->
+        <section class="page-section">
+        <h5 class="section-title">التحليل المتقدم (Advanced Analysis) <small class="text-muted fw-normal">— الإنذار المبكر لفروع في خطر</small></h5>
         <div class="row g-3 mb-4">
-
-            <!-- 3. Early Warning (Now Full Width) -->
+            <!-- الإنذار المبكر -->
             <div class="col-12">
                 <div class="analysis-card">
                     <div class="analysis-header">
@@ -370,57 +396,7 @@
         </div>
         </section>
 
-        <!-- Row 3: Detailed Table -->
-        <section class="page-section">
-        <div class="row mt-4">
-            <div class="col-12">
-                <h5 class="section-title">تفاصيل الفروع (Detailed Report)</h5>
-                <div class="card border-0 shadow-sm p-3">
-                    <div class="table-responsive">
-                        <table class="table table-cockpit align-middle">
-                            <thead>
-                                <tr>
-                                    <th class="text-center">#</th>
-                                    <th onclick="setSort('name')" style="cursor: pointer;">الفرع (Branch) ↕</th>
-                                    <th class="text-center" onclick="setSort('val')" style="cursor: pointer;">المبيعات
-                                        (Sales) ↕</th>
-                                    <th class="text-center" onclick="setSort('prevVal')" style="cursor: pointer;">مبيعات
-                                        العام السابق (Last Year) ↕</th>
-                                    <th class="text-center" onclick="setSort('target')" style="cursor: pointer;">الهدف
-                                        (Target) ↕</th>
-                                    <th class="text-center" onclick="setSort('ach')" style="cursor: pointer;">
-                                        التحقيق (%)
-                                        ↕</th>
-                                    <th class="text-center" onclick="setSort('growth')" style="cursor: pointer;">النمو
-                                        (Growth %) ↕</th>
-                                    <th class="text-center" onclick="setSort('absGrowth')" style="cursor: pointer;">قيمة
-                                        النمو (Growth Val) ↕</th>
-                                    <th class="text-center" onclick="setSort('dailyReq')" style="cursor: pointer;">
-                                        اليومية المتبقية (Remaining Daily) ↕</th>
-                                    <th class="text-center" onclick="setSort('trans')" style="cursor: pointer;">الفواتير
-                                        (Trans) ↕</th>
-                                    <th class="text-center" onclick="setSort('avgInv')" style="cursor: pointer;">متوسط
-                                        الفاتورة (Inv Rate) ↕</th>
-                                    <th class="text-center" onclick="setSort('visitors')" style="cursor: pointer;">
-                                        الزوار (Vis) ↕</th>
-                                    <th class="text-center text-muted" onclick="setSort('prevVisitors')"
-                                        style="cursor: pointer;">
-                                        زوار العام السابق (Vis LY) ↕</th>
-                                    <th class="text-center" onclick="setSort('custVal')" style="cursor: pointer;">قيمة
-                                        العميل (Val) ↕</th>
-                                    <th class="text-center" onclick="setSort('conv')" style="cursor: pointer;">التحويل
-                                        (Vis Rate) ↕</th>
-                                </tr>
-                            </thead>
-                            <tbody id="detailsTableBody">
-                                <!-- JS -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-        </section>
+        <!-- تفاصيل الفروع انتقلت إلى صفحة تفاصيل الفروع -->
 
         <!-- Branch Details Modal -->
         <div class="modal fade" id="branchModal" tabindex="-1" aria-hidden="true">
@@ -558,31 +534,94 @@
 
         // Sorting State
 
-        let currentSort = { col: 'val', asc: false }; // Default: Sales Desc
-        let dailySort = { col: 'salesY', asc: false }; // Daily Report Sort
-        let top10Metric = 'val'; // Top 10 chart: val|ach|avgInv|visitors|growth
+        let currentSort = { col: 'val', asc: false };
+        let dailySort = { col: 'salesY', asc: false };
+        let top10MetricStores = 'val';
+        let top10MetricEmployees = 'val';
+        window.employeeListForTop10 = [];
 
-        function setTop10Metric(m) {
-            top10Metric = m;
-            document.querySelectorAll('.top10-btn').forEach(b => {
-                b.classList.toggle('active', b.dataset.metric === m);
-            });
-            if (window.branchListForTop10) renderTop10FromBranchList();
+        function setTop10Metric(m, target) {
+            if (target === 'stores') {
+                top10MetricStores = m;
+                document.querySelectorAll('.top10-btn[data-target="stores"]').forEach(b => {
+                    b.classList.toggle('active', b.dataset.metric === m);
+                });
+                if (window.branchListForTop10) renderTop10FromBranchList();
+            } else if (target === 'employees') {
+                top10MetricEmployees = m;
+                document.querySelectorAll('.top10-btn[data-target="employees"]').forEach(b => {
+                    b.classList.toggle('active', b.dataset.metric === m);
+                });
+                if (window.employeeListForTop10.length) renderTop10Employees();
+            }
         }
 
         function renderTop10FromBranchList() {
             if (!window.branchListForTop10) return;
+            let m = top10MetricStores;
             let list = [...window.branchListForTop10];
             list.sort((a, b) => {
-                let valA = a[top10Metric];
-                let valB = b[top10Metric];
+                let valA = a[m] != null ? a[m] : 0;
+                let valB = b[m] != null ? b[m] : 0;
                 if (typeof valA === 'string') valA = (valA || '').toLowerCase();
                 if (typeof valB === 'string') valB = (valB || '').toLowerCase();
                 if (valA < valB) return 1;
                 if (valA > valB) return -1;
                 return 0;
             });
-            renderTop10(list.slice(0, 10), top10Metric);
+            renderTop10Chart('top10StoresChart', list.slice(0, 10), m);
+        }
+
+        async function loadTopEmployees() {
+            try {
+                const res = await fetch('employees_data.json?t=' + Date.now());
+                const ed = await res.json();
+                const history = ed.history || {};
+                const targets = ed.targets || {};
+                const empNames = ed.employee_names || {};
+                let agg = {};
+                Object.keys(history).forEach(sid => {
+                    (history[sid] || []).forEach(r => {
+                        let [d, rawName, sales, trans] = r;
+                        if (!rawName || rawName === 'None') return;
+                        let empId = rawName, name = rawName;
+                        if (rawName.includes('-')) { const p = rawName.split('-'); empId = p[0].trim(); name = p[1].trim(); }
+                        if (empNames[empId]) name = empNames[empId];
+                        if (!agg[empId]) agg[empId] = { name, val: 0, target: targets[empId] || 0, trans: 0 };
+                        agg[empId].val += sales || 0;
+                        agg[empId].trans += trans || 0;
+                    });
+                });
+                window.employeeListForTop10 = Object.values(agg).map(e => ({
+                    name: e.name, val: e.val, target: e.target, trans: e.trans,
+                    avgInv: e.trans > 0 ? e.val / e.trans : 0,
+                    ach: e.target > 0 ? (e.val / e.target) * 100 : 0
+                }));
+                if (window.employeeListForTop10.length) renderTop10Employees(); else renderTop10EmployeesPlaceholder();
+            } catch (e) { renderTop10EmployeesPlaceholder(); }
+        }
+
+        function renderTop10Employees() {
+            let m = top10MetricEmployees;
+            let list = [...window.employeeListForTop10];
+            list.sort((a, b) => (b[m] || 0) - (a[m] || 0));
+            renderTop10Chart('top10EmployeesChart', list.slice(0, 10), m);
+        }
+
+        function renderTop10EmployeesPlaceholder() {
+            const ctx = document.getElementById('top10EmployeesChart');
+            if (!ctx) return;
+            const c = ctx.getContext('2d');
+            if (charts['top10emp']) charts['top10emp'].destroy();
+            charts['top10emp'] = new Chart(c, {
+                type: 'bar', data: { labels: [], datasets: [{ label: '', data: [] }] },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+            const wrap = ctx.parentElement;
+            let msg = wrap.querySelector('.no-data-msg');
+            if (!msg) { msg = document.createElement('p'); msg.className = 'no-data-msg text-muted text-center py-5 mb-0'; wrap.style.position = 'relative'; wrap.appendChild(msg); }
+            msg.textContent = 'لا توجد بيانات. انتقل لصفحة أداء الموظفين للتفاصيل.';
+            msg.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:100%;';
         }
 
         function setSort(col) {
@@ -721,7 +760,8 @@
                 }
 
                 updateDashboard();
-            } catch (e) { console.error(e); }
+                loadTopEmployees();
+            } catch (e) { console.error(e); loadTopEmployees(); }
         }
 
         // Toggle UI
@@ -1118,6 +1158,16 @@
             let prevConvRate = prev.visitors > 0 ? (prev.trans / prev.visitors) * 100 : 0;
             document.getElementById('prevConvRate').textContent = prevConvRate.toFixed(1) + '%';
 
+            // Prev Cust Value
+            let prevCustValue = prev.visitors > 0 ? prev.sales / prev.visitors : 0;
+            let pCV = document.getElementById('prevCustValue');
+            if (pCV) pCV.textContent = prevCustValue.toFixed(0);
+
+            // Cust Value Growth
+            let custValueGrowth = prevCustValue > 0 ? ((custValue - prevCustValue) / prevCustValue) * 100 : 0;
+            let cVGEl = document.getElementById('custValueGrowth');
+            if (cVGEl) { cVGEl.textContent = (custValueGrowth > 0 ? '+' : '') + custValueGrowth.toFixed(1) + '%'; cVGEl.className = 'kpi-sub ' + (custValueGrowth >= 0 ? 'text-success-custom' : 'text-danger-custom'); }
+
             // Absolute Growth
             let absGrowth = curr.sales - prev.sales;
             let absGEl = document.getElementById('growthAbs');
@@ -1193,35 +1243,9 @@
                 return 0;
             });
 
-            // Render Top 10 Chart (with metric toggle)
+            // Render Top 10 Stores Chart
             window.branchListForTop10 = branchList;
             renderTop10FromBranchList();
-
-            // Render Table
-            const tbody = document.getElementById('detailsTableBody');
-            tbody.innerHTML = '';
-
-            branchList.forEach((b, i) => {
-                let tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td class="text-center"><span class="rank-badge">${i + 1}</span></td>
-                    <td class="fw-bold fs-6">${b.name}</td>
-                    <td class="text-center">${b.val.toLocaleString()}</td>
-                    <td class="text-center text-muted">${b.prevVal.toLocaleString()}</td>
-                    <td class="text-center">${b.target.toLocaleString()}</td>
-                    <td class="text-center ${b.ach >= 100 ? 'text-success' : 'text-warning'} fw-bold">${b.ach.toFixed(1)}%</td>
-                    <td class="text-center ${b.growth >= 0 ? 'text-success' : 'text-danger'} fw-bold" dir="ltr">${b.growth.toFixed(1)}%</td>
-                    <td class="text-center ${b.absGrowth >= 0 ? 'text-success' : 'text-danger'} fw-bold" dir="ltr">${b.absGrowth.toLocaleString()}</td>
-                    <td class="text-center fw-bold text-danger">${(b.dailyReq || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                    <td class="text-center">${b.trans.toLocaleString()}</td>
-                    <td class="text-center">${b.avgInv.toFixed(0)}</td>
-                    <td class="text-center">${b.visitors.toLocaleString()}</td>
-                    <td class="text-center text-muted">${b.prevVisitors.toLocaleString()}</td>
-                    <td class="text-center fw-bold">${b.custVal.toFixed(0)}</td>
-                    <td class="text-center">${b.conv.toFixed(1)}%</td>
-                `;
-                tbody.appendChild(tr);
-            });
 
             // --- 6. Render Daily Report ---
             renderDailyReport();
@@ -1375,13 +1399,14 @@
             });
         }
 
+        const monthNamesAr = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
         function renderTrendChart(currM, prevM, y1, y2) {
             const ctx = document.getElementById('trendChart').getContext('2d');
             if (charts['trend']) charts['trend'].destroy();
 
             const selectedM = document.getElementById('monthFilter').value;
+            const labels = monthNamesAr;
 
-            const labels = Array.from({ length: 12 }, (_, i) => i + 1);
             charts['trend'] = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -1389,21 +1414,25 @@
                     datasets: [
                         {
                             label: y1,
-                            data: labels.map(m => currM[m] || 0),
-                            // Selected: Dark Brand (#cc6100), Unselected: Faded (#ffd8a8), All: Brand (#fe7900)
+                            data: labels.map((_, i) => currM[i + 1] || 0),
                             backgroundColor: (ctx) => {
-                                if (selectedM === 'all') return '#fe7900';
-                                return (ctx.dataIndex + 1) == selectedM ? '#cc6100' : '#ffd8a8';
+                                if (selectedM === 'all') return 'rgba(249, 115, 22, 0.9)';
+                                return (ctx.dataIndex + 1) == selectedM ? '#ea580c' : 'rgba(249, 115, 22, 0.4)';
                             },
-                            borderRadius: 4
+                            borderRadius: 6,
+                            borderSkipped: false
                         },
-                        { label: y2, data: labels.map(m => prevM[m] || 0), backgroundColor: '#e9ecef', borderRadius: 4 }
+                        { label: y2, data: labels.map((_, i) => prevM[i + 1] || 0), backgroundColor: 'rgba(148, 163, 184, 0.5)', borderRadius: 6, borderSkipped: false }
                     ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
-                    scales: { x: { grid: { display: false } }, y: { grid: { borderDash: [5, 5] } } },
-                    plugins: { legend: { position: 'top' } },
+                    animation: { duration: 600 },
+                    scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(0,0,0,0.06)' } } },
+                    plugins: {
+                        legend: { position: 'top', labels: { color: 'var(--neutral-700)', font: { family: 'Cairo' } } },
+                        tooltip: { backgroundColor: 'var(--neutral-800)', titleFont: { family: 'Cairo' }, bodyFont: { family: 'Cairo' } }
+                    },
                     onClick: (e, activeEls, chart) => {
                         const points = chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
                         if (points.length) {
@@ -1436,22 +1465,24 @@
         }
 
         const top10Labels = { val: 'المبيعات', ach: 'التحقيق %', avgInv: 'معدل الفاتورة', visitors: 'الزوار', growth: 'النمو %' };
-        function renderTop10(data, metric) {
-            metric = metric || top10Metric;
-            const ctx = document.getElementById('top10Chart').getContext('2d');
-            if (charts['top10']) charts['top10'].destroy();
+        function renderTop10Chart(canvasId, data, metric) {
+            const ctx = document.getElementById(canvasId);
+            if (!ctx) return;
+            const c = ctx.getContext('2d');
+            const key = canvasId === 'top10StoresChart' ? 'top10stores' : 'top10emp';
+            if (charts[key]) charts[key].destroy();
             const values = data.map(d => d[metric] != null ? (typeof d[metric] === 'number' ? d[metric] : parseFloat(d[metric]) || 0) : 0);
 
-            charts['top10'] = new Chart(ctx, {
+            charts[key] = new Chart(c, {
                 type: 'bar',
                 data: {
                     labels: data.map(d => d.name),
                     datasets: [{
                         label: top10Labels[metric] || metric,
                         data: values,
-                        backgroundColor: '#198754',
-                        borderRadius: 4,
-                        barThickness: 20
+                        backgroundColor: 'rgba(249, 115, 22, 0.85)',
+                        borderRadius: 6,
+                        barThickness: 24
                     }]
                 },
                 options: {

@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>تفاصيل الفرع | Orange Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
     <link rel="stylesheet" href="assets/sidebar.css">
     <style>
         .card.branch-card {
@@ -45,6 +45,7 @@
         </div>
         <nav class="sidebar-nav">
             <a href="index.html" class="nav-link"><i class="fas fa-home"></i> الرئيسية</a>
+            <a href="reports.html" class="nav-link"><i class="fas fa-file-alt"></i> التقارير</a>
             <a href="employees.html" class="nav-link"><i class="fas fa-users"></i> أداء الموظفين</a>
             <a href="product_analysis.html" class="nav-link"><i class="fas fa-box"></i> تحليل المنتجات</a>
             <a href="branch_details.html" class="nav-link"><i class="fas fa-store"></i> تفاصيل الفروع</a>
@@ -98,7 +99,35 @@
                             </button>
                         </div>
                     </div>
-                    <small class="text-muted">أو انتقل من <a href="index.html">لوحة التحكم</a> واضغط على اسم الفرع في جدول التفاصيل.</small>
+                    <small class="text-muted">أو اضغط على اسم الفرع في الجدول أدناه لعرض التفاصيل.</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- جدول تفاصيل جميع الفروع (عند الدخول بدون sid) - قابل للتوسيع -->
+        <div id="branchesTableSection" class="mb-4" style="display: none;">
+            <h5 class="section-title mb-3">تفاصيل الفروع (Detailed Report)</h5>
+            <div class="card border-0 shadow-sm" style="border-radius: var(--radius-2xl); overflow: hidden;">
+                <div class="table-responsive">
+                    <table class="table table-cockpit align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width: 40px;"></th>
+                                <th class="text-center">#</th>
+                                <th>الفرع (Branch)</th>
+                                <th class="text-center">المبيعات</th>
+                                <th class="text-center">العام السابق</th>
+                                <th class="text-center">الهدف</th>
+                                <th class="text-center">التحقيق %</th>
+                                <th class="text-center">النمو %</th>
+                                <th class="text-center">الفواتير</th>
+                                <th class="text-center">متوسط الفاتورة</th>
+                                <th class="text-center">الزوار</th>
+                            </tr>
+                        </thead>
+                        <tbody id="branchesTableBody">
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -203,6 +232,8 @@
                     errDiv.style.display = 'none';
                     pickerDiv.style.display = 'block';
                     document.getElementById('branchName').textContent = 'اختر فرعاً لعرض التفاصيل';
+                    // تحميل وعرض جدول تفاصيل جميع الفروع مع إمكانية التوسيع
+                    loadBranchesTableWithExpand();
                 } catch (e) {
                     errDiv.innerHTML = `<div class="alert alert-warning">لم يتم العثور على قائمة الفروع. تأكد من وجود ملف management_data.json. يمكنك أيضاً الوصول لتفاصيل الفرع من <a href="index.html">لوحة التحكم</a> بالنقر على اسم الفرع.</div>`;
                 }
@@ -393,6 +424,173 @@
             const storeName = sel.options[sel.selectedIndex]?.text || storeId;
             if (!storeId) return;
             window.location.href = `branch_details.html?sid=${encodeURIComponent(storeId)}&name=${encodeURIComponent(storeName)}`;
+        }
+
+        let cachedMgmt = null;
+        let cachedEmployees = null;
+        let expandedSid = null;
+
+        async function loadBranchesTableWithExpand() {
+            try {
+                const res = await fetch('management_data.json?t=' + Date.now());
+                cachedMgmt = await res.json();
+                const raw = cachedMgmt;
+                const today = new Date();
+                const yesterday = new Date(today);
+                yesterday.setDate(today.getDate() - 1);
+                const currEnd = yesterday;
+                const currStart = new Date(currEnd.getFullYear(), currEnd.getMonth(), 1);
+                const prevStart = new Date(currStart);
+                prevStart.setFullYear(prevStart.getFullYear() - 1);
+                const prevEnd = new Date(currEnd);
+                prevEnd.setFullYear(prevEnd.getFullYear() - 1);
+
+                const fmt = d => d.toISOString().split('T')[0];
+                const sTime = currStart.getTime();
+                const eTime = currEnd.getTime();
+                const pS = prevStart.getTime();
+                const pE = prevEnd.getTime();
+                const filterFn = (dStr) => {
+                    const t = new Date(dStr).getTime();
+                    return t >= sTime && t <= eTime;
+                };
+                const filterPrev = (dStr) => {
+                    const t = new Date(dStr).getTime();
+                    return t >= pS && t <= pE;
+                };
+
+                let branchSales = {}, branchTrans = {}, branchTarget = {}, branchVisitors = {};
+                let prevSales = {}, prevVisitors = {};
+                (raw.sales || []).forEach(([d,s,v]) => {
+                    if (filterFn(d)) { branchSales[s] = (branchSales[s]||0)+v; }
+                    if (filterPrev(d)) { prevSales[s] = (prevSales[s]||0)+v; }
+                });
+                (raw.transactions || []).forEach(([d,s,v]) => {
+                    if (filterFn(d)) branchTrans[s] = (branchTrans[s]||0)+v;
+                });
+                (raw.targets || []).forEach(([d,s,v]) => {
+                    if (filterFn(d)) branchTarget[s] = (branchTarget[s]||0)+v;
+                });
+                (raw.visitors || []).forEach(([d,s,v]) => {
+                    if (filterFn(d)) branchVisitors[s] = (branchVisitors[s]||0)+v;
+                    if (filterPrev(d)) prevVisitors[s] = (prevVisitors[s]||0)+v;
+                });
+
+                let list = [];
+                const allIds = new Set([...Object.keys(branchSales), ...Object.keys(prevSales), ...Object.keys(branchTarget)]);
+                allIds.forEach(sid => {
+                    const val = branchSales[sid]||0, prevVal = prevSales[sid]||0;
+                    const target = branchTarget[sid]||0;
+                    const trans = branchTrans[sid]||0;
+                    const visitors = branchVisitors[sid]||0;
+                    const pV = prevVisitors[sid]||0;
+                    const growth = prevVal>0 ? ((val-prevVal)/prevVal)*100 : 0;
+                    const ach = target>0 ? (val/target)*100 : 0;
+                    const avgInv = trans>0 ? val/trans : 0;
+                    list.push({
+                        sid, name: raw.stores[sid]||sid, val, prevVal, target, trans, visitors, prevVisitors: pV, growth, ach, avgInv
+                    });
+                });
+                list.sort((a,b) => (b.val||0) - (a.val||0));
+
+                const tbody = document.getElementById('branchesTableBody');
+                tbody.innerHTML = '';
+                list.forEach((b, i) => {
+                    const tr = document.createElement('tr');
+                    tr.dataset.sid = b.sid;
+                    tr.innerHTML = `
+                        <td class="text-center"><i class="fas fa-chevron-down expand-icon text-muted" style="cursor:pointer;transition:transform 0.2s;"></i></td>
+                        <td class="text-center">${i+1}</td>
+                        <td><a href="#" class="branch-name-link text-dark fw-bold text-decoration-none" data-sid="${b.sid}">${b.name}</a></td>
+                        <td class="text-center">${b.val.toLocaleString()}</td>
+                        <td class="text-center text-muted">${b.prevVal.toLocaleString()}</td>
+                        <td class="text-center">${b.target.toLocaleString()}</td>
+                        <td class="text-center ${b.ach>=100?'text-success':'text-warning'} fw-bold">${b.ach.toFixed(1)}%</td>
+                        <td class="text-center ${b.growth>=0?'text-success':'text-danger'} fw-bold" dir="ltr">${b.growth.toFixed(1)}%</td>
+                        <td class="text-center">${b.trans.toLocaleString()}</td>
+                        <td class="text-center">${b.avgInv.toFixed(0)}</td>
+                        <td class="text-center">${b.visitors.toLocaleString()}</td>
+                    `;
+                    tbody.appendChild(tr);
+                    const expTr = document.createElement('tr');
+                    expTr.className = 'expandable-row';
+                    expTr.dataset.sid = b.sid;
+                    expTr.style.display = 'none';
+                    expTr.innerHTML = '<td colspan="10" class="p-0 bg-light"><div class="expand-content p-4" id="expand-'+b.sid+'"></div></td>';
+                    tbody.appendChild(expTr);
+                });
+
+                document.getElementById('branchesTableSection').style.display = 'block';
+
+                tbody.querySelectorAll('.branch-name-link, .expand-icon').forEach(el => {
+                    el.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const row = el.closest('tr');
+                        const s = row.dataset.sid;
+                        const expRow = tbody.querySelector('tr.expandable-row[data-sid="'+s+'"]');
+                        if (!expRow) return;
+                        if (expRow.style.display === 'table-row') {
+                            expRow.style.display = 'none';
+                            tbody.querySelector('tr[data-sid="'+s+'"] .expand-icon').style.transform = 'rotate(0deg)';
+                            expandedSid = null;
+                        } else {
+                            tbody.querySelectorAll('tr.expandable-row').forEach(r => { r.style.display = 'none'; });
+                            tbody.querySelectorAll('.expand-icon').forEach(i => { i.style.transform = 'rotate(0deg)'; });
+                            expRow.style.display = 'table-row';
+                            row.querySelector('.expand-icon').style.transform = 'rotate(180deg)';
+                            expandedSid = s;
+                            loadExpandContent(s, document.getElementById('expand-'+s));
+                        }
+                    });
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadExpandContent(sid, container) {
+            container.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><p class="mt-2 text-muted">جار تحميل التفاصيل...</p></div>';
+            try {
+                if (!cachedEmployees) {
+                    const res = await fetch('employees_data.json?t='+Date.now());
+                    cachedEmployees = await res.json();
+                }
+                const rec = (cachedEmployees.history || {})[sid] || [];
+                const targets = cachedEmployees.targets || {};
+                const empNames = cachedEmployees.employee_names || {};
+                const dateYest = (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]; })();
+                const monthPrefix = dateYest.substring(0,7);
+                let yestStats = {}, monthStats = {};
+                rec.forEach(r => {
+                    let [d, rawName, sales, trans] = r;
+                    if (!rawName || rawName === 'None') return;
+                    let empId = rawName, name = rawName;
+                    if (rawName.includes('-')) { const p = rawName.split('-'); empId = p[0].trim(); name = p[1].trim(); }
+                    if (empNames[empId]) name = empNames[empId];
+                    if (d === dateYest) { yestStats[name] = yestStats[name] || { s:0, t:0 }; yestStats[name].s += sales; yestStats[name].t += trans; }
+                    if (d.startsWith(monthPrefix) && d <= dateYest) {
+                        monthStats[name] = monthStats[name] || { s:0, t:0, target: targets[empId]||0 };
+                        monthStats[name].s += sales; monthStats[name].t += trans;
+                    }
+                });
+                container.innerHTML = `
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <h6 class="fw-bold mb-2">مبيعات الأمس (${dateYest})</h6>
+                            <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th>الموظف</th><th>المبيعات</th><th>فواتير</th><th>Avg</th></tr></thead><tbody>
+                                ${Object.entries(yestStats).sort((a,b)=>b[1].s-a[1].s).map(([n,st]) => `<tr><td>${n}</td><td>${st.s.toLocaleString()}</td><td>${st.t}</td><td>${(st.t>0?st.s/st.t:0).toFixed(0)}</td></tr>`).join('')}
+                            </tbody></table></div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="fw-bold mb-2">مبيعات الشهر (${monthPrefix})</h6>
+                            <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th>الموظف</th><th>المبيعات</th><th>الهدف</th><th>تحقيق%</th></tr></thead><tbody>
+                                ${Object.entries(monthStats).sort((a,b)=>b[1].s-a[1].s).map(([n,st]) => {
+                                    const ach = st.target>0 ? (st.s/st.target)*100 : 0;
+                                    return `<tr><td>${n}</td><td>${st.s.toLocaleString()}</td><td>${st.target.toLocaleString()}</td><td class="${ach>=100?'text-success':'text-warning'}">${ach.toFixed(1)}%</td></tr>`;
+                                }).join('')}
+                            </tbody></table></div>
+                        </div>
+                    </div>
+                `;
+            } catch (e) { container.innerHTML = '<p class="text-danger">فشل تحميل التفاصيل.</p>'; }
         }
 
         init();
