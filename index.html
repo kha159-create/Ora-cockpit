@@ -81,6 +81,7 @@
         <nav class="sidebar-nav">
             <a href="index.html" class="nav-link"><i class="fas fa-home"></i> الرئيسية</a>
             <a href="reports.html" class="nav-link"><i class="fas fa-file-alt"></i> التقارير</a>
+            <a href="yesterday_report.html" class="nav-link"><i class="fas fa-calendar-day"></i> تقرير أمس</a>
             <a href="employees.html" class="nav-link"><i class="fas fa-users"></i> أداء الموظفين</a>
             <a href="product_analysis.html" class="nav-link"><i class="fas fa-box"></i> تحليل المنتجات</a>
             <a href="branch_details.html" class="nav-link"><i class="fas fa-store"></i> تفاصيل الفروع</a>
@@ -99,15 +100,19 @@
 
     <div class="app-wrap">
         <main class="main-content">
-            <div class="main-topbar d-flex flex-wrap align-items-center gap-2">
-                <button onclick="filterToday()" class="btn btn-white border shadow-sm btn-sm d-flex align-items-center gap-2" title="اضغط لعرض مبيعات اليوم">
-                    <span class="fw-bold text-dark">مبيعات اليوم: <span class="text-primary today-sales-val">0</span></span>
-                    <span class="text-muted small" id="lastUpdate">...</span>
-                </button>
-                <a href="widget.html" class="btn btn-outline-warning btn-sm fw-bold">متابعة مبيعات اليوم</a>
-                <button onclick="openPdfModal()" class="btn btn-warning btn-sm fw-bold text-white">PDF</button>
-                <button onclick="showExcelModal()" class="btn btn-success btn-sm fw-bold text-white">Excel</button>
-                <button id="btnSetTarget" onclick="window.location.href='target_setting.html'" class="btn-primary fw-bold" style="display: none;">Target</button>
+            <div class="main-topbar d-flex flex-wrap align-items-center justify-content-between gap-2 w-100">
+                <span class="fw-bold text-dark">لوحة التحكم</span>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <button onclick="filterToday()" class="btn btn-white border shadow-sm btn-sm d-flex align-items-center gap-2" title="اضغط لعرض مبيعات اليوم">
+                        <span class="fw-bold text-dark">مبيعات اليوم: <span class="text-primary today-sales-val">0</span></span>
+                        <span class="text-muted small" id="lastUpdate">...</span>
+                    </button>
+                    <a href="widget.html" class="btn btn-outline-warning btn-sm fw-bold">متابعة مبيعات اليوم</a>
+                    <button onclick="openPdfModal()" class="btn btn-warning btn-sm fw-bold text-white">PDF</button>
+                    <button onclick="showExcelModal()" class="btn btn-success btn-sm fw-bold text-white">Excel</button>
+                    <button id="btnSetTarget" onclick="window.location.href='target_setting.html'" class="btn-primary fw-bold" style="display: none;">Target</button>
+                </div>
+                <a href="yesterday_report.html" class="btn btn-outline-primary btn-sm fw-bold text-nowrap">تقرير أمس</a>
             </div>
             <div class="main-content-inner">
 
@@ -268,51 +273,6 @@
         </div>
         </section>
 
-        <!-- تقرير أمس -->
-        <section class="page-section" id="dailyAccordion">
-        <div class="analysis-card mb-4" style="border-radius: var(--radius-2xl); overflow: hidden; box-shadow: var(--shadow-lg); border: 1px solid var(--neutral-200);">
-            <div class="analysis-header" style="background: linear-gradient(135deg, var(--primary-50), #fff);">
-                <h6 class="m-0 fw-bold" style="color: var(--primary-600);">
-                    📊 تقرير أمس &nbsp;<span id="dailyReportTitle" class="text-muted fw-normal" style="font-size: 0.85rem;">جار التحميل...</span>
-                </h6>
-                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDaily" aria-expanded="false" aria-controls="collapseDaily">
-                    <i class="fas fa-chevron-down"></i> عرض
-                </button>
-            </div>
-            <div id="collapseDaily" class="accordion-collapse collapse" aria-labelledby="headingDaily" data-bs-parent="#dailyAccordion">
-                <div class="accordion-body p-0" style="max-height: 400px; overflow-y: auto;">
-                            <!-- Daily Table -->
-                            <table class="table table-striped table-hover mb-0 align-middle">
-                                <thead class="table-light sticky-top" style="z-index: 1;">
-                                    <tr>
-                                        <th class="text-center">#</th>
-                                        <th>الفرع</th>
-                                        <th onclick="setDailySort('salesY')" style="cursor: pointer;">مبيعات الأمس ↕
-                                        </th>
-                                        <th class="text-muted" style="font-size: 0.9em;">العام الماضي</th>
-                                        <th onclick="setDailySort('growth')" style="cursor: pointer;">النمو % ↕
-                                        </th>
-                                        <th onclick="setDailySort('dailyReq')" style="cursor: pointer;">اليومية المتبقية
-                                            (Rem. Daily) ↕
-                                        </th>
-                                        <th onclick="setDailySort('trans')" style="cursor: pointer;">عدد الفواتير ↕</th>
-                                        <th onclick="setDailySort('avgInv')" style="cursor: pointer;">متوسط الفاتورة
-                                            (Inv Rate) ↕</th>
-                                        <th onclick="setDailySort('visitY')" style="cursor: pointer;">زوار ↕</th>
-                                        <th class="text-muted" onclick="setDailySort('visitLY')"
-                                            style="font-size: 0.9em; cursor: pointer;">زوار (LY)</th>
-                                        <th onclick="setDailySort('conv')" style="cursor: pointer;">تحويل % ↕</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="dailyTableBody">
-                                    <!-- JS -->
-                                </tbody>
-                            </table>
-                </div>
-            </div>
-        </div>
-        </section>
-
         <!-- Daily Sales Performance - بالكامل full width -->
         <section class="page-section">
         <h5 class="section-title">أداء المبيعات اليومي (Daily Sales Performance)</h5>
@@ -362,7 +322,7 @@
         </section>
 
         <!-- التحليل المتقدم -->
-        <section class="page-section">
+        <section class="page-section" id="earlyWarning">
         <h5 class="section-title">التحليل المتقدم (Advanced Analysis) <small class="text-muted fw-normal">— الإنذار المبكر لفروع في خطر</small></h5>
         <div class="row g-3 mb-4">
             <!-- الإنذار المبكر -->
@@ -1246,9 +1206,6 @@
             // Render Top 10 Stores Chart
             window.branchListForTop10 = branchList;
             renderTop10FromBranchList();
-
-            // --- 6. Render Daily Report ---
-            renderDailyReport();
 
             // --- 7. Advanced Analysis ---
             updateAdvancedAnalysis(curr, prev, branchList, top5Avg);

@@ -9,56 +9,11 @@
     <link rel="stylesheet" href="assets/sidebar.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root {
-            --bs-primary: #ea580c;
-            --card-radius: 1.5rem;
-            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-            --neutral-200: #e2e8f0;
-        }
-        body { background-color: #f8fafc; }
-        .reports-topbar {
-            background: #fff;
-            box-shadow: var(--shadow-lg);
-            border: 1px solid var(--neutral-200);
-            border-radius: var(--card-radius);
-            padding: 0.85rem 1.25rem;
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 0.75rem;
-            margin-bottom: 1.5rem;
-        }
-        .btn-reports-target { background: #0d6efd; color: white; border: none; border-radius: 0.75rem; padding: 0.5rem 1rem; font-weight: 700; box-shadow: 0 2px 8px rgba(13,110,253,0.3); }
-        .btn-reports-target:hover { background: #0b5ed7; color: white; transform: translateY(-1px); }
-        .btn-reports-excel { background: #198754; color: white; border: none; border-radius: 0.75rem; padding: 0.5rem 1rem; font-weight: 700; box-shadow: 0 2px 8px rgba(25,135,84,0.3); }
-        .btn-reports-excel:hover { background: #157347; color: white; transform: translateY(-1px); }
-        .btn-reports-pdf { background: linear-gradient(135deg, #f97316, #ea580c); color: white; border: none; border-radius: 0.75rem; padding: 0.5rem 1rem; font-weight: 700; box-shadow: 0 2px 8px rgba(249,115,22,0.35); }
-        .btn-reports-pdf:hover { color: white; transform: translateY(-1px); }
-        .btn-reports-widget { background: #ffc107; color: #212529; border: none; border-radius: 0.75rem; padding: 0.5rem 1rem; font-weight: 700; }
-        .btn-reports-widget:hover { background: #e0a800; color: #212529; transform: translateY(-1px); }
-        .today-sales-card {
-            background: #f1f5f9;
-            border: 1px solid var(--neutral-200);
-            border-radius: 0.75rem;
-            padding: 0.6rem 1rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .today-sales-card .label { font-weight: 600; color: #0f172a; }
-        .today-sales-card .value { font-weight: 800; color: #0d6efd; font-size: 1.1rem; }
-        .today-sales-card .time { font-size: 0.85rem; color: #64748b; }
-        .reports-content {
-            background: #fff;
-            border-radius: var(--card-radius);
-            box-shadow: var(--shadow-lg);
-            border: 1px solid var(--neutral-200);
-            padding: 1.5rem;
-            min-height: 300px;
-        }
-        .reports-section-title { font-weight: 700; margin-bottom: 1rem; border-right: 4px solid var(--bs-primary); padding-right: 10px; color: #0f172a; }
-        .reports-content .card { border-radius: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border: 1px solid var(--neutral-200); transition: transform 0.2s, box-shadow 0.2s; }
-        .reports-content .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+        .report-card { border-radius: var(--radius-2xl); box-shadow: var(--shadow-lg); border: 1px solid var(--neutral-200); overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
+        .report-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-xl); border-color: var(--primary-200); }
+        .report-card .card-body { padding: 1.25rem; }
+        .report-card .card-title { font-weight: 700; color: var(--neutral-900); margin-bottom: 0.5rem; }
+        .report-card .card-text { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem; }
     </style>
 </head>
 
@@ -73,7 +28,8 @@
         </div>
         <nav class="sidebar-nav">
             <a href="index.html" class="nav-link"><i class="fas fa-home"></i> الرئيسية</a>
-            <a href="reports.html" class="nav-link"><i class="fas fa-file-alt"></i> التقارير</a>
+            <a href="reports.html" class="nav-link active"><i class="fas fa-file-alt"></i> التقارير</a>
+            <a href="yesterday_report.html" class="nav-link"><i class="fas fa-calendar-day"></i> تقرير أمس</a>
             <a href="employees.html" class="nav-link"><i class="fas fa-users"></i> أداء الموظفين</a>
             <a href="product_analysis.html" class="nav-link"><i class="fas fa-box"></i> تحليل المنتجات</a>
             <a href="branch_details.html" class="nav-link"><i class="fas fa-store"></i> تفاصيل الفروع</a>
@@ -92,120 +48,133 @@
 
     <div class="app-wrap">
         <main class="main-content">
+            <div class="main-topbar d-flex flex-wrap align-items-center justify-content-between gap-2 w-100">
+                <span class="fw-bold text-dark">التقارير</span>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="fw-bold text-dark">مبيعات اليوم: <span class="text-primary" id="reportsTodaySales">0</span></span>
+                    <span class="text-muted small" id="reportsLastUpdate">--:--</span>
+                    <a href="index.html" class="btn btn-warning btn-sm fw-bold text-white">PDF</a>
+                    <a href="index.html" class="btn btn-success btn-sm fw-bold text-white">Excel</a>
+                    <a href="widget.html" class="btn btn-outline-warning btn-sm fw-bold">متابعة مبيعات اليوم</a>
+                </div>
+            </div>
             <div class="main-content-inner">
 
-                <header class="page-header">
-                    <h1 class="page-title">التقارير</h1>
-                    <p class="page-subtitle">وصول سريع إلى Target، Excel، PDF، ومتابعة مبيعات اليوم</p>
-                </header>
+    <div class="container-fluid px-4">
+        <header class="page-header">
+            <h1 class="page-title">التقارير</h1>
+            <p class="page-subtitle">وصول سريع إلى جميع التقارير والتصديرات</p>
+        </header>
 
-                <!-- شريط أزرار + بطاقة مبيعات اليوم -->
-                <div class="page-filters reports-topbar">
-                    <a href="target_setting.html" class="btn btn-reports-target">Target</a>
-                    <a href="index.html" class="btn btn-reports-excel">Excel</a>
-                    <a href="index.html" class="btn btn-reports-pdf">PDF</a>
-                    <a href="widget.html" class="btn btn-reports-widget">متابعة مبيعات اليوم</a>
-                    <div class="today-sales-card ms-auto">
-                        <span class="label">مبيعات اليوم:</span>
-                        <span class="value" id="reportsTodaySales">0</span>
-                        <span class="time" id="reportsLastUpdate">--:--</span>
-                    </div>
-                </div>
-
-                <section class="page-section">
-                <div class="reports-content cockpit-section">
-                    <h5 class="section-title">روابط سريعة</h5>
-                    <p class="text-muted mb-4">من هذه الصفحة يمكنك الوصول السريع إلى تصدير التارجت، Excel، PDF، ومتابعة مبيعات اليوم. استخدم الأزرار أعلاه أو القائمة الجانبية للانتقال إلى الصفحة المناسبة.</p>
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <a href="index.html" class="text-decoration-none">
-                                <div class="card border-0 shadow-sm h-100 hover-shadow">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-chart-line fa-2x text-primary mb-2"></i>
-                                        <h6 class="card-title">لوحة التحكم</h6>
-                                        <small class="text-muted">ملخص المبيعات والفروع</small>
-                                    </div>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="target_setting.html" class="text-decoration-none">
-                                <div class="card border-0 shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-bullseye fa-2x text-primary mb-2"></i>
-                                        <h6 class="card-title">التارجت</h6>
-                                        <small class="text-muted">تحديد الأهداف الشهرية</small>
-                                    </div>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="widget.html" class="text-decoration-none">
-                                <div class="card border-0 shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-sun fa-2x text-warning mb-2"></i>
-                                        <h6 class="card-title">مبيعات اليوم</h6>
-                                        <small class="text-muted">متابعة حية</small>
-                                    </div>
-                                </div>
-                            </a>
+        <section class="page-section">
+        <div class="row g-4">
+            <div class="col-12 col-md-6 col-lg-4">
+                <a href="index.html" class="text-decoration-none">
+                    <div class="card report-card h-100">
+                        <div class="card-body">
+                            <i class="fas fa-chart-line fa-2x text-primary mb-2"></i>
+                            <h5 class="card-title">لوحة التحكم</h5>
+                            <p class="card-text">ملخص شامل للمبيعات، الفروع، والزوار مع مقارنة السنة الحالية والسابقة.</p>
+                            <span class="btn btn-sm btn-outline-primary">عرض</span>
                         </div>
                     </div>
-                </div>
-                </section>
-
+                </a>
             </div>
-        </main>
+            <div class="col-12 col-md-6 col-lg-4">
+                <a href="yesterday_report.html" class="text-decoration-none">
+                    <div class="card report-card h-100">
+                        <div class="card-body">
+                            <i class="fas fa-calendar-day fa-2x text-primary mb-2"></i>
+                            <h5 class="card-title">تقرير أمس</h5>
+                            <p class="card-text">تقرير مبيعات الأمس للموظفين والمعارض مع مقارنة بالعام الماضي وزرّي تصدير PDF.</p>
+                            <span class="btn btn-sm btn-outline-primary">عرض</span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4">
+                <a href="branch_details.html" class="text-decoration-none">
+                    <div class="card report-card h-100">
+                        <div class="card-body">
+                            <i class="fas fa-store fa-2x text-primary mb-2"></i>
+                            <h5 class="card-title">تفاصيل الفروع</h5>
+                            <p class="card-text">جدول كامل بجميع الفروع مع إمكانية التوسيع لعرض تفاصيل الموظفين عند النقر.</p>
+                            <span class="btn btn-sm btn-outline-primary">عرض</span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4">
+                <a href="index.html#earlyWarning" class="text-decoration-none">
+                    <div class="card report-card h-100">
+                        <div class="card-body">
+                            <i class="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
+                            <h5 class="card-title">الإنذار المبكر</h5>
+                            <p class="card-text">فروع في خطر عدم تحقيق الهدف حسب الوقت المنقضي من الشهر.</p>
+                            <span class="btn btn-sm btn-outline-primary">عرض</span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4">
+                <a href="target_setting.html" class="text-decoration-none">
+                    <div class="card report-card h-100">
+                        <div class="card-body">
+                            <i class="fas fa-bullseye fa-2x text-primary mb-2"></i>
+                            <h5 class="card-title">التارجت (الأهداف)</h5>
+                            <p class="card-text">تحديد الأهداف الشهرية للموظفين والفروع.</p>
+                            <span class="btn btn-sm btn-outline-primary">عرض</span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4">
+                <a href="widget.html" class="text-decoration-none">
+                    <div class="card report-card h-100">
+                        <div class="card-body">
+                            <i class="fas fa-sun fa-2x text-warning mb-2"></i>
+                            <h5 class="card-title">متابعة مبيعات اليوم</h5>
+                            <p class="card-text">متابعة حية لمبيعات اليوم عبر الويدجت.</p>
+                            <span class="btn btn-sm btn-outline-primary">عرض</span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+        </section>
+
     </div>
 
     <script src="users.js"></script>
     <script>
         const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-        if (!currentUser) {
-            window.location.href = 'login.html';
-        }
-        function logout() {
-            localStorage.removeItem('currentUser');
-            window.location.href = 'login.html';
-        }
-        (function () {
-            function updateTodaySales() {
-                try {
-                    fetch('management_data.json?t=' + Date.now())
-                        .then(r => r.json())
-                        .then(data => {
-                            var el = document.getElementById('reportsTodaySales');
-                            var timeEl = document.getElementById('reportsLastUpdate');
-                            if (!el) return;
-                            var total = 0;
-                            var byStore = data.byStore || data.stores || [];
-                            if (Array.isArray(byStore)) {
-                                var today = new Date().toISOString().slice(0, 10);
-                                byStore.forEach(function (s) {
-                                    var daily = s.daily || s.byDay || [];
-                                    var day = daily.find(function (d) { return (d.date || d.day) === today; });
-                                    if (day) total += (day.sales || day.salesAmount || day.totalSales || 0);
-                                });
-                            }
-                            el.textContent = total.toLocaleString('ar-EG');
-                            if (timeEl) timeEl.textContent = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
-                        })
-                        .catch(function () {
-                            var el = document.getElementById('reportsTodaySales');
-                            if (el) el.textContent = '0';
-                            var timeEl = document.getElementById('reportsLastUpdate');
-                            if (timeEl) timeEl.textContent = '--:--';
-                        });
-                } catch (e) {
-                    var el = document.getElementById('reportsTodaySales');
+        if (!currentUser) window.location.href = 'login.html';
+        function logout() { localStorage.removeItem('currentUser'); window.location.href = 'login.html'; }
+
+        function updateTodaySales() {
+            fetch('management_data.json?t=' + Date.now())
+                .then(r => r.json())
+                .then(data => {
+                    const el = document.getElementById('reportsTodaySales');
+                    const timeEl = document.getElementById('reportsLastUpdate');
+                    if (!el) return;
+                    let total = 0;
+                    const today = new Date().toISOString().slice(0, 10);
+                    (data.sales || []).forEach(([d,s,v]) => { if (d === today) total += v; });
+                    el.textContent = total.toLocaleString('ar-EG');
+                    if (timeEl) timeEl.textContent = (data.metadata?.generated_at?.split(' ')[1] || '').slice(0,5) || '--:--';
+                })
+                .catch(() => {
+                    const el = document.getElementById('reportsTodaySales');
                     if (el) el.textContent = '0';
-                }
-            }
-            updateTodaySales();
-            setInterval(updateTodaySales, 60000);
-        })();
+                });
+        }
+        updateTodaySales();
+        setInterval(updateTodaySales, 60000);
     </script>
     <script src="assets/sidebar.js"></script>
+            </div>
+        </main>
+    </div>
 </body>
-
 </html>

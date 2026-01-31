@@ -1,0 +1,33 @@
+# سحب تحديثات الـ 15 دقيقة من الريبو الأصلي (upstream) تلقائياً
+# بدلاً من تشغيل تحديث البيانات على ريبونا
+name: Sync Upstream Every 15 Min
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/ALAAWF2/orange-dashboard.git 2>/dev/null || true
+          git fetch upstream main
+
+      - name: Merge upstream
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git merge upstream/main --no-edit
+
+      - name: Push
+        run: git push origin main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
