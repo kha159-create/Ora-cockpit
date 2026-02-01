@@ -173,15 +173,50 @@
                 panel.style.display = 'flex';
                 btn.classList.remove('btn-outline-warning');
                 btn.classList.add('btn-warning', 'text-white');
-                btn.querySelector('.live-dot').style.opacity = '1';
+                if (btn.querySelector('.live-dot')) btn.querySelector('.live-dot').style.opacity = '1';
                 filterToday();
                 calculateTodayHeader();
+                openLiveModal();
             } else {
                 panel.style.display = 'none';
                 btn.classList.remove('btn-warning', 'text-white');
                 btn.classList.add('btn-outline-warning');
-                btn.querySelector('.live-dot').style.opacity = '0.6';
+                if (btn.querySelector('.live-dot')) btn.querySelector('.live-dot').style.opacity = '0.6';
+                bootstrap.Modal.getInstance(document.getElementById('liveSalesModal'))?.hide();
             }
+        }
+        function openLiveModal() {
+            populateLiveModal();
+            new bootstrap.Modal(document.getElementById('liveSalesModal')).show();
+        }
+        function populateLiveModal() {
+            if (!rawData) {
+                const tbody = document.getElementById('liveModalBody');
+                if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">جار تحميل البيانات...</td></tr>';
+                return;
+            }
+            const todayStr = new Date().toLocaleDateString('en-CA');
+            const selManager = currentUser.role !== 'Admin' ? currentUser.name : null;
+            let byStore = {};
+            rawData.sales.forEach(([d, s, v]) => {
+                if (d !== todayStr) return;
+                if (selManager) {
+                    const meta = rawData.store_meta ? rawData.store_meta[s] : null;
+                    if (!meta || meta.manager !== selManager) return;
+                }
+                byStore[s] = (byStore[s] || 0) + v;
+            });
+            let total = 0;
+            const rows = Object.entries(byStore).map(([sid, val]) => {
+                total += val;
+                return { name: rawData.stores[sid] || sid, val };
+            });
+            rows.sort((a, b) => b.val - a.val);
+            const tbody = document.getElementById('liveModalBody');
+            if (!tbody) return;
+            tbody.innerHTML = rows.map((r, i) => `<tr><td class="text-center">${i+1}</td><td class="fw-bold">${r.name}</td><td class="text-end fw-bold">${r.val.toLocaleString()}</td></tr>`).join('') || '<tr><td colspan="3" class="text-center text-muted">لا توجد مبيعات اليوم</td></tr>';
+            const totalEl = document.getElementById('liveModalTotal');
+            if (totalEl) totalEl.textContent = total.toLocaleString();
         }
     </script>
 
@@ -276,10 +311,9 @@
                     <div class="kpi-icon" style="background: linear-gradient(135deg, var(--primary-400), var(--primary-600)); color:#fff;"><i class="fas fa-chart-line"></i></div>
                     <div class="kpi-title">المبيعات الإجمالية</div>
                     <div class="kpi-value" id="totalSales">0</div>
-                    <div class="kpi-sub">الحصة مقابل <span id="prevSales">0</span></div>
+                    <div class="kpi-sub">الحصة مقابل <span id="targetSalesRef">0</span> | السابق: <span id="prevSalesDisp">0</span></div>
                     <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
                         <span id="salesGrowthVal" class="kpi-badge pos">0%</span>
-                        <span class="kpi-sub">السنة الماضية: <span id="prevSalesDisp">0</span></span>
                     </div>
                     <div class="kpi-sub mt-1"><span id="growthAbs" class="fw-bold">0</span> قيمة النمو</div>
                     <div class="kpi-progress"><div id="salesAchBar" class="kpi-progress-fill" style="width:0%"></div></div>
@@ -300,7 +334,7 @@
                     <div class="kpi-icon" style="background: #7c3aed; color:#fff;"><i class="fas fa-receipt"></i></div>
                     <div class="kpi-title">الفواتير</div>
                     <div class="kpi-value" id="totalTrans">0</div>
-                    <div class="kpi-sub">متوسط: <span id="avgTicket" class="fw-bold">0</span> | السابق: <span id="prevTrans">0</span></div>
+                    <div class="kpi-sub">متوسط: <span id="avgTicket" class="fw-bold">0</span> | السابق: <span id="prevTrans">0</span> (متوسط سابق: <span id="prevAvgTicket">0</span>)</div>
                     <span id="transGrowth" class="kpi-badge pos">0%</span>
                 </div>
             </div>
@@ -309,7 +343,7 @@
                     <div class="kpi-icon" style="background: #7c3aed; color:#fff;"><i class="fas fa-users"></i></div>
                     <div class="kpi-title">الزوار</div>
                     <div class="kpi-value" id="totalVisitors">0</div>
-                    <div class="kpi-sub">Conv: <span id="convRate" class="fw-bold">0%</span> | السابق: <span id="prevVisitors">0</span></div>
+                    <div class="kpi-sub">Conv: <span id="convRate" class="fw-bold">0%</span> | السابق: <span id="prevVisitors">0</span> (Conv سابق: <span id="prevConvRate">0%</span>)</div>
                     <span id="visitorsGrowth" class="kpi-badge pos">0%</span>
                 </div>
             </div>
@@ -615,7 +649,7 @@
             renderTopProgressList('top10StoresList', list.slice(0, 10), m);
         }
 
-        async function loadTopEmployees() {
+        async function loadTopEmployees(dateStart, dateEnd) {
             try {
                 const res = await fetch('employees_data.json?t=' + Date.now());
                 const ed = await res.json();
@@ -624,6 +658,8 @@
                 const targets = ed.targets || {};
                 const empNames = ed.employee_names || {};
                 const selManager = currentUser.role !== 'Admin' ? currentUser.name : null;
+                const sTime = dateStart ? dateStart.getTime() : 0;
+                const eTime = dateEnd ? dateEnd.getTime() : Number.MAX_SAFE_INTEGER;
                 let agg = {};
                 Object.keys(history).forEach(sid => {
                     if (selManager) {
@@ -632,13 +668,17 @@
                     }
                     (history[sid] || []).forEach(r => {
                         let [d, rawName, sales, trans] = r;
+                        if (dateStart && dateEnd) {
+                            const dTime = new Date(d).getTime();
+                            if (dTime < sTime || dTime > eTime) return;
+                        }
                         if (!rawName || rawName === 'None') return;
                         let empId = rawName, name = rawName;
-                        if (rawName.includes('-')) { const p = rawName.split('-'); empId = p[0].trim(); name = p[1].trim(); }
+                        if (typeof rawName === 'string' && rawName.includes('-')) { const p = rawName.split('-'); empId = p[0].trim(); name = p[1].trim(); }
                         if (empNames[empId]) name = empNames[empId];
                         if (!agg[empId]) agg[empId] = { name, val: 0, target: targets[empId] || 0, trans: 0 };
-                        agg[empId].val += sales || 0;
-                        agg[empId].trans += trans || 0;
+                        agg[empId].val += (sales && !isNaN(sales)) ? sales : 0;
+                        agg[empId].trans += (trans && !isNaN(trans)) ? trans : 0;
                     });
                 });
                 window.employeeListForTop10 = Object.values(agg).map(e => ({
@@ -823,7 +863,6 @@
                 }
 
                 updateDashboard();
-                loadTopEmployees();
                 if (window.location.hash === '#pdf') setTimeout(function(){ if (typeof openPdfModal==='function') openPdfModal(); }, 300);
                 if (window.location.hash === '#excel') setTimeout(function(){ if (typeof showExcelModal==='function') showExcelModal(); }, 300);
             } catch (e) { console.error(e); loadTopEmployees(); }
@@ -1215,25 +1254,31 @@
             // Trans Growth
             let transGrowth = prev.trans > 0 ? ((curr.trans - prev.trans) / prev.trans) * 100 : 0;
             let tGEl = document.getElementById('transGrowth');
-            if (tGEl) { tGEl.textContent = (transGrowth > 0 ? '+' : '') + transGrowth.toFixed(1) + '%'; tGEl.className = 'kpi-sub ' + (transGrowth >= 0 ? 'text-success-custom fw-bold' : 'text-danger-custom fw-bold'); }
+            if (tGEl) { tGEl.textContent = (transGrowth > 0 ? '+' : '') + transGrowth.toFixed(1) + '%'; tGEl.className = 'kpi-badge ' + (transGrowth >= 0 ? 'pos' : 'neg'); }
 
             // Visitors Growth
             let visitorsGrowth = prev.visitors > 0 ? ((curr.visitors - prev.visitors) / prev.visitors) * 100 : 0;
             let vGEl = document.getElementById('visitorsGrowth');
-            if (vGEl) { vGEl.textContent = (visitorsGrowth > 0 ? '+' : '') + visitorsGrowth.toFixed(1) + '%'; vGEl.className = 'kpi-sub ' + (visitorsGrowth >= 0 ? 'text-success-custom fw-bold' : 'text-danger-custom fw-bold'); }
+            if (vGEl) { vGEl.textContent = (visitorsGrowth > 0 ? '+' : '') + visitorsGrowth.toFixed(1) + '%'; vGEl.className = 'kpi-badge ' + (visitorsGrowth >= 0 ? 'pos' : 'neg'); }
 
             // --- 4. Update KPI Cards (Previous) ---
-            fmt(document.getElementById('targetSalesRef'), curr.target);
-            fmt(document.getElementById('prevSalesDisp'), prev.sales);
-            fmt(document.getElementById('prevTrans'), prev.trans);
-            fmt(document.getElementById('prevVisitors'), prev.visitors);
+            let targetSalesEl = document.getElementById('targetSalesRef');
+            let prevSalesEl = document.getElementById('prevSalesDisp');
+            if (targetSalesEl) targetSalesEl.textContent = curr.target.toLocaleString(undefined, {maximumFractionDigits:0});
+            if (prevSalesEl) prevSalesEl.textContent = prev.sales.toLocaleString(undefined, {maximumFractionDigits:0});
+            let pT = document.getElementById('prevTrans');
+            if (pT) pT.textContent = prev.trans.toLocaleString(undefined, {maximumFractionDigits:0});
+            let pV = document.getElementById('prevVisitors');
+            if (pV) pV.textContent = prev.visitors.toLocaleString(undefined, {maximumFractionDigits:0});
 
             // Prev Rates
             let prevAvgTicket = prev.trans > 0 ? prev.sales / prev.trans : 0;
-            document.getElementById('prevAvgTicket').textContent = prevAvgTicket.toFixed(0);
+            let pAT = document.getElementById('prevAvgTicket');
+            if (pAT) pAT.textContent = prevAvgTicket.toFixed(0);
 
             let prevConvRate = prev.visitors > 0 ? (prev.trans / prev.visitors) * 100 : 0;
-            document.getElementById('prevConvRate').textContent = prevConvRate.toFixed(1) + '%';
+            let pCR = document.getElementById('prevConvRate');
+            if (pCR) pCR.textContent = prevConvRate.toFixed(1) + '%';
 
             // Prev Cust Value
             let prevCustValue = prev.visitors > 0 ? prev.sales / prev.visitors : 0;
@@ -1259,7 +1304,7 @@
             let prevData = trendChartMetric === 'visitors' ? (prev.monthlyVisitors || {}) : (trendChartMetric === 'target' ? (prev.monthlyTarget || {}) : prev.monthly);
             renderTrendChart(currData, prevData, cYear, pYear);
 
-            // --- 5. Top 10 Chart & Table ---
+            // --- 5. Top 10 Stores ---
             // Prepare Branch Data
             let branchList = [];
             let allStores = new Set([
@@ -1304,7 +1349,7 @@
                 let absGrowth = val - prevVal;
 
                 branchList.push({
-                    sid, name, val, prevVal, growth, absGrowth, target, trans, visitors, prevVisitors, ach, avgInv, conv, custVal, dailyReq
+                    name, val, prevVal, growth, absGrowth, target, trans, visitors, prevVisitors, ach, avgInv, conv, custVal, dailyReq
                 });
             });
 
@@ -1322,9 +1367,11 @@
                 return 0;
             });
 
-            // Render Top 10 Stores Chart
             window.branchListForTop10 = branchList;
             renderTop10FromBranchList();
+
+            // --- 6. Top 10 Employees (with date filter) ---
+            loadTopEmployees(currentStart, currentEnd);
 
             // --- 7. Advanced Analysis ---
             updateAdvancedAnalysis(curr, prev, branchList, top5Avg);
@@ -1459,150 +1506,9 @@
             });
         }
 
-        // --- Branch Daily Details Popup ---
-        function showBranchDailyDetails(storeId, storeName) {
-            if (!rawData || !window.dashboardState) {
-                alert("البيانات غير جاهزة بعد");
-                return;
-            }
-
-            const startDate = new Date(window.dashboardState.start);
-            const endDate = new Date(window.dashboardState.end);
-
-            // Update Modal Title
-            document.getElementById('branchDailyTitle').textContent = storeName;
-            document.getElementById('branchDailyPeriod').textContent =
-                `${startDate.toLocaleDateString('en-CA')} إلى ${endDate.toLocaleDateString('en-CA')}`;
-
-            // Day names for display
-            const dayNames = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-
-            // Calculate Remaining Days for Daily Req
-            const nowForReq = new Date();
-            const lastDayOfMonth = new Date(nowForReq.getFullYear(), nowForReq.getMonth() + 1, 0).getDate();
-            let remainingDays = lastDayOfMonth - nowForReq.getDate() + 1;
-            if (remainingDays < 1) remainingDays = 1;
-
-            // Build table rows
-            let rows = [];
-            let grandTotalSales = 0, grandSalesLY = 0, grandVisitors = 0, grandVisitorsLY = 0, grandTrans = 0, grandTarget = 0;
-
-            let loopDate = new Date(startDate);
-            while (loopDate <= endDate) {
-                const dateStr = loopDate.toLocaleDateString('en-CA');
-                const dayData = getDayData(storeId, dateStr);
-
-                const sales = dayData.sales || 0;
-                const visitors = dayData.visitors || 0;
-                const trans = dayData.trans || 0;
-                const target = dayData.target || 0;
-
-                // Last Year Data
-                let lyDate = new Date(loopDate);
-                lyDate.setFullYear(loopDate.getFullYear() - 1);
-                const lyDateStr = lyDate.toLocaleDateString('en-CA');
-                const lyData = getDayData(storeId, lyDateStr);
-
-                const salesLY = lyData.sales || 0;
-                const visitorsLY = lyData.visitors || 0;
-
-                // Calculations
-                const growth = salesLY > 0 ? ((sales - salesLY) / salesLY * 100) : (sales > 0 ? 100 : 0);
-                const avgInv = trans > 0 ? Math.round(sales / trans) : 0;
-                const conv = visitors > 0 ? ((trans / visitors) * 100) : 0;
-
-                // Day name
-                const dayName = dayNames[loopDate.getDay()];
-
-                rows.push({
-                    date: dateStr,
-                    dayName,
-                    sales, salesLY, growth, trans, avgInv, visitors, visitorsLY, conv
-                });
-
-                grandTotalSales += sales;
-                grandSalesLY += salesLY;
-                grandVisitors += visitors;
-                grandVisitorsLY += visitorsLY;
-                grandTrans += trans;
-                grandTarget += target;
-
-                loopDate.setDate(loopDate.getDate() + 1);
-            }
-
-            // Update KPIs
-            const achPct = grandTarget > 0 ? ((grandTotalSales / grandTarget) * 100) : 0;
-            let dailyReq = 0;
-            if (grandTarget > grandTotalSales) {
-                dailyReq = (grandTarget - grandTotalSales) / remainingDays;
-            }
-
-            document.getElementById('bdTotalSales').textContent = grandTotalSales.toLocaleString();
-            document.getElementById('bdTarget').textContent = grandTarget.toLocaleString();
-            document.getElementById('bdAchievement').textContent = achPct.toFixed(1) + '%';
-            document.getElementById('bdAchievement').className = achPct >= 100 ? 'fs-4 fw-bold text-success' : 'fs-4 fw-bold text-warning';
-            document.getElementById('bdDailyReq').textContent = Math.round(dailyReq).toLocaleString();
-
-            // Render Table Body
-            const tbody = document.getElementById('branchDailyBody');
-            tbody.innerHTML = rows.map(r => `
-                <tr>
-                    <td class="text-center">${r.date}</td>
-                    <td class="text-center">${r.dayName}</td>
-                    <td class="text-center fw-bold">${r.sales.toLocaleString()}</td>
-                    <td class="text-center text-muted">${r.salesLY.toLocaleString()}</td>
-                    <td class="text-center ${r.growth >= 0 ? 'text-success' : 'text-danger'} fw-bold">${r.growth > 0 ? '+' : ''}${r.growth.toFixed(1)}%</td>
-                    <td class="text-center">${r.trans.toLocaleString()}</td>
-                    <td class="text-center">${r.avgInv.toLocaleString()}</td>
-                    <td class="text-center">${r.visitors.toLocaleString()}</td>
-                    <td class="text-center text-muted">${r.visitorsLY.toLocaleString()}</td>
-                    <td class="text-center">${r.conv.toFixed(1)}%</td>
-                </tr>
-            `).join('');
-
-            // Render Footer (Totals)
-            const grandGrowth = grandSalesLY > 0 ? ((grandTotalSales - grandSalesLY) / grandSalesLY * 100) : 0;
-            const grandAvgInv = grandTrans > 0 ? Math.round(grandTotalSales / grandTrans) : 0;
-            const grandConv = grandVisitors > 0 ? ((grandTrans / grandVisitors) * 100) : 0;
-
-            document.getElementById('branchDailyFoot').innerHTML = `
-                <tr>
-                    <td class="text-center" colspan="2">الإجمالي</td>
-                    <td class="text-center">${grandTotalSales.toLocaleString()}</td>
-                    <td class="text-center">${grandSalesLY.toLocaleString()}</td>
-                    <td class="text-center ${grandGrowth >= 0 ? 'text-success' : 'text-danger'}">${grandGrowth > 0 ? '+' : ''}${grandGrowth.toFixed(1)}%</td>
-                    <td class="text-center">${grandTrans.toLocaleString()}</td>
-                    <td class="text-center">${grandAvgInv.toLocaleString()}</td>
-                    <td class="text-center">${grandVisitors.toLocaleString()}</td>
-                    <td class="text-center">${grandVisitorsLY.toLocaleString()}</td>
-                    <td class="text-center">${grandConv.toFixed(1)}%</td>
-                </tr>
-            `;
-
-            // Show Modal
-            const modal = new bootstrap.Modal(document.getElementById('branchDailyModal'));
-            modal.show();
-        }
-
 
 
         // --- Helpers ---
-        // Helper: Get daily data for a specific store and date
-        function getDayData(storeId, dateStr) {
-            if (!rawData) return { sales: 0, target: 0, visitors: 0, trans: 0 };
-            const findValue = (arr) => {
-                if (!arr) return 0;
-                const item = arr.find(row => row[0] === dateStr && row[1] == storeId);
-                return item ? item[2] : 0;
-            };
-            return {
-                sales: findValue(rawData.sales),
-                target: findValue(rawData.targets),
-                visitors: findValue(rawData.visitors),
-                trans: findValue(rawData.transactions)
-            };
-        }
-
         function fmt(el, v) { el.textContent = v.toLocaleString(undefined, { maximumFractionDigits: 0 }); }
         function valFmt(v) { return v.toLocaleString(undefined, { maximumFractionDigits: 0 }); } // Explicit helper if needed
 
@@ -1618,7 +1524,9 @@
 
         const monthNamesAr = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
         function renderTrendChart(currM, prevM, y1, y2) {
-            const ctx = document.getElementById('trendChart').getContext('2d');
+            const canvas = document.getElementById('trendChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
             if (charts['trend']) charts['trend'].destroy();
 
             const selectedM = document.getElementById('monthFilter').value;
@@ -1814,6 +1722,33 @@
             generatePDF(storeId, isDetailed);
         }
 
+        function openYesterdayReportModal() {
+            new bootstrap.Modal(document.getElementById('yesterdayReportModal')).show();
+        }
+
+        async function downloadYesterdayPdfStores() {
+            if (!rawData) { alert('جار تحميل البيانات... حاول مرة أخرى'); return; }
+            const y = new Date();
+            y.setDate(y.getDate() - 1);
+            y.setHours(0, 0, 0, 0);
+            const yEnd = new Date(y);
+            yEnd.setHours(23, 59, 59, 999);
+            window.dashboardState = { start: y, end: yEnd };
+            bootstrap.Modal.getInstance(document.getElementById('yesterdayReportModal'))?.hide();
+            if (typeof generatePDF === 'function') generatePDF('all', false);
+        }
+
+        async function downloadYesterdayPdfEmployees() {
+            try {
+                const res = await fetch('employees_data.json?t=' + Date.now());
+                const ed = await res.json();
+                window.historyData = ed.history || {};
+                window.storeMeta = (rawData && rawData.store_meta) || {};
+                bootstrap.Modal.getInstance(document.getElementById('yesterdayReportModal'))?.hide();
+                if (typeof generateEmployeePDF === 'function') generateEmployeePDF();
+            } catch (e) { alert('تعذر تحميل بيانات الموظفين'); }
+        }
+
         init();
     </script>
     <!-- PDF Export Modal -->
@@ -1841,6 +1776,25 @@
                 <div class="modal-footer">
                     <button type="button" class="btn-secondary" data-bs-dismiss="modal">إغلاق</button>
                     <button type="button" class="btn-primary" onclick="triggerPdfExport()">تصدير</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="liveSalesModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-circle me-2" style="font-size:0.5rem;"></i> مبيعات اليوم - تفاصيل الفروع</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3 fw-bold">الإجمالي: <span id="liveModalTotal" class="text-primary">0</span></div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light"><tr><th class="text-center" style="width:50px">#</th><th>الفرع</th><th class="text-end">المبيعات</th></tr></thead>
+                            <tbody id="liveModalBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>

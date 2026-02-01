@@ -252,8 +252,16 @@
             }
 
             try {
-                // Fetch Data
-                // Note: Assuming file is in same dir
+                if (currentUser.role !== 'Admin') {
+                    const mgmtRes = await fetch('management_data.json');
+                    const mgmt = await mgmtRes.json();
+                    const meta = (mgmt.store_meta || {})[sid];
+                    if (!meta || meta.manager !== currentUser.name) {
+                        document.getElementById('loadingErrors').innerHTML = '<div class="alert alert-warning">لا تملك صلاحية عرض هذا الفرع. سيتم تحويلك لاختيار فرع من فروعك.</div>';
+                        setTimeout(() => { window.location.href = 'branch_details.html'; }, 2000);
+                        return;
+                    }
+                }
                 const res = await fetch('employees_data.json');
                 if (!res.ok) throw new Error("File not found");
                 const allData = await res.json();
@@ -487,6 +495,7 @@
                     if (filterPrev(d)) prevVisitors[s] = (prevVisitors[s]||0)+v;
                 });
 
+                const storeMeta = raw.store_meta || {};
                 let list = [];
                 const allIds = new Set([...Object.keys(branchSales), ...Object.keys(prevSales), ...Object.keys(branchTarget)]);
                 allIds.forEach(sid => {
