@@ -110,7 +110,7 @@ async function generateEmployeePDF(targetEmps = null) {
                             storeStats: {},
                             globalMtd: { sales: 0, trans: 0, items: 0 },
                             globalYest: { sales: 0, trans: 0, items: 0 },
-                            globalPrev: { sales: 0 },
+                            globalPrev: { sales: 0, trans: 0, items: 0 },
                             lastStore: sCode,
                             latestActiveStore: sCode,
                             latestActiveDate: ""
@@ -139,6 +139,8 @@ async function generateEmployeePDF(targetEmps = null) {
 
                     if (isPrev) {
                         globalEmps[key].globalPrev.sales += sales;
+                        globalEmps[key].globalPrev.trans += r[3] || 0;
+                        globalEmps[key].globalPrev.items += r[4] || 0;
                     }
 
                     if (!globalEmps[key].storeStats[sCode]) globalEmps[key].storeStats[sCode] = 0;
@@ -167,6 +169,10 @@ async function generateEmployeePDF(targetEmps = null) {
 
     const globalEmpMap = processGlobalData();
 
+    // Check Filter Mode
+    const filterVal = document.getElementById('periodFilter') ? document.getElementById('periodFilter').value : 'mtd';
+    const isPrevMode = filterVal === 'prev_month';
+
     // Loop through stores
     for (const storeId of targetStores) {
 
@@ -186,7 +192,12 @@ async function generateEmployeePDF(targetEmps = null) {
             // Filter by Allowed IDs (if provided)
             if (targetEmps && !targetEmps.includes(e.id)) return;
 
-            if (e.primaryStore === storeId && (e.globalMtd.sales > 0 || e.globalMtd.trans > 0)) {
+            // Check Activity based on Mode
+            const hasActivity = isPrevMode
+                ? (e.globalPrev.sales > 0 || e.globalPrev.trans > 0)
+                : (e.globalMtd.sales > 0 || e.globalMtd.trans > 0);
+
+            if (e.primaryStore === storeId && hasActivity) {
                 empKeys.push(e.id);
             }
         });
@@ -202,100 +213,162 @@ async function generateEmployeePDF(targetEmps = null) {
         if (typeof storesData !== 'undefined' && storesData[storeId]) {
             sName = storesData[storeId];
         }
-        doc.text(`${storeId} - ${sName}`, 14, 15);
+
+        let headerTitle = `${storeId} - ${sName}`;
+        if (isPrevMode) headerTitle += " (الشهر السابق)";
+        doc.text(headerTitle, 14, 15);
 
         const tableRows = [];
-        let yestTotalSales = 0, yestTotalTrans = 0;
-        let mtdTotalSales = 0, mtdTotalTrans = 0, mtdTotalTarget = 0;
+        let col1TotalSales = 0, col1TotalTrans = 0; // Was Yest, now dynamic
+        let col2TotalSales = 0, col2TotalTrans = 0, col2TotalTarget = 0; // Was MTD, now dynamic (Prev or MTD)
 
-        empKeys.sort((a, b) => globalEmpMap[b].globalMtd.sales - globalEmpMap[a].globalMtd.sales);
+        // Sort based on Mode
+        empKeys.sort((a, b) => {
+            if (isPrevMode) return globalEmpMap[b].globalPrev.sales - globalEmpMap[a].globalPrev.sales;
+            return globalEmpMap[b].globalMtd.sales - globalEmpMap[a].globalMtd.sales;
+        });
 
-        empKeys.forEach(key => {
-            const emp = globalEmpMap[key];
-            const yest = emp.globalYest;
-            const mtd = emp.globalMtd;
-            const target = (typeof targetsData !== 'undefined' && targetsData[key]) ? targetsData[key] : 0;
+        empKeys.forEach(empKey => {
+            const emp = globalEmpMap[empKey];
 
-            const yestContrib = storeTotals.yest > 0 ? (yest.sales / storeTotals.yest) * 100 : 0;
-            const yestAvgInv = yest.trans > 0 ? Math.round(yest.sales / yest.trans) : 0;
+            // Robust Target Lookup:
+            // 1. Try window.targetsData if targetsData is not in scope.
+            // 2. Try the exact key (string).
+            // 3. Try the key as number (if mismatch).
+            // 4. Fallback to 0.
+            let relevantTargets = (typeof targetsData !== 'undefined') ? targetsData : (window.targetsData || {});
+            let target = relevantTargets[empKey];
 
-            const mtdContrib = storeTotals.mtd > 0 ? (mtd.sales / storeTotals.mtd) * 100 : 0;
-            const mtdAvgInv = mtd.trans > 0 ? Math.round(mtd.sales / mtd.trans) : 0;
+            if (target === undefined) {
+                // Try converting key to int or string
+                // keys in JSON might be integers
+                target = relevantTargets[parseInt(empKey)] || relevantTargets[empKey.toString()] || 0;
+            }
 
-            const prevContrib = storeTotals.prev > 0 ? (emp.globalPrev.sales / storeTotals.prev) * 100 : 0;
-            const ach = target > 0 ? (mtd.sales / target) * 100 : 0;
-            const remaining = Math.max(0, target - mtd.sales);
+            // Define Data Sources based on Mode
+            let dataCol1, dataCol2; // Col1 = Small Period (Yest), Col2 = Main Period (MTD/Prev)
+            let storeTotalCol1, storeTotalCol2;
 
-            const daysInMonthLabel = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-            const daysPassedLabel = yestDate.getDate();
-            const daysLeftLabel = daysInMonthLabel - daysPassedLabel;
-            const dailyReq = daysLeftLabel > 0 ? remaining / daysLeftLabel : 0;
+            if (isPrevMode) {
+                // For Previous Month, we don't really have a "Yesterday". 
+                // We can either leave Col1 empty or put something else. 
+                // Let's leave it zero/dash for clarity, or maybe show last available day?
+                // For simplicity: Zero out Col1 in Prev Mode to focus on the Month.
+                dataCol1 = { sales: 0, trans: 0, items: 0 };
+                storeTotalCol1 = 0;
 
-            yestTotalSales += yest.sales;
-            yestTotalTrans += yest.trans;
-            mtdTotalSales += mtd.sales;
-            mtdTotalTarget += target;
-            mtdTotalTrans += mtd.trans;
+                dataCol2 = emp.globalPrev;
+                storeTotalCol2 = storeTotals.prev;
+            } else {
+                dataCol1 = emp.globalYest;
+                storeTotalCol1 = storeTotals.yest;
 
+                dataCol2 = emp.globalMtd;
+                storeTotalCol2 = storeTotals.mtd;
+            }
+
+            // Col 1 (Yest / Empty) calculations
+            const col1Contrib = storeTotalCol1 > 0 ? (dataCol1.sales / storeTotalCol1) * 100 : 0;
+            const col1AvgInv = dataCol1.trans > 0 ? Math.round(dataCol1.sales / dataCol1.trans) : 0;
+
+            // Col 2 (Main) calculations
+            const col2Contrib = storeTotalCol2 > 0 ? (dataCol2.sales / storeTotalCol2) * 100 : 0;
+            const col2AvgInv = dataCol2.trans > 0 ? Math.round(dataCol2.sales / dataCol2.trans) : 0;
+
+            // Achievement & Req
+            const ach = target > 0 ? (dataCol2.sales / target) * 100 : 0;
+            const remaining = Math.max(0, target - dataCol2.sales);
+
+            // Daily Req Logic
+            let dailyReq = 0;
+            if (!isPrevMode) {
+                // Only relevant for MTD
+                const daysInMonthLabel = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+                const daysPassedLabel = yestDate.getDate();
+                const daysLeftLabel = daysInMonthLabel - daysPassedLabel;
+                dailyReq = daysLeftLabel > 0 ? remaining / daysLeftLabel : 0;
+            }
+
+            // Aggregation
+            col1TotalSales += dataCol1.sales;
+            col1TotalTrans += dataCol1.trans;
+
+            col2TotalSales += dataCol2.sales;
+            col2TotalTrans += dataCol2.trans;
+            col2TotalTarget += target;
+
+            // Row Building
             tableRows.push([
                 emp.name,
-                Math.round(yest.sales).toLocaleString(),
-                yestContrib.toFixed(0) + '%',
-                yest.trans,
-                yestAvgInv,
-                Math.round(mtd.sales).toLocaleString(),
-                mtdContrib.toFixed(0) + '%',
-                mtd.trans,
-                mtdAvgInv,
+                isPrevMode ? '-' : Math.round(dataCol1.sales).toLocaleString(),
+                isPrevMode ? '-' : col1Contrib.toFixed(0) + '%',
+                isPrevMode ? '-' : dataCol1.trans,
+                isPrevMode ? '-' : col1AvgInv,
+                Math.round(dataCol2.sales).toLocaleString(),
+                col2Contrib.toFixed(0) + '%',
+                dataCol2.trans,
+                col2AvgInv,
                 Math.round(target).toLocaleString(),
                 ach.toFixed(1) + '%',
                 Math.round(remaining).toLocaleString(),
-                Math.round(dailyReq).toLocaleString()
+                isPrevMode ? '-' : Math.round(dailyReq).toLocaleString()
             ]);
         });
 
         // Totals Row
-        const mtdTotalAch = mtdTotalTarget > 0 ? (mtdTotalSales / mtdTotalTarget * 100).toFixed(1) + '%' : '-';
-        const mtdRem = Math.max(0, mtdTotalTarget - mtdTotalSales);
-        const daysInMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-        const daysPassedEnd = yestDate.getDate();
-        const daysLeftEnd = daysInMonthEnd - daysPassedEnd;
-        const mtdDaily = daysLeftEnd > 0 ? mtdRem / daysLeftEnd : 0;
+        const col2TotalAch = col2TotalTarget > 0 ? (col2TotalSales / col2TotalTarget * 100).toFixed(1) + '%' : '-';
+        const col2Rem = Math.max(0, col2TotalTarget - col2TotalSales);
+        let col2Daily = 0;
+        if (!isPrevMode) {
+            const daysInMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+            const daysPassedEnd = yestDate.getDate();
+            const daysLeftEnd = daysInMonthEnd - daysPassedEnd;
+            col2Daily = daysLeftEnd > 0 ? col2Rem / daysLeftEnd : 0;
+        }
 
         tableRows.push([
-            "الإجمالي (Total)",
-            Math.round(yestTotalSales).toLocaleString(),
-            "100%",
-            yestTotalTrans,
-            yestTotalTrans > 0 ? Math.round(yestTotalSales / yestTotalTrans) : 0,
+            "الإجمالي",
+            isPrevMode ? '-' : Math.round(col1TotalSales).toLocaleString(),
+            isPrevMode ? '-' : "100%",
+            isPrevMode ? '-' : col1TotalTrans,
+            isPrevMode ? '-' : (col1TotalTrans > 0 ? Math.round(col1TotalSales / col1TotalTrans) : 0),
 
-            Math.round(mtdTotalSales).toLocaleString(),
+            Math.round(col2TotalSales).toLocaleString(),
             "100%",
-            mtdTotalTrans,
-            mtdTotalTrans > 0 ? Math.round(mtdTotalSales / mtdTotalTrans) : 0,
-            Math.round(mtdTotalTarget).toLocaleString(),
-            mtdTotalAch,
-            Math.round(mtdRem).toLocaleString(),
-            Math.round(mtdDaily).toLocaleString()
+            col2TotalTrans,
+            col2TotalTrans > 0 ? Math.round(col2TotalSales / col2TotalTrans) : 0,
+            Math.round(col2TotalTarget).toLocaleString(),
+            col2TotalAch,
+            Math.round(col2Rem).toLocaleString(),
+            isPrevMode ? '-' : Math.round(col2Daily).toLocaleString()
         ]);
+
+        // Dynamic Headers
+        let col1Header = `الأمس (Yesterday) - ${yestStrFinal}`;
+        let col2Header = `الشهر الحالي (MTD) - ${monthStartStr} إلى ${yestStrFinal}`;
+
+        if (isPrevMode) {
+            col1Header = "---";
+            col2Header = `الشهر السابق (Previous Month) - ${prevMonthStartStr} إلى ${prevMonthEndStr}`;
+        }
 
         doc.autoTable({
             startY: 25,
             head: [
                 [
                     { content: 'بيانات الموظف (Employee)', colSpan: 1, styles: { fillColor: [255, 255, 255], textColor: 0, halign: 'center' } },
-                    { content: `الأمس (Yesterday) - ${yestStrFinal}`, colSpan: 4, styles: { fillColor: [220, 220, 220], textColor: 0, halign: 'center' } },
-                    { content: `الشهر الحالي (MTD) - ${monthStartStr} إلى ${yestStrFinal}`, colSpan: 9, styles: { fillColor: [200, 200, 200], textColor: 0, halign: 'center' } }
+                    { content: col1Header, colSpan: 4, styles: { fillColor: [220, 220, 220], textColor: 0, halign: 'center' } },
+                    { content: col2Header, colSpan: 9, styles: { fillColor: [200, 200, 200], textColor: 0, halign: 'center' } }
                 ],
                 [
                     'الموظف',
-                    'المبيعات', 'المساهمة %', 'العدد', 'متوسط الفاتورة',
-                    'المبيعات', 'المساهمة %', 'العدد', 'متوسط الفاتورة', 'الهدف', 'التحقيق %', 'المتبقي', 'اليومية المتبقية'
+                    'المبيعات', 'مساهمة %', 'العدد', 'م. فاتورة',
+                    'المبيعات', 'مساهمة %', 'العدد', 'م. فاتورة', 'الهدف', 'تحقيق %', 'المتبقي', 'يومية متبقية'
                 ]
             ],
             body: tableRows,
             theme: 'grid',
-            styles: { font: fontName, fontSize: 10, cellPadding: 2, halign: 'center' },
+            styles: { font: fontName, fontSize: 9, cellPadding: 1, halign: 'center', overflow: 'ellipsize' },
             columnStyles: {
                 0: { halign: 'right', fontStyle: 'bold', minCellWidth: 35 },
                 10: { textColor: [0, 128, 0], fontStyle: 'bold' }

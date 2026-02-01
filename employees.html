@@ -676,9 +676,17 @@
                     targetsData = empJson.targets;
                     employeeNames = empJson.employee_names || {};
 
+                    // Expose to Global Scope for PDF Script
+                    window.historyData = historyData;
+                    window.targetsData = targetsData;
+                    window.employeeNames = employeeNames;
+
                     const mgmtJson = await mgmtRes.json();
                     storesData = mgmtJson.stores;
                     storeMeta = mgmtJson.store_meta || {};
+
+                    window.storesData = storesData;
+                    window.storeMeta = storeMeta;
 
                     populateFilters();
                     initMonthFilter();
