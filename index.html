@@ -300,7 +300,7 @@
                     <div class="d-flex flex-wrap align-items-end gap-3 p-3 rounded-xl" style="background: var(--neutral-50); border: 1px solid var(--border-color);">
                         <div>
                             <label class="form-label small text-muted fw-bold mb-1">نوع التقرير</label>
-                            <select id="filterMode" class="form-select form-select-sm input" onchange="toggleFilterMode()">
+                            <select id="filterMode" class="form-select form-select-sm input" onchange="toggleFilterMode(); updateDashboard();">
                                 <option value="standard">سنوي / شهري</option>
                                 <option value="custom" selected>فترة مخصصة (Custom Range)</option>
                             </select>
@@ -324,11 +324,11 @@
                         <div id="customFilters" class="d-flex gap-2 flex-wrap" style="display: none;">
                             <div>
                                 <label class="form-label small text-muted fw-bold mb-1">من تاريخ</label>
-                                <input type="date" id="startDate" class="form-control form-control-sm input">
+                                <input type="date" id="startDate" class="form-control form-control-sm input" onchange="updateDashboard()">
                             </div>
                             <div>
                                 <label class="form-label small text-muted fw-bold mb-1">إلى تاريخ</label>
-                                <input type="date" id="endDate" class="form-control form-control-sm input">
+                                <input type="date" id="endDate" class="form-control form-control-sm input" onchange="updateDashboard()">
                             </div>
                         </div>
                         <div id="todayFilterLabel" class="align-self-end pb-1 text-muted small fw-bold" style="display:none;"></div>
@@ -1076,7 +1076,14 @@
                 // Custom Range
                 let s = document.getElementById('startDate').value;
                 let e = document.getElementById('endDate').value;
-                if (!s || !e) return; // Alert user?
+                const today = new Date();
+                const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+                if (!s || !e) {
+                    s = s || todayStr;
+                    e = e || todayStr;
+                    document.getElementById('startDate').value = s;
+                    document.getElementById('endDate').value = e;
+                }
 
                 currentStart = new Date(s);
                 currentEnd = new Date(e);
@@ -1127,9 +1134,9 @@
                 currentStart = new Date(selYear, 0, 1); // Jan 1
 
                 if (selMonth === 'all') {
-                    // YTD Logic: If viewing current year (2026), limit to Today
+                    // YTD Logic: If viewing current year, limit to Today
                     let now = new Date();
-                    if (selYear === 2026) { // Hardcoded "Current Year" awareness or dynamic
+                    if (selYear === now.getFullYear()) {
                         // Use "today" as end date for fair comparison
                         currentEnd = now;
                     } else {
