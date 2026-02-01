@@ -504,9 +504,15 @@
             window.rawData = cachedMgmt;
             window.currentUser = JSON.parse(localStorage.getItem('currentUser')) || { role: 'Admin' };
             const today = new Date();
-            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-            monthStart.setHours(0, 0, 0, 0);
-            const y = new Date(today); y.setDate(y.getDate() - 1); y.setHours(23, 59, 59, 999);
+            let monthStart, y;
+            if (today.getDate() === 1) {
+                monthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                y = new Date(today.getFullYear(), today.getMonth(), 0);
+            } else {
+                monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                y = new Date(today); y.setDate(y.getDate() - 1);
+            }
+            monthStart.setHours(0, 0, 0, 0); y.setHours(23, 59, 59, 999);
             window.dashboardState = { start: monthStart, end: y };
             if (typeof generatePDF === 'function') generatePDF();
         }

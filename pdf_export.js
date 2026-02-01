@@ -1,5 +1,13 @@
 /* PDF Export Logic - Final (Base64 Font) */
 
+function toYMD(d) {
+    if (!d) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 async function generatePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF('l', 'mm', 'a4');
@@ -68,13 +76,15 @@ async function generatePDF() {
         endDate = new Date(window.dashboardState.end);
         console.log("PDF Export: Using Dashboard Dates", startDate, endDate);
     } else {
-        // Fallback: month to yesterday (ensures data exists)
         let today = new Date();
-        endDate = new Date(today);
-        endDate.setDate(today.getDate() - 1);
-        endDate.setHours(23, 59, 59, 999);
-        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-        startDate.setHours(0, 0, 0, 0);
+        if (today.getDate() === 1) {
+            startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+        } else {
+            startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+            endDate = new Date(today); endDate.setDate(today.getDate() - 1);
+        }
+        startDate.setHours(0, 0, 0, 0); endDate.setHours(23, 59, 59, 999);
         console.warn("PDF Export: Using Fallback Dates (Month to Yesterday)");
     }
 
@@ -109,7 +119,7 @@ async function generatePDF() {
 
         let preLoopDate = new Date(mStart);
         while (preLoopDate <= mEnd) {
-            const dateStr = preLoopDate.toLocaleDateString('en-CA');
+            const dateStr = toYMD(preLoopDate);
             const dayData = getDayData(storeId, dateStr);
             headerTotalTarget += dayData.target || 0;
             headerTotalSales += dayData.sales || 0;
@@ -129,7 +139,7 @@ async function generatePDF() {
 
         doc.setFontSize(12);
         doc.text(`Manager: ${meta.manager}`, 14, 28);
-        doc.text(`Date: ${startDate.toLocaleDateString('en-CA')} to ${endDate.toLocaleDateString('en-CA')}`, 14, 34);
+        doc.text(`Date: ${toYMD(startDate)} to ${toYMD(endDate)}`, 14, 34);
 
         // Summary KPIs Line
         const kpiText = `اليومية المتبقية: ${Math.round(dailyReq).toLocaleString()}   |   التحقيق: ${achPct}%   |   الهدف: ${Math.round(headerTotalTarget).toLocaleString()}`;
@@ -145,7 +155,7 @@ async function generatePDF() {
 
         let loopDate = new Date(startDate);
         while (loopDate <= endDate) {
-            const dateStr = loopDate.toLocaleDateString('en-CA');
+            const dateStr = toYMD(loopDate);
             const dayData = getDayData(storeId, dateStr);
 
             const sales = dayData.sales || 0;
@@ -154,7 +164,7 @@ async function generatePDF() {
 
             let lyDate = new Date(loopDate);
             lyDate.setFullYear(loopDate.getFullYear() - 1);
-            const lyDateStr = lyDate.toLocaleDateString('en-CA');
+            const lyDateStr = toYMD(lyDate);
             const lyData = getDayData(storeId, lyDateStr);
             const salesLY = lyData.sales || 0;
             const visitorsLY = lyData.visitors || 0;
@@ -248,15 +258,19 @@ function getDayData(storeId, dateStr) {
     const rawData = window.rawData;
     if (!rawData) return { sales: 0, target: 0, visitors: 0, trans: 0 };
     const dStr = typeof dateStr === 'string' ? dateStr : (dateStr && dateStr.toISOString ? dateStr.toISOString().split('T')[0] : '');
-    const findValue = (arr) => {
+    const findValue = (arr, exactDate = true) => {
         if (!arr) return 0;
-        const item = arr.find(row => String(row[0]) === dStr && String(row[1]) === String(storeId));
+        let item = arr.find(row => String(row[0]) === dStr && String(row[1]) === String(storeId));
+        if (!item && !exactDate && dStr.length >= 7) {
+            const firstOfMonth = dStr.substring(0, 8) + '01';
+            item = arr.find(row => String(row[0]) === firstOfMonth && String(row[1]) === String(storeId));
+        }
         return item ? (item[2] || 0) : 0;
     };
     return {
-        sales: findValue(rawData.sales),
-        target: findValue(rawData.targets),
-        visitors: findValue(rawData.visitors),
-        trans: findValue(rawData.transactions)
+        sales: findValue(rawData.sales, true),
+        target: findValue(rawData.targets, false),
+        visitors: findValue(rawData.visitors, true),
+        trans: findValue(rawData.transactions, true)
     };
 }
