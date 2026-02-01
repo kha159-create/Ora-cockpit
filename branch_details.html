@@ -5,140 +5,90 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>تفاصيل الفرع | Orange Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/sidebar.css">
+    <link href="assets/bootstrap.rtl.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        .card.branch-card {
-            border-radius: var(--radius-2xl);
-            box-shadow: var(--shadow-lg);
-            border: 1px solid var(--neutral-200);
-            overflow: hidden;
+        :root {
+            --orange-primary: #fe7900;
+            --orange-dark: #cc6100;
+            --dark-bg: #1a1a1a;
+            --card-radius: 12px;
         }
-        .card.branch-card .card-header {
-            background: linear-gradient(to left, rgba(255, 237, 213, 0.95), rgba(254, 215, 170, 0.95));
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #f8f9fa;
+        }
+
+        .navbar {
+            background-color: #000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .navbar-brand {
+            color: var(--orange-primary) !important;
+            font-weight: 800;
+            font-size: 1.5rem;
+        }
+
+        .card {
+            border-radius: var(--card-radius);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s;
             border: none;
-            border-bottom: 2px solid rgba(249, 115, 22, 0.4);
-            color: var(--neutral-900);
+        }
+
+        .card-header {
+            background: linear-gradient(45deg, var(--orange-primary), #ff9a3b);
+            color: white;
             font-weight: 700;
-            font-size: 1rem;
-            padding: 1rem 1.25rem;
+            border-radius: var(--card-radius) var(--card-radius) 0 0 !important;
         }
+
         .table thead th {
-            font-size: 0.875rem;
-            font-weight: 600;
-            background: linear-gradient(135deg, var(--neutral-50), var(--neutral-100)) !important;
-            color: var(--text-muted);
+            font-size: 0.9rem;
+            color: #666;
+            font-weight: 700;
+            background-color: #f8f9fa;
         }
-        .spinner-container { display: flex; justify-content: center; align-items: center; height: 60vh; }
-        .report-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-xl); border-color: var(--primary-200); }
+
+        .spinner-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 60vh;
+        }
     </style>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
-<body class="app-with-sidebar">
+<body>
 
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
-    <button type="button" class="sidebar-toggle" aria-label="فتح القائمة"><i class="fas fa-bars"></i></button>
-    <aside class="sidebar">
-        <div class="sidebar-brand">
-            <div class="sidebar-brand-logo">O</div>
-            <div class="sidebar-brand-text"><span class="brand-orange">ORANGE</span> DASHBOARD</div>
+    <nav class="navbar navbar-dark mb-4">
+        <div class="container-fluid">
+            <span class="navbar-brand">
+                <span style="color: white;">ORANGE</span> DASHBOARD
+            </span>
+            <a href="index.html" class="btn btn-outline-light btn-sm fw-bold">عودة للرئيسية</a>
         </div>
-        <nav class="sidebar-nav">
-            <a href="index.html" class="nav-link"><i class="fas fa-home"></i> الرئيسية</a>
-            <a href="reports.html" class="nav-link"><i class="fas fa-file-alt"></i> التقارير</a>
-            <a href="employees.html" class="nav-link"><i class="fas fa-users"></i> أداء الموظفين</a>
-            <a href="product_analysis.html" class="nav-link"><i class="fas fa-box"></i> تحليل المنتجات</a>
-            <a href="branch_details.html" class="nav-link"><i class="fas fa-store"></i> تفاصيل الفروع</a>
-            <a href="target_setting.html" class="nav-link"><i class="fas fa-bullseye"></i> الأهداف</a>
-            <a href="chatbot.html" class="nav-link"><i class="fas fa-comments"></i> الشات بوت</a>
-            <a href="stagnant_products.html" class="nav-link"><i class="fas fa-pause-circle"></i> المنتجات الراكدة</a>
-            <a href="offers_analysis.html" class="nav-link"><i class="fas fa-tags"></i> تحليل العروض</a>
-            <a href="data_audit.html" class="nav-link"><i class="fas fa-clipboard-check"></i> تدقيق البيانات</a>
-            <a href="admin_targets.html" class="nav-link"><i class="fas fa-cog"></i> إعدادات الأهداف</a>
-        </nav>
-        <div class="sidebar-footer">
-            <a href="#" class="nav-link" onclick="event.preventDefault(); if(typeof logout==='function')logout(); else window.location.href='login.html'; return false;"><i class="fas fa-sign-out-alt"></i> خروج</a>
-        </div>
-    </aside>
+    </nav>
 
-    <div class="app-wrap">
-        <main class="main-content">
-            <div class="main-topbar d-flex flex-wrap align-items-center justify-content-between gap-2 w-100">
-                <span class="fw-bold text-dark">تفاصيل الفروع</span>
-                <a href="index.html" class="btn btn-outline-primary btn-sm fw-bold">لوحة التحكم</a>
+    <div class="container mb-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="fw-bold mb-0" id="branchName">جاري التحميل...</h2>
+                <small class="text-muted" id="reportDate"></small>
             </div>
-            <div class="main-content-inner">
-
-    <div class="container-fluid px-4">
-        <header class="page-header">
-            <h1 class="page-title">تفاصيل الفرع</h1>
-            <p class="page-subtitle mb-2">مبيعات الأمس والشهر للموظفين — <span id="branchName">جاري التحميل...</span></p>
-            <small class="text-muted" id="reportDate"></small>
-        </header>
+        </div>
 
         <div id="loadingErrors" class="text-center my-5">
             <div class="spinner-border text-primary" role="status"></div>
             <p class="mt-2">جاري استدعاء البيانات...</p>
         </div>
 
-        <!-- Filters (same as dashboard) - shown when no sid -->
-        <div id="branchFiltersBar" class="mb-4" style="display: none;">
-            <div class="card border-0 shadow-sm p-3" style="border-radius: var(--radius-2xl);">
-                <div class="row align-items-end g-3">
-                    <div class="col-12 col-xl-6">
-                        <div class="d-flex flex-wrap align-items-end gap-3">
-                            <div>
-                                <label class="form-label small text-muted fw-bold mb-1">نوع التقرير</label>
-                                <select id="filterMode" class="form-select form-select-sm" onchange="toggleBranchFilterMode()">
-                                    <option value="today" selected>اليوم</option>
-                                    <option value="standard">سنوي / شهري</option>
-                                    <option value="custom">فترة مخصصة</option>
-                                </select>
-                            </div>
-                            <div id="stdFilters" class="d-flex gap-2 flex-wrap">
-                                <div><label class="form-label small text-muted fw-bold mb-1">السنة</label><select id="yearFilter" class="form-select form-select-sm" onchange="applyBranchFilters()"><option value="2026">2026</option><option value="2025">2025</option><option value="2024">2024</option></select></div>
-                                <div><label class="form-label small text-muted fw-bold mb-1">الشهر</label><select id="monthFilter" class="form-select form-select-sm" onchange="applyBranchFilters()"><option value="all">كل السنة</option></select></div>
-                            </div>
-                            <div id="customFilters" class="d-flex gap-2 flex-wrap" style="display: none;">
-                                <div><label class="form-label small text-muted fw-bold mb-1">من تاريخ</label><input type="date" id="startDate" class="form-control form-control-sm"></div>
-                                <div><label class="form-label small text-muted fw-bold mb-1">إلى تاريخ</label><input type="date" id="endDate" class="form-control form-control-sm"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-12 col-xl-6">
-                        <div class="d-flex flex-wrap align-items-end gap-3">
-                            <div><label class="form-label small text-muted fw-bold mb-1">مدير المنطقة</label><select id="managerFilter" class="form-select form-select-sm" onchange="applyBranchFilters()"><option value="all">الكل</option></select></div>
-                            <div><label class="form-label small text-muted fw-bold mb-1">المدينة</label><select id="cityFilter" class="form-select form-select-sm" onchange="applyBranchFilters()"><option value="all">الكل</option></select></div>
-                            <div><label class="form-label small text-muted fw-bold mb-1">نوع المعرض</label><select id="typeFilter" class="form-select form-select-sm" onchange="applyBranchFilters()"><option value="all">الكل</option><option value="Showroom">معارض</option><option value="Online">أونلاين</option></select></div>
-                            <div><label class="form-label small text-muted fw-bold mb-1">الفرع</label><select id="branchFilter" class="form-select form-select-sm" onchange="applyBranchFilters()"><option value="all">كافة الفروع</option></select></div>
-                            <button class="btn btn-primary btn-sm fw-bold" onclick="applyBranchFilters()">عرض 🔄</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- تقرير أمس للمعارض - بطاقة -->
-        <div id="branchReportCardSection" class="mb-4" style="display: none;">
-            <div class="row g-3">
-                <div class="col-12 col-md-6 col-lg-4">
-                    <div class="card border-0 shadow-sm report-card h-100" style="cursor:pointer; border-radius:var(--radius-2xl); transition:transform 0.2s;" onclick="doYesterdayPdfStores()">
-                        <div class="card-body text-center">
-                            <i class="fas fa-file-pdf fa-3x text-danger mb-3"></i>
-                            <h5 class="card-title">تقرير أمس للمعارض</h5>
-                            <p class="card-text text-muted small">PDF - الشهر حتى أمس</p>
-                            <span class="btn btn-warning btn-sm fw-bold text-white">تصدير PDF</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Store Picker (when sid is missing - e.g. from sidebar) -->
+        <!-- Store Picker (when sid is missing - e.g. from sidebar or direct link) -->
         <div id="storePicker" class="mb-4" style="display: none;">
-            <div class="card border-0 shadow-sm" style="border-radius: var(--radius-2xl); overflow: hidden;">
-                <div class="card-header py-3" style="background: linear-gradient(to left, rgba(255, 237, 213, 0.95), rgba(254, 215, 170, 0.95)); border: none; color: var(--neutral-900); font-weight: 700;">
+            <div class="card" style="border-radius: var(--card-radius); overflow: hidden;">
+                <div class="card-header py-3">
                     <i class="fas fa-store me-2"></i>اختر الفرع / المعرض لعرض التفاصيل
                 </div>
                 <div class="card-body p-4">
@@ -152,50 +102,21 @@
                         </div>
                         <div class="col-12 col-md-6 col-lg-4 d-flex align-items-end">
                             <button type="button" class="btn btn-primary w-100" onclick="goToSelectedStore()">
-                                <i class="fas fa-external-link-alt me-2"></i>عرض التفاصيل
+                                عرض التفاصيل
                             </button>
                         </div>
                     </div>
-                    <small class="text-muted">أو اضغط على اسم الفرع في الجدول أدناه لعرض التفاصيل.</small>
-                </div>
-            </div>
-        </div>
-
-        <!-- جدول تفاصيل جميع الفروع (عند الدخول بدون sid) - قابل للتوسيع -->
-        <div id="branchesTableSection" class="mb-4" style="display: none;">
-            <h5 class="section-title mb-3">تفاصيل الفروع (Detailed Report)</h5>
-            <div class="card border-0 shadow-sm" style="border-radius: var(--radius-2xl); overflow: hidden;">
-                <div class="table-responsive">
-                    <table class="table table-cockpit align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th class="text-center" style="width: 40px;"></th>
-                                <th class="text-center">#</th>
-                                <th>الفرع (Branch)</th>
-                                <th class="text-center">المبيعات</th>
-                                <th class="text-center">العام السابق</th>
-                                <th class="text-center">الهدف</th>
-                                <th class="text-center">التحقيق %</th>
-                                <th class="text-center">النمو %</th>
-                                <th class="text-center">الفواتير</th>
-                                <th class="text-center">متوسط الفاتورة</th>
-                                <th class="text-center">الزوار</th>
-                            </tr>
-                        </thead>
-                        <tbody id="branchesTableBody">
-                        </tbody>
-                    </table>
+                    <small class="text-muted">أو انتقل من <a href="index.html">لوحة التحكم</a> واضغط على اسم الفرع في جدول التفاصيل.</small>
                 </div>
             </div>
         </div>
 
         <div id="content" style="display: none;">
-            <section class="page-section">
             <div class="row">
                 <!-- Left: Yesterday -->
                 <div class="col-lg-6 mb-4">
-                    <div class="card branch-card h-100">
-                        <div class="card-header">
+                    <div class="card h-100">
+                        <div class="card-header py-3">
                             📅 مبيعات الأمس (<span id="dateYesterday">--</span>)
                         </div>
                         <div class="card-body p-0">
@@ -222,8 +143,8 @@
 
                 <!-- Right: Month to Date -->
                 <div class="col-lg-6 mb-4">
-                    <div class="card branch-card h-100">
-                        <div class="card-header">
+                    <div class="card h-100">
+                        <div class="card-header py-3 bg-secondary">
                             📅 مبيعات الشهر (<span id="dateMonth">--</span>)
                         </div>
                         <div class="card-body p-0">
@@ -248,16 +169,10 @@
                     </div>
                 </div>
             </div>
-            </section>
         </div>
     </div>
 
-    <script src="users.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-    <script src="assets/amiri_font.js"></script>
-    <script src="pdf_export.js"></script>
+    <script src="assets/bootstrap.bundle.min.js"></script>
     <script>
         // Get Params
         const urlParams = new URLSearchParams(window.location.search);
@@ -269,62 +184,17 @@
             document.getElementById('branchName').textContent = branchName;
         }
 
-        const currentUser = JSON.parse(localStorage.getItem('currentUser')) || { role: 'Admin' };
-        function isStoreAccessible(sid, storeMeta) {
-            if (currentUser.role === 'Admin') return true;
-            const meta = storeMeta[sid];
-            return meta && meta.manager === currentUser.name;
-        }
-
         async function init() {
             const errDiv = document.getElementById('loadingErrors');
-            const pickerDiv = document.getElementById('storePicker');
 
             if (!sid) {
-                try {
-                    const res = await fetch('management_data.json');
-                    if (!res.ok) throw new Error("File not found");
-                    const mgmt = await res.json();
-                    cachedMgmt = mgmt;
-                    const stores = mgmt.stores || {};
-                    const meta = mgmt.store_meta || {};
-                    let storeList = Object.entries(stores).map(([id, name]) => ({ id, name }));
-                    if (currentUser.role !== 'Admin') storeList = storeList.filter(s => isStoreAccessible(s.id, meta));
-                    storeList.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-
-                    const sel = document.getElementById('storeSelect');
-                    storeList.forEach(s => {
-                        const opt = document.createElement('option');
-                        opt.value = s.id;
-                        opt.textContent = s.name || s.id;
-                        sel.appendChild(opt);
-                    });
-
-                    errDiv.style.display = 'none';
-                    pickerDiv.style.display = 'block';
-                    document.getElementById('branchName').textContent = 'اختر فرعاً لعرض التفاصيل';
-                    document.getElementById('branchFiltersBar').style.display = 'block';
-                    document.getElementById('branchReportCardSection').style.display = 'block';
-                    populateBranchFilters(mgmt);
-                    initBranchFilterDates();
-                    loadBranchesTableWithExpand();
-                } catch (e) {
-                    errDiv.innerHTML = `<div class="alert alert-warning">لم يتم العثور على قائمة الفروع. تأكد من وجود ملف management_data.json. يمكنك أيضاً الوصول لتفاصيل الفرع من <a href="index.html">لوحة التحكم</a> بالنقر على اسم الفرع.</div>`;
-                }
+                errDiv.innerHTML = `<div class="alert alert-danger">رقم الفرع غير موجود (Store ID Missing)</div>`;
                 return;
             }
 
             try {
-                if (currentUser.role !== 'Admin') {
-                    const mgmtRes = await fetch('management_data.json');
-                    const mgmt = await mgmtRes.json();
-                    const meta = (mgmt.store_meta || {})[sid];
-                    if (!meta || meta.manager !== currentUser.name) {
-                        document.getElementById('loadingErrors').innerHTML = '<div class="alert alert-warning">لا تملك صلاحية عرض هذا الفرع. سيتم تحويلك لاختيار فرع من فروعك.</div>';
-                        setTimeout(() => { window.location.href = 'branch_details.html'; }, 2000);
-                        return;
-                    }
-                }
+                // Fetch Data
+                // Note: Assuming file is in same dir
                 const res = await fetch('employees_data.json');
                 if (!res.ok) throw new Error("File not found");
                 const allData = await res.json();
@@ -332,7 +202,6 @@
                 // NEW: Logic for handling both old and new data structures
                 let records = [];
                 let targets = {};
-                let targetsByMonth = {};
                 let employeeNames = {};
 
                 if (allData.history && allData.targets) {
@@ -342,8 +211,7 @@
                         return;
                     }
                     records = allData.history[sid];
-                    targets = allData.targets || {};
-                    targetsByMonth = allData.targets_by_month || {};
+                    targets = allData.targets;
                     employeeNames = allData.employee_names || {};
                 } else {
                     // Old Structure Fallback (for backwards compatibility if file not regenerated yet)
@@ -354,7 +222,7 @@
                     records = allData[sid];
                 }
 
-                renderData(records, targets, targetsByMonth, employeeNames);
+                renderData(records, targets, employeeNames);
 
                 errDiv.style.display = 'none';
                 document.getElementById('content').style.display = 'block';
@@ -365,22 +233,14 @@
             }
         }
 
-        function toYMD(d) {
-            if (!d) return '';
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${y}-${m}-${day}`;
-        }
+        function renderData(records, targets = {}, employeeNames = {}) {
+            // records: [Date, Name, Sales, Trans, Items]
 
-        function renderData(records, targets = {}, targetsByMonth = {}, employeeNames = {}) {
-            // records: [Date, empId, Sales, Trans, Items, MaxTicket]
-
-            // Dates to Filter (use local date to avoid timezone mismatch)
+            // Dates to Filter
             let today = new Date();
             let yesterday = new Date(today);
             yesterday.setDate(today.getDate() - 1);
-            const dateYest = toYMD(yesterday);
+            const dateYest = yesterday.toISOString().split('T')[0];
             const monthPrefix = dateYest.substring(0, 7); // YYYY-MM
 
             // UI Dates
@@ -393,48 +253,52 @@
             let yestStats = {};
             let monthStats = {};
 
-            function resolveTarget(empId) {
-                if (!empId) return 0;
-                const keys = [empId, String(empId).padStart(4, '0'), String(empId)];
-                let t = targets[keys[0]] ?? targets[keys[1]] ?? targets[keys[2]];
-                if (t != null) return t;
-                const tbm = targetsByMonth[monthPrefix];
-                if (tbm) {
-                    t = tbm[keys[0]] ?? tbm[keys[1]] ?? tbm[keys[2]];
-                    if (t != null) return t;
-                }
-                return 0;
-            }
-
             records.forEach(r => {
-                let [d, rawName, sales, trans] = r;
+                let [d, rawName, sales, trans, items] = r;
 
-                // Extract ID and Name (rawName is empId in new format, or "id-Name" in old)
+                // Extract ID and Name
                 let empId = rawName;
                 let name = rawName;
-                if (typeof rawName === 'string' && rawName.includes('-')) {
+
+                if (rawName.includes('-')) {
                     const parts = rawName.split('-');
                     empId = parts[0].trim();
-                    name = parts[1]?.trim() || empId;
+                    name = parts[1].trim();
                 }
-                if (employeeNames[empId]) name = employeeNames[empId];
-                if (employeeNames[String(empId).padStart(4, '0')]) name = employeeNames[String(empId).padStart(4, '0')];
-                if (!name || name === 'null') name = "Unknown";
+
+                // Use Arabic Name Override (try empId + variants: 12, 0012)
+                const resolveName = (id) => {
+                    if (!id) return null;
+                    if (employeeNames[id]) return employeeNames[id];
+                    if (typeof id === 'string' && /^\d+$/.test(id)) {
+                        if (employeeNames[id.padStart(4, '0')]) return employeeNames[id.padStart(4, '0')];
+                        const unpadded = String(parseInt(id, 10));
+                        if (unpadded !== id && employeeNames[unpadded]) return employeeNames[unpadded];
+                    }
+                    return null;
+                };
+                const resolved = resolveName(empId);
+                if (resolved) name = resolved;
+
+                if (!name || name === 'null') name = "Unknown"; // Fallback
 
                 // Yesterday
                 if (d === dateYest) {
                     if (!yestStats[name]) yestStats[name] = { s: 0, t: 0 };
-                    yestStats[name].s += (sales || 0);
-                    yestStats[name].t += (trans || 0);
+                    yestStats[name].s += sales;
+                    yestStats[name].t += trans;
                 }
 
                 // Month (accumulate)
-                if (d && String(d).startsWith(monthPrefix) && String(d) <= dateYest) {
+                if (d.startsWith(monthPrefix) && d <= dateYest) {
                     if (!monthStats[name]) {
-                        monthStats[name] = { s: 0, t: 0, target: resolveTarget(empId) };
+                        // Lookup Target
+                        let target = (empId && targets[empId]) ? targets[empId] : 0;
+
+                        monthStats[name] = { s: 0, t: 0, target: target };
                     }
-                    monthStats[name].s += (sales || 0);
-                    monthStats[name].t += (trans || 0);
+                    monthStats[name].s += sales;
+                    monthStats[name].t += trans;
                 }
             });
 
@@ -515,24 +379,6 @@
             `;
         }
 
-        function doYesterdayPdfStores() {
-            if (!cachedMgmt) { alert('جار تحميل البيانات... حاول مرة أخرى'); return; }
-            window.rawData = cachedMgmt;
-            window.currentUser = JSON.parse(localStorage.getItem('currentUser')) || { role: 'Admin' };
-            const today = new Date();
-            let monthStart, y;
-            if (today.getDate() === 1) {
-                monthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                y = new Date(today.getFullYear(), today.getMonth(), 0);
-            } else {
-                monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                y = new Date(today); y.setDate(y.getDate() - 1);
-            }
-            monthStart.setHours(0, 0, 0, 0); y.setHours(23, 59, 59, 999);
-            window.dashboardState = { start: monthStart, end: y };
-            if (typeof generatePDF === 'function') generatePDF();
-        }
-
         function goToSelectedStore() {
             const sel = document.getElementById('storeSelect');
             const storeId = sel.value;
@@ -541,314 +387,8 @@
             window.location.href = `branch_details.html?sid=${encodeURIComponent(storeId)}&name=${encodeURIComponent(storeName)}`;
         }
 
-        let cachedMgmt = null;
-        let cachedEmployees = null;
-        let expandedSid = null;
-
-        function populateBranchFilters(mgmt) {
-            const meta = mgmt?.store_meta || {};
-            const mSel = document.getElementById('managerFilter');
-            const cSel = document.getElementById('cityFilter');
-            const bSel = document.getElementById('branchFilter');
-            if (mSel) {
-                const managers = new Set();
-                Object.values(meta).forEach(m=>{ if(m&&m.manager) managers.add(m.manager); });
-                mSel.innerHTML = '<option value="all">الكل</option>'+Array.from(managers).sort().map(m=>`<option value="${m}">${m}</option>`).join('');
-                if (currentUser.role !== 'Admin' && currentUser.name) { mSel.value = currentUser.name; mSel.disabled = true; }
-            }
-            if (cSel) {
-                const cities = new Set();
-                Object.values(meta).forEach(m=>{ if(m&&m.city) cities.add(m.city); });
-                cSel.innerHTML = '<option value="all">الكل</option>'+Array.from(cities).sort().map(c=>`<option value="${c}">${c}</option>`).join('');
-            }
-            if (bSel && mgmt.stores) {
-                let stores = Object.entries(mgmt.stores).map(([id,n])=>({id,name:n||id}));
-                stores.sort((a,b)=>a.name.localeCompare(b.name));
-                bSel.innerHTML = '<option value="all">كافة الفروع</option>'+stores.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-            }
-            const mSelect = document.getElementById('monthFilter');
-            if (mSelect) {
-                const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-                mSelect.innerHTML = '<option value="all">كل السنة</option>'+months.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
-            }
-        }
-        function toggleBranchFilterMode() {
-            const mode = document.getElementById('filterMode')?.value || 'today';
-            const std = document.getElementById('stdFilters');
-            const cust = document.getElementById('customFilters');
-            if (std) std.style.display = mode === 'standard' ? 'flex' : 'none';
-            if (cust) cust.style.display = mode === 'custom' ? 'flex' : 'none';
-        }
-        function initBranchFilterDates() {
-            const today = new Date();
-            const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-            document.getElementById('startDate').value = todayStr;
-            document.getElementById('endDate').value = todayStr;
-            toggleBranchFilterMode();
-        }
-        function getBranchFilterDateRange() {
-            const mode = document.getElementById('filterMode').value;
-            const today = new Date();
-            const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
-            let currStart, currEnd;
-            if (mode === 'today') {
-                currStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-                currEnd = new Date(today);
-                currEnd.setHours(23, 59, 59, 999);
-            } else if (mode === 'custom') {
-                const startEl = document.getElementById('startDate');
-                const endEl = document.getElementById('endDate');
-                currStart = startEl?.value ? new Date(startEl.value) : new Date(today.getFullYear(), today.getMonth(), 1);
-                currEnd = endEl?.value ? new Date(endEl.value) : yesterday;
-                currEnd.setHours(23,59,59,999);
-            } else {
-                const y = parseInt(document.getElementById('yearFilter')?.value || today.getFullYear());
-                const m = document.getElementById('monthFilter')?.value;
-                currStart = m === 'all' ? new Date(y, 0, 1) : new Date(y, parseInt(m)-1, 1);
-                currEnd = m === 'all' ? (y === today.getFullYear() ? today : new Date(y, 11, 31)) : new Date(y, parseInt(m), 0);
-                currEnd.setHours(23,59,59,999);
-                if (currEnd > today) currEnd = today;
-            }
-            return { currStart, currEnd };
-        }
-        function applyBranchFilters() {
-            const storeSel = document.getElementById('storeSelect');
-            const mgmt = cachedMgmt;
-            if (!mgmt) return;
-            const meta = mgmt.store_meta || {};
-            const m = document.getElementById('managerFilter')?.value || 'all';
-            const c = document.getElementById('cityFilter')?.value || 'all';
-            const t = document.getElementById('typeFilter')?.value || 'all';
-            const b = document.getElementById('branchFilter')?.value || 'all';
-            let storeList = Object.entries(mgmt.stores||{}).map(([id,name])=>({id,name}));
-            if (currentUser.role !== 'Admin') storeList = storeList.filter(s=>isStoreAccessible(s.id, meta));
-            storeList = storeList.filter(s=>{
-                const x = meta[s.id];
-                if (!x) return m==='all'&&c==='all'&&t==='all'&&b==='all';
-                if (m!=='all' && x.manager!==m) return false;
-                if (c!=='all' && x.city!==c) return false;
-                if (t!=='all' && x.type!==t) return false;
-                if (b!=='all' && s.id!==b) return false;
-                return true;
-            });
-            storeList.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-            if (storeSel) {
-                const v = storeSel.value;
-                storeSel.innerHTML = '<option value="">-- اختر الفرع --</option>'+storeList.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-                if (storeList.some(s=>s.id===v)) storeSel.value = v;
-            }
-            loadBranchesTableWithExpand();
-        }
-
-        async function loadBranchesTableWithExpand() {
-            try {
-                if (!cachedMgmt) {
-                    const res = await fetch('management_data.json?t=' + Date.now());
-                    cachedMgmt = await res.json();
-                }
-                const raw = cachedMgmt;
-                const { currStart, currEnd } = getBranchFilterDateRange ? getBranchFilterDateRange() : (() => {
-                    const today = new Date();
-                    const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
-                    return { currStart: new Date(yesterday.getFullYear(), yesterday.getMonth(), 1), currEnd: yesterday };
-                })();
-                const prevStart = new Date(currStart);
-                prevStart.setFullYear(prevStart.getFullYear() - 1);
-                const prevEnd = new Date(currEnd);
-                prevEnd.setFullYear(prevEnd.getFullYear() - 1);
-
-                const toYMDLocal = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-                const startYMD = toYMDLocal(currStart);
-                const endYMD = toYMDLocal(currEnd);
-                const prevStartYMD = toYMDLocal(prevStart);
-                const prevEndYMD = toYMDLocal(prevEnd);
-                const filterFn = (dStr) => {
-                    if (!dStr || typeof dStr !== 'string') return false;
-                    const d = String(dStr).substring(0, 10);
-                    return d >= startYMD && d <= endYMD;
-                };
-                const filterPrev = (dStr) => {
-                    if (!dStr || typeof dStr !== 'string') return false;
-                    const d = String(dStr).substring(0, 10);
-                    return d >= prevStartYMD && d <= prevEndYMD;
-                };
-
-                let branchSales = {}, branchTrans = {}, branchTarget = {}, branchVisitors = {};
-                let prevSales = {}, prevVisitors = {};
-                (raw.sales || []).forEach(([d,s,v]) => {
-                    if (filterFn(d)) { branchSales[s] = (branchSales[s]||0)+v; }
-                    if (filterPrev(d)) { prevSales[s] = (prevSales[s]||0)+v; }
-                });
-                (raw.transactions || []).forEach(([d,s,v]) => {
-                    if (filterFn(d)) branchTrans[s] = (branchTrans[s]||0)+v;
-                });
-                (raw.targets || []).forEach(([d,s,v]) => {
-                    if (filterFn(d)) branchTarget[s] = (branchTarget[s]||0)+v;
-                });
-                (raw.visitors || []).forEach(([d,s,v]) => {
-                    if (filterFn(d)) branchVisitors[s] = (branchVisitors[s]||0)+v;
-                    if (filterPrev(d)) prevVisitors[s] = (prevVisitors[s]||0)+v;
-                });
-
-                const storeMeta = raw.store_meta || {};
-                const m = document.getElementById('managerFilter')?.value || 'all';
-                const c = document.getElementById('cityFilter')?.value || 'all';
-                const t = document.getElementById('typeFilter')?.value || 'all';
-                const b = document.getElementById('branchFilter')?.value || 'all';
-                const metaFilter = (sId) => {
-                    const x = storeMeta[sId];
-                    if (!x) return m==='all'&&c==='all'&&t==='all'&&b==='all';
-                    if (m!=='all' && x.manager!==m) return false;
-                    if (c!=='all' && x.city!==c) return false;
-                    if (t!=='all' && x.type!==t) return false;
-                    if (b!=='all' && sId!==b) return false;
-                    return true;
-                };
-                let list = [];
-                const allIds = new Set([...Object.keys(branchSales), ...Object.keys(prevSales), ...Object.keys(branchTarget)]);
-                allIds.forEach(sid => {
-                    if (currentUser.role !== 'Admin' && !isStoreAccessible(sid, storeMeta)) return;
-                    if (!metaFilter(sid)) return;
-                    const val = branchSales[sid]||0, prevVal = prevSales[sid]||0;
-                    const target = branchTarget[sid]||0;
-                    const trans = branchTrans[sid]||0;
-                    const visitors = branchVisitors[sid]||0;
-                    const pV = prevVisitors[sid]||0;
-                    const growth = prevVal>0 ? ((val-prevVal)/prevVal)*100 : 0;
-                    const ach = target>0 ? (val/target)*100 : 0;
-                    const avgInv = trans>0 ? val/trans : 0;
-                    list.push({
-                        sid, name: raw.stores[sid]||sid, val, prevVal, target, trans, visitors, prevVisitors: pV, growth, ach, avgInv
-                    });
-                });
-                list.sort((a,b) => (b.val||0) - (a.val||0));
-
-                const tbody = document.getElementById('branchesTableBody');
-                tbody.innerHTML = '';
-                list.forEach((b, i) => {
-                    const tr = document.createElement('tr');
-                    tr.dataset.sid = b.sid;
-                    tr.innerHTML = `
-                        <td class="text-center"><i class="fas fa-chevron-down expand-icon text-muted" style="cursor:pointer;transition:transform 0.2s;"></i></td>
-                        <td class="text-center">${i+1}</td>
-                        <td><a href="#" class="branch-name-link text-dark fw-bold text-decoration-none" data-sid="${b.sid}">${b.name}</a></td>
-                        <td class="text-center">${b.val.toLocaleString()}</td>
-                        <td class="text-center text-muted">${b.prevVal.toLocaleString()}</td>
-                        <td class="text-center">${b.target.toLocaleString()}</td>
-                        <td class="text-center ${b.ach>=100?'text-success':'text-warning'} fw-bold">${b.ach.toFixed(1)}%</td>
-                        <td class="text-center ${b.growth>=0?'text-success':'text-danger'} fw-bold" dir="ltr">${b.growth.toFixed(1)}%</td>
-                        <td class="text-center">${b.trans.toLocaleString()}</td>
-                        <td class="text-center">${b.avgInv.toFixed(0)}</td>
-                        <td class="text-center">${b.visitors.toLocaleString()}</td>
-                    `;
-                    tbody.appendChild(tr);
-                    const expTr = document.createElement('tr');
-                    expTr.className = 'expandable-row';
-                    expTr.dataset.sid = b.sid;
-                    expTr.style.display = 'none';
-                    expTr.innerHTML = '<td colspan="10" class="p-0 bg-light"><div class="expand-content p-4" id="expand-'+b.sid+'"></div></td>';
-                    tbody.appendChild(expTr);
-                });
-
-                document.getElementById('branchesTableSection').style.display = 'block';
-
-                tbody.querySelectorAll('.branch-name-link, .expand-icon').forEach(el => {
-                    el.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        const row = el.closest('tr');
-                        const s = row.dataset.sid;
-                        const expRow = tbody.querySelector('tr.expandable-row[data-sid="'+s+'"]');
-                        if (!expRow) return;
-                        if (expRow.style.display === 'table-row') {
-                            expRow.style.display = 'none';
-                            tbody.querySelector('tr[data-sid="'+s+'"] .expand-icon').style.transform = 'rotate(0deg)';
-                            expandedSid = null;
-                        } else {
-                            tbody.querySelectorAll('tr.expandable-row').forEach(r => { r.style.display = 'none'; });
-                            tbody.querySelectorAll('.expand-icon').forEach(i => { i.style.transform = 'rotate(0deg)'; });
-                            expRow.style.display = 'table-row';
-                            row.querySelector('.expand-icon').style.transform = 'rotate(180deg)';
-                            expandedSid = s;
-                            loadExpandContent(s, document.getElementById('expand-'+s));
-                        }
-                    });
-                });
-            } catch (e) { console.error(e); }
-        }
-
-        async function loadExpandContent(sid, container) {
-            container.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><p class="mt-2 text-muted">جار تحميل التفاصيل...</p></div>';
-            try {
-                if (!cachedEmployees) {
-                    const res = await fetch('employees_data.json?t='+Date.now());
-                    cachedEmployees = await res.json();
-                }
-                const rec = (cachedEmployees.history || {})[sid] || [];
-                const targets = cachedEmployees.targets || {};
-                const targetsByMonth = cachedEmployees.targets_by_month || {};
-                const empNames = cachedEmployees.employee_names || {};
-                const toYMDLocal = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-                const today = new Date();
-                const yester = new Date(); yester.setDate(yester.getDate()-1);
-                const dateToday = toYMDLocal(today);
-                const dateYest = toYMDLocal(yester);
-                const monthPrefix = dateYest.substring(0,7);
-                const normDate = (s) => s ? String(s).substring(0, 10) : '';
-                const resolveTgt = (eid) => { if(!eid) return 0; const k=[eid, String(eid).padStart(4,'0')]; return targets[k[0]]??targets[k[1]]??targetsByMonth[monthPrefix]?.[k[0]]??targetsByMonth[monthPrefix]?.[k[1]]??0; };
-                const mode = document.getElementById('filterMode')?.value || 'today';
-                let todayStats = {}, yestStats = {}, monthStats = {};
-                rec.forEach(r => {
-                    let [d, rawName, sales, trans] = r;
-                    if (!rawName || rawName === 'None') return;
-                    const dNorm = normDate(d);
-                    let empId = rawName, name = rawName;
-                    if (rawName.includes('-')) { const p = rawName.split('-'); empId = p[0].trim(); name = p[1]?.trim() || empId; }
-                    if (empNames[empId]) name = empNames[empId];
-                    if (empNames[String(empId).padStart(4,'0')]) name = empNames[String(empId).padStart(4,'0')];
-                    if (dNorm === dateToday) { todayStats[name] = todayStats[name] || { s:0, t:0 }; todayStats[name].s += (sales||0); todayStats[name].t += (trans||0); }
-                    if (dNorm === dateYest) { yestStats[name] = yestStats[name] || { s:0, t:0 }; yestStats[name].s += (sales||0); yestStats[name].t += (trans||0); }
-                    if (dNorm && dNorm.startsWith(monthPrefix) && dNorm <= dateYest) {
-                        monthStats[name] = monthStats[name] || { s:0, t:0, target: resolveTgt(empId) };
-                        monthStats[name].s += (sales||0); monthStats[name].t += (trans||0);
-                    }
-                });
-                const todaySection = mode === 'today' ? `
-                        <div class="col-md-6">
-                            <h6 class="fw-bold mb-2">مبيعات اليوم (${dateToday})</h6>
-                            <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th>الموظف</th><th>المبيعات</th><th>فواتير</th><th>Avg</th></tr></thead><tbody>
-                                ${Object.entries(todayStats).sort((a,b)=>b[1].s-a[1].s).map(([n,st]) => `<tr><td>${n}</td><td>${st.s.toLocaleString()}</td><td>${st.t}</td><td>${(st.t>0?st.s/st.t:0).toFixed(0)}</td></tr>`).join('') || '<tr><td colspan="4" class="text-muted text-center">لا توجد مبيعات</td></tr>'}
-                            </tbody></table></div>
-                        </div>` : '';
-                container.innerHTML = `
-                    <div class="row g-3">
-                        ${todaySection}
-                        <div class="col-md-6">
-                            <h6 class="fw-bold mb-2">مبيعات الأمس (${dateYest})</h6>
-                            <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th>الموظف</th><th>المبيعات</th><th>فواتير</th><th>Avg</th></tr></thead><tbody>
-                                ${Object.entries(yestStats).sort((a,b)=>b[1].s-a[1].s).map(([n,st]) => `<tr><td>${n}</td><td>${st.s.toLocaleString()}</td><td>${st.t}</td><td>${(st.t>0?st.s/st.t:0).toFixed(0)}</td></tr>`).join('') || '<tr><td colspan="4" class="text-muted text-center">لا توجد مبيعات</td></tr>'}
-                            </tbody></table></div>
-                        </div>
-                        <div class="col-md-6">
-                            <h6 class="fw-bold mb-2">مبيعات الشهر (${monthPrefix})</h6>
-                            <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th>الموظف</th><th>المبيعات</th><th>الهدف</th><th>تحقيق%</th></tr></thead><tbody>
-                                ${Object.entries(monthStats).sort((a,b)=>b[1].s-a[1].s).map(([n,st]) => {
-                                    const ach = st.target>0 ? (st.s/st.target)*100 : 0;
-                                    return `<tr><td>${n}</td><td>${st.s.toLocaleString()}</td><td>${st.target.toLocaleString()}</td><td class="${ach>=100?'text-success':'text-warning'}">${ach.toFixed(1)}%</td></tr>`;
-                                }).join('') || '<tr><td colspan="4" class="text-muted text-center">لا توجد مبيعات</td></tr>'}
-                            </tbody></table></div>
-                        </div>
-                    </div>
-                `;
-            } catch (e) { container.innerHTML = '<p class="text-danger">فشل تحميل التفاصيل.</p>'; }
-        }
-
         init();
     </script>
-
-            </div><!-- /main-content-inner -->
-        </main><!-- /main-content -->
-    </div><!-- /app-wrap -->
-    <script src="assets/sidebar.js"></script>
 </body>
 
 </html>
