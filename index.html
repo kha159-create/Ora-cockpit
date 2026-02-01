@@ -135,8 +135,6 @@
                         <span class="fw-bold text-dark">مبيعات اليوم: <span class="text-primary today-sales-val">0</span></span>
                         <span class="text-muted small" id="lastUpdate">...</span>
                     </div>
-                    <button onclick="openYesterdayReportModal()" class="btn btn-outline-primary btn-sm fw-bold text-nowrap">تقرير أمس</button>
-                    <button id="btnSetTarget" onclick="window.location.href='target_setting.html'" class="btn-primary fw-bold" style="display: none;">Target</button>
                 </div>
             </div>
             <div class="main-content-inner">
@@ -672,14 +670,16 @@
         function setTrendMetric(m) {
             trendChartMetric = m;
             document.querySelectorAll('.chart-metric-btn').forEach(b => { b.classList.toggle('active', b.dataset.metric === m); });
-            const legendMap = { sales: ['المبيعات الحالية', 'المبيعات السنة السابقة'], visitors: ['الزوار الحالية', 'الزوار السنة السابقة'], target: ['الهدف الحالي', 'الهدف السنة السابقة'] };
+            const legendMap = { sales: ['المبيعات الحالية', 'المبيعات السنة السابقة'], visitors: ['الزوار الحالية', 'الزوار السنة السابقة'], target: ['المبيعات', 'الهدف'] };
             const [l1, l2] = legendMap[m] || legendMap.sales;
             const el1 = document.getElementById('trendLegend1'); if (el1) el1.textContent = l1;
             const el2 = document.getElementById('trendLegend2'); if (el2) el2.textContent = l2;
             if (window.lastTrendData) {
                 const {curr, prev, cYear, pYear} = window.lastTrendData;
-                let currData = m === 'visitors' ? (curr.monthlyVisitors || {}) : (m === 'target' ? (curr.monthlyTarget || {}) : curr.monthly);
-                let prevData = m === 'visitors' ? (prev.monthlyVisitors || {}) : (m === 'target' ? (prev.monthlyTarget || {}) : prev.monthly);
+                let currData, prevData;
+                if (m === 'visitors') { currData = curr.monthlyVisitors || {}; prevData = prev.monthlyVisitors || {}; }
+                else if (m === 'target') { currData = curr.monthly || {}; prevData = curr.monthlyTarget || {}; }
+                else { currData = curr.monthly || {}; prevData = prev.monthly || {}; }
                 renderTrendChart(currData, prevData, cYear, pYear);
             }
         }
@@ -724,7 +724,11 @@
                 const history = ed.history || {};
                 const targets = ed.targets || {};
                 const empNames = ed.employee_names || {};
-                const selManager = currentUser.role !== 'Admin' ? currentUser.name : null;
+                let selManager = currentUser.role !== 'Admin' ? currentUser.name : null;
+                if (currentUser.role === 'Admin') {
+                    const mf = document.getElementById('managerFilter');
+                    selManager = mf && mf.value !== 'all' ? mf.value : null;
+                }
                 const sTime = dateStart ? dateStart.getTime() : 0;
                 const eTime = dateEnd ? dateEnd.getTime() : Number.MAX_SAFE_INTEGER;
                 let agg = {};
@@ -751,7 +755,7 @@
                 window.employeeListForTop10 = Object.values(agg).map(e => ({
                     name: e.name, val: e.val, target: e.target, trans: e.trans,
                     avgInv: e.trans > 0 ? e.val / e.trans : 0,
-                    ach: e.target > 0 ? (e.val / e.target) * 100 : 0
+                    ach: (e.target && e.target > 0) ? (e.val / e.target) * 100 : null
                 }));
                 if (window.employeeListForTop10.length) renderTop10Employees(); else renderTop10EmployeesPlaceholder();
             } catch (e) { renderTop10EmployeesPlaceholder(); }
@@ -781,9 +785,11 @@
                 return 0;
             }), 1);
             wrap.innerHTML = list.map((d, i) => {
-                let v = d[metric] != null ? (typeof d[metric] === 'number' ? d[metric] : parseFloat(d[metric]) || 0) : 0;
-                let pct = (metric === 'ach' || metric === 'growth') ? Math.min(Math.max(v, 0), 120) : (maxVal > 0 ? (v / maxVal) * 100 : 0);
-                let displayVal = typeof v === 'number' ? (metric === 'ach' || metric === 'growth' ? v.toFixed(1) + '%' : v.toLocaleString()) : v;
+                let v = d[metric] != null ? (typeof d[metric] === 'number' ? d[metric] : parseFloat(d[metric]) || 0) : null;
+                if (v === null && (metric === 'ach' || metric === 'growth')) v = 0;
+                const numV = typeof v === 'number' && !isNaN(v) ? v : 0;
+                let pct = (metric === 'ach' || metric === 'growth') ? Math.min(Math.max(numV, 0), 120) : (maxVal > 0 ? (numV / maxVal) * 100 : 0);
+                let displayVal = (metric === 'ach' || metric === 'growth') ? ((d.target && d.target > 0) ? numV.toFixed(1) + '%' : '-') : (typeof v === 'number' ? v.toLocaleString() : (v || '-'));
                 return `<div class="top-progress-item">
                     <span class="top-progress-name">${(i+1)}-${d.name}</span>
                     <div class="top-progress-bar-wrap">
@@ -889,16 +895,10 @@
                 let yesterday = new Date(today);
                 yesterday.setDate(today.getDate() - 1);
 
+                document.getElementById('endDate').value = yesterday.toLocaleDateString('en-CA');
+
                 // Start date: Start of this month
                 let firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-
-                // Fix: If yesterday is before start of month (e.g. today is 1st), default End Date to Today
-                if (yesterday < firstDay) {
-                    document.getElementById('endDate').value = today.toLocaleDateString('en-CA');
-                } else {
-                    document.getElementById('endDate').value = yesterday.toLocaleDateString('en-CA');
-                }
-
                 document.getElementById('startDate').value = firstDay.toLocaleDateString('en-CA');
 
                 // Ensure UI reflects Custom Mode
@@ -1375,9 +1375,11 @@
             let cYear = currentStart.getFullYear();
             let pYear = prevStart.getFullYear();
             window.lastTrendData = { curr, prev, cYear, pYear };
-            let currData = trendChartMetric === 'visitors' ? (curr.monthlyVisitors || {}) : (trendChartMetric === 'target' ? (curr.monthlyTarget || {}) : curr.monthly);
-            let prevData = trendChartMetric === 'visitors' ? (prev.monthlyVisitors || {}) : (trendChartMetric === 'target' ? (prev.monthlyTarget || {}) : prev.monthly);
-            renderTrendChart(currData, prevData, cYear, pYear);
+            let currData, prevData, lbl1, lbl2;
+            if (trendChartMetric === 'visitors') { currData = curr.monthlyVisitors || {}; prevData = prev.monthlyVisitors || {}; lbl1 = 'الزوار الحالية'; lbl2 = 'الزوار السنة السابقة'; }
+            else if (trendChartMetric === 'target') { currData = curr.monthly || {}; prevData = curr.monthlyTarget || {}; lbl1 = 'المبيعات'; lbl2 = 'الهدف'; }
+            else { currData = curr.monthly || {}; prevData = prev.monthly || {}; lbl1 = 'المبيعات الحالية'; lbl2 = 'المبيعات السنة السابقة'; }
+            renderTrendChart(currData, prevData, lbl1, lbl2);
 
             // --- 5. Top 10 Stores ---
             // Prepare Branch Data
@@ -1604,7 +1606,7 @@
             const ctx = canvas.getContext('2d');
             if (charts['trend']) charts['trend'].destroy();
 
-            const legendMap = { sales: ['المبيعات الحالية', 'المبيعات السنة السابقة'], visitors: ['الزوار الحالية', 'الزوار السنة السابقة'], target: ['الهدف الحالي', 'الهدف السنة السابقة'] };
+            const legendMap = { sales: ['المبيعات الحالية', 'المبيعات السنة السابقة'], visitors: ['الزوار الحالية', 'الزوار السنة السابقة'], target: ['المبيعات', 'الهدف'] };
             const [l1, l2] = legendMap[trendChartMetric] || legendMap.sales;
             const el1 = document.getElementById('trendLegend1'); if (el1) el1.textContent = l1;
             const el2 = document.getElementById('trendLegend2'); if (el2) el2.textContent = l2;

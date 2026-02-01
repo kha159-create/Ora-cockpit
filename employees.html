@@ -49,6 +49,8 @@
             transform: translateY(-3px);
         }
 
+        .report-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+
         .section-title {
             font-weight: 700;
             margin-bottom: 20px;
@@ -559,6 +561,20 @@
             <p class="page-subtitle">ترتيب الموظفين حسب المبيعات والتحقيق والأهداف</p>
         </header>
 
+        <!-- تقرير أمس للموظفين - بطاقة -->
+        <div class="row g-3 mb-4">
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card border-0 shadow-sm report-card h-100" style="cursor:pointer; border-radius:var(--radius-2xl); transition:transform 0.2s;" onclick="openEmployeeSelectionModal('pdf')">
+                    <div class="card-body text-center">
+                        <i class="fas fa-file-pdf fa-3x text-danger mb-3"></i>
+                        <h5 class="card-title">تقرير أمس للموظفين</h5>
+                        <p class="card-text text-muted small">اختر الموظفين للتقرير وأزل المستقيلين</p>
+                        <span class="btn btn-warning btn-sm fw-bold text-white">تصدير PDF</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Filters -->
         <div class="page-filters">
             <div class="row align-items-end g-2">
@@ -878,9 +894,7 @@
             // Global for Insight Panel
             let empTrendChartInstance = null;
             let employeeDailyMaps = {}; // Map empId -> Object {date: {stats}} for aggregation
-
             let branchStats = {}; // Map storeId -> {current, transactions, items}
-            let monthlyTargetsData = {}; // Global for new targets
 
             // Fetch Data
             async function loadData() {
@@ -894,25 +908,12 @@
 
                     const empJson = await empRes.json();
                     historyData = empJson.history;
-
-                    targetsData = empJson.targets; // Legacy (Current Month)
-                    monthlyTargetsData = empJson.monthly_targets || {}; // New (All Months)
+                    targetsData = empJson.targets;
                     employeeNames = empJson.employee_names || {};
-
-                    // Expose to Global Scope for PDF Script
-                    window.historyData = historyData;
-
-                    window.targetsData = targetsData;
-                    window.monthlyTargetsData = monthlyTargetsData; // Expose to Window
-                    window.employeeNames = employeeNames;
 
                     const mgmtJson = await mgmtRes.json();
                     storesData = mgmtJson.stores;
                     storeMeta = mgmtJson.store_meta || {};
-
-                    window.storesData = storesData;
-                    window.storeMeta = storeMeta;
-                    window.storeTargets = mgmtJson.targets || [];
 
                     populateFilters();
                     initMonthFilter();
@@ -1004,10 +1005,8 @@
 
                 // Aggregate employee data
                 const empAgg = {};
-
                 const history = historyData || {};
                 const targets = targetsData || {};
-                const monthlyTargets = monthlyTargetsData || {};
 
                 // Date Filters
                 const today = new Date();
@@ -1160,21 +1159,7 @@
                         }
 
                         if (!empAgg[key]) {
-                            // Determine Target Date based on Filter
-                            let tDateStr = `${todayYear}-${String(todayMonth + 1).padStart(2, '0')}-01`; // Default MTD
-                            if (periodFilter === 'prev_month') {
-                                tDateStr = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-01`;
-                            }
-
-                            // Lookup Target
-                            let monthlyTarget = 0;
-                            if (monthlyTargets[empId] && monthlyTargets[empId][tDateStr]) {
-                                monthlyTarget = monthlyTargets[empId][tDateStr];
-                            } else {
-                                // Fallback to legacy targets if matching MTD
-                                if (periodFilter !== 'prev_month') monthlyTarget = targets[empId] || 0;
-                            }
-
+                            let monthlyTarget = targets[empId] || 0;
                             empAgg[key] = {
                                 id: empId,
                                 name: empName,
