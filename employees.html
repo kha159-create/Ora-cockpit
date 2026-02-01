@@ -268,225 +268,6 @@
             padding: 2px 6px;
             margin-right: 3px;
         }
-
-        /* ========== MOBILE RESPONSIVE STYLES ========== */
-
-        /* Navbar Mobile */
-        @media (max-width: 768px) {
-            .navbar {
-                padding: 8px 12px;
-            }
-
-            .navbar-brand {
-                font-size: 1rem;
-            }
-
-            .navbar .d-flex {
-                flex-wrap: wrap;
-                gap: 6px !important;
-                justify-content: flex-end;
-            }
-
-            .navbar .btn {
-                padding: 4px 8px;
-                font-size: 0.75rem;
-            }
-
-            .navbar .badge {
-                font-size: 0.65rem;
-                padding: 3px 6px;
-            }
-
-            .navbar .dropdown-toggle {
-                padding: 4px 8px;
-            }
-        }
-
-        /* Filters Mobile */
-        @media (max-width: 768px) {
-            .card.border-0.shadow-sm.p-3.mb-4 .row.align-items-end {
-                flex-direction: column;
-            }
-
-            .card.border-0.shadow-sm.p-3.mb-4 .row.align-items-end>div {
-                width: 100% !important;
-                max-width: 100% !important;
-                flex: 0 0 100% !important;
-                margin-bottom: 10px;
-            }
-
-            .form-select-sm,
-            .form-control-sm {
-                font-size: 0.9rem;
-                padding: 8px 12px;
-            }
-
-            .form-label {
-                font-size: 0.8rem;
-            }
-        }
-
-        /* KPI Cards Mobile */
-        @media (max-width: 768px) {
-            .row.g-3.mb-4>[class*="col-md-3"] {
-                flex: 0 0 50%;
-                max-width: 50%;
-            }
-
-            .kpi-card {
-                padding: 12px;
-            }
-
-            .kpi-card .fs-3 {
-                font-size: 1.2rem !important;
-            }
-
-            .kpi-card .fs-5 {
-                font-size: 0.95rem !important;
-            }
-
-            .kpi-card .text-muted.small {
-                font-size: 0.7rem;
-            }
-        }
-
-        @media (max-width: 576px) {
-            .row.g-3.mb-4>[class*="col-md-3"] {
-                flex: 0 0 100%;
-                max-width: 100%;
-            }
-
-            .kpi-card {
-                padding: 15px;
-                margin-bottom: 0;
-            }
-
-            .kpi-card .fs-3 {
-                font-size: 1.4rem !important;
-            }
-        }
-
-        /* Section Titles Mobile */
-        @media (max-width: 768px) {
-            .section-title {
-                font-size: 1rem;
-                margin-bottom: 12px;
-            }
-
-            .d-flex.justify-content-between.align-items-center.mb-2 {
-                flex-direction: column;
-                align-items: flex-start !important;
-                gap: 10px;
-            }
-
-            .d-flex.gap-2 select {
-                font-size: 0.8rem;
-            }
-        }
-
-        /* Leaderboard Table Mobile */
-        @media (max-width: 768px) {
-            .table-responsive {
-                font-size: 0.8rem;
-            }
-
-            .table-custom th,
-            .table-custom td {
-                padding: 8px 6px;
-                white-space: nowrap;
-            }
-
-            .rank-badge {
-                width: 24px;
-                height: 24px;
-                font-size: 0.7rem;
-            }
-
-            /* Ensure horizontal scroll works */
-            .table-responsive {
-                -webkit-overflow-scrolling: touch;
-            }
-        }
-
-        /* Offcanvas Mobile */
-        @media (max-width: 768px) {
-            .offcanvas {
-                width: 100% !important;
-            }
-
-            .offcanvas-body .h3 {
-                font-size: 1.3rem;
-            }
-
-            .insight-card {
-                padding: 12px;
-                margin-bottom: 10px;
-            }
-
-            .insight-value {
-                font-size: 1.2rem;
-            }
-        }
-
-        /* Modal Mobile */
-        @media (max-width: 768px) {
-            .modal-dialog {
-                margin: 10px;
-                max-width: calc(100% - 20px);
-            }
-
-            .modal-body {
-                padding: 12px;
-            }
-
-            .legend-item {
-                font-size: 0.75rem;
-                margin-left: 8px;
-                margin-bottom: 5px;
-            }
-
-            .btn-group-sm .btn {
-                padding: 4px 8px;
-                font-size: 0.7rem;
-            }
-
-            .emp-select-modal .table th,
-            .emp-select-modal .table td {
-                padding: 6px 4px;
-                font-size: 0.75rem;
-            }
-        }
-
-        /* Touch-friendly elements */
-        @media (max-width: 768px) {
-            .btn {
-                min-height: 38px;
-            }
-
-            input[type="checkbox"] {
-                width: 18px;
-                height: 18px;
-            }
-
-            tbody tr {
-                min-height: 44px;
-            }
-        }
-
-        /* Container padding Mobile */
-        @media (max-width: 768px) {
-            .container-fluid.px-4 {
-                padding-left: 10px !important;
-                padding-right: 10px !important;
-            }
-        }
-
-        /* Chart Section Mobile */
-        @media (max-width: 768px) {
-            .card.border-0.shadow-sm[style*="height: 300px"] {
-                height: 250px !important;
-            }
-        }
     </style>
     <link rel="stylesheet" href="assets/sidebar.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -547,6 +328,7 @@
         if (!currentUser) {
             window.location.href = 'login.html';
         }
+        window.currentUser = currentUser;
 
         function logout() {
             localStorage.removeItem('currentUser');
@@ -907,13 +689,18 @@
                     ]);
 
                     const empJson = await empRes.json();
-                    historyData = empJson.history;
-                    targetsData = empJson.targets;
+                    historyData = empJson.history || {};
+                    targetsData = empJson.targets || {};
                     employeeNames = empJson.employee_names || {};
+                    window.historyData = historyData;
+                    window.targetsData = targetsData;
+                    window.employeeNames = employeeNames;
 
                     const mgmtJson = await mgmtRes.json();
-                    storesData = mgmtJson.stores;
+                    storesData = mgmtJson.stores || {};
                     storeMeta = mgmtJson.store_meta || {};
+                    window.storesData = storesData;
+                    window.storeMeta = storeMeta;
 
                     populateFilters();
                     initMonthFilter();

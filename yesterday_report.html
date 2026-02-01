@@ -247,7 +247,7 @@
             const yEnd = new Date(y);
             yEnd.setHours(23, 59, 59, 999);
             window.dashboardState = { start: y, end: yEnd };
-            if (typeof generatePDF === 'function') generatePDF('all', false);
+            if (typeof generatePDF === 'function') generatePDF();
             else alert('جار تحميل مكتبة PDF... حاول مرة أخرى.');
         }
 

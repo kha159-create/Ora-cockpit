@@ -93,10 +93,10 @@
         <select id="branchFilter"><option value="all">الكل</option></select>
     </div>
     <div class="modal fade" id="pdfOptionsModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-warning">
-                    <h5 class="modal-title fw-bold" id="pdfOptionsModalTitle">خيارات تقرير PDF</h5>
+                    <h5 class="modal-title fw-bold" id="pdfOptionsModalTitle">خيارات تقرير PDF للمعارض</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -104,14 +104,7 @@
                         <label class="form-label fw-bold">مدير المنطقة</label>
                         <select id="pdfOptManagerFilter" class="form-select" onchange="populatePdfOptionsModal()"><option value="all">الكل</option></select>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">المعرض / الفرع</label>
-                        <select id="pdfOptStoreSelect" class="form-select"><option value="all">الكل (ملخص عام)</option></select>
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="pdfOptDetailedCheck">
-                        <label class="form-check-label" for="pdfOptDetailedCheck">إنشاء صفحة تفصيلية لكل فرع (عرض تفاصيل المعارض)</label>
-                    </div>
+                    <p class="text-muted small">سيتم إنشاء صفحة لكل معرض تابع للمدير المختار (كما في الريبو الأصلي)</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
@@ -199,6 +192,7 @@
     <script>
         const currentUser = JSON.parse(localStorage.getItem('currentUser'));
         if (!currentUser) window.location.href = 'login.html';
+        window.currentUser = currentUser;
         function logout() { localStorage.removeItem('currentUser'); window.location.href = 'login.html'; }
 
         let rawData = null;
@@ -283,25 +277,11 @@
             if (!rawData || !rawData.store_meta) return;
             const meta = rawData.store_meta;
             const mSel = document.getElementById('pdfOptManagerFilter');
-            const sSel = document.getElementById('pdfOptStoreSelect');
             if (mSel) {
                 const managers = new Set();
                 Object.values(meta).forEach(m=>{ if(m&&m.manager) managers.add(m.manager); });
                 mSel.innerHTML = '<option value="all">الكل</option>'+Array.from(managers).sort().map(m=>`<option value="${m}">${m}</option>`).join('');
                 if (currentUser.role !== 'Admin' && currentUser.name) { mSel.value = currentUser.name; mSel.disabled = true; } else mSel.disabled = false;
-            }
-            const selMgr = mSel ? mSel.value : 'all';
-            let stores = [];
-            Object.keys(meta||{}).forEach(sid=>{
-                const m = meta[sid];
-                if (!m || m.type !== 'Showroom') return;
-                if (selMgr !== 'all' && m.manager !== selMgr) return;
-                const name = (rawData.stores&&rawData.stores[sid]) || m.name_ar || m.name || sid;
-                stores.push({id:sid, name});
-            });
-            stores.sort((a,b)=>a.name.localeCompare(b.name));
-            if (sSel) {
-                sSel.innerHTML = '<option value="all">الكل (ملخص عام)</option>'+stores.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
             }
         }
 
@@ -314,8 +294,6 @@
         }
 
         function confirmPdfOptionsExport() {
-            const storeId = document.getElementById('pdfOptStoreSelect').value;
-            const isDetailed = document.getElementById('pdfOptDetailedCheck').checked;
             const mgrVal = document.getElementById('pdfOptManagerFilter').value;
             const mf = document.getElementById('managerFilter');
             if (mf) mf.value = mgrVal;
@@ -326,14 +304,14 @@
                 const today = new Date(); today.setHours(0,0,0,0);
                 const end = new Date(today); end.setHours(23,59,59,999);
                 window.dashboardState = { start: today, end };
-                if (typeof generatePDF === 'function') generatePDF(storeId, isDetailed);
+                if (typeof generatePDF === 'function') generatePDF();
             } else if (pendingPdfReportType === 'yesterday-stores') {
                 const today = new Date();
                 const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
                 monthStart.setHours(0,0,0,0);
                 const y = new Date(today); y.setDate(y.getDate()-1); y.setHours(23,59,59,999);
                 window.dashboardState = { start: monthStart, end: y };
-                if (typeof generatePDF === 'function') generatePDF(storeId, isDetailed);
+                if (typeof generatePDF === 'function') generatePDF();
             }
         }
 
@@ -348,15 +326,20 @@
             fetch('employees_data.json?t='+Date.now()).then(r=>r.json()).then(ed=>{
                 window.historyData = ed.history || {};
                 window.storeMeta = rawData?.store_meta || {};
+                window.targetsData = ed.targets || {};
+                window.storesData = rawData?.stores || {};
+                window.employeeNames = ed.employee_names || {};
+                window.currentUser = currentUser;
                 let targetEmps = null;
                 if (mode === 'active') {
                     const last15 = new Date(); last15.setDate(last15.getDate()-15);
                     const activeIds = new Set();
                     Object.values(ed.history||{}).forEach(recs=>{
                         (recs||[]).forEach(r=>{
-                            const [date, empId, sales] = r;
+                            let empId = r[1];
+                            if (typeof empId === 'string' && empId.includes('-')) empId = empId.split('-')[0].trim();
                             if (!empId || empId===''||empId==='None') return;
-                            if (new Date(date) >= last15 && (sales||0)>0) activeIds.add(empId);
+                            if (new Date(r[0]) >= last15 && (r[2]||0)>0) activeIds.add(empId);
                         });
                     });
                     targetEmps = Array.from(activeIds);

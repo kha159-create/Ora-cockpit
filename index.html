@@ -135,6 +135,9 @@
                         <span class="fw-bold text-dark">مبيعات اليوم: <span class="text-primary today-sales-val">0</span></span>
                         <span class="text-muted small" id="lastUpdate">...</span>
                     </div>
+                    <button onclick="generatePDF()" class="btn btn-warning btn-sm fw-bold text-white">
+                        <i class="fas fa-file-pdf me-1"></i> PDF
+                    </button>
                 </div>
             </div>
             <div class="main-content-inner">
@@ -156,6 +159,7 @@
         if (!currentUser) {
             window.location.href = 'login.html';
         }
+        window.currentUser = currentUser;
 
         function logout() {
             localStorage.removeItem('currentUser');
@@ -834,6 +838,7 @@
             try {
                 const res = await fetch('management_data.json?t=' + Date.now());
                 rawData = await res.json();
+                window.rawData = rawData;
 
                 // 1. Update Time (Show Time Only or Date+Time)
                 // User asked for "Time of last update"
@@ -1809,7 +1814,7 @@
                 window.dashboardState = { start: monthStart, end: y };
                 window.pdfReportDateRange = null;
             }
-            if (typeof generatePDF === 'function') generatePDF(storeId, isDetailed);
+            if (typeof generatePDF === 'function') generatePDF();
         }
 
         function openPdfModalForYesterday() {

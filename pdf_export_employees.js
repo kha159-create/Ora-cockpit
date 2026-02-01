@@ -21,14 +21,19 @@ async function generateEmployeePDF(targetEmps = null) {
         doc.setFont("helvetica");
     }
 
-    // --- Ensure Data ---
-    if (typeof historyData === 'undefined' || !historyData) {
+    const historyData = window.historyData;
+    const storeMeta = window.storeMeta;
+    const targetsData = window.targetsData;
+    const storesData = window.storesData;
+    const employeeNames = window.employeeNames;
+    const currentUser = window.currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+
+    if (!historyData || typeof historyData !== 'object') {
         alert("البيانات غير جاهزة بعد.");
         return;
     }
 
-    // --- Permissions ---
-    if (typeof storeMeta === 'undefined' || !storeMeta) {
+    if (!storeMeta || typeof storeMeta !== 'object') {
         alert("بيانات الفروع غير جاهزة");
         return;
     }
@@ -53,26 +58,21 @@ async function generateEmployeePDF(targetEmps = null) {
         return local.toISOString().split('T')[0];
     }
 
-    // Today
     let today = new Date();
-    // Yesterday
     let yestDate = new Date(today);
     yestDate.setDate(today.getDate() - 1);
 
     const yestStrFinal = formatDate(yestDate);
-
-    // MTD Start (1st of Current Month)
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const monthStartStr = formatDate(monthStart);
 
-    // Previous Month Logic (Robust)
-    // 1. Get 1st of Previous Month
-    const prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    const prevMonthStartStr = formatDate(prevStart);
-
-    // 2. Get Last Day of Previous Month (Day 0 of Current Month)
-    const prevEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+    // Prev Period Dates (for Share Growth)
+    const prevEnd = new Date(yestDate);
+    prevEnd.setMonth(prevEnd.getMonth() - 1);
     const prevMonthEndStr = formatDate(prevEnd);
+
+    const prevStart = new Date(prevEnd.getFullYear(), prevEnd.getMonth(), 1);
+    const prevMonthStartStr = formatDate(prevStart);
 
     let pageIndex = 0;
 
@@ -110,7 +110,7 @@ async function generateEmployeePDF(targetEmps = null) {
                             storeStats: {},
                             globalMtd: { sales: 0, trans: 0, items: 0 },
                             globalYest: { sales: 0, trans: 0, items: 0 },
-                            globalPrev: { sales: 0, trans: 0, items: 0 },
+                            globalPrev: { sales: 0 },
                             lastStore: sCode,
                             latestActiveStore: sCode,
                             latestActiveDate: ""
@@ -139,8 +139,6 @@ async function generateEmployeePDF(targetEmps = null) {
 
                     if (isPrev) {
                         globalEmps[key].globalPrev.sales += sales;
-                        globalEmps[key].globalPrev.trans += r[3] || 0;
-                        globalEmps[key].globalPrev.items += r[4] || 0;
                     }
 
                     if (!globalEmps[key].storeStats[sCode]) globalEmps[key].storeStats[sCode] = 0;
@@ -160,7 +158,7 @@ async function generateEmployeePDF(targetEmps = null) {
                 });
                 e.primaryStore = bestStore;
             }
-            if (typeof employeeNames !== 'undefined' && employeeNames[e.id]) {
+            if (employeeNames && employeeNames[e.id]) {
                 e.name = employeeNames[e.id];
             }
         });
@@ -168,10 +166,6 @@ async function generateEmployeePDF(targetEmps = null) {
     };
 
     const globalEmpMap = processGlobalData();
-
-    // Check Filter Mode
-    const filterVal = document.getElementById('periodFilter') ? document.getElementById('periodFilter').value : 'mtd';
-    const isPrevMode = filterVal === 'prev_month';
 
     // Loop through stores
     for (const storeId of targetStores) {
@@ -192,12 +186,7 @@ async function generateEmployeePDF(targetEmps = null) {
             // Filter by Allowed IDs (if provided)
             if (targetEmps && !targetEmps.includes(e.id)) return;
 
-            // Check Activity based on Mode
-            const hasActivity = isPrevMode
-                ? (e.globalPrev.sales > 0 || e.globalPrev.trans > 0)
-                : (e.globalMtd.sales > 0 || e.globalMtd.trans > 0);
-
-            if (e.primaryStore === storeId && hasActivity) {
+            if (e.primaryStore === storeId && (e.globalMtd.sales > 0 || e.globalMtd.trans > 0)) {
                 empKeys.push(e.id);
             }
         });
@@ -210,188 +199,105 @@ async function generateEmployeePDF(targetEmps = null) {
         doc.setFont(fontName);
         doc.setFontSize(14);
         let sName = storeId;
-        if (typeof storesData !== 'undefined' && storesData[storeId]) {
+        if (storesData && storesData[storeId]) {
             sName = storesData[storeId];
         }
-
-        let headerTitle = `${storeId} - ${sName}`;
-        if (isPrevMode) headerTitle += " (الشهر السابق)";
-
-        // --- LOOKUP STORE TARGET ---
-        if (window.storeTargets) {
-            const targetDate = isPrevMode ? prevMonthStartStr : monthStartStr;
-            const storeTargetRec = window.storeTargets.find(t => t[0] === targetDate && t[1].toString() === storeId.toString());
-            if (storeTargetRec) {
-                const sTarget = storeTargetRec[2];
-                headerTitle += ` [الهدف: ${sTarget.toLocaleString()}]`;
-            }
-        }
-
-        doc.text(headerTitle, 14, 15);
+        doc.text(`${storeId} - ${sName}`, 14, 15);
 
         const tableRows = [];
-        let col1TotalSales = 0, col1TotalTrans = 0; // Was Yest, now dynamic
-        let col2TotalSales = 0, col2TotalTrans = 0, col2TotalTarget = 0; // Was MTD, now dynamic (Prev or MTD)
+        let yestTotalSales = 0, yestTotalTrans = 0;
+        let mtdTotalSales = 0, mtdTotalTrans = 0, mtdTotalTarget = 0;
 
-        // Sort based on Mode
-        empKeys.sort((a, b) => {
-            if (isPrevMode) return globalEmpMap[b].globalPrev.sales - globalEmpMap[a].globalPrev.sales;
-            return globalEmpMap[b].globalMtd.sales - globalEmpMap[a].globalMtd.sales;
-        });
+        empKeys.sort((a, b) => globalEmpMap[b].globalMtd.sales - globalEmpMap[a].globalMtd.sales);
 
-        empKeys.forEach(empKey => {
-            const emp = globalEmpMap[empKey];
+        empKeys.forEach(key => {
+            const emp = globalEmpMap[key];
+            const yest = emp.globalYest;
+            const mtd = emp.globalMtd;
+            const target = (targetsData && targetsData[key]) ? targetsData[key] : 0;
 
-            // Robust Target Lookup:
-            // 1. Try window.targetsData if targetsData is not in scope.
-            // 2. Try the exact key (string).
-            // 3. Try the key as number (if mismatch).
-            // 4. Fallback to 0.
-            let relevantTargets = (typeof targetsData !== 'undefined') ? targetsData : (window.targetsData || {});
-            let target = relevantTargets[empKey];
+            const yestContrib = storeTotals.yest > 0 ? (yest.sales / storeTotals.yest) * 100 : 0;
+            const yestAvgInv = yest.trans > 0 ? Math.round(yest.sales / yest.trans) : 0;
 
-            if (target === undefined) {
-                // Try converting key to int or string
-                // keys in JSON might be integers
-                target = relevantTargets[parseInt(empKey)] || relevantTargets[empKey.toString()] || 0;
-            }
+            const mtdContrib = storeTotals.mtd > 0 ? (mtd.sales / storeTotals.mtd) * 100 : 0;
+            const mtdAvgInv = mtd.trans > 0 ? Math.round(mtd.sales / mtd.trans) : 0;
 
-            // --- Monthly Target Override ---
-            const monthlyTargets = (typeof window.monthlyTargetsData !== 'undefined') ? window.monthlyTargetsData : {};
-            const tDateStr = isPrevMode ? prevMonthStartStr : monthStartStr;
+            const prevContrib = storeTotals.prev > 0 ? (emp.globalPrev.sales / storeTotals.prev) * 100 : 0;
+            const ach = target > 0 ? (mtd.sales / target) * 100 : 0;
+            const remaining = Math.max(0, target - mtd.sales);
 
-            if (monthlyTargets[empKey] && monthlyTargets[empKey][tDateStr]) {
-                target = monthlyTargets[empKey][tDateStr];
-            } else if (monthlyTargets[parseInt(empKey)] && monthlyTargets[parseInt(empKey)][tDateStr]) {
-                target = monthlyTargets[parseInt(empKey)][tDateStr];
-            }
+            const daysInMonthLabel = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+            const daysPassedLabel = yestDate.getDate();
+            const daysLeftLabel = daysInMonthLabel - daysPassedLabel;
+            const dailyReq = daysLeftLabel > 0 ? remaining / daysLeftLabel : 0;
 
-            // Define Data Sources based on Mode
-            let dataCol1, dataCol2; // Col1 = Small Period (Yest), Col2 = Main Period (MTD/Prev)
-            let storeTotalCol1, storeTotalCol2;
+            yestTotalSales += yest.sales;
+            yestTotalTrans += yest.trans;
+            mtdTotalSales += mtd.sales;
+            mtdTotalTarget += target;
+            mtdTotalTrans += mtd.trans;
 
-            if (isPrevMode) {
-                // For Previous Month, we don't really have a "Yesterday". 
-                // We can either leave Col1 empty or put something else. 
-                // Let's leave it zero/dash for clarity, or maybe show last available day?
-                // For simplicity: Zero out Col1 in Prev Mode to focus on the Month.
-                dataCol1 = { sales: 0, trans: 0, items: 0 };
-                storeTotalCol1 = 0;
-
-                dataCol2 = emp.globalPrev;
-                storeTotalCol2 = storeTotals.prev;
-            } else {
-                dataCol1 = emp.globalYest;
-                storeTotalCol1 = storeTotals.yest;
-
-                dataCol2 = emp.globalMtd;
-                storeTotalCol2 = storeTotals.mtd;
-            }
-
-            // Col 1 (Yest / Empty) calculations
-            const col1Contrib = storeTotalCol1 > 0 ? (dataCol1.sales / storeTotalCol1) * 100 : 0;
-            const col1AvgInv = dataCol1.trans > 0 ? Math.round(dataCol1.sales / dataCol1.trans) : 0;
-
-            // Col 2 (Main) calculations
-            const col2Contrib = storeTotalCol2 > 0 ? (dataCol2.sales / storeTotalCol2) * 100 : 0;
-            const col2AvgInv = dataCol2.trans > 0 ? Math.round(dataCol2.sales / dataCol2.trans) : 0;
-
-            // Achievement & Req
-            const ach = target > 0 ? (dataCol2.sales / target) * 100 : 0;
-            const remaining = Math.max(0, target - dataCol2.sales);
-
-            // Daily Req Logic
-            let dailyReq = 0;
-            if (!isPrevMode) {
-                // Only relevant for MTD
-                const daysInMonthLabel = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-                const daysPassedLabel = yestDate.getDate();
-                const daysLeftLabel = daysInMonthLabel - daysPassedLabel;
-                dailyReq = daysLeftLabel > 0 ? remaining / daysLeftLabel : 0;
-            }
-
-            // Aggregation
-            col1TotalSales += dataCol1.sales;
-            col1TotalTrans += dataCol1.trans;
-
-            col2TotalSales += dataCol2.sales;
-            col2TotalTrans += dataCol2.trans;
-            col2TotalTarget += target;
-
-            // Row Building
             tableRows.push([
                 emp.name,
-                isPrevMode ? '-' : Math.round(dataCol1.sales).toLocaleString(),
-                isPrevMode ? '-' : col1Contrib.toFixed(0) + '%',
-                isPrevMode ? '-' : dataCol1.trans,
-                isPrevMode ? '-' : col1AvgInv,
-                Math.round(dataCol2.sales).toLocaleString(),
-                col2Contrib.toFixed(0) + '%',
-                dataCol2.trans,
-                col2AvgInv,
+                Math.round(yest.sales).toLocaleString(),
+                yestContrib.toFixed(0) + '%',
+                yest.trans,
+                yestAvgInv,
+                Math.round(mtd.sales).toLocaleString(),
+                mtdContrib.toFixed(0) + '%',
+                mtd.trans,
+                mtdAvgInv,
                 Math.round(target).toLocaleString(),
                 ach.toFixed(1) + '%',
                 Math.round(remaining).toLocaleString(),
-                isPrevMode ? '-' : Math.round(dailyReq).toLocaleString()
+                Math.round(dailyReq).toLocaleString()
             ]);
         });
 
         // Totals Row
-        const col2TotalAch = col2TotalTarget > 0 ? (col2TotalSales / col2TotalTarget * 100).toFixed(1) + '%' : '-';
-        const col2Rem = Math.max(0, col2TotalTarget - col2TotalSales);
-        let col2Daily = 0;
-        if (!isPrevMode) {
-            const daysInMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-            const daysPassedEnd = yestDate.getDate();
-            const daysLeftEnd = daysInMonthEnd - daysPassedEnd;
-            col2Daily = daysLeftEnd > 0 ? col2Rem / daysLeftEnd : 0;
-        }
+        const mtdTotalAch = mtdTotalTarget > 0 ? (mtdTotalSales / mtdTotalTarget * 100).toFixed(1) + '%' : '-';
+        const mtdRem = Math.max(0, mtdTotalTarget - mtdTotalSales);
+        const daysInMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+        const daysPassedEnd = yestDate.getDate();
+        const daysLeftEnd = daysInMonthEnd - daysPassedEnd;
+        const mtdDaily = daysLeftEnd > 0 ? mtdRem / daysLeftEnd : 0;
 
         tableRows.push([
-            "الإجمالي",
-            isPrevMode ? '-' : Math.round(col1TotalSales).toLocaleString(),
-            isPrevMode ? '-' : "100%",
-            isPrevMode ? '-' : col1TotalTrans,
-            isPrevMode ? '-' : (col1TotalTrans > 0 ? Math.round(col1TotalSales / col1TotalTrans) : 0),
-
-            Math.round(col2TotalSales).toLocaleString(),
+            "الإجمالي (Total)",
+            Math.round(yestTotalSales).toLocaleString(),
             "100%",
-            col2TotalTrans,
-            col2TotalTrans > 0 ? Math.round(col2TotalSales / col2TotalTrans) : 0,
-            Math.round(col2TotalTarget).toLocaleString(),
-            col2TotalAch,
-            Math.round(col2Rem).toLocaleString(),
-            isPrevMode ? '-' : Math.round(col2Daily).toLocaleString()
+            yestTotalTrans,
+            yestTotalTrans > 0 ? Math.round(yestTotalSales / yestTotalTrans) : 0,
+
+            Math.round(mtdTotalSales).toLocaleString(),
+            "100%",
+            mtdTotalTrans,
+            mtdTotalTrans > 0 ? Math.round(mtdTotalSales / mtdTotalTrans) : 0,
+            Math.round(mtdTotalTarget).toLocaleString(),
+            mtdTotalAch,
+            Math.round(mtdRem).toLocaleString(),
+            Math.round(mtdDaily).toLocaleString()
         ]);
-
-        // Dynamic Headers
-        let col1Header = `الأمس (Yesterday) - ${yestStrFinal}`;
-        let col2Header = `الشهر الحالي (MTD) - ${monthStartStr} إلى ${yestStrFinal}`;
-
-        if (isPrevMode) {
-            col1Header = "---";
-            col2Header = `الشهر السابق (Previous Month) - ${prevMonthStartStr} إلى ${prevMonthEndStr}`;
-        }
 
         doc.autoTable({
             startY: 25,
             head: [
                 [
                     { content: 'بيانات الموظف (Employee)', colSpan: 1, styles: { fillColor: [255, 255, 255], textColor: 0, halign: 'center' } },
-                    { content: col1Header, colSpan: 4, styles: { fillColor: [220, 220, 220], textColor: 0, halign: 'center' } },
-                    { content: col2Header, colSpan: 9, styles: { fillColor: [200, 200, 200], textColor: 0, halign: 'center' } }
+                    { content: `الأمس (Yesterday) - ${yestStrFinal}`, colSpan: 4, styles: { fillColor: [220, 220, 220], textColor: 0, halign: 'center' } },
+                    { content: `الشهر الحالي (MTD) - ${monthStartStr} إلى ${yestStrFinal}`, colSpan: 9, styles: { fillColor: [200, 200, 200], textColor: 0, halign: 'center' } }
                 ],
                 [
                     'الموظف',
-                    'المبيعات', 'مساهمة %', 'العدد', 'م. فاتورة',
-                    'المبيعات', 'مساهمة %', 'العدد', 'م. فاتورة', 'الهدف', 'تحقيق %', 'المتبقي', 'يومية متبقية'
+                    'المبيعات', 'المساهمة %', 'العدد', 'متوسط الفاتورة',
+                    'المبيعات', 'المساهمة %', 'العدد', 'متوسط الفاتورة', 'الهدف', 'التحقيق %', 'المتبقي', 'اليومية المتبقية'
                 ]
             ],
             body: tableRows,
             theme: 'grid',
-            styles: { font: fontName, fontSize: 9, cellPadding: 1, halign: 'center', overflow: 'ellipsize' },
+            styles: { font: fontName, fontSize: 8, cellPadding: 1, halign: 'center' },
             columnStyles: {
-                0: { halign: 'right', fontStyle: 'bold', minCellWidth: 35 },
+                0: { halign: 'right', fontStyle: 'bold', minCellWidth: 30 },
                 10: { textColor: [0, 128, 0], fontStyle: 'bold' }
             },
             didParseCell: function (data) {
@@ -402,45 +308,6 @@ async function generateEmployeePDF(targetEmps = null) {
             }
         });
     }
-
-
-
-    // --- DEBUG PAGE ---
-    doc.addPage();
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text("Debug Information (Please share this screenshot)", 10, 10);
-
-    let debugInfo = [];
-    const tData = (typeof targetsData !== 'undefined') ? targetsData : (window.targetsData || {});
-
-    debugInfo.push(`Targets Data Type: ${typeof tData}`);
-    debugInfo.push(`Is Array? ${Array.isArray(tData)}`);
-    debugInfo.push(`Keys Count: ${Object.keys(tData).length}`);
-
-    // Sample Keys
-    const keys = Object.keys(tData).slice(0, 10);
-    debugInfo.push(`Sample Keys: ${keys.join(', ')}`);
-
-    // Sample Values
-    const samples = keys.map(k => `${k}: ${tData[k]}`);
-    debugInfo.push(`Sample Values: ${samples.join(' | ')}`);
-
-    // Check specific ID if possible (e.g. from last loop)
-    // We don't have a specific ID here easily, but let's check "3200" or similar if known.
-    // Or check one from GlobalEmpMap
-    const sampleEmp = Object.values(globalEmpMap)[0];
-    if (sampleEmp) {
-        debugInfo.push(`Sample Emp ID: ${sampleEmp.id} (Name: ${sampleEmp.name})`);
-        debugInfo.push(`Target Lookup for '${sampleEmp.id}': ${tData[sampleEmp.id]}`);
-        debugInfo.push(`Target Lookup for int(${sampleEmp.id}): ${tData[parseInt(sampleEmp.id)]}`);
-    }
-
-    let yPos = 20;
-    debugInfo.forEach(line => {
-        doc.text(line, 10, yPos);
-        yPos += 7;
-    });
 
     doc.save(`Employees_Report_${new Date().toLocaleDateString('en-CA')}.pdf`);
 }
