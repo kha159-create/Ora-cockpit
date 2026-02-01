@@ -166,6 +166,10 @@
             window.location.href = 'login.html';
         }
 
+        function toYMD(d) {
+            if (!d || !(d instanceof Date)) return '';
+            return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        }
         let livePanelVisible = false;
         function toggleLive() {
             livePanelVisible = !livePanelVisible;
@@ -208,7 +212,7 @@
                 document.getElementById('liveBranchList').innerHTML = '<div class="text-muted text-center py-5">جار تحميل البيانات...</div>';
                 return;
             }
-            const todayStr = new Date().toLocaleDateString('en-CA');
+            const todayStr = toYMD(new Date());
             const selManager = document.getElementById('liveManagerFilter') ? document.getElementById('liveManagerFilter').value : 'all';
             const mgr = (currentUser.role !== 'Admin') ? currentUser.name : selManager;
             let byStore = {}; let transByStore = {};
@@ -264,7 +268,7 @@
                 const ed = await res.json();
                 const history = ed.history || {};
                 const empNames = ed.employee_names || {};
-                const todayStr = new Date().toLocaleDateString('en-CA');
+                const todayStr = toYMD(new Date());
                 const storeRec = (history[sid] || []).filter(r => r[0] === todayStr && r[1] && r[1] !== '' && r[1] !== 'None' && (r[2] || 0) > 0);
                 const agg = {};
                 storeRec.forEach(r => {
@@ -301,8 +305,9 @@
                         <div>
                             <label class="form-label small text-muted fw-bold mb-1">نوع التقرير</label>
                             <select id="filterMode" class="form-select form-select-sm input" onchange="toggleFilterMode(); updateDashboard();">
-                                <option value="standard" selected>سنوي / شهري</option>
-                                <option value="custom">فترة مخصصة (Custom Range)</option>
+                                <option value="standard">سنوي / شهري</option>
+                                <option value="custom">فترة مخصصة</option>
+                                <option value="today" selected>اليوم</option>
                             </select>
                         </div>
                         <div id="stdFilters" class="d-flex gap-2 flex-wrap">
@@ -991,8 +996,14 @@
             }
         }
 
-        // Helper: Format Date YYYY-MM-DD
-        const toYMD = (d) => d.toLocaleDateString('en-CA');
+        // Helper: Format Date YYYY-MM-DD (local time - avoids timezone mismatch with data)
+        function toYMD(d) {
+            if (!d || !(d instanceof Date)) return '';
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return y + '-' + m + '-' + day;
+        }
 
         function filterToday() {
             const today = toYMD(new Date());
@@ -1251,8 +1262,8 @@
                 const filterManager = filters.manager || selManager;
                 const filterType = filters.type || selType;
 
-                let sTime = start.getTime();
-                let eTime = end.getTime();
+                const startYMD = toYMD(start);
+                const endYMD = toYMD(end);
 
                 const filterFn = (dStr, sId) => {
                     // Branch
@@ -1268,9 +1279,10 @@
                         if (filterCity !== 'all' || filterManager !== 'all' || filterType !== 'all') return false;
                     }
 
-                    // Date
-                    let dTime = new Date(dStr).getTime();
-                    return dTime >= sTime && dTime <= eTime;
+                    // Date: use string compare (YYYY-MM-DD) to avoid timezone issues
+                    if (!dStr || typeof dStr !== 'string') return false;
+                    const d = String(dStr).substring(0, 10);
+                    return d >= startYMD && d <= endYMD;
                 };
 
                 // Sales

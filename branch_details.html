@@ -657,18 +657,20 @@
                 const prevEnd = new Date(currEnd);
                 prevEnd.setFullYear(prevEnd.getFullYear() - 1);
 
-                const fmt = d => d.toISOString().split('T')[0];
-                const sTime = currStart.getTime();
-                const eTime = currEnd.getTime();
-                const pS = prevStart.getTime();
-                const pE = prevEnd.getTime();
+                const toYMDLocal = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+                const startYMD = toYMDLocal(currStart);
+                const endYMD = toYMDLocal(currEnd);
+                const prevStartYMD = toYMDLocal(prevStart);
+                const prevEndYMD = toYMDLocal(prevEnd);
                 const filterFn = (dStr) => {
-                    const t = new Date(dStr).getTime();
-                    return t >= sTime && t <= eTime;
+                    if (!dStr || typeof dStr !== 'string') return false;
+                    const d = String(dStr).substring(0, 10);
+                    return d >= startYMD && d <= endYMD;
                 };
                 const filterPrev = (dStr) => {
-                    const t = new Date(dStr).getTime();
-                    return t >= pS && t <= pE;
+                    if (!dStr || typeof dStr !== 'string') return false;
+                    const d = String(dStr).substring(0, 10);
+                    return d >= prevStartYMD && d <= prevEndYMD;
                 };
 
                 let branchSales = {}, branchTrans = {}, branchTarget = {}, branchVisitors = {};

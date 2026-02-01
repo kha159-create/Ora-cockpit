@@ -140,7 +140,8 @@
                 const genTime = rawData.metadata?.generated_at?.split(' ')[1] || '';
                 document.getElementById('lastUpdate').textContent = genTime.split(':').slice(0,2).join(':') || '--:--';
 
-                let todayStr = new Date().toISOString().split('T')[0];
+                const td = new Date();
+                let todayStr = td.getFullYear()+'-'+String(td.getMonth()+1).padStart(2,'0')+'-'+String(td.getDate()).padStart(2,'0');
                 let todayTotal = 0;
                 (rawData.sales || []).forEach(([d,s,v]) => { if (d === todayStr) todayTotal += v; });
                 document.getElementById('todaySales').textContent = todayTotal.toLocaleString();
@@ -156,8 +157,8 @@
             yesterday.setDate(yesterday.getDate() - 1);
             const lastYear = new Date(yesterday);
             lastYear.setFullYear(lastYear.getFullYear() - 1);
-            const fmt = d => d.toISOString().split('T')[0];
-            const dateYest = fmt(yesterday);
+            const toYMD = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+            const dateYest = toYMD(yesterday);
             const dateLY = fmt(lastYear);
 
             let stats = {};
@@ -204,7 +205,7 @@
         function renderEmployeesReport() {
             const yesterday = new Date();
             yesterday.setDate(yesterday.getDate() - 1);
-            const dateYest = yesterday.toISOString().split('T')[0];
+            const dateYest = yesterday.getFullYear()+'-'+String(yesterday.getMonth()+1).padStart(2,'0')+'-'+String(yesterday.getDate()).padStart(2,'0');
             const empNames = window.empNames || {};
 
             let agg = [];

@@ -464,23 +464,13 @@
         let currentUser = null;
         let deferredPrompt = null;
 
-        // Date Helpers
-        function getTodayStr() {
-            const today = new Date();
-            return today.toISOString().split('T')[0];
+        // Date Helpers (local time to match data format YYYY-MM-DD)
+        function toYMD(d) {
+            return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
         }
-
-        function getYesterdayStr() {
-            const d = new Date();
-            d.setDate(d.getDate() - 1);
-            return d.toISOString().split('T')[0];
-        }
-
-        function getLastYearTodayStr() {
-            const d = new Date();
-            d.setFullYear(d.getFullYear() - 1);
-            return d.toISOString().split('T')[0];
-        }
+        function getTodayStr() { return toYMD(new Date()); }
+        function getYesterdayStr() { const d = new Date(); d.setDate(d.getDate()-1); return toYMD(d); }
+        function getLastYearTodayStr() { const d = new Date(); d.setFullYear(d.getFullYear()-1); return toYMD(d); }
 
         function formatNumber(num) {
             return Math.round(num).toLocaleString('en-US');
