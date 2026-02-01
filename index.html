@@ -331,6 +331,7 @@
                                 <input type="date" id="endDate" class="form-control form-control-sm input">
                             </div>
                         </div>
+                        <div id="todayFilterLabel" class="align-self-end pb-1 text-muted small fw-bold" style="display:none;"></div>
                     </div>
                 </div>
                 <div class="col-12 col-xl-6">
@@ -902,16 +903,11 @@
                     mSelect.appendChild(opt);
                 });
 
-                // Set Dates Default for Custom Range (Month Start -> Yesterday)
+                // Set Dates Default: اليوم (Today)
                 let today = new Date();
-                let yesterday = new Date(today);
-                yesterday.setDate(today.getDate() - 1);
-
-                document.getElementById('endDate').value = yesterday.toLocaleDateString('en-CA');
-
-                // Start date: Start of this month
-                let firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-                document.getElementById('startDate').value = firstDay.toLocaleDateString('en-CA');
+                let todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+                document.getElementById('startDate').value = todayStr;
+                document.getElementById('endDate').value = todayStr;
 
                 // Ensure UI reflects Custom Mode
                 toggleFilterMode();
@@ -961,21 +957,35 @@
             const yearC = document.getElementById('yearFilterContainer');
             const monthC = document.getElementById('monthFilterContainer');
 
-            if (mode === 'custom') {
+            if (mode === 'today') {
+                std.style.display = 'none';
+                cust.style.display = 'none';
+                const todayLbl = document.getElementById('todayFilterLabel');
+                if (todayLbl) {
+                    const d = new Date();
+                    todayLbl.textContent = '📅 اليوم: ' + (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+                    todayLbl.style.display = 'block';
+                }
+            } else if (mode === 'custom') {
                 std.style.display = 'none';
                 cust.style.display = 'flex';
+                const todayLbl = document.getElementById('todayFilterLabel');
+                if (todayLbl) todayLbl.style.display = 'none';
             } else if (mode === 'ramadan') {
                 std.style.display = 'flex';
                 cust.style.display = 'none';
-                // Show Year, Hide Month
                 yearC.style.display = 'block';
                 monthC.style.display = 'none';
+                const todayLbl = document.getElementById('todayFilterLabel');
+                if (todayLbl) todayLbl.style.display = 'none';
             } else {
                 // Standard
                 std.style.display = 'flex';
                 cust.style.display = 'none';
                 yearC.style.display = 'block';
                 monthC.style.display = 'block';
+                const todayLbl = document.getElementById('todayFilterLabel');
+                if (todayLbl) todayLbl.style.display = 'none';
             }
         }
 
@@ -1053,7 +1063,16 @@
             let prevStart, prevEnd;
 
             // 1. Determine Date Ranges
-            if (mode === 'custom') {
+            if (mode === 'today') {
+                const today = new Date();
+                currentStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+                currentEnd = new Date(today);
+                currentEnd.setHours(23, 59, 59, 999);
+                prevStart = new Date(currentStart);
+                prevStart.setFullYear(prevStart.getFullYear() - 1);
+                prevEnd = new Date(currentEnd);
+                prevEnd.setFullYear(prevEnd.getFullYear() - 1);
+            } else if (mode === 'custom') {
                 // Custom Range
                 let s = document.getElementById('startDate').value;
                 let e = document.getElementById('endDate').value;

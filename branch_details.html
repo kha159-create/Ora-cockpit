@@ -91,8 +91,9 @@
                             <div>
                                 <label class="form-label small text-muted fw-bold mb-1">نوع التقرير</label>
                                 <select id="filterMode" class="form-select form-select-sm" onchange="toggleBranchFilterMode()">
+                                    <option value="today" selected>اليوم</option>
                                     <option value="standard">سنوي / شهري</option>
-                                    <option value="custom" selected>فترة مخصصة</option>
+                                    <option value="custom">فترة مخصصة</option>
                                 </select>
                             </div>
                             <div id="stdFilters" class="d-flex gap-2 flex-wrap">
@@ -331,6 +332,7 @@
                 // NEW: Logic for handling both old and new data structures
                 let records = [];
                 let targets = {};
+                let targetsByMonth = {};
                 let employeeNames = {};
 
                 if (allData.history && allData.targets) {
@@ -340,7 +342,8 @@
                         return;
                     }
                     records = allData.history[sid];
-                    targets = allData.targets;
+                    targets = allData.targets || {};
+                    targetsByMonth = allData.targets_by_month || {};
                     employeeNames = allData.employee_names || {};
                 } else {
                     // Old Structure Fallback (for backwards compatibility if file not regenerated yet)
@@ -351,7 +354,7 @@
                     records = allData[sid];
                 }
 
-                renderData(records, targets, employeeNames);
+                renderData(records, targets, targetsByMonth, employeeNames);
 
                 errDiv.style.display = 'none';
                 document.getElementById('content').style.display = 'block';
@@ -362,14 +365,22 @@
             }
         }
 
-        function renderData(records, targets = {}, employeeNames = {}) {
-            // records: [Date, Name, Sales, Trans, Items]
+        function toYMD(d) {
+            if (!d) return '';
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
 
-            // Dates to Filter
+        function renderData(records, targets = {}, targetsByMonth = {}, employeeNames = {}) {
+            // records: [Date, empId, Sales, Trans, Items, MaxTicket]
+
+            // Dates to Filter (use local date to avoid timezone mismatch)
             let today = new Date();
             let yesterday = new Date(today);
             yesterday.setDate(today.getDate() - 1);
-            const dateYest = yesterday.toISOString().split('T')[0];
+            const dateYest = toYMD(yesterday);
             const monthPrefix = dateYest.substring(0, 7); // YYYY-MM
 
             // UI Dates
@@ -382,43 +393,48 @@
             let yestStats = {};
             let monthStats = {};
 
-            records.forEach(r => {
-                let [d, rawName, sales, trans, items] = r;
+            function resolveTarget(empId) {
+                if (!empId) return 0;
+                const keys = [empId, String(empId).padStart(4, '0'), String(empId)];
+                let t = targets[keys[0]] ?? targets[keys[1]] ?? targets[keys[2]];
+                if (t != null) return t;
+                const tbm = targetsByMonth[monthPrefix];
+                if (tbm) {
+                    t = tbm[keys[0]] ?? tbm[keys[1]] ?? tbm[keys[2]];
+                    if (t != null) return t;
+                }
+                return 0;
+            }
 
-                // Extract ID and Name
+            records.forEach(r => {
+                let [d, rawName, sales, trans] = r;
+
+                // Extract ID and Name (rawName is empId in new format, or "id-Name" in old)
                 let empId = rawName;
                 let name = rawName;
-
-                if (rawName.includes('-')) {
+                if (typeof rawName === 'string' && rawName.includes('-')) {
                     const parts = rawName.split('-');
                     empId = parts[0].trim();
-                    name = parts[1].trim();
+                    name = parts[1]?.trim() || empId;
                 }
-
-                // Use Arabic Name Override
-                if (employeeNames[empId]) {
-                    name = employeeNames[empId];
-                }
-
-                if (!name || name === 'null') name = "Unknown"; // Fallback
+                if (employeeNames[empId]) name = employeeNames[empId];
+                if (employeeNames[String(empId).padStart(4, '0')]) name = employeeNames[String(empId).padStart(4, '0')];
+                if (!name || name === 'null') name = "Unknown";
 
                 // Yesterday
                 if (d === dateYest) {
                     if (!yestStats[name]) yestStats[name] = { s: 0, t: 0 };
-                    yestStats[name].s += sales;
-                    yestStats[name].t += trans;
+                    yestStats[name].s += (sales || 0);
+                    yestStats[name].t += (trans || 0);
                 }
 
                 // Month (accumulate)
-                if (d.startsWith(monthPrefix) && d <= dateYest) {
+                if (d && String(d).startsWith(monthPrefix) && String(d) <= dateYest) {
                     if (!monthStats[name]) {
-                        // Lookup Target
-                        let target = (empId && targets[empId]) ? targets[empId] : 0;
-
-                        monthStats[name] = { s: 0, t: 0, target: target };
+                        monthStats[name] = { s: 0, t: 0, target: resolveTarget(empId) };
                     }
-                    monthStats[name].s += sales;
-                    monthStats[name].t += trans;
+                    monthStats[name].s += (sales || 0);
+                    monthStats[name].t += (trans || 0);
                 }
             });
 
@@ -557,7 +573,7 @@
             }
         }
         function toggleBranchFilterMode() {
-            const mode = document.getElementById('filterMode')?.value || 'custom';
+            const mode = document.getElementById('filterMode')?.value || 'today';
             const std = document.getElementById('stdFilters');
             const cust = document.getElementById('customFilters');
             if (std) std.style.display = mode === 'standard' ? 'flex' : 'none';
@@ -565,10 +581,9 @@
         }
         function initBranchFilterDates() {
             const today = new Date();
-            const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
-            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-            document.getElementById('startDate').value = firstDay.toLocaleDateString('en-CA');
-            document.getElementById('endDate').value = yesterday.toLocaleDateString('en-CA');
+            const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+            document.getElementById('startDate').value = todayStr;
+            document.getElementById('endDate').value = todayStr;
             toggleBranchFilterMode();
         }
         function getBranchFilterDateRange() {
@@ -576,7 +591,11 @@
             const today = new Date();
             const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
             let currStart, currEnd;
-            if (mode === 'custom') {
+            if (mode === 'today') {
+                currStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+                currEnd = new Date(today);
+                currEnd.setHours(23, 59, 59, 999);
+            } else if (mode === 'custom') {
                 const startEl = document.getElementById('startDate');
                 const endEl = document.getElementById('endDate');
                 currStart = startEl?.value ? new Date(startEl.value) : new Date(today.getFullYear(), today.getMonth(), 1);
@@ -764,20 +783,25 @@
                 }
                 const rec = (cachedEmployees.history || {})[sid] || [];
                 const targets = cachedEmployees.targets || {};
+                const targetsByMonth = cachedEmployees.targets_by_month || {};
                 const empNames = cachedEmployees.employee_names || {};
-                const dateYest = (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]; })();
+                const toYMDLocal = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+                const yester = new Date(); yester.setDate(yester.getDate()-1);
+                const dateYest = toYMDLocal(yester);
                 const monthPrefix = dateYest.substring(0,7);
+                const resolveTgt = (eid) => { if(!eid) return 0; const k=[eid, String(eid).padStart(4,'0')]; return targets[k[0]]??targets[k[1]]??targetsByMonth[monthPrefix]?.[k[0]]??targetsByMonth[monthPrefix]?.[k[1]]??0; };
                 let yestStats = {}, monthStats = {};
                 rec.forEach(r => {
                     let [d, rawName, sales, trans] = r;
                     if (!rawName || rawName === 'None') return;
                     let empId = rawName, name = rawName;
-                    if (rawName.includes('-')) { const p = rawName.split('-'); empId = p[0].trim(); name = p[1].trim(); }
+                    if (rawName.includes('-')) { const p = rawName.split('-'); empId = p[0].trim(); name = p[1]?.trim() || empId; }
                     if (empNames[empId]) name = empNames[empId];
-                    if (d === dateYest) { yestStats[name] = yestStats[name] || { s:0, t:0 }; yestStats[name].s += sales; yestStats[name].t += trans; }
-                    if (d.startsWith(monthPrefix) && d <= dateYest) {
-                        monthStats[name] = monthStats[name] || { s:0, t:0, target: targets[empId]||0 };
-                        monthStats[name].s += sales; monthStats[name].t += trans;
+                    if (empNames[String(empId).padStart(4,'0')]) name = empNames[String(empId).padStart(4,'0')];
+                    if (d === dateYest) { yestStats[name] = yestStats[name] || { s:0, t:0 }; yestStats[name].s += (sales||0); yestStats[name].t += (trans||0); }
+                    if (d && String(d).startsWith(monthPrefix) && String(d) <= dateYest) {
+                        monthStats[name] = monthStats[name] || { s:0, t:0, target: resolveTgt(empId) };
+                        monthStats[name].s += (sales||0); monthStats[name].t += (trans||0);
                     }
                 });
                 container.innerHTML = `
