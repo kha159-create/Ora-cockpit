@@ -174,8 +174,6 @@
                 btn.classList.remove('btn-outline-warning');
                 btn.classList.add('btn-warning', 'text-white');
                 if (btn.querySelector('.live-dot')) btn.querySelector('.live-dot').style.opacity = '1';
-                filterToday();
-                calculateTodayHeader();
                 openLiveModal();
             } else {
                 panel.style.display = 'none';
@@ -186,37 +184,102 @@
             }
         }
         function openLiveModal() {
+            populateLiveManagerFilter();
             populateLiveModal();
             new bootstrap.Modal(document.getElementById('liveSalesModal')).show();
         }
-        function populateLiveModal() {
+        function populateLiveManagerFilter() {
+            const sel = document.getElementById('liveManagerFilter');
+            if (!sel || !rawData || !rawData.store_meta) return;
+            const managers = new Set();
+            Object.values(rawData.store_meta).forEach(m => { if (m && m.manager) managers.add(m.manager); });
+            const cur = sel.value;
+            sel.innerHTML = '<option value="all">الكل</option>' + Array.from(managers).sort().map(m => `<option value="${m}">${m}</option>`).join('');
+            if (cur && managers.has(cur)) sel.value = cur;
+            if (currentUser.role !== 'Admin') { sel.value = currentUser.name; sel.disabled = true; } else sel.disabled = false;
+        }
+        async function populateLiveModal() {
             if (!rawData) {
-                const tbody = document.getElementById('liveModalBody');
-                if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">جار تحميل البيانات...</td></tr>';
+                document.getElementById('liveModalTotal').textContent = '0';
+                document.getElementById('liveModalTrans').textContent = '0';
+                document.getElementById('liveModalAvgTicket').textContent = '0';
+                document.getElementById('liveBranchList').innerHTML = '<div class="text-muted text-center py-5">جار تحميل البيانات...</div>';
                 return;
             }
             const todayStr = new Date().toLocaleDateString('en-CA');
-            const selManager = currentUser.role !== 'Admin' ? currentUser.name : null;
-            let byStore = {};
+            const selManager = document.getElementById('liveManagerFilter') ? document.getElementById('liveManagerFilter').value : 'all';
+            const mgr = (currentUser.role !== 'Admin') ? currentUser.name : selManager;
+            let byStore = {}; let transByStore = {};
             rawData.sales.forEach(([d, s, v]) => {
                 if (d !== todayStr) return;
-                if (selManager) {
-                    const meta = rawData.store_meta ? rawData.store_meta[s] : null;
-                    if (!meta || meta.manager !== selManager) return;
-                }
+                if (mgr !== 'all') { const meta = rawData.store_meta ? rawData.store_meta[s] : null; if (!meta || meta.manager !== mgr) return; }
                 byStore[s] = (byStore[s] || 0) + v;
             });
-            let total = 0;
-            const rows = Object.entries(byStore).map(([sid, val]) => {
-                total += val;
-                return { name: rawData.stores[sid] || sid, val };
+            if (rawData.transactions) rawData.transactions.forEach(([d, s, v]) => {
+                if (d !== todayStr) return;
+                if (mgr !== 'all') { const meta = rawData.store_meta ? rawData.store_meta[s] : null; if (!meta || meta.manager !== mgr) return; }
+                transByStore[s] = (transByStore[s] || 0) + (v || 0);
+            });
+            let total = 0, totalTrans = 0;
+            const rows = Object.keys(byStore).map(sid => {
+                const val = byStore[sid] || 0;
+                const trans = transByStore[sid] || 0;
+                total += val; totalTrans += trans;
+                return { sid, name: rawData.stores[sid] || sid, val, trans };
             });
             rows.sort((a, b) => b.val - a.val);
-            const tbody = document.getElementById('liveModalBody');
-            if (!tbody) return;
-            tbody.innerHTML = rows.map((r, i) => `<tr><td class="text-center">${i+1}</td><td class="fw-bold">${r.name}</td><td class="text-end fw-bold">${r.val.toLocaleString()}</td></tr>`).join('') || '<tr><td colspan="3" class="text-center text-muted">لا توجد مبيعات اليوم</td></tr>';
-            const totalEl = document.getElementById('liveModalTotal');
-            if (totalEl) totalEl.textContent = total.toLocaleString();
+            document.getElementById('liveModalTotal').textContent = total.toLocaleString();
+            document.getElementById('liveModalTrans').textContent = totalTrans.toLocaleString();
+            document.getElementById('liveModalAvgTicket').textContent = totalTrans > 0 ? Math.round(total / totalTrans).toLocaleString() : '0';
+            const listEl = document.getElementById('liveBranchList');
+            if (!listEl) return;
+            if (rows.length === 0) { listEl.innerHTML = '<div class="text-muted text-center py-5">لا توجد مبيعات اليوم</div>'; return; }
+            listEl.innerHTML = rows.map((r, i) => `
+                <div class="live-branch-card border rounded mb-2 overflow-hidden" data-sid="${r.sid}">
+                    <div class="live-branch-header d-flex justify-content-between align-items-center px-3 py-2 cursor-pointer" style="cursor:pointer; background:#f8f9fa;" onclick="toggleLiveBranch('${r.sid}')">
+                        <span class="fw-bold">${i+1} - ${r.name}</span>
+                        <span class="d-flex gap-3">
+                            <span class="text-primary fw-bold">${r.val.toLocaleString()}</span>
+                            <span class="text-muted small">${r.trans} فاتورة</span>
+                            <span class="text-muted small">متوسط: ${r.trans > 0 ? Math.round(r.val/r.trans).toLocaleString() : '0'}</span>
+                            <span class="toggle-icon-live"><i class="fas fa-chevron-down"></i></span>
+                        </span>
+                    </div>
+                    <div class="live-emp-list" id="live-emp-${r.sid}" style="display:none; background:#fafafa; padding:0.5rem 1rem;"></div>
+                </div>
+            `).join('');
+        }
+        async function toggleLiveBranch(sid) {
+            const wrap = document.getElementById('live-emp-' + sid);
+            const card = document.querySelector('.live-branch-card[data-sid="' + sid + '"]');
+            if (!wrap || !card) return;
+            if (wrap.style.display === 'block') { wrap.style.display = 'none'; card.querySelector('.toggle-icon-live i').className = 'fas fa-chevron-down'; return; }
+            wrap.style.display = 'block';
+            card.querySelector('.toggle-icon-live i').className = 'fas fa-chevron-up';
+            if (wrap.dataset.loaded) return;
+            try {
+                const res = await fetch('employees_data.json?t=' + Date.now());
+                const ed = await res.json();
+                const history = ed.history || {};
+                const empNames = ed.employee_names || {};
+                const todayStr = new Date().toLocaleDateString('en-CA');
+                const storeRec = (history[sid] || []).filter(r => r[0] === todayStr && r[1] && r[1] !== '' && r[1] !== 'None' && (r[2] || 0) > 0);
+                const agg = {};
+                storeRec.forEach(r => {
+                    const [, empId, sales, trans] = r;
+                    const key = empId;
+                    if (!agg[key]) agg[key] = { sales: 0, trans: 0 };
+                    agg[key].sales += sales || 0;
+                    agg[key].trans += trans || 0;
+                });
+                const list = Object.entries(agg).map(([k, v]) => ({
+                    name: empNames[k] || (k.includes('-') ? k.split('-').slice(1).join('-').trim() : k),
+                    trans: v.trans,
+                    avgTicket: v.trans > 0 ? Math.round(v.sales / v.trans) : 0
+                })).sort((a, b) => b.trans - a.trans);
+                wrap.innerHTML = list.length ? list.map((e, i) => `<div class="d-flex justify-content-between py-1 px-2 border-bottom" style="font-size:0.9rem"><span>${i+1}. ${e.name}</span><span>${e.trans} فاتورة - متوسط: ${e.avgTicket.toLocaleString()}</span></div>`).join('') : '<div class="text-muted py-2">لا توجد مبيعات موظفين اليوم</div>';
+                wrap.dataset.loaded = '1';
+            } catch (e) { wrap.innerHTML = '<div class="text-muted py-2">تعذر تحميل بيانات الموظفين</div>'; wrap.dataset.loaded = '1'; }
         }
     </script>
 
@@ -1723,7 +1786,63 @@
         }
 
         function openYesterdayReportModal() {
+            populateYesterdayReportModal();
             new bootstrap.Modal(document.getElementById('yesterdayReportModal')).show();
+        }
+        function populateYesterdayReportModal() {
+            if (!rawData) {
+                document.getElementById('yesterdayReportTableBody').innerHTML = '<tr><td colspan="11" class="text-center text-muted">جار تحميل البيانات...</td></tr>';
+                return;
+            }
+            const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+            const lastYear = new Date(yesterday); lastYear.setFullYear(lastYear.getFullYear() - 1);
+            const fmt = d => d.toLocaleDateString('en-CA');
+            const dateYest = fmt(yesterday), dateLastY = fmt(lastYear);
+            const dayNames = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+            document.getElementById('yesterdayReportTitle').textContent = `تقرير أمس (${dayNames[yesterday.getDay()]} ${dateYest}) مقارنة بـ (${dateLastY})`;
+
+            let selManager = document.getElementById('managerFilter') ? document.getElementById('managerFilter').value : 'all';
+            if (currentUser.role !== 'Admin') selManager = currentUser.name;
+
+            let stats = {};
+            Object.keys(rawData.stores || {}).forEach(sid => {
+                if (sid === '0' || sid === '9999') return;
+                if (selManager !== 'all') { const meta = rawData.store_meta?.[sid]; if (!meta || meta.manager !== selManager) return; }
+                stats[sid] = { salesY:0, salesLY:0, transY:0, visitY:0, visitLY:0 };
+            });
+            rawData.sales?.forEach(([d,s,v]) => { if (!stats[s]) return; if (d===dateYest) stats[s].salesY+=v; if (d===dateLastY) stats[s].salesLY+=v; });
+            rawData.transactions?.forEach(([d,s,v]) => { if (!stats[s]) return; if (d===dateYest) stats[s].transY+=v; });
+            rawData.visitors?.forEach(([d,s,v]) => { if (!stats[s]) return; if (d===dateYest) stats[s].visitY+=v; if (d===dateLastY) stats[s].visitLY+=v; });
+
+            let list = [];
+            Object.keys(stats).forEach(sid => {
+                const d = stats[sid];
+                if (d.salesY===0 && d.salesLY===0 && d.transY===0) return;
+                const name = rawData.stores[sid] || sid;
+                const growth = d.salesLY>0 ? ((d.salesY-d.salesLY)/d.salesLY)*100 : (d.salesY>0 ? 100 : 0);
+                const avgInv = d.transY>0 ? Math.round(d.salesY/d.transY) : 0;
+                const conv = d.visitY>0 ? ((d.transY/d.visitY)*100).toFixed(1) : '-';
+                const dailyReq = globalDailyReq?.[sid] ?? 0;
+                list.push({ sid, name, ...d, growth, avgInv, conv, dailyReq });
+            });
+            list.sort((a,b) => b.salesY - a.salesY);
+
+            const tbody = document.getElementById('yesterdayReportTableBody');
+            tbody.innerHTML = list.map((r,i) => `
+                <tr>
+                    <td>${i+1}</td>
+                    <td class="fw-bold"><a href="branch_details.html?sid=${r.sid}&name=${encodeURIComponent(r.name)}" class="text-decoration-none text-dark">${r.name}</a></td>
+                    <td class="fw-bold">${r.salesY.toLocaleString()}</td>
+                    <td class="text-secondary">${r.salesLY.toLocaleString()}</td>
+                    <td class="${r.growth>=0?'text-success':'text-danger'} fw-bold" dir="ltr">${r.growth>0?'+':''}${r.growth.toFixed(1)}%</td>
+                    <td class="fw-bold text-danger">${(r.dailyReq||0).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+                    <td>${r.transY.toLocaleString()}</td>
+                    <td>${r.avgInv}</td>
+                    <td>${r.visitY.toLocaleString()}</td>
+                    <td class="text-secondary">${r.visitLY.toLocaleString()}</td>
+                    <td>${r.conv}%</td>
+                </tr>
+            `).join('') || '<tr><td colspan="11" class="text-center text-muted">لا توجد بيانات</td></tr>';
         }
 
         async function downloadYesterdayPdfStores() {
@@ -1781,34 +1900,60 @@
         </div>
     </div>
     <div class="modal fade" id="liveSalesModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header bg-warning text-dark">
                     <h5 class="modal-title fw-bold"><i class="fas fa-circle me-2" style="font-size:0.5rem;"></i> مبيعات اليوم - تفاصيل الفروع</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-3 fw-bold">الإجمالي: <span id="liveModalTotal" class="text-primary">0</span></div>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover mb-0">
-                            <thead class="table-light"><tr><th class="text-center" style="width:50px">#</th><th>الفرع</th><th class="text-end">المبيعات</th></tr></thead>
-                            <tbody id="liveModalBody"></tbody>
-                        </table>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted fw-bold mb-1">مدير المنطقة</label>
+                        <select id="liveManagerFilter" class="form-select form-select-sm" onchange="populateLiveModal()" style="max-width:220px;">
+                            <option value="all">الكل</option>
+                        </select>
                     </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-4"><div class="rounded p-3 border-bottom border-4 border-warning"><div class="small text-muted">إجمالي المبيعات</div><div class="fs-4 fw-bold" id="liveModalTotal">0</div></div></div>
+                        <div class="col-4"><div class="rounded p-3 border-bottom border-4 border-primary"><div class="small text-muted">عدد الفواتير</div><div class="fs-4 fw-bold" id="liveModalTrans">0</div></div></div>
+                        <div class="col-4"><div class="rounded p-3 border-bottom border-4 border-success"><div class="small text-muted">متوسط الفاتورة</div><div class="fs-4 fw-bold" id="liveModalAvgTicket">0</div></div></div>
+                    </div>
+                    <h6 class="section-title mb-2">مبيعات الفروع اليوم (اضغط على الفرع لعرض الموظفين)</h6>
+                    <div id="liveBranchList" style="max-height:400px;overflow-y:auto;"></div>
                 </div>
             </div>
         </div>
     </div>
     <div class="modal fade" id="yesterdayReportModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title fw-bold">تقرير أمس</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted mb-3">اختر نوع التقرير لتصدير PDF:</p>
-                    <div class="d-flex flex-column gap-2">
+                    <h6 class="fw-bold mb-2" id="yesterdayReportTitle">تقرير أمس</h6>
+                    <div class="table-responsive mb-4" style="max-height:350px; overflow-y:auto;">
+                        <table class="table table-sm table-striped table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th class="text-center" style="width:40px">#</th>
+                                    <th>الفرع</th>
+                                    <th class="text-end">مبيعات أمس</th>
+                                    <th class="text-end text-muted">العام الماضي</th>
+                                    <th class="text-center">النمو %</th>
+                                    <th class="text-end">اليومية المتبقية</th>
+                                    <th class="text-center">الفواتير</th>
+                                    <th class="text-center">متوسط</th>
+                                    <th class="text-center">زوار</th>
+                                    <th class="text-center text-muted">زوار LY</th>
+                                    <th class="text-center">تحويل %</th>
+                                </tr>
+                            </thead>
+                            <tbody id="yesterdayReportTableBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
                         <button onclick="downloadYesterdayPdfStores()" class="btn btn-warning fw-bold text-white">
                             <i class="fas fa-file-pdf me-2"></i> تقرير أمس للمعارض (PDF)
                         </button>

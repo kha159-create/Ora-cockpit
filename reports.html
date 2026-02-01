@@ -86,19 +86,77 @@
     </div>
 
     <div id="hiddenFilters" style="display:none;">
+        <input type="date" id="startDate"><input type="date" id="endDate">
         <select id="managerFilter"><option value="all">الكل</option></select>
         <select id="cityFilter"><option value="all">الكل</option></select>
         <select id="typeFilter"><option value="all">الكل</option></select>
         <select id="branchFilter"><option value="all">الكل</option></select>
     </div>
+    <div class="modal fade" id="pdfOptionsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title fw-bold" id="pdfOptionsModalTitle">خيارات تقرير PDF</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">مدير المنطقة</label>
+                        <select id="pdfOptManagerFilter" class="form-select" onchange="populatePdfOptionsModal()"><option value="all">الكل</option></select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">المعرض / الفرع</label>
+                        <select id="pdfOptStoreSelect" class="form-select"><option value="all">الكل (ملخص عام)</option></select>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="pdfOptDetailedCheck">
+                        <label class="form-check-label" for="pdfOptDetailedCheck">إنشاء صفحة تفصيلية لكل فرع (عرض تفاصيل المعارض)</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="button" class="btn btn-warning fw-bold text-white" onclick="confirmPdfOptionsExport()">تصدير PDF</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="pdfEmployeeOptionsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title fw-bold">تقرير أمس للموظفين</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">اختر طريقة التصدير:</p>
+                    <div class="d-flex flex-column gap-2">
+                        <button onclick="doPdfReportEmployees('all')" class="btn btn-warning fw-bold text-white w-100">
+                            <i class="fas fa-users me-2"></i> تصدير الكل
+                        </button>
+                        <button onclick="doPdfReportEmployees('active')" class="btn btn-outline-warning fw-bold w-100">
+                            <i class="fas fa-user-check me-2"></i> النشطين فقط
+                        </button>
+                        <a href="employees.html#pdf" class="btn btn-outline-secondary w-100">
+                            <i class="fas fa-user-cog me-2"></i> اختيار الموظفين يدوياً (صفحة أداء الموظفين)
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="modal fade" id="excelDateModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title fw-bold">تصدير Excel - مبيعات المعارض</h5>
+                    <h5 class="modal-title fw-bold">تصدير Excel</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <div class="mb-3" id="excelReportTypeGroup">
+                        <label class="form-label fw-bold">نوع التقرير</label>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="excelReportType" id="excelTypeStore" value="store" checked><label class="form-check-label" for="excelTypeStore">مبيعات المعارض</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="excelReportType" id="excelTypeEmployee" value="employee"><label class="form-check-label" for="excelTypeEmployee">مبيعات الموظفين</label></div>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">من تاريخ</label>
                         <input type="date" id="excelStartDate" class="form-control">
@@ -130,6 +188,7 @@
     </div>
 
     <script src="users.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <script src="assets/amiri_font.js"></script>
@@ -143,7 +202,33 @@
         function logout() { localStorage.removeItem('currentUser'); window.location.href = 'login.html'; }
 
         let rawData = null;
-        fetch('management_data.json?t=' + Date.now()).then(r=>r.json()).then(d=>{ rawData=d; window.rawData=d; }).catch(()=>{});
+        fetch('management_data.json?t=' + Date.now()).then(r=>r.json()).then(d=>{ rawData=d; window.rawData=d; populateHiddenFilters(); }).catch(()=>{});
+
+        function populateHiddenFilters() {
+            if (!rawData || !rawData.store_meta) return;
+            const meta = rawData.store_meta;
+            const mSel = document.getElementById('managerFilter');
+            const cSel = document.getElementById('cityFilter');
+            const tSel = document.getElementById('typeFilter');
+            const bSel = document.getElementById('branchFilter');
+            if (mSel) {
+                const managers = new Set();
+                Object.values(meta).forEach(m=>{ if(m&&m.manager) managers.add(m.manager); });
+                mSel.innerHTML = '<option value="all">الكل</option>'+Array.from(managers).sort().map(m=>`<option value="${m}">${m}</option>`).join('');
+                if (currentUser.role !== 'Admin' && currentUser.name) { mSel.value = currentUser.name; mSel.disabled = true; }
+            }
+            if (cSel) {
+                const cities = new Set();
+                Object.values(meta).forEach(m=>{ if(m&&m.city) cities.add(m.city); });
+                cSel.innerHTML = '<option value="all">الكل</option>'+Array.from(cities).sort().map(c=>`<option value="${c}">${c}</option>`).join('');
+            }
+            if (tSel) tSel.innerHTML = '<option value="all">الكل</option><option value="Showroom">معارض</option><option value="Online">أونلاين</option>';
+            if (bSel && rawData.stores) {
+                let stores = Object.entries(rawData.stores).map(([id,n])=>({id,name:n||id}));
+                stores.sort((a,b)=>a.name.localeCompare(b.name));
+                bSel.innerHTML = '<option value="all">كافة الفروع</option>'+stores.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+            }
+        }
 
         function updateLastUpdate() {
             fetch('management_data.json?t=' + Date.now())
@@ -157,6 +242,8 @@
         updateLastUpdate();
         setInterval(updateLastUpdate, 60000);
 
+        let pendingPdfReportType = null;
+
         function openReportModal(type) {
             const modal = new bootstrap.Modal(document.getElementById('reportTypeModal'));
             const body = document.getElementById('reportModalBody');
@@ -165,13 +252,13 @@
                 title.textContent = 'اختر تقرير PDF';
                 body.innerHTML = `
                     <div class="d-flex flex-column gap-2">
-                        <button onclick="doPdfReport('dashboard')" class="btn btn-warning fw-bold text-white w-100">
+                        <button onclick="openPdfOptionsModal('dashboard')" class="btn btn-warning fw-bold text-white w-100">
                             <i class="fas fa-chart-line me-2"></i> تقرير لوحة التحكم (PDF)
                         </button>
-                        <button onclick="doPdfReport('yesterday-stores')" class="btn btn-warning fw-bold text-white w-100">
+                        <button onclick="openPdfOptionsModal('yesterday-stores')" class="btn btn-warning fw-bold text-white w-100">
                             <i class="fas fa-store me-2"></i> تقرير أمس للمعارض (PDF)
                         </button>
-                        <button onclick="doPdfReport('yesterday-employees')" class="btn btn-warning fw-bold text-white w-100">
+                        <button onclick="openPdfEmployeeOptionsModal()" class="btn btn-warning fw-bold text-white w-100">
                             <i class="fas fa-users me-2"></i> تقرير أمس للموظفين (PDF)
                         </button>
                     </div>
@@ -192,38 +279,110 @@
             modal.show();
         }
 
-        function doPdfReport(reportType) {
-            bootstrap.Modal.getInstance(document.getElementById('reportTypeModal'))?.hide();
-            if (!rawData) { alert('جار تحميل البيانات... حاول مرة أخرى'); return; }
-            window.rawData = rawData;
-            if (reportType === 'dashboard') {
-                const today = new Date();
-                today.setHours(0,0,0,0);
-                const end = new Date(today);
-                end.setHours(23,59,59,999);
-                window.dashboardState = { start: today, end: end };
-                if (typeof generatePDF === 'function') generatePDF('all', false);
-            } else if (reportType === 'yesterday-stores') {
-                const y = new Date();
-                y.setDate(y.getDate()-1);
-                y.setHours(0,0,0,0);
-                const yEnd = new Date(y);
-                yEnd.setHours(23,59,59,999);
-                window.dashboardState = { start: y, end: yEnd };
-                if (typeof generatePDF === 'function') generatePDF('all', false);
-            } else if (reportType === 'yesterday-employees') {
-                fetch('employees_data.json?t='+Date.now()).then(r=>r.json()).then(ed=>{
-                    window.historyData = ed.history || {};
-                    window.storeMeta = rawData?.store_meta || {};
-                    if (typeof generateEmployeePDF === 'function') generateEmployeePDF();
-                }).catch(()=>alert('تعذر تحميل بيانات الموظفين'));
+        function populatePdfOptionsModal() {
+            if (!rawData || !rawData.store_meta) return;
+            const meta = rawData.store_meta;
+            const mSel = document.getElementById('pdfOptManagerFilter');
+            const sSel = document.getElementById('pdfOptStoreSelect');
+            if (mSel) {
+                const managers = new Set();
+                Object.values(meta).forEach(m=>{ if(m&&m.manager) managers.add(m.manager); });
+                mSel.innerHTML = '<option value="all">الكل</option>'+Array.from(managers).sort().map(m=>`<option value="${m}">${m}</option>`).join('');
+                if (currentUser.role !== 'Admin' && currentUser.name) { mSel.value = currentUser.name; mSel.disabled = true; } else mSel.disabled = false;
             }
+            const selMgr = mSel ? mSel.value : 'all';
+            let stores = [];
+            Object.keys(meta||{}).forEach(sid=>{
+                const m = meta[sid];
+                if (!m || m.type !== 'Showroom') return;
+                if (selMgr !== 'all' && m.manager !== selMgr) return;
+                const name = (rawData.stores&&rawData.stores[sid]) || m.name_ar || m.name || sid;
+                stores.push({id:sid, name});
+            });
+            stores.sort((a,b)=>a.name.localeCompare(b.name));
+            if (sSel) {
+                sSel.innerHTML = '<option value="all">الكل (ملخص عام)</option>'+stores.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+            }
+        }
+
+        function openPdfOptionsModal(reportType) {
+            bootstrap.Modal.getInstance(document.getElementById('reportTypeModal'))?.hide();
+            pendingPdfReportType = reportType;
+            document.getElementById('pdfOptionsModalTitle').textContent = reportType === 'dashboard' ? 'خيارات تقرير لوحة التحكم' : 'خيارات تقرير أمس للمعارض';
+            populatePdfOptionsModal();
+            new bootstrap.Modal(document.getElementById('pdfOptionsModal')).show();
+        }
+
+        function confirmPdfOptionsExport() {
+            const storeId = document.getElementById('pdfOptStoreSelect').value;
+            const isDetailed = document.getElementById('pdfOptDetailedCheck').checked;
+            const mgrVal = document.getElementById('pdfOptManagerFilter').value;
+            const mf = document.getElementById('managerFilter');
+            if (mf) mf.value = mgrVal;
+            bootstrap.Modal.getInstance(document.getElementById('pdfOptionsModal'))?.hide();
+            if (!rawData) { alert('جار تحميل البيانات...'); return; }
+            window.rawData = rawData;
+            if (pendingPdfReportType === 'dashboard') {
+                const today = new Date(); today.setHours(0,0,0,0);
+                const end = new Date(today); end.setHours(23,59,59,999);
+                window.dashboardState = { start: today, end };
+                if (typeof generatePDF === 'function') generatePDF(storeId, isDetailed);
+            } else if (pendingPdfReportType === 'yesterday-stores') {
+                const y = new Date(); y.setDate(y.getDate()-1); y.setHours(0,0,0,0);
+                const yEnd = new Date(y); yEnd.setHours(23,59,59,999);
+                window.dashboardState = { start: y, end: yEnd };
+                if (typeof generatePDF === 'function') generatePDF(storeId, isDetailed);
+            }
+        }
+
+        function openPdfEmployeeOptionsModal() {
+            bootstrap.Modal.getInstance(document.getElementById('reportTypeModal'))?.hide();
+            new bootstrap.Modal(document.getElementById('pdfEmployeeOptionsModal')).show();
+        }
+
+        function doPdfReportEmployees(mode) {
+            bootstrap.Modal.getInstance(document.getElementById('pdfEmployeeOptionsModal'))?.hide();
+            if (!rawData) { alert('جار تحميل البيانات...'); return; }
+            fetch('employees_data.json?t='+Date.now()).then(r=>r.json()).then(ed=>{
+                window.historyData = ed.history || {};
+                window.storeMeta = rawData?.store_meta || {};
+                let targetEmps = null;
+                if (mode === 'active') {
+                    const last15 = new Date(); last15.setDate(last15.getDate()-15);
+                    const activeIds = new Set();
+                    Object.values(ed.history||{}).forEach(recs=>{
+                        (recs||[]).forEach(r=>{
+                            const [date, empId, sales] = r;
+                            if (!empId || empId===''||empId==='None') return;
+                            if (new Date(date) >= last15 && (sales||0)>0) activeIds.add(empId);
+                        });
+                    });
+                    targetEmps = Array.from(activeIds);
+                }
+                if (typeof generateEmployeePDF === 'function') generateEmployeePDF(targetEmps);
+            }).catch(()=>alert('تعذر تحميل بيانات الموظفين'));
         }
 
         function doExcelReport(type) {
             bootstrap.Modal.getInstance(document.getElementById('reportTypeModal'))?.hide();
-            if (type === 'store') window.location.href = 'index.html#excel';
-            else window.location.href = 'employees.html';
+            const today = new Date();
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+            const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
+            const startEl = document.getElementById('startDate');
+            const endEl = document.getElementById('endDate');
+            if (startEl) startEl.value = firstDay.toLocaleDateString('en-CA');
+            if (endEl) endEl.value = yesterday.toLocaleDateString('en-CA');
+            if (typeof showExcelModal === 'function') {
+                document.getElementById('excelTypeStore').checked = (type === 'store');
+                document.getElementById('excelTypeEmployee').checked = (type === 'employee');
+                showExcelModal();
+            } else {
+                if (type === 'store') window.location.href = 'index.html#excel';
+                else window.location.href = 'employees.html';
+            }
+        }
+        function runExcelExport() {
+            if (typeof generateExcelReport === 'function') generateExcelReport();
         }
     </script>
     <script src="assets/sidebar.js"></script>

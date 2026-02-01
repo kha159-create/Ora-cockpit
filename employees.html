@@ -360,10 +360,36 @@
                 <!-- Period -->
                 <div class="col-md-3 col-lg-3">
                     <label class="form-label small text-muted fw-bold mb-1">الفترة</label>
-                    <select id="periodFilter" class="form-select form-select-sm" onchange="updatePage()">
+                    <select id="periodFilter" class="form-select form-select-sm" onchange="toggleMonthFilter(); updatePage();">
                         <option value="mtd" selected>الشهر الحالي (MTD)</option>
+                        <option value="month">شهر محدد</option>
                         <option value="yesterday">يوم أمس (Yesterday)</option>
                         <option value="today">اليوم (Today)</option>
+                    </select>
+                </div>
+                <div id="monthFilterContainer" class="col-md-2 col-lg-2" style="display:none;">
+                    <label class="form-label small text-muted fw-bold mb-1">الشهر</label>
+                    <select id="monthFilter" class="form-select form-select-sm" onchange="updatePage()">
+                        <option value="1">يناير</option>
+                        <option value="2">فبراير</option>
+                        <option value="3">مارس</option>
+                        <option value="4">أبريل</option>
+                        <option value="5">مايو</option>
+                        <option value="6">يونيو</option>
+                        <option value="7">يوليو</option>
+                        <option value="8">أغسطس</option>
+                        <option value="9">سبتمبر</option>
+                        <option value="10">أكتوبر</option>
+                        <option value="11">نوفمبر</option>
+                        <option value="12">ديسمبر</option>
+                    </select>
+                </div>
+                <div id="yearFilterContainer" class="col-md-2 col-lg-2" style="display:none;">
+                    <label class="form-label small text-muted fw-bold mb-1">السنة</label>
+                    <select id="yearFilter" class="form-select form-select-sm" onchange="updatePage()">
+                        <option value="2026">2026</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
                     </select>
                 </div>
                 <!-- Sort -->
@@ -655,6 +681,7 @@
                     storeMeta = mgmtJson.store_meta || {};
 
                     populateFilters();
+                    initMonthFilter();
                     updatePage();
 
                     // Debug: Show record count
@@ -669,6 +696,26 @@
                 }
             }
 
+            function toggleMonthFilter() {
+                const pf = document.getElementById('periodFilter').value;
+                const mc = document.getElementById('monthFilterContainer');
+                const yc = document.getElementById('yearFilterContainer');
+                if (pf === 'month') {
+                    if (mc) mc.style.display = 'block';
+                    if (yc) yc.style.display = 'block';
+                } else {
+                    if (mc) mc.style.display = 'none';
+                    if (yc) yc.style.display = 'none';
+                }
+            }
+            function initMonthFilter() {
+                const now = new Date();
+                const mSelect = document.getElementById('monthFilter');
+                const ySelect = document.getElementById('yearFilter');
+                if (mSelect) mSelect.value = String(now.getMonth() + 1);
+                if (ySelect) ySelect.value = String(now.getFullYear());
+                toggleMonthFilter();
+            }
             function populateFilters() {
                 // Managers
                 const managerSelect = document.getElementById('managerFilter');
@@ -752,6 +799,12 @@
                 const yesterdayStr = toLocalYMD(yesterday);
                 const yesterdayDay = yesterday.getDate();
 
+                const selYearEl = document.getElementById('yearFilter');
+                const selMonthEl = document.getElementById('monthFilter');
+                const selYear = selYearEl ? parseInt(selYearEl.value || todayYear, 10) : todayYear;
+                const selMonthNum = selMonthEl ? parseInt(selMonthEl.value || (todayMonth + 1), 10) : (todayMonth + 1);
+                const selMonth0 = selMonthNum - 1;
+
                 const checkPeriod = (dYear, dMonth, dDay, dVal, dDateStr) => {
                     // Returns: 0 (None), 1 (Current), 2 (Previous)
                     let status = 0;
@@ -761,6 +814,8 @@
                         if (dYear === todayYear && dMonth === todayMonth && dVal <= todayVal) status = 1;
                     } else if (periodFilter === 'mtd_yest') {
                         if (dYear === todayYear && dMonth === todayMonth && dVal < todayVal) status = 1;
+                    } else if (periodFilter === 'month') {
+                        if (dYear === selYear && dMonth === selMonth0) status = 1;
                     } else if (periodFilter === 'yesterday') {
                         if (dDateStr === yesterdayStr) status = 1;
                     } else if (periodFilter === 'today') {
@@ -769,12 +824,16 @@
 
                     if (status === 1) return 1;
 
-                    // 2. Check Previous (Same period last month)
-                    if (dYear === prevYear && dMonth === prevMonth) {
+                    // 2. Check Previous (Same period last month / last year for month mode)
+                    const prevYearMonth = periodFilter === 'month' ? (selYear - 1) : prevYear;
+                    const prevMonthMonth = periodFilter === 'month' ? selMonth0 : prevMonth;
+                    if (dYear === prevYearMonth && dMonth === prevMonthMonth) {
                         if (periodFilter === 'mtd') {
                             if (dDay <= todayDay) return 2;
                         } else if (periodFilter === 'mtd_yest') {
                             if (dDay <= yesterdayDay) return 2;
+                        } else if (periodFilter === 'month') {
+                            return 2;
                         } else if (periodFilter === 'yesterday') {
                             if (dDay === yesterdayDay) return 2;
                         } else if (periodFilter === 'today') {
@@ -952,7 +1011,7 @@
                     // Achievement
                     e.achievement = 0;
                     if (e.target > 0) {
-                        if (periodFilter === 'mtd' || periodFilter === 'mtd_yest') {
+                        if (periodFilter === 'mtd' || periodFilter === 'mtd_yest' || periodFilter === 'month') {
                             e.achievement = (e.sales / e.target) * 100;
                         }
                     }
@@ -976,11 +1035,14 @@
                 // Calculate dailyReq for sorting
                 const todayForDaily = new Date();
                 const lastDayOfMonth = new Date(todayForDaily.getFullYear(), todayForDaily.getMonth() + 1, 0).getDate();
-                const remainingDays = lastDayOfMonth - todayForDaily.getDate() + 1;
+                let remainingDays = lastDayOfMonth - todayForDaily.getDate() + 1;
+                if (periodFilter === 'month' && (selYear !== todayForDaily.getFullYear() || selMonthNum !== (todayForDaily.getMonth() + 1))) {
+                    remainingDays = 0;
+                }
 
                 empList.forEach(e => {
                     e.dailyReq = 0;
-                    if (periodFilter === 'mtd' && e.target > e.sales && remainingDays > 0) {
+                    if ((periodFilter === 'mtd' || periodFilter === 'month') && e.target > e.sales && remainingDays > 0) {
                         e.dailyReq = (e.target - e.sales) / remainingDays;
                     }
                 });
@@ -993,14 +1055,14 @@
 
                 // Update KPIs
                 const totalSales = empList.reduce((s, e) => s + e.sales, 0);
-                const totalTarget = empList.reduce((s, e) => s + (periodFilter === 'mtd' ? e.target : 0), 0);
+                const totalTarget = empList.reduce((s, e) => s + ((periodFilter === 'mtd' || periodFilter === 'month') ? e.target : 0), 0);
 
                 document.getElementById('totalEmployees').textContent = empList.length.toLocaleString();
                 document.getElementById('totalSales').textContent = totalSales.toLocaleString('en-US', { maximumFractionDigits: 0 })
                     ;
 
                 // KPI 3: Avg Achievement or Avg Sales
-                if (periodFilter === 'mtd' && totalTarget > 0) {
+                if ((periodFilter === 'mtd' || periodFilter === 'month') && totalTarget > 0) {
                     const totalAch = (totalSales / totalTarget) * 100;
                     document.getElementById('avgSalesPerEmpLabel').textContent = 'نسبة تحقيق الهدف';
                     document.getElementById('avgSalesPerEmp').textContent = totalAch.toFixed(1) + '%';
@@ -1136,7 +1198,7 @@
 
                 function buildRow(emp, rank) {
                     const rankClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : 'rank-other';
-                    const showTarget = periodFilter === 'mtd' && emp.target > 0;
+                    const showTarget = (periodFilter === 'mtd' || periodFilter === 'month') && emp.target > 0;
                     const targetText = showTarget ? emp.target.toLocaleString() : '-';
                     const dailyReqText = emp.dailyReq > 0 ? emp.dailyReq.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '-';
                     let achBadge = '<span class="text-muted">-</span>';
