@@ -885,10 +885,16 @@
                 let yesterday = new Date(today);
                 yesterday.setDate(today.getDate() - 1);
 
-                document.getElementById('endDate').value = yesterday.toLocaleDateString('en-CA');
-
                 // Start date: Start of this month
                 let firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+
+                // Fix: If yesterday is before start of month (e.g. today is 1st), default End Date to Today
+                if (yesterday < firstDay) {
+                    document.getElementById('endDate').value = today.toLocaleDateString('en-CA');
+                } else {
+                    document.getElementById('endDate').value = yesterday.toLocaleDateString('en-CA');
+                }
+
                 document.getElementById('startDate').value = firstDay.toLocaleDateString('en-CA');
 
                 // Ensure UI reflects Custom Mode
