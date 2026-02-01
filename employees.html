@@ -663,6 +663,7 @@
             // Global Data
             let historyData = {};
             let targetsData = {};
+            let targetsDataByMonth = {};
             let storesData = {};
             let storeMeta = {}; // To store manager info
             let employeeNames = {}; // New: Arabic names map
@@ -691,9 +692,11 @@
                     const empJson = await empRes.json();
                     historyData = empJson.history || {};
                     targetsData = empJson.targets || {};
+                    targetsDataByMonth = empJson.targets_by_month || {};
                     employeeNames = empJson.employee_names || {};
                     window.historyData = historyData;
                     window.targetsData = targetsData;
+                    window.targetsDataByMonth = targetsDataByMonth;
                     window.employeeNames = employeeNames;
 
                     const mgmtJson = await mgmtRes.json();
@@ -794,6 +797,7 @@
                 const empAgg = {};
                 const history = historyData || {};
                 const targets = targetsData || {};
+                const targetsByMonth = targetsDataByMonth || {};
 
                 // Date Filters
                 const today = new Date();
@@ -947,6 +951,13 @@
 
                         if (!empAgg[key]) {
                             let monthlyTarget = targets[empId] || 0;
+                            if (periodFilter === 'month' && selYear && selMonthNum) {
+                                const monthKey = `${selYear}-${String(selMonthNum).padStart(2, '0')}`;
+                                const tbm = targetsByMonth[monthKey];
+                                if (tbm) {
+                                    monthlyTarget = tbm[empId] ?? tbm[empId + ''] ?? tbm[empId?.toString().padStart(4, '0')] ?? 0;
+                                }
+                            }
                             empAgg[key] = {
                                 id: empId,
                                 name: empName,

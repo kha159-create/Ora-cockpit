@@ -301,9 +301,13 @@
             if (!rawData) { alert('جار تحميل البيانات...'); return; }
             window.rawData = rawData;
             if (pendingPdfReportType === 'dashboard') {
-                const today = new Date(); today.setHours(0,0,0,0);
-                const end = new Date(today); end.setHours(23,59,59,999);
-                window.dashboardState = { start: today, end };
+                const today = new Date();
+                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                monthStart.setHours(0,0,0,0);
+                const end = new Date(today);
+                end.setDate(end.getDate() - 1);
+                end.setHours(23,59,59,999);
+                window.dashboardState = { start: monthStart, end };
                 if (typeof generatePDF === 'function') generatePDF();
             } else if (pendingPdfReportType === 'yesterday-stores') {
                 const today = new Date();

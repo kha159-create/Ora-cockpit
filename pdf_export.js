@@ -34,24 +34,26 @@ async function generatePDF() {
     const storeMeta = rawData.store_meta;
 
     // --- Filter Stores ---
-    let targetStores = [];
     const mfEl = document.getElementById('managerFilter');
+    const cfEl = document.getElementById('cityFilter');
+    const tfEl = document.getElementById('typeFilter');
+    const bfEl = document.getElementById('branchFilter');
     const selManager = mfEl ? mfEl.value : 'all';
+    const selCity = cfEl ? cfEl.value : 'all';
+    const selType = tfEl ? tfEl.value : 'all';
+    const selBranch = bfEl ? bfEl.value : 'all';
 
-    if (currentUser.role === 'Admin') {
-        targetStores = Object.keys(storeMeta).filter(id => {
-            const meta = storeMeta[id];
-            if (meta.type !== 'Showroom') return false;
-            // Apply Manager Filter if selected
-            if (selManager !== 'all' && meta.manager !== selManager) return false;
-            return true;
-        });
-    } else {
-        targetStores = Object.keys(storeMeta).filter(id => {
-            const meta = storeMeta[id];
-            return meta && meta.manager === currentUser.name && meta.type === 'Showroom';
-        });
-    }
+    const passesFilter = (id, meta) => {
+        if (!meta || meta.type !== 'Showroom') return false;
+        if (currentUser.role !== 'Admin' && meta.manager !== currentUser.name) return false;
+        if (selManager !== 'all' && meta.manager !== selManager) return false;
+        if (selCity !== 'all' && meta.city !== selCity) return false;
+        if (selType !== 'all' && meta.type !== selType) return false;
+        if (selBranch !== 'all' && id !== selBranch) return false;
+        return true;
+    };
+
+    let targetStores = Object.keys(storeMeta).filter(id => passesFilter(id, storeMeta[id]));
 
     if (targetStores.length === 0) {
         alert("لا توجد فروع لعرض التقرير");
@@ -66,12 +68,14 @@ async function generatePDF() {
         endDate = new Date(window.dashboardState.end);
         console.log("PDF Export: Using Dashboard Dates", startDate, endDate);
     } else {
-        // Fallback (Original Logic)
+        // Fallback: month to yesterday (ensures data exists)
         let today = new Date();
         endDate = new Date(today);
         endDate.setDate(today.getDate() - 1);
+        endDate.setHours(23, 59, 59, 999);
         startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-        console.warn("PDF Export: Using Fallback Dates (Dashboard State Missing)");
+        startDate.setHours(0, 0, 0, 0);
+        console.warn("PDF Export: Using Fallback Dates (Month to Yesterday)");
     }
 
     let pageIndex = 0;
@@ -243,10 +247,11 @@ async function generatePDF() {
 function getDayData(storeId, dateStr) {
     const rawData = window.rawData;
     if (!rawData) return { sales: 0, target: 0, visitors: 0, trans: 0 };
+    const dStr = typeof dateStr === 'string' ? dateStr : (dateStr && dateStr.toISOString ? dateStr.toISOString().split('T')[0] : '');
     const findValue = (arr) => {
         if (!arr) return 0;
-        const item = arr.find(row => row[0] === dateStr && row[1] == storeId);
-        return item ? item[2] : 0;
+        const item = arr.find(row => String(row[0]) === dStr && String(row[1]) === String(storeId));
+        return item ? (item[2] || 0) : 0;
     };
     return {
         sales: findValue(rawData.sales),

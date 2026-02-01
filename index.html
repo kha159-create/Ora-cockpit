@@ -727,6 +727,7 @@
                 const storeMeta = (rawData && rawData.store_meta) || {};
                 const history = ed.history || {};
                 const targets = ed.targets || {};
+                const targetsByMonth = ed.targets_by_month || {};
                 const empNames = ed.employee_names || {};
                 let selManager = currentUser.role !== 'Admin' ? currentUser.name : null;
                 if (currentUser.role === 'Admin') {
@@ -751,7 +752,13 @@
                         let empId = rawName, name = rawName;
                         if (typeof rawName === 'string' && rawName.includes('-')) { const p = rawName.split('-'); empId = p[0].trim(); name = p[1].trim(); }
                         if (empNames[empId]) name = empNames[empId];
-                        if (!agg[empId]) agg[empId] = { name, val: 0, target: targets[empId] || 0, trans: 0 };
+                        let tgt = targets[empId] || 0;
+                        if (dateStart && dateEnd) {
+                            const monthKey = dateStart.getFullYear() + '-' + String(dateStart.getMonth() + 1).padStart(2, '0');
+                            const tbm = targetsByMonth[monthKey];
+                            if (tbm) tgt = tbm[empId] ?? tbm[empId?.toString().padStart(4, '0')] ?? tgt;
+                        }
+                        if (!agg[empId]) agg[empId] = { name, val: 0, target: tgt, trans: 0 };
                         agg[empId].val += (sales && !isNaN(sales)) ? sales : 0;
                         agg[empId].trans += (trans && !isNaN(trans)) ? trans : 0;
                     });
