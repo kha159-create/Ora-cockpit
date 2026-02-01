@@ -557,7 +557,7 @@
 
         function isStoreAccessible(sid) {
             if (!currentUser) return false;
-            if (currentUser.role === 'Admin') return true;
+            if (currentUser.role === 'Admin' || currentUser.role === 'Auditor') return true;
             const meta = storeMeta[sid];
             if (currentUser.role === 'Manager') {
                 return meta && meta.manager === currentUser.name;

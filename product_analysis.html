@@ -756,7 +756,7 @@
         // Helper to check if user has access to a store
         function isStoreAccessible(sid) {
             if (!currentUser) return false;
-            if (currentUser.role === 'Admin') return true;
+            if (currentUser.role === 'Admin' || currentUser.role === 'Auditor') return true;
 
             const meta = storeMeta[sid];
             // For Manager role, only show stores where this user is the manager
@@ -773,9 +773,9 @@
 
         function setupFilters(mgmtData) {
             const role = (currentUser.role || 'guest').toLowerCase().replace(' ', '_');
-            const allowed = ['admin', 'sales_manager', 'manager', 'salesmanager'];
+            const allowed = ['admin', 'sales_manager', 'manager', 'salesmanager', 'auditor'];
 
-            if (allowed.includes(role) || role.includes('admin') || role.includes('manager')) {
+            if (allowed.includes(role) || role.includes('admin') || role.includes('manager') || role.includes('auditor')) {
                 const regSel = document.getElementById('regionFilter');
                 const storeSel = document.getElementById('storeFilter');
 
@@ -785,7 +785,7 @@
                 const regions = new Set();
                 const stores = [];
 
-                const sourceData = rawData.analysis_mtd || {};
+                const sourceData = rawData.periods?.mtd?.analysis || rawData.analysis_mtd || {};
 
                 Object.keys(sourceData).forEach(sid => {
                     if (!isStoreAccessible(sid)) return;
@@ -937,7 +937,7 @@
                     const listModal = new bootstrap.Modal(document.getElementById('offersListModal'));
                     listModal.show();
 
-                    const res = await fetch('offers_data.json');
+                    const res = await fetch('offers_data.json?t=' + Date.now());
                     if (!res.ok) throw new Error("Failed to load offers data file");
                     cachedOffersData = await res.json();
                 } catch (e) {
@@ -974,6 +974,10 @@
                 if (offer.stats) {
                     offer.stats.forEach(stat => {
                         if (activeStore !== 'all' && String(stat.s) !== String(activeStore)) return;
+                        if (activeRegion !== 'all') {
+                            const m = storeMeta[stat.s];
+                            if (!m || m.region !== activeRegion) return;
+                        }
                         const d = new Date(stat.d);
                         if (d < pStart || d > pEnd) return;
 
@@ -1060,6 +1064,10 @@
             if (offer.stats) {
                 offer.stats.forEach(stat => {
                     if (activeStore !== 'all' && String(stat.s) !== String(activeStore)) return;
+                    if (activeRegion !== 'all') {
+                        const m = storeMeta[stat.s];
+                        if (!m || m.region !== activeRegion) return;
+                    }
                     const d = new Date(stat.d);
                     if (d < pStart || d > pEnd) return;
 
@@ -1074,6 +1082,10 @@
             if (offer.items) {
                 offer.items.forEach(item => {
                     if (activeStore !== 'all' && String(item.s) !== String(activeStore)) return;
+                    if (activeRegion !== 'all') {
+                        const m = storeMeta[item.s];
+                        if (!m || m.region !== activeRegion) return;
+                    }
                     const d = new Date(item.d);
                     if (d < pStart || d > pEnd) return;
 
@@ -1524,7 +1536,7 @@
             }));
 
             // Permission Filter
-            if (currentUser.role !== 'Admin') {
+            if (currentUser.role !== 'Admin' && currentUser.role !== 'Auditor') {
                 outlets = outlets.filter(o => {
                     const meta = storeMeta[o.id];
                     return meta && meta.manager === currentUser.name;

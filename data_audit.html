@@ -700,7 +700,7 @@
 
         async function exportMissingEmployees() {
             try {
-                const res = await fetch('audit_missing_emp.json');
+                const res = await fetch('audit_missing_emp.json?t=' + Date.now());
                 const data = await res.json();
                 const list = data.missing_sales_groups || [];
                 if (list.length === 0) { alert('لا يوجد موظفين غير مسجلين'); return; }

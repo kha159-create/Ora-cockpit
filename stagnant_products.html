@@ -140,11 +140,18 @@
         <!-- Filter Bar -->
         <div class="page-filters filter-bar">
             <div class="row align-items-center g-3">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <h5 class="mb-0 fw-bold text-muted">تصفية البيانات:</h5>
                 </div>
+                <div class="col-md-4">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white">🔍</span>
+                        <input type="text" class="form-control" id="productSearchInput" placeholder="بحث عن منتج أو رقم..."
+                            onkeyup="applyFilters()">
+                    </div>
+                </div>
                 <!-- Filters -->
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="d-flex flex-wrap gap-2 justify-content-md-end">
                         <select class="form-select form-select-sm fw-bold" id="regionFilter" style="width: 150px;"
                             onchange="applyFilters()">
@@ -253,7 +260,7 @@
         }
         function isStoreAccessible(sid) {
             if (!currentUser) return false;
-            if (currentUser.role === 'Admin') return true;
+            if (currentUser.role === 'Admin' || currentUser.role === 'Auditor') return true;
             const meta = storeMeta[sid];
             if (currentUser.role === 'Manager') {
                 return meta && meta.manager === currentUser.name;
@@ -335,8 +342,17 @@
                     });
                 });
             });
-            rows.sort((a, b) => a.days - b.days);
-            const displayRows = rows;
+            const searchQ = (document.getElementById('productSearchInput')?.value || '').toLowerCase().trim();
+            let displayRows = searchQ
+                ? rows.filter(r =>
+                    (r.name && r.name.toLowerCase().includes(searchQ)) ||
+                    (r.id && String(r.id).toLowerCase().includes(searchQ))
+                )
+                : rows;
+            displayRows.sort((a, b) => a.days - b.days);
+            const totalItemsCount = displayRows.length;
+            const totalQtyDisplay = displayRows.reduce((s, r) => s + r.qty, 0);
+            const totalValueDisplay = displayRows.reduce((s, r) => s + r.val, 0);
             if (displayRows.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4">✅ لا توجد منتجات راكدة في هذا النطاق</td></tr>';
             } else {
@@ -358,9 +374,11 @@
                     tbody.appendChild(tr);
                 });
             }
-            document.getElementById('statTotalItems').textContent = totalItems.toLocaleString();
-            document.getElementById('statTotalQty').textContent = totalQty.toLocaleString();
-            document.getElementById('statTotalValue').textContent = totalValue.toLocaleString();
+            document.getElementById('statTotalItems').textContent = totalItemsCount.toLocaleString();
+            document.getElementById('statTotalQty').textContent = totalQtyDisplay.toLocaleString();
+            document.getElementById('statTotalValue').textContent = totalValueDisplay.toLocaleString();
+            const ratioText = searchQ ? `${displayRows.length} من ${rows.length}` : (rows.length > 0 ? rows.length + ' صنف' : '--');
+            document.getElementById('statRatio').textContent = ratioText;
         }
         function exportToExcel() {
             const table = document.getElementById("stagnantTable");

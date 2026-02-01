@@ -202,7 +202,7 @@ async function exportStoreSales(startDate, endDate) {
 // --- OPTION 2: Employee Sales Export (Sales Manager Only) ---
 async function exportEmployeeSales(startDate, endDate) {
     // 1. Fetch employees_data.json
-    const res = await fetch('employees_data.json');
+    const res = await fetch('employees_data.json?t=' + Date.now());
     if (!res.ok) throw new Error("Could not fetch employee data (employees_data.json missing)");
     const empData = await res.json();
 

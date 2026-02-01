@@ -282,7 +282,7 @@
 
             if (!sid) {
                 try {
-                    const res = await fetch('management_data.json');
+                    const res = await fetch('management_data.json?t=' + Date.now());
                     if (!res.ok) throw new Error("File not found");
                     const mgmt = await res.json();
                     cachedMgmt = mgmt;
@@ -316,7 +316,7 @@
 
             try {
                 if (currentUser.role !== 'Admin') {
-                    const mgmtRes = await fetch('management_data.json');
+                    const mgmtRes = await fetch('management_data.json?t=' + Date.now());
                     const mgmt = await mgmtRes.json();
                     const meta = (mgmt.store_meta || {})[sid];
                     if (!meta || meta.manager !== currentUser.name) {
