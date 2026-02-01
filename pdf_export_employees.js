@@ -216,6 +216,17 @@ async function generateEmployeePDF(targetEmps = null) {
 
         let headerTitle = `${storeId} - ${sName}`;
         if (isPrevMode) headerTitle += " (الشهر السابق)";
+
+        // --- LOOKUP STORE TARGET ---
+        if (window.storeTargets) {
+            const targetDate = isPrevMode ? prevMonthStartStr : monthStartStr;
+            const storeTargetRec = window.storeTargets.find(t => t[0] === targetDate && t[1].toString() === storeId.toString());
+            if (storeTargetRec) {
+                const sTarget = storeTargetRec[2];
+                headerTitle += ` [الهدف: ${sTarget.toLocaleString()}]`;
+            }
+        }
+
         doc.text(headerTitle, 14, 15);
 
         const tableRows = [];
@@ -243,6 +254,16 @@ async function generateEmployeePDF(targetEmps = null) {
                 // Try converting key to int or string
                 // keys in JSON might be integers
                 target = relevantTargets[parseInt(empKey)] || relevantTargets[empKey.toString()] || 0;
+            }
+
+            // --- Monthly Target Override ---
+            const monthlyTargets = (typeof window.monthlyTargetsData !== 'undefined') ? window.monthlyTargetsData : {};
+            const tDateStr = isPrevMode ? prevMonthStartStr : monthStartStr;
+
+            if (monthlyTargets[empKey] && monthlyTargets[empKey][tDateStr]) {
+                target = monthlyTargets[empKey][tDateStr];
+            } else if (monthlyTargets[parseInt(empKey)] && monthlyTargets[parseInt(empKey)][tDateStr]) {
+                target = monthlyTargets[parseInt(empKey)][tDateStr];
             }
 
             // Define Data Sources based on Mode
@@ -381,6 +402,45 @@ async function generateEmployeePDF(targetEmps = null) {
             }
         });
     }
+
+
+
+    // --- DEBUG PAGE ---
+    doc.addPage();
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("Debug Information (Please share this screenshot)", 10, 10);
+
+    let debugInfo = [];
+    const tData = (typeof targetsData !== 'undefined') ? targetsData : (window.targetsData || {});
+
+    debugInfo.push(`Targets Data Type: ${typeof tData}`);
+    debugInfo.push(`Is Array? ${Array.isArray(tData)}`);
+    debugInfo.push(`Keys Count: ${Object.keys(tData).length}`);
+
+    // Sample Keys
+    const keys = Object.keys(tData).slice(0, 10);
+    debugInfo.push(`Sample Keys: ${keys.join(', ')}`);
+
+    // Sample Values
+    const samples = keys.map(k => `${k}: ${tData[k]}`);
+    debugInfo.push(`Sample Values: ${samples.join(' | ')}`);
+
+    // Check specific ID if possible (e.g. from last loop)
+    // We don't have a specific ID here easily, but let's check "3200" or similar if known.
+    // Or check one from GlobalEmpMap
+    const sampleEmp = Object.values(globalEmpMap)[0];
+    if (sampleEmp) {
+        debugInfo.push(`Sample Emp ID: ${sampleEmp.id} (Name: ${sampleEmp.name})`);
+        debugInfo.push(`Target Lookup for '${sampleEmp.id}': ${tData[sampleEmp.id]}`);
+        debugInfo.push(`Target Lookup for int(${sampleEmp.id}): ${tData[parseInt(sampleEmp.id)]}`);
+    }
+
+    let yPos = 20;
+    debugInfo.forEach(line => {
+        doc.text(line, 10, yPos);
+        yPos += 7;
+    });
 
     doc.save(`Employees_Report_${new Date().toLocaleDateString('en-CA')}.pdf`);
 }
