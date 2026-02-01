@@ -301,8 +301,8 @@
                         <div>
                             <label class="form-label small text-muted fw-bold mb-1">نوع التقرير</label>
                             <select id="filterMode" class="form-select form-select-sm input" onchange="toggleFilterMode(); updateDashboard();">
-                                <option value="standard">سنوي / شهري</option>
-                                <option value="custom" selected>فترة مخصصة (Custom Range)</option>
+                                <option value="standard" selected>سنوي / شهري</option>
+                                <option value="custom">فترة مخصصة (Custom Range)</option>
                             </select>
                         </div>
                         <div id="stdFilters" class="d-flex gap-2 flex-wrap">
@@ -318,6 +318,18 @@
                                 <label class="form-label small text-muted fw-bold mb-1">الشهر</label>
                                 <select id="monthFilter" class="form-select form-select-sm input" onchange="updateDashboard()">
                                     <option value="all">كل السنة</option>
+                                    <option value="1">يناير</option>
+                                    <option value="2">فبراير</option>
+                                    <option value="3">مارس</option>
+                                    <option value="4">أبريل</option>
+                                    <option value="5">مايو</option>
+                                    <option value="6">يونيو</option>
+                                    <option value="7">يوليو</option>
+                                    <option value="8">أغسطس</option>
+                                    <option value="9">سبتمبر</option>
+                                    <option value="10">أكتوبر</option>
+                                    <option value="11">نوفمبر</option>
+                                    <option value="12">ديسمبر</option>
                                 </select>
                             </div>
                         </div>
@@ -833,16 +845,6 @@
         }
 
         async function init() {
-            // Init Month Filter
-            const months = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
-            const mSelect = document.getElementById('monthFilter');
-            months.forEach((m, i) => {
-                let opt = document.createElement('option');
-                opt.value = i + 1;
-                opt.textContent = m;
-                mSelect.appendChild(opt);
-            });
-
             try {
                 const res = await fetch('management_data.json?t=' + Date.now());
                 rawData = await res.json();
@@ -903,13 +905,13 @@
                     mSelect.appendChild(opt);
                 });
 
-                // Set Dates Default: اليوم (Today)
+                // Set Dates Default for Custom mode (when user switches)
                 let today = new Date();
                 let todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
                 document.getElementById('startDate').value = todayStr;
                 document.getElementById('endDate').value = todayStr;
 
-                // Ensure UI reflects Custom Mode
+                // Ensure UI reflects filter mode (standard = year+month, custom = dates)
                 toggleFilterMode();
 
                 // Apply Permissions
