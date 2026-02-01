@@ -1,6 +1,6 @@
-# سحب تحديثات الـ 15 دقيقة من الريبو الأصلي (upstream) تلقائياً
-# بدلاً من تشغيل تحديث البيانات على ريبونا
-name: Sync Upstream Every 15 Min
+# تحديث البيانات كل 15 دقيقة من الريبو الأصلي ALAAWF2/orange-dashboard
+# نأخذ ملفات JSON من المصدر فقط - لا علاقة للملفات المحلية
+name: Sync Data From Upstream Every 15 Min
 
 on:
   schedule:
@@ -8,26 +8,24 @@ on:
   workflow_dispatch:
 
 jobs:
-  sync:
+  sync-data:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Fetch upstream
+      - name: Fetch JSON from ALAAWF2/orange-dashboard
         run: |
-          git remote add upstream https://github.com/ALAAWF2/orange-dashboard.git 2>/dev/null || true
-          git fetch upstream main
+          BASE="https://raw.githubusercontent.com/ALAAWF2/orange-dashboard/main"
+          for f in management_data.json employees_data.json product_analysis_data.json stagnant_data.json offers_data.json; do
+            curl -sfL "$BASE/$f" -o "$f" 2>/dev/null && echo "OK: $f" || echo "Skip: $f"
+          done
 
-      - name: Merge upstream (prefer ours on conflicts)
+      - name: Commit and push if changed
         run: |
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git merge upstream/main --no-edit -X ours
-
-      - name: Push
-        run: git push origin main
+          git add management_data.json employees_data.json product_analysis_data.json stagnant_data.json offers_data.json 2>/dev/null || true
+          git diff --staged --quiet || (git commit -m "chore: sync data from ALAAWF2/orange-dashboard [auto]" && git push origin main)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
