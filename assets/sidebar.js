@@ -56,11 +56,12 @@
             var role = user.role || '';
             var name = user.name || '';
 
+            // Admin & Auditor see all pages
             document.querySelectorAll('.sidebar-nav .nav-link[href*="admin_targets"]').forEach(function (a) {
-                a.style.display = (role === 'Admin') ? '' : 'none';
+                a.style.display = (role === 'Admin' || role === 'Auditor') ? '' : 'none';
             });
             document.querySelectorAll('.sidebar-nav .nav-link[href*="data_audit"]').forEach(function (a) {
-                a.style.display = (role === 'Auditor') ? '' : 'none';
+                a.style.display = (role === 'Admin' || role === 'Auditor') ? '' : 'none';
             });
             document.querySelectorAll('.sidebar-nav .nav-link[href*="target_setting"]').forEach(function (a) {
                 a.style.display = (role === 'Admin' || name === 'Sales Manager') ? '' : 'none';
