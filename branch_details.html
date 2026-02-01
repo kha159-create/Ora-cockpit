@@ -788,30 +788,44 @@
                 const targetsByMonth = cachedEmployees.targets_by_month || {};
                 const empNames = cachedEmployees.employee_names || {};
                 const toYMDLocal = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+                const today = new Date();
                 const yester = new Date(); yester.setDate(yester.getDate()-1);
+                const dateToday = toYMDLocal(today);
                 const dateYest = toYMDLocal(yester);
                 const monthPrefix = dateYest.substring(0,7);
+                const normDate = (s) => s ? String(s).substring(0, 10) : '';
                 const resolveTgt = (eid) => { if(!eid) return 0; const k=[eid, String(eid).padStart(4,'0')]; return targets[k[0]]??targets[k[1]]??targetsByMonth[monthPrefix]?.[k[0]]??targetsByMonth[monthPrefix]?.[k[1]]??0; };
-                let yestStats = {}, monthStats = {};
+                const mode = document.getElementById('filterMode')?.value || 'today';
+                let todayStats = {}, yestStats = {}, monthStats = {};
                 rec.forEach(r => {
                     let [d, rawName, sales, trans] = r;
                     if (!rawName || rawName === 'None') return;
+                    const dNorm = normDate(d);
                     let empId = rawName, name = rawName;
                     if (rawName.includes('-')) { const p = rawName.split('-'); empId = p[0].trim(); name = p[1]?.trim() || empId; }
                     if (empNames[empId]) name = empNames[empId];
                     if (empNames[String(empId).padStart(4,'0')]) name = empNames[String(empId).padStart(4,'0')];
-                    if (d === dateYest) { yestStats[name] = yestStats[name] || { s:0, t:0 }; yestStats[name].s += (sales||0); yestStats[name].t += (trans||0); }
-                    if (d && String(d).startsWith(monthPrefix) && String(d) <= dateYest) {
+                    if (dNorm === dateToday) { todayStats[name] = todayStats[name] || { s:0, t:0 }; todayStats[name].s += (sales||0); todayStats[name].t += (trans||0); }
+                    if (dNorm === dateYest) { yestStats[name] = yestStats[name] || { s:0, t:0 }; yestStats[name].s += (sales||0); yestStats[name].t += (trans||0); }
+                    if (dNorm && dNorm.startsWith(monthPrefix) && dNorm <= dateYest) {
                         monthStats[name] = monthStats[name] || { s:0, t:0, target: resolveTgt(empId) };
                         monthStats[name].s += (sales||0); monthStats[name].t += (trans||0);
                     }
                 });
+                const todaySection = mode === 'today' ? `
+                        <div class="col-md-6">
+                            <h6 class="fw-bold mb-2">مبيعات اليوم (${dateToday})</h6>
+                            <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th>الموظف</th><th>المبيعات</th><th>فواتير</th><th>Avg</th></tr></thead><tbody>
+                                ${Object.entries(todayStats).sort((a,b)=>b[1].s-a[1].s).map(([n,st]) => `<tr><td>${n}</td><td>${st.s.toLocaleString()}</td><td>${st.t}</td><td>${(st.t>0?st.s/st.t:0).toFixed(0)}</td></tr>`).join('') || '<tr><td colspan="4" class="text-muted text-center">لا توجد مبيعات</td></tr>'}
+                            </tbody></table></div>
+                        </div>` : '';
                 container.innerHTML = `
                     <div class="row g-3">
+                        ${todaySection}
                         <div class="col-md-6">
                             <h6 class="fw-bold mb-2">مبيعات الأمس (${dateYest})</h6>
                             <div class="table-responsive"><table class="table table-sm table-hover"><thead class="table-light"><tr><th>الموظف</th><th>المبيعات</th><th>فواتير</th><th>Avg</th></tr></thead><tbody>
-                                ${Object.entries(yestStats).sort((a,b)=>b[1].s-a[1].s).map(([n,st]) => `<tr><td>${n}</td><td>${st.s.toLocaleString()}</td><td>${st.t}</td><td>${(st.t>0?st.s/st.t:0).toFixed(0)}</td></tr>`).join('')}
+                                ${Object.entries(yestStats).sort((a,b)=>b[1].s-a[1].s).map(([n,st]) => `<tr><td>${n}</td><td>${st.s.toLocaleString()}</td><td>${st.t}</td><td>${(st.t>0?st.s/st.t:0).toFixed(0)}</td></tr>`).join('') || '<tr><td colspan="4" class="text-muted text-center">لا توجد مبيعات</td></tr>'}
                             </tbody></table></div>
                         </div>
                         <div class="col-md-6">
@@ -820,7 +834,7 @@
                                 ${Object.entries(monthStats).sort((a,b)=>b[1].s-a[1].s).map(([n,st]) => {
                                     const ach = st.target>0 ? (st.s/st.target)*100 : 0;
                                     return `<tr><td>${n}</td><td>${st.s.toLocaleString()}</td><td>${st.target.toLocaleString()}</td><td class="${ach>=100?'text-success':'text-warning'}">${ach.toFixed(1)}%</td></tr>`;
-                                }).join('')}
+                                }).join('') || '<tr><td colspan="4" class="text-muted text-center">لا توجد مبيعات</td></tr>'}
                             </tbody></table></div>
                         </div>
                     </div>

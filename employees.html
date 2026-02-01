@@ -836,9 +836,12 @@
                 const selMonthNum = selMonthEl ? parseInt(selMonthEl.value || (todayMonth + 1), 10) : (todayMonth + 1);
                 const selMonth0 = selMonthNum - 1;
 
+                const normDate = (s) => s ? String(s).substring(0, 10) : '';
+
                 const checkPeriod = (dYear, dMonth, dDay, dVal, dDateStr) => {
                     // Returns: 0 (None), 1 (Current), 2 (Previous)
                     let status = 0;
+                    const dNorm = normDate(dDateStr);
 
                     // 1. Check Current
                     if (periodFilter === 'mtd') {
@@ -848,9 +851,9 @@
                     } else if (periodFilter === 'month') {
                         if (dYear === selYear && dMonth === selMonth0) status = 1;
                     } else if (periodFilter === 'yesterday') {
-                        if (dDateStr === yesterdayStr) status = 1;
+                        if (dNorm === yesterdayStr) status = 1;
                     } else if (periodFilter === 'today') {
-                        if (dDateStr === todayStr) status = 1;
+                        if (dNorm === todayStr) status = 1;
                     }
 
                     if (status === 1) return 1;
