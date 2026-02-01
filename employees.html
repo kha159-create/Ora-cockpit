@@ -699,6 +699,11 @@
                     initMonthFilter();
                     updatePage();
 
+                    if (window.location.hash === '#pdf') {
+                        window.location.hash = '';
+                        setTimeout(() => { if (typeof openEmployeeSelectionModal === 'function') openEmployeeSelectionModal('pdf'); }, 300);
+                    }
+
                     // Debug: Show record count
                     const totalStores = Object.keys(historyData).length;
                     document.getElementById('lastUpdate').textContent = new Date().toLocaleDateString('ar-SA') + ` (Stores:

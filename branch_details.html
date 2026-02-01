@@ -81,6 +81,42 @@
             <p class="mt-2">جاري استدعاء البيانات...</p>
         </div>
 
+        <!-- Filters (same as dashboard) - shown when no sid -->
+        <div id="branchFiltersBar" class="mb-4" style="display: none;">
+            <div class="card border-0 shadow-sm p-3" style="border-radius: var(--radius-2xl);">
+                <div class="row align-items-end g-3">
+                    <div class="col-12 col-xl-6">
+                        <div class="d-flex flex-wrap align-items-end gap-3">
+                            <div>
+                                <label class="form-label small text-muted fw-bold mb-1">نوع التقرير</label>
+                                <select id="filterMode" class="form-select form-select-sm" onchange="toggleBranchFilterMode()">
+                                    <option value="standard">سنوي / شهري</option>
+                                    <option value="custom" selected>فترة مخصصة</option>
+                                </select>
+                            </div>
+                            <div id="stdFilters" class="d-flex gap-2 flex-wrap">
+                                <div><label class="form-label small text-muted fw-bold mb-1">السنة</label><select id="yearFilter" class="form-select form-select-sm" onchange="applyBranchFilters()"><option value="2026">2026</option><option value="2025">2025</option><option value="2024">2024</option></select></div>
+                                <div><label class="form-label small text-muted fw-bold mb-1">الشهر</label><select id="monthFilter" class="form-select form-select-sm" onchange="applyBranchFilters()"><option value="all">كل السنة</option></select></div>
+                            </div>
+                            <div id="customFilters" class="d-flex gap-2 flex-wrap" style="display: none;">
+                                <div><label class="form-label small text-muted fw-bold mb-1">من تاريخ</label><input type="date" id="startDate" class="form-control form-control-sm"></div>
+                                <div><label class="form-label small text-muted fw-bold mb-1">إلى تاريخ</label><input type="date" id="endDate" class="form-control form-control-sm"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-xl-6">
+                        <div class="d-flex flex-wrap align-items-end gap-3">
+                            <div><label class="form-label small text-muted fw-bold mb-1">مدير المنطقة</label><select id="managerFilter" class="form-select form-select-sm" onchange="applyBranchFilters()"><option value="all">الكل</option></select></div>
+                            <div><label class="form-label small text-muted fw-bold mb-1">المدينة</label><select id="cityFilter" class="form-select form-select-sm" onchange="applyBranchFilters()"><option value="all">الكل</option></select></div>
+                            <div><label class="form-label small text-muted fw-bold mb-1">نوع المعرض</label><select id="typeFilter" class="form-select form-select-sm" onchange="applyBranchFilters()"><option value="all">الكل</option><option value="Showroom">معارض</option><option value="Online">أونلاين</option></select></div>
+                            <div><label class="form-label small text-muted fw-bold mb-1">الفرع</label><select id="branchFilter" class="form-select form-select-sm" onchange="applyBranchFilters()"><option value="all">كافة الفروع</option></select></div>
+                            <button class="btn btn-primary btn-sm fw-bold" onclick="applyBranchFilters()">عرض 🔄</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Store Picker (when sid is missing - e.g. from sidebar) -->
         <div id="storePicker" class="mb-4" style="display: none;">
             <div class="card border-0 shadow-sm" style="border-radius: var(--radius-2xl); overflow: hidden;">
@@ -226,6 +262,7 @@
                     const res = await fetch('management_data.json');
                     if (!res.ok) throw new Error("File not found");
                     const mgmt = await res.json();
+                    cachedMgmt = mgmt;
                     const stores = mgmt.stores || {};
                     const meta = mgmt.store_meta || {};
                     let storeList = Object.entries(stores).map(([id, name]) => ({ id, name }));
@@ -243,7 +280,9 @@
                     errDiv.style.display = 'none';
                     pickerDiv.style.display = 'block';
                     document.getElementById('branchName').textContent = 'اختر فرعاً لعرض التفاصيل';
-                    // تحميل وعرض جدول تفاصيل جميع الفروع مع إمكانية التوسيع
+                    document.getElementById('branchFiltersBar').style.display = 'block';
+                    populateBranchFilters(mgmt);
+                    initBranchFilterDates();
                     loadBranchesTableWithExpand();
                 } catch (e) {
                     errDiv.innerHTML = `<div class="alert alert-warning">لم يتم العثور على قائمة الفروع. تأكد من وجود ملف management_data.json. يمكنك أيضاً الوصول لتفاصيل الفرع من <a href="index.html">لوحة التحكم</a> بالنقر على اسم الفرع.</div>`;
@@ -449,16 +488,110 @@
         let cachedEmployees = null;
         let expandedSid = null;
 
+        function populateBranchFilters(mgmt) {
+            const meta = mgmt?.store_meta || {};
+            const mSel = document.getElementById('managerFilter');
+            const cSel = document.getElementById('cityFilter');
+            const bSel = document.getElementById('branchFilter');
+            if (mSel) {
+                const managers = new Set();
+                Object.values(meta).forEach(m=>{ if(m&&m.manager) managers.add(m.manager); });
+                mSel.innerHTML = '<option value="all">الكل</option>'+Array.from(managers).sort().map(m=>`<option value="${m}">${m}</option>`).join('');
+                if (currentUser.role !== 'Admin' && currentUser.name) { mSel.value = currentUser.name; mSel.disabled = true; }
+            }
+            if (cSel) {
+                const cities = new Set();
+                Object.values(meta).forEach(m=>{ if(m&&m.city) cities.add(m.city); });
+                cSel.innerHTML = '<option value="all">الكل</option>'+Array.from(cities).sort().map(c=>`<option value="${c}">${c}</option>`).join('');
+            }
+            if (bSel && mgmt.stores) {
+                let stores = Object.entries(mgmt.stores).map(([id,n])=>({id,name:n||id}));
+                stores.sort((a,b)=>a.name.localeCompare(b.name));
+                bSel.innerHTML = '<option value="all">كافة الفروع</option>'+stores.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+            }
+            const mSelect = document.getElementById('monthFilter');
+            if (mSelect) {
+                const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+                mSelect.innerHTML = '<option value="all">كل السنة</option>'+months.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
+            }
+        }
+        function toggleBranchFilterMode() {
+            const mode = document.getElementById('filterMode')?.value || 'custom';
+            const std = document.getElementById('stdFilters');
+            const cust = document.getElementById('customFilters');
+            if (std) std.style.display = mode === 'standard' ? 'flex' : 'none';
+            if (cust) cust.style.display = mode === 'custom' ? 'flex' : 'none';
+        }
+        function initBranchFilterDates() {
+            const today = new Date();
+            const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+            document.getElementById('startDate').value = firstDay.toLocaleDateString('en-CA');
+            document.getElementById('endDate').value = yesterday.toLocaleDateString('en-CA');
+            toggleBranchFilterMode();
+        }
+        function getBranchFilterDateRange() {
+            const mode = document.getElementById('filterMode').value;
+            const today = new Date();
+            const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
+            let currStart, currEnd;
+            if (mode === 'custom') {
+                const startEl = document.getElementById('startDate');
+                const endEl = document.getElementById('endDate');
+                currStart = startEl?.value ? new Date(startEl.value) : new Date(today.getFullYear(), today.getMonth(), 1);
+                currEnd = endEl?.value ? new Date(endEl.value) : yesterday;
+                currEnd.setHours(23,59,59,999);
+            } else {
+                const y = parseInt(document.getElementById('yearFilter')?.value || today.getFullYear());
+                const m = document.getElementById('monthFilter')?.value;
+                currStart = m === 'all' ? new Date(y, 0, 1) : new Date(y, parseInt(m)-1, 1);
+                currEnd = m === 'all' ? (y === today.getFullYear() ? today : new Date(y, 11, 31)) : new Date(y, parseInt(m), 0);
+                currEnd.setHours(23,59,59,999);
+                if (currEnd > today) currEnd = today;
+            }
+            return { currStart, currEnd };
+        }
+        function applyBranchFilters() {
+            const storeSel = document.getElementById('storeSelect');
+            const mgmt = cachedMgmt;
+            if (!mgmt) return;
+            const meta = mgmt.store_meta || {};
+            const m = document.getElementById('managerFilter')?.value || 'all';
+            const c = document.getElementById('cityFilter')?.value || 'all';
+            const t = document.getElementById('typeFilter')?.value || 'all';
+            const b = document.getElementById('branchFilter')?.value || 'all';
+            let storeList = Object.entries(mgmt.stores||{}).map(([id,name])=>({id,name}));
+            if (currentUser.role !== 'Admin') storeList = storeList.filter(s=>isStoreAccessible(s.id, meta));
+            storeList = storeList.filter(s=>{
+                const x = meta[s.id];
+                if (!x) return m==='all'&&c==='all'&&t==='all'&&b==='all';
+                if (m!=='all' && x.manager!==m) return false;
+                if (c!=='all' && x.city!==c) return false;
+                if (t!=='all' && x.type!==t) return false;
+                if (b!=='all' && s.id!==b) return false;
+                return true;
+            });
+            storeList.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+            if (storeSel) {
+                const v = storeSel.value;
+                storeSel.innerHTML = '<option value="">-- اختر الفرع --</option>'+storeList.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+                if (storeList.some(s=>s.id===v)) storeSel.value = v;
+            }
+            loadBranchesTableWithExpand();
+        }
+
         async function loadBranchesTableWithExpand() {
             try {
-                const res = await fetch('management_data.json?t=' + Date.now());
-                cachedMgmt = await res.json();
+                if (!cachedMgmt) {
+                    const res = await fetch('management_data.json?t=' + Date.now());
+                    cachedMgmt = await res.json();
+                }
                 const raw = cachedMgmt;
-                const today = new Date();
-                const yesterday = new Date(today);
-                yesterday.setDate(today.getDate() - 1);
-                const currEnd = yesterday;
-                const currStart = new Date(currEnd.getFullYear(), currEnd.getMonth(), 1);
+                const { currStart, currEnd } = getBranchFilterDateRange ? getBranchFilterDateRange() : (() => {
+                    const today = new Date();
+                    const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+                    return { currStart: new Date(yesterday.getFullYear(), yesterday.getMonth(), 1), currEnd: yesterday };
+                })();
                 const prevStart = new Date(currStart);
                 prevStart.setFullYear(prevStart.getFullYear() - 1);
                 const prevEnd = new Date(currEnd);
@@ -496,10 +629,24 @@
                 });
 
                 const storeMeta = raw.store_meta || {};
+                const m = document.getElementById('managerFilter')?.value || 'all';
+                const c = document.getElementById('cityFilter')?.value || 'all';
+                const t = document.getElementById('typeFilter')?.value || 'all';
+                const b = document.getElementById('branchFilter')?.value || 'all';
+                const metaFilter = (sId) => {
+                    const x = storeMeta[sId];
+                    if (!x) return m==='all'&&c==='all'&&t==='all'&&b==='all';
+                    if (m!=='all' && x.manager!==m) return false;
+                    if (c!=='all' && x.city!==c) return false;
+                    if (t!=='all' && x.type!==t) return false;
+                    if (b!=='all' && sId!==b) return false;
+                    return true;
+                };
                 let list = [];
                 const allIds = new Set([...Object.keys(branchSales), ...Object.keys(prevSales), ...Object.keys(branchTarget)]);
                 allIds.forEach(sid => {
                     if (currentUser.role !== 'Admin' && !isStoreAccessible(sid, storeMeta)) return;
+                    if (!metaFilter(sid)) return;
                     const val = branchSales[sid]||0, prevVal = prevSales[sid]||0;
                     const target = branchTarget[sid]||0;
                     const trans = branchTrans[sid]||0;

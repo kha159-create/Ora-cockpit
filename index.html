@@ -443,7 +443,7 @@
                 <canvas id="trendChart"></canvas>
             </div>
             <div class="chart-legend mt-2 d-flex gap-4 justify-content-center flex-wrap">
-                <span class="d-inline-flex align-items-center gap-2"><span class="legend-dot bg-orange"></span><span id="trendLegend1">السنة الحالية</span></span>
+                <span class="d-inline-flex align-items-center gap-2"><span class="legend-dot bg-orange"></span><span id="trendLegend1">المبيعات الحالية</span></span>
                 <span class="d-inline-flex align-items-center gap-2"><span class="legend-dot bg-dark"></span><span id="trendLegend2">السنة السابقة</span></span>
             </div>
         </div>
@@ -672,6 +672,10 @@
         function setTrendMetric(m) {
             trendChartMetric = m;
             document.querySelectorAll('.chart-metric-btn').forEach(b => { b.classList.toggle('active', b.dataset.metric === m); });
+            const legendMap = { sales: ['المبيعات الحالية', 'المبيعات السنة السابقة'], visitors: ['الزوار الحالية', 'الزوار السنة السابقة'], target: ['الهدف الحالي', 'الهدف السنة السابقة'] };
+            const [l1, l2] = legendMap[m] || legendMap.sales;
+            const el1 = document.getElementById('trendLegend1'); if (el1) el1.textContent = l1;
+            const el2 = document.getElementById('trendLegend2'); if (el2) el2.textContent = l2;
             if (window.lastTrendData) {
                 const {curr, prev, cYear, pYear} = window.lastTrendData;
                 let currData = m === 'visitors' ? (curr.monthlyVisitors || {}) : (m === 'target' ? (curr.monthlyTarget || {}) : curr.monthly);
@@ -1251,6 +1255,8 @@
                 rawData.visitors.forEach(([d, s, v]) => {
                     if (filterFn(d, s)) {
                         visitors += v;
+                        let m = new Date(d).getMonth() + 1;
+                        monthlyVisitors[m] = (monthlyVisitors[m] || 0) + v;
                         branchVisitors[s] = (branchVisitors[s] || 0) + v;
                     }
                 });
@@ -1598,7 +1604,12 @@
             const ctx = canvas.getContext('2d');
             if (charts['trend']) charts['trend'].destroy();
 
-            const selectedM = document.getElementById('monthFilter').value;
+            const legendMap = { sales: ['المبيعات الحالية', 'المبيعات السنة السابقة'], visitors: ['الزوار الحالية', 'الزوار السنة السابقة'], target: ['الهدف الحالي', 'الهدف السنة السابقة'] };
+            const [l1, l2] = legendMap[trendChartMetric] || legendMap.sales;
+            const el1 = document.getElementById('trendLegend1'); if (el1) el1.textContent = l1;
+            const el2 = document.getElementById('trendLegend2'); if (el2) el2.textContent = l2;
+
+            const selectedM = document.getElementById('monthFilter') ? document.getElementById('monthFilter').value : 'all';
             const labels = monthNamesAr;
 
             charts['trend'] = new Chart(ctx, {
@@ -1782,13 +1793,28 @@
             const storeId = document.getElementById('pdfStoreSelect').value;
             const isDetailed = document.getElementById('pdfDetailedCheck').checked;
 
-            // Close modal
             const modalEl = document.getElementById('pdfExportModal');
             const modal = bootstrap.Modal.getInstance(modalEl);
             if (modal) modal.hide();
 
-            // Call function in pdf_export.js
-            generatePDF(storeId, isDetailed);
+            if (window.pdfReportDateRange === 'yesterday') {
+                const today = new Date();
+                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                monthStart.setHours(0, 0, 0, 0);
+                const y = new Date(today);
+                y.setDate(y.getDate() - 1);
+                y.setHours(23, 59, 59, 999);
+                window.dashboardState = { start: monthStart, end: y };
+                window.pdfReportDateRange = null;
+            }
+            if (typeof generatePDF === 'function') generatePDF(storeId, isDetailed);
+        }
+
+        function openPdfModalForYesterday() {
+            window.pdfReportDateRange = 'yesterday';
+            populatePdfStoreSelect();
+            bootstrap.Modal.getInstance(document.getElementById('yesterdayReportModal'))?.hide();
+            new bootstrap.Modal(document.getElementById('pdfExportModal')).show();
         }
 
         function openYesterdayReportModal() {
@@ -1851,27 +1877,14 @@
             `).join('') || '<tr><td colspan="11" class="text-center text-muted">لا توجد بيانات</td></tr>';
         }
 
-        async function downloadYesterdayPdfStores() {
+        function downloadYesterdayPdfStores() {
             if (!rawData) { alert('جار تحميل البيانات... حاول مرة أخرى'); return; }
-            const y = new Date();
-            y.setDate(y.getDate() - 1);
-            y.setHours(0, 0, 0, 0);
-            const yEnd = new Date(y);
-            yEnd.setHours(23, 59, 59, 999);
-            window.dashboardState = { start: y, end: yEnd };
-            bootstrap.Modal.getInstance(document.getElementById('yesterdayReportModal'))?.hide();
-            if (typeof generatePDF === 'function') generatePDF('all', false);
+            openPdfModalForYesterday();
         }
 
-        async function downloadYesterdayPdfEmployees() {
-            try {
-                const res = await fetch('employees_data.json?t=' + Date.now());
-                const ed = await res.json();
-                window.historyData = ed.history || {};
-                window.storeMeta = (rawData && rawData.store_meta) || {};
-                bootstrap.Modal.getInstance(document.getElementById('yesterdayReportModal'))?.hide();
-                if (typeof generateEmployeePDF === 'function') generateEmployeePDF();
-            } catch (e) { alert('تعذر تحميل بيانات الموظفين'); }
+        function downloadYesterdayPdfEmployees() {
+            bootstrap.Modal.getInstance(document.getElementById('yesterdayReportModal'))?.hide();
+            window.location.href = 'employees.html#pdf';
         }
 
         init();

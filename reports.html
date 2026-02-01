@@ -136,9 +136,9 @@
                         <button onclick="doPdfReportEmployees('active')" class="btn btn-outline-warning fw-bold w-100">
                             <i class="fas fa-user-check me-2"></i> النشطين فقط
                         </button>
-                        <a href="employees.html#pdf" class="btn btn-outline-secondary w-100">
-                            <i class="fas fa-user-cog me-2"></i> اختيار الموظفين يدوياً (صفحة أداء الموظفين)
-                        </a>
+                        <button onclick="bootstrap.Modal.getInstance(document.getElementById('pdfEmployeeOptionsModal'))?.hide(); window.location.href='employees.html#pdf';" class="btn btn-outline-secondary w-100">
+                            <i class="fas fa-user-cog me-2"></i> اختيار الموظفين يدوياً (شاشة كاملة كما في الصورة)
+                        </button>
                     </div>
                 </div>
             </div>
@@ -328,9 +328,11 @@
                 window.dashboardState = { start: today, end };
                 if (typeof generatePDF === 'function') generatePDF(storeId, isDetailed);
             } else if (pendingPdfReportType === 'yesterday-stores') {
-                const y = new Date(); y.setDate(y.getDate()-1); y.setHours(0,0,0,0);
-                const yEnd = new Date(y); yEnd.setHours(23,59,59,999);
-                window.dashboardState = { start: y, end: yEnd };
+                const today = new Date();
+                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                monthStart.setHours(0,0,0,0);
+                const y = new Date(today); y.setDate(y.getDate()-1); y.setHours(23,59,59,999);
+                window.dashboardState = { start: monthStart, end: y };
                 if (typeof generatePDF === 'function') generatePDF(storeId, isDetailed);
             }
         }
