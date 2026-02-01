@@ -202,7 +202,7 @@
             const cur = sel.value;
             sel.innerHTML = '<option value="all">الكل</option>' + Array.from(managers).sort().map(m => `<option value="${m}">${m}</option>`).join('');
             if (cur && managers.has(cur)) sel.value = cur;
-            if (currentUser.role !== 'Admin') { sel.value = currentUser.name; sel.disabled = true; } else sel.disabled = false;
+            if (currentUser.role !== 'Admin' && currentUser.role !== 'Auditor') { sel.value = currentUser.name; sel.disabled = true; } else sel.disabled = false;
         }
         async function populateLiveModal() {
             if (!rawData) {
@@ -214,7 +214,7 @@
             }
             const todayStr = toYMD(new Date());
             const selManager = document.getElementById('liveManagerFilter') ? document.getElementById('liveManagerFilter').value : 'all';
-            const mgr = (currentUser.role !== 'Admin') ? currentUser.name : selManager;
+            const mgr = (currentUser.role !== 'Admin' && currentUser.role !== 'Auditor') ? currentUser.name : selManager;
             let byStore = {}; let transByStore = {};
             rawData.sales.forEach(([d, s, v]) => {
                 if (d !== todayStr) return;
@@ -747,8 +747,8 @@
                 const targets = ed.targets || {};
                 const targetsByMonth = ed.targets_by_month || {};
                 const empNames = ed.employee_names || {};
-                let selManager = currentUser.role !== 'Admin' ? currentUser.name : null;
-                if (currentUser.role === 'Admin') {
+                let selManager = (currentUser.role !== 'Admin' && currentUser.role !== 'Auditor') ? currentUser.name : null;
+                if (currentUser.role === 'Admin' || currentUser.role === 'Auditor') {
                     const mf = document.getElementById('managerFilter');
                     selManager = mf && mf.value !== 'all' ? mf.value : null;
                 }
@@ -920,7 +920,7 @@
                 toggleFilterMode();
 
                 // Apply Permissions
-                if (currentUser.role !== 'Admin') {
+                if (currentUser.role !== 'Admin' && currentUser.role !== 'Auditor') {
                     const mWrap = document.getElementById('managerFilterWrap');
                     if (mWrap) mWrap.style.display = 'none';
                     // Force Select (Visual)
@@ -1033,7 +1033,7 @@
 
             // Respect Manager Filter (Security)
             let selManager = 'all';
-            if (currentUser.role !== 'Admin') {
+            if (currentUser.role !== 'Admin' && currentUser.role !== 'Auditor') {
                 selManager = currentUser.name;
             }
 
@@ -1065,7 +1065,7 @@
             // Manager Filter Logic (Security)
             let selManager = document.getElementById('managerFilter').value;
 
-            if (currentUser.role !== 'Admin') {
+            if (currentUser.role !== 'Admin' && currentUser.role !== 'Auditor') {
                 // Enforce current user as manager
                 selManager = currentUser.name;
             }
@@ -1543,7 +1543,7 @@
 
             // Manager Filter Logic (Same as Dashboard)
             let selManager = document.getElementById('managerFilter').value;
-            if (currentUser.role !== 'Admin') {
+            if (currentUser.role !== 'Admin' && currentUser.role !== 'Auditor') {
                 selManager = currentUser.name;
             }
 
@@ -1813,7 +1813,7 @@
 
             // Respect Manager Filter
             let selManager = document.getElementById('managerFilter').value;
-            if (currentUser.role !== 'Admin') {
+            if (currentUser.role !== 'Admin' && currentUser.role !== 'Auditor') {
                 selManager = currentUser.name;
             }
 
@@ -1892,7 +1892,7 @@
             document.getElementById('yesterdayReportTitle').textContent = `تقرير أمس (${dayNames[yesterday.getDay()]} ${dateYest}) مقارنة بـ (${dateLastY})`;
 
             let selManager = document.getElementById('managerFilter') ? document.getElementById('managerFilter').value : 'all';
-            if (currentUser.role !== 'Admin') selManager = currentUser.name;
+            if (currentUser.role !== 'Admin' && currentUser.role !== 'Auditor') selManager = currentUser.name;
 
             let stats = {};
             Object.keys(rawData.stores || {}).forEach(sid => {

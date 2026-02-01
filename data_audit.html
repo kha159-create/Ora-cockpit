@@ -196,14 +196,23 @@
 
         <div class="page-filters d-flex flex-wrap justify-content-between align-items-center gap-3">
             <span class="section-label mb-0">الفترة:</span>
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 align-items-center">
+                <input type="date" id="startDate" class="form-control form-control-sm" style="max-width:150px">
+                <span>إلى</span>
+                <input type="date" id="endDate" class="form-control form-control-sm" style="max-width:150px">
+                <select id="yearFilter" class="form-select form-select-sm" style="max-width:100px" onchange="runAudit()">
+                    <option value="2024">2024</option>
+                    <option value="2025">2025</option>
+                    <option value="2026" selected>2026</option>
+                </select>
                 <select id="dateFilter" class="form-select form-select-sm" onchange="runAudit()">
                     <option value="all">كل الفترات (All Time)</option>
                     <option value="current_month" selected>هذا الشهر (Current Month)</option>
                 </select>
-                <button onclick="runAudit()" class="btn-primary fw-bold text-nowrap">
+                <button onclick="runAudit()" class="btn btn-primary btn-sm fw-bold text-nowrap">
                     <i class="fas fa-sync-alt me-1"></i> تحديث
                 </button>
+                <span id="dataStatus" class="text-muted small ms-2"></span>
             </div>
         </div>
 
@@ -215,34 +224,35 @@
 
             <!-- 1. Store Management Audit -->
             <div class="col-12">
-                <div class="card h-100 border-start border-4 border-warning">
+                <div class="card border-start border-4 border-warning mb-4">
                     <div class="card-header d-flex justify-content-between text-warning">
                         <span><i class="fas fa-store me-2"></i>تدقيق المعارض (Management Data)</span>
-                        <span class="badge bg-secondary" id="mgmtCount">Checking...</span>
+                        <span class="badge bg-secondary" id="mgmtCount">جاري...</span>
                     </div>
-                </div>
-                <div class="col-md-4 col-lg-3">
-                    <div class="report-card">
-                        <h6><i class="fas fa-trophy text-warning me-2"></i>ترتيب المبيعات</h6>
-                        <p>أفضل الموظفين حسب إجمالي المبيعات</p>
-                        <button class="btn btn-export btn-sm" onclick="exportEmployeeRanking()"><i
-                                class="fas fa-file-excel me-1"></i>تصدير</button>
-                    </div>
-                </div>
-                <div class="col-md-4 col-lg-3">
-                    <div class="report-card">
-                        <h6><i class="fas fa-calendar-day text-success me-2"></i>مبيعات يومية</h6>
-                        <p>تفاصيل مبيعات كل موظف يومياً</p>
-                        <button class="btn btn-export btn-sm" onclick="exportEmployeeDailySales()"><i
-                                class="fas fa-file-excel me-1"></i>تصدير</button>
-                    </div>
-                </div>
-                <div class="col-md-4 col-lg-3">
-                    <div class="report-card">
-                        <h6><i class="fas fa-link text-info me-2"></i>ربط الموظفين</h6>
-                        <p>أسماء الموظفين وكيف مربوطين بالنظام</p>
-                        <button class="btn btn-export btn-sm" onclick="exportEmployeeMapping()"><i
-                                class="fas fa-file-excel me-1"></i>تصدير</button>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4 col-lg-3">
+                                <div class="report-card">
+                                    <h6><i class="fas fa-trophy text-warning me-2"></i>ترتيب المبيعات</h6>
+                                    <p>أفضل الموظفين حسب إجمالي المبيعات</p>
+                                    <button class="btn btn-export btn-sm" onclick="exportEmployeeRanking()"><i class="fas fa-file-excel me-1"></i>تصدير</button>
+                                </div>
+                            </div>
+                            <div class="col-md-4 col-lg-3">
+                                <div class="report-card">
+                                    <h6><i class="fas fa-calendar-day text-success me-2"></i>مبيعات يومية</h6>
+                                    <p>تفاصيل مبيعات كل موظف يومياً</p>
+                                    <button class="btn btn-export btn-sm" onclick="exportEmployeeDailySales()"><i class="fas fa-file-excel me-1"></i>تصدير</button>
+                                </div>
+                            </div>
+                            <div class="col-md-4 col-lg-3">
+                                <div class="report-card">
+                                    <h6><i class="fas fa-link text-info me-2"></i>ربط الموظفين</h6>
+                                    <p>أسماء الموظفين وكيف مربوطين بالنظام</p>
+                                    <button class="btn btn-export btn-sm" onclick="exportEmployeeMapping()"><i class="fas fa-file-excel me-1"></i>تصدير</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -365,17 +375,38 @@
         }
         function logout() { localStorage.removeItem('currentUser'); window.location.href = 'login.html'; }
 
-        // Set Default Dates
-        const today = new Date();
-        const startOfYear = new Date(today.getFullYear(), 0, 1);
-        document.getElementById('startDate').value = startOfYear.toISOString().split('T')[0];
-        document.getElementById('endDate').value = today.toISOString().split('T')[0];
-        document.getElementById('yearFilter').value = today.getFullYear();
+        // Set Default Dates & Sync from dateFilter
+        function syncDateRangeFromFilter() {
+            const today = new Date();
+            const toYMD = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+            const df = document.getElementById('dateFilter')?.value || 'current_month';
+            const startEl = document.getElementById('startDate');
+            const endEl = document.getElementById('endDate');
+            const yearEl = document.getElementById('yearFilter');
+            if (df === 'all') {
+                startEl.value = '2020-01-01';
+                endEl.value = toYMD(today);
+            } else {
+                const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                startEl.value = toYMD(firstOfMonth);
+                endEl.value = toYMD(today);
+            }
+            if (yearEl) yearEl.value = today.getFullYear();
+        }
+
+        function runAudit() {
+            syncDateRangeFromFilter();
+            loadAllData();
+        }
+
+        syncDateRangeFromFilter();
 
         // Load Data
         async function loadAllData() {
             const status = document.getElementById('dataStatus');
-            status.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>جاري تحميل البيانات...';
+            const mgmtBadge = document.getElementById('mgmtCount');
+            if (status) status.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>جاري تحميل...';
+            if (mgmtBadge) mgmtBadge.textContent = 'جاري...';
             try {
                 const [mgmtRes, empRes] = await Promise.all([
                     fetch('management_data.json?t=' + Date.now()),
@@ -385,19 +416,34 @@
                 empData = await empRes.json();
                 const salesCount = mgmtData.sales?.length || 0;
                 const empCount = Object.keys(empData.employee_names || {}).length;
-                status.innerHTML = `<span class="text-success"><i class="fas fa-check-circle me-2"></i>تم التحميل: ${salesCount.toLocaleString()} سجل مبيعات، ${empCount} موظف</span>`;
+                const histCount = Object.keys(empData.history || {}).length;
+                if (status) status.innerHTML = `<span class="text-success"><i class="fas fa-check-circle me-2"></i>تم: ${salesCount.toLocaleString()} مبيعات، ${empCount} موظف، ${histCount} فرع</span>`;
+                if (mgmtBadge) mgmtBadge.textContent = `${salesCount.toLocaleString()} سجل`;
             } catch (e) {
-                status.innerHTML = `<span class="text-danger"><i class="fas fa-times-circle me-2"></i>خطأ: ${e.message}</span>`;
+                if (status) status.innerHTML = `<span class="text-danger"><i class="fas fa-times-circle me-2"></i>خطأ: ${e.message}</span>`;
+                if (mgmtBadge) mgmtBadge.textContent = 'خطأ';
             }
         }
 
         // Helpers
         function getDateRange() {
-            return { start: document.getElementById('startDate').value, end: document.getElementById('endDate').value };
+            const s = document.getElementById('startDate')?.value;
+            const e = document.getElementById('endDate')?.value;
+            return { start: s || '2020-01-01', end: e || new Date().toISOString().split('T')[0] };
         }
         function inRange(d) { const r = getDateRange(); return d >= r.start && d <= r.end; }
         function getStoreName(id) { return mgmtData?.stores?.[id] || id; }
-        function getEmpName(id) { return empData?.employee_names?.[id] || id; }
+        function getEmpName(id) {
+            if (!id || !empData?.employee_names) return id || '-';
+            const nm = empData.employee_names[id];
+            if (nm) return nm;
+            if (typeof id === 'string' && /^\d+$/.test(id)) {
+                if (empData.employee_names[id.padStart(4, '0')]) return empData.employee_names[id.padStart(4, '0')];
+                const unpadded = String(parseInt(id, 10));
+                if (unpadded !== id && empData.employee_names[unpadded]) return empData.employee_names[unpadded];
+            }
+            return id;
+        }
         function downloadExcel(data, filename, sheetName = 'Sheet1') {
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();

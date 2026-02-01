@@ -5,11 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Orange | أداء الموظفين</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%23fe7900'/><text x='16' y='22' font-size='18' text-anchor='middle' fill='white' font-family='sans-serif'>O</text></svg>">
 
-    <link rel="stylesheet" href="assets/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <script src="assets/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
         :root {
@@ -50,24 +49,16 @@
             transform: translateY(-3px);
         }
 
+        .report-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+
         .section-title {
             font-weight: 700;
             margin-bottom: 20px;
-            border-right: 4px solid #fe7900;
+            border-right: 4px solid var(--primary-500);
             padding-right: 10px;
         }
 
-        .table-custom thead th {
-            background-color: #fe7900;
-            color: white;
-            font-weight: 500;
-            border: none;
-        }
-
-        .table-custom tbody tr:hover {
-            background-color: #fff3e0;
-        }
-
+        /* .table-custom من sidebar.css (هوية cockpit) */
         .rank-badge {
             width: 30px;
             height: 30px;
@@ -278,48 +269,58 @@
             margin-right: 3px;
         }
     </style>
+    <link rel="stylesheet" href="assets/sidebar.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
-<body>
+<body class="app-with-sidebar">
 
-    <!-- Navbar -->
-    <nav class="navbar mb-4 sticky-top">
-        <div class="container-fluid">
-            <span class="navbar-brand"><span class="brand-orange">ORANGE</span> EMPLOYEES</span>
-            <div class="d-flex gap-2 align-items-center">
-                <span class="badge bg-light text-dark border" id="lastUpdate">...</span>
-                <a href="index.html" class="btn btn-outline-secondary btn-sm fw-bold">🏠 الرئيسية</a>
-
-                <!-- Export Dropdown -->
-                <div class="dropdown">
-                    <button class="btn btn-success btn-sm fw-bold dropdown-toggle" type="button"
-                        data-bs-toggle="dropdown" aria-expanded="false">
-                        📊 تصدير Excel
-                    </button>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="#" onclick="exportExcel('current')">البيانات الحالية</a></li>
-                        <li>
-                            <hr class="dropdown-divider">
-                        </li>
-                        <li><a class="dropdown-item" href="#" onclick="exportExcel('template')">📄 قالب تارجت الشهر
-                                القادم</a></li>
-                    </ul>
-                </div>
-
-                <button onclick="openEmployeeSelectionModal('pdf')" class="btn btn-warning btn-sm fw-bold text-white">📄
-                    تصدير
-                    PDF</button>
-                <button onclick="logout()" class="btn btn-danger btn-sm fw-bold">خروج</button>
-            </div>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <button type="button" class="sidebar-toggle" aria-label="فتح القائمة"><i class="fas fa-bars"></i></button>
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="sidebar-brand-logo">O</div>
+            <div class="sidebar-brand-text"><span class="brand-orange">ORANGE</span> DASHBOARD</div>
         </div>
-    </nav>
+        <nav class="sidebar-nav">
+            <a href="index.html" class="nav-link"><i class="fas fa-home"></i> الرئيسية</a>
+            <a href="reports.html" class="nav-link"><i class="fas fa-file-alt"></i> التقارير</a>
+            <a href="employees.html" class="nav-link"><i class="fas fa-users"></i> أداء الموظفين</a>
+            <a href="product_analysis.html" class="nav-link"><i class="fas fa-box"></i> تحليل المنتجات</a>
+            <a href="branch_details.html" class="nav-link"><i class="fas fa-store"></i> تفاصيل الفروع</a>
+            <a href="target_setting.html" class="nav-link"><i class="fas fa-bullseye"></i> الأهداف</a>
+            <a href="chatbot.html" class="nav-link"><i class="fas fa-comments"></i> الشات بوت</a>
+            <a href="stagnant_products.html" class="nav-link"><i class="fas fa-pause-circle"></i> المنتجات الراكدة</a>
+            <a href="offers_analysis.html" class="nav-link"><i class="fas fa-tags"></i> تحليل العروض</a>
+            <a href="data_audit.html" class="nav-link"><i class="fas fa-clipboard-check"></i> تدقيق البيانات</a>
+            <a href="admin_targets.html" class="nav-link"><i class="fas fa-cog"></i> إعدادات الأهداف</a>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="#" class="nav-link" onclick="event.preventDefault(); logout(); return false;"><i class="fas fa-sign-out-alt"></i> خروج</a>
+        </div>
+    </aside>
 
-    <!-- JS Libraries (jspdf local to avoid CDN/Tracking Prevention) -->
-    <script src="assets/jspdf.umd.min.js"></script>
-    <script src="assets/jspdf.plugin.autotable.min.js"></script>
+    <div class="app-wrap">
+        <main class="main-content">
+            <div class="main-topbar d-flex flex-wrap align-items-center justify-content-between gap-2 w-100">
+                <span class="fw-bold text-dark">أداء الموظفين</span>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="text-muted small" id="lastUpdate">...</span>
+                <a href="index.html" class="btn btn-outline-primary btn-sm fw-bold">لوحة التحكم</a>
+                <a href="reports.html" class="btn btn-outline-primary btn-sm fw-bold">التقارير</a>
+                </div>
+            </div>
+            <div class="main-content-inner">
+
+    <!-- JS Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <script src="assets/amiri_font.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <!-- SheetJS for Excel Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="assets/amiri_font.js"></script>
     <script src="pdf_export_employees.js"></script>
 
     <script>
@@ -327,6 +328,7 @@
         if (!currentUser) {
             window.location.href = 'login.html';
         }
+        window.currentUser = currentUser;
 
         function logout() {
             localStorage.removeItem('currentUser');
@@ -336,8 +338,27 @@
 
     <div class="container-fluid px-4">
 
+        <header class="page-header">
+            <h1 class="page-title">أداء الموظفين</h1>
+            <p class="page-subtitle">ترتيب الموظفين حسب المبيعات والتحقيق والأهداف</p>
+        </header>
+
+        <!-- تقرير أمس للموظفين - بطاقة -->
+        <div class="row g-3 mb-4">
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card border-0 shadow-sm report-card h-100" style="cursor:pointer; border-radius:var(--radius-2xl); transition:transform 0.2s;" onclick="openEmployeeSelectionModal('pdf')">
+                    <div class="card-body text-center">
+                        <i class="fas fa-file-pdf fa-3x text-danger mb-3"></i>
+                        <h5 class="card-title">تقرير أمس للموظفين</h5>
+                        <p class="card-text text-muted small">اختر الموظفين للتقرير وأزل المستقيلين</p>
+                        <span class="btn btn-warning btn-sm fw-bold text-white">تصدير PDF</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Filters -->
-        <div class="card border-0 shadow-sm p-3 mb-4">
+        <div class="page-filters">
             <div class="row align-items-end g-2">
                 <!-- Manager -->
                 <div class="col-md-2 col-lg-2">
@@ -356,10 +377,36 @@
                 <!-- Period -->
                 <div class="col-md-3 col-lg-3">
                     <label class="form-label small text-muted fw-bold mb-1">الفترة</label>
-                    <select id="periodFilter" class="form-select form-select-sm" onchange="updatePage()">
-                        <option value="mtd" selected>الشهر الحالي (MTD)</option>
+                    <select id="periodFilter" class="form-select form-select-sm" onchange="toggleMonthFilter(); updatePage();">
+                        <option value="today" selected>اليوم (Today)</option>
+                        <option value="mtd">الشهر الحالي (MTD)</option>
+                        <option value="month">شهر محدد</option>
                         <option value="yesterday">يوم أمس (Yesterday)</option>
-                        <option value="today">اليوم (Today)</option>
+                    </select>
+                </div>
+                <div id="monthFilterContainer" class="col-md-2 col-lg-2" style="display:none;">
+                    <label class="form-label small text-muted fw-bold mb-1">الشهر</label>
+                    <select id="monthFilter" class="form-select form-select-sm" onchange="updatePage()">
+                        <option value="1">يناير</option>
+                        <option value="2">فبراير</option>
+                        <option value="3">مارس</option>
+                        <option value="4">أبريل</option>
+                        <option value="5">مايو</option>
+                        <option value="6">يونيو</option>
+                        <option value="7">يوليو</option>
+                        <option value="8">أغسطس</option>
+                        <option value="9">سبتمبر</option>
+                        <option value="10">أكتوبر</option>
+                        <option value="11">نوفمبر</option>
+                        <option value="12">ديسمبر</option>
+                    </select>
+                </div>
+                <div id="yearFilterContainer" class="col-md-2 col-lg-2" style="display:none;">
+                    <label class="form-label small text-muted fw-bold mb-1">السنة</label>
+                    <select id="yearFilter" class="form-select form-select-sm" onchange="updatePage()">
+                        <option value="2026">2026</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
                     </select>
                 </div>
                 <!-- Sort -->
@@ -381,14 +428,16 @@
                 </div>
                 <!-- Update Button -->
                 <div class="col-md-1 col-lg-1">
-                    <button class="btn btn-primary btn-sm w-100 fw-bold" onclick="updatePage()">
+                    <button class="btn-primary w-100 fw-bold" onclick="updatePage()">
                         <span class="d-none d-md-inline">🔄</span>
                         <span class="d-md-none">تحديث</span>
                     </button>
                 </div>
             </div>
+        </div>
 
             <!-- Summary KPIs -->
+            <section class="page-section">
             <div class="row g-3 mb-4">
                 <div class="col-md-3">
                     <div class="kpi-card border-bottom border-4 border-warning">
@@ -417,7 +466,7 @@
                 </div>
             </div>
 
-            <!-- Top 10 Chart Section (Moved Up) -->
+            <!-- Top 10 Chart Section -->
             <div class="row g-3 mb-4">
                 <div class="col-12">
                     <div class="d-flex justify-content-between align-items-center mb-2">
@@ -459,49 +508,19 @@
             </div>
 
             <div class="row">
-                <!-- Leaderboard Table (Full Width) -->
+                <!-- Leaderboard by Manager (Cockpit-style sections) -->
                 <div class="col-12">
                     <h5 class="section-title">🏆 ترتيب الموظفين (Leaderboard)</h5>
-                    <div class="card border-0 shadow-sm p-3">
-                        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-                            <table class="table table-custom table-hover align-middle mb-0">
-                                <thead class="sticky-top">
-                                    <tr>
-                                        <th>#</th>
-                                        <th class="sortable" data-sort="name" onclick="sortTable('name')">الموظف</th>
-                                        <th class="d-none d-md-table-cell sortable" data-sort="storeName"
-                                            onclick="sortTable('storeName')">الفرع</th>
-                                        <th class="sortable desc" data-sort="sales" onclick="sortTable('sales')">
-                                            المبيعات</th>
-                                        <th class="text-center sortable" data-sort="branchShare"
-                                            onclick="sortTable('branchShare')">حصة الفرع %</th>
-                                        <th class="text-center sortable" data-sort="shareGrowth"
-                                            onclick="sortTable('shareGrowth')">تطور الحصة</th>
-                                        <th class="text-center sortable" data-sort="target"
-                                            onclick="sortTable('target')">الهدف</th>
-                                        <th class="text-center sortable" data-sort="achievement"
-                                            onclick="sortTable('achievement')">التحقيق %</th>
-                                        <th class="text-center sortable" data-sort="dailyReq"
-                                            onclick="sortTable('dailyReq')">اليومية المتبقية</th>
-                                        <th class="d-none d-md-table-cell sortable" data-sort="transactions"
-                                            onclick="sortTable('transactions')">الفواتير</th>
-                                        <th class="d-none d-md-table-cell sortable" data-sort="avg_ticket"
-                                            onclick="sortTable('avg_ticket')">معدل الفاتورة</th>
-                                        <th class="d-none d-md-table-cell sortable" data-sort="items_per_inv"
-                                            onclick="sortTable('items_per_inv')">متوسط القطع</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="leaderboardBody">
-                                </tbody>
-                            </table>
-                        </div>
+                    <div id="leaderboardSections">
+                        <!-- Filled by renderTable(): cockpit-section per manager -->
                     </div>
                 </div>
             </div>
+        </section>
 
         </div>
 
-        <script src="assets/bootstrap.bundle.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
         <!-- Employee Insight Offcanvas -->
         <div class="offcanvas offcanvas-start" tabindex="-1" id="empInsightPanel"
@@ -630,7 +649,7 @@
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                        <button type="button" class="btn-secondary" data-bs-dismiss="modal">إلغاء</button>
                         <button type="button" class="btn btn-success fw-bold" onclick="exportSelectedEmployees()">
                             📥 تصدير المحددين
                         </button>
@@ -644,6 +663,7 @@
             // Global Data
             let historyData = {};
             let targetsData = {};
+            let targetsDataByMonth = {};
             let storesData = {};
             let storeMeta = {}; // To store manager info
             let employeeNames = {}; // New: Arabic names map
@@ -670,16 +690,29 @@
                     ]);
 
                     const empJson = await empRes.json();
-                    historyData = empJson.history;
-                    targetsData = empJson.targets;
+                    historyData = empJson.history || {};
+                    targetsData = empJson.targets || {};
+                    targetsDataByMonth = empJson.targets_by_month || {};
                     employeeNames = empJson.employee_names || {};
+                    window.historyData = historyData;
+                    window.targetsData = targetsData;
+                    window.targetsDataByMonth = targetsDataByMonth;
+                    window.employeeNames = employeeNames;
 
                     const mgmtJson = await mgmtRes.json();
-                    storesData = mgmtJson.stores;
+                    storesData = mgmtJson.stores || {};
                     storeMeta = mgmtJson.store_meta || {};
+                    window.storesData = storesData;
+                    window.storeMeta = storeMeta;
 
                     populateFilters();
+                    initMonthFilter();
                     updatePage();
+
+                    if (window.location.hash === '#pdf') {
+                        window.location.hash = '';
+                        setTimeout(() => { if (typeof openEmployeeSelectionModal === 'function') openEmployeeSelectionModal('pdf'); }, 300);
+                    }
 
                     // Debug: Show record count
                     const totalStores = Object.keys(historyData).length;
@@ -693,6 +726,26 @@
                 }
             }
 
+            function toggleMonthFilter() {
+                const pf = document.getElementById('periodFilter').value;
+                const mc = document.getElementById('monthFilterContainer');
+                const yc = document.getElementById('yearFilterContainer');
+                if (pf === 'month') {
+                    if (mc) mc.style.display = 'block';
+                    if (yc) yc.style.display = 'block';
+                } else {
+                    if (mc) mc.style.display = 'none';
+                    if (yc) yc.style.display = 'none';
+                }
+            }
+            function initMonthFilter() {
+                const now = new Date();
+                const mSelect = document.getElementById('monthFilter');
+                const ySelect = document.getElementById('yearFilter');
+                if (mSelect) mSelect.value = String(now.getMonth() + 1);
+                if (ySelect) ySelect.value = String(now.getFullYear());
+                toggleMonthFilter();
+            }
             function populateFilters() {
                 // Managers
                 const managerSelect = document.getElementById('managerFilter');
@@ -724,8 +777,8 @@
             function updatePage() {
                 let managerFilter = document.getElementById('managerFilter').value;
 
-                // Enforce Permissions
-                if (currentUser.role !== 'Admin') {
+                // Enforce Permissions (Admin & Auditor see ALL data)
+                if (currentUser.role !== 'Admin' && currentUser.role !== 'Auditor') {
                     managerFilter = currentUser.name;
                     // Also lock UI
                     const mf = document.getElementById('managerFilter');
@@ -744,6 +797,7 @@
                 const empAgg = {};
                 const history = historyData || {};
                 const targets = targetsData || {};
+                const targetsByMonth = targetsDataByMonth || {};
 
                 // Date Filters
                 const today = new Date();
@@ -776,29 +830,44 @@
                 const yesterdayStr = toLocalYMD(yesterday);
                 const yesterdayDay = yesterday.getDate();
 
+                const selYearEl = document.getElementById('yearFilter');
+                const selMonthEl = document.getElementById('monthFilter');
+                const selYear = selYearEl ? parseInt(selYearEl.value || todayYear, 10) : todayYear;
+                const selMonthNum = selMonthEl ? parseInt(selMonthEl.value || (todayMonth + 1), 10) : (todayMonth + 1);
+                const selMonth0 = selMonthNum - 1;
+
+                const normDate = (s) => s ? String(s).substring(0, 10) : '';
+
                 const checkPeriod = (dYear, dMonth, dDay, dVal, dDateStr) => {
                     // Returns: 0 (None), 1 (Current), 2 (Previous)
                     let status = 0;
+                    const dNorm = normDate(dDateStr);
 
                     // 1. Check Current
                     if (periodFilter === 'mtd') {
                         if (dYear === todayYear && dMonth === todayMonth && dVal <= todayVal) status = 1;
                     } else if (periodFilter === 'mtd_yest') {
                         if (dYear === todayYear && dMonth === todayMonth && dVal < todayVal) status = 1;
+                    } else if (periodFilter === 'month') {
+                        if (dYear === selYear && dMonth === selMonth0) status = 1;
                     } else if (periodFilter === 'yesterday') {
-                        if (dDateStr === yesterdayStr) status = 1;
+                        if (dNorm === yesterdayStr) status = 1;
                     } else if (periodFilter === 'today') {
-                        if (dDateStr === todayStr) status = 1;
+                        if (dNorm === todayStr) status = 1;
                     }
 
                     if (status === 1) return 1;
 
-                    // 2. Check Previous (Same period last month)
-                    if (dYear === prevYear && dMonth === prevMonth) {
+                    // 2. Check Previous (Same period last month / last year for month mode)
+                    const prevYearMonth = periodFilter === 'month' ? (selYear - 1) : prevYear;
+                    const prevMonthMonth = periodFilter === 'month' ? selMonth0 : prevMonth;
+                    if (dYear === prevYearMonth && dMonth === prevMonthMonth) {
                         if (periodFilter === 'mtd') {
                             if (dDay <= todayDay) return 2;
                         } else if (periodFilter === 'mtd_yest') {
                             if (dDay <= yesterdayDay) return 2;
+                        } else if (periodFilter === 'month') {
+                            return 2;
                         } else if (periodFilter === 'yesterday') {
                             if (dDay === yesterdayDay) return 2;
                         } else if (periodFilter === 'today') {
@@ -896,6 +965,13 @@
 
                         if (!empAgg[key]) {
                             let monthlyTarget = targets[empId] || 0;
+                            if (periodFilter === 'month' && selYear && selMonthNum) {
+                                const monthKey = `${selYear}-${String(selMonthNum).padStart(2, '0')}`;
+                                const tbm = targetsByMonth[monthKey];
+                                if (tbm) {
+                                    monthlyTarget = tbm[empId] ?? tbm[empId + ''] ?? tbm[empId?.toString().padStart(4, '0')] ?? 0;
+                                }
+                            }
                             empAgg[key] = {
                                 id: empId,
                                 name: empName,
@@ -978,15 +1054,16 @@
                     empList = empList.filter(e => e.name.toLowerCase().includes(searchTerm));
                 }
 
-                // Calculate metrics
+                // Calculate metrics (and manager for grouping)
                 empList.forEach(e => {
+                    e.manager = (storeMeta[e.storeCode] && storeMeta[e.storeCode].manager) ? storeMeta[e.storeCode].manager : 'غير معيّن';
                     e.avg_ticket = e.transactions > 0 ? e.sales / e.transactions : 0;
                     e.items_per_inv = e.transactions > 0 ? Math.abs(e.items) / e.transactions : 0;
 
                     // Achievement
                     e.achievement = 0;
                     if (e.target > 0) {
-                        if (periodFilter === 'mtd' || periodFilter === 'mtd_yest') {
+                        if (periodFilter === 'mtd' || periodFilter === 'mtd_yest' || periodFilter === 'month') {
                             e.achievement = (e.sales / e.target) * 100;
                         }
                     }
@@ -1010,11 +1087,14 @@
                 // Calculate dailyReq for sorting
                 const todayForDaily = new Date();
                 const lastDayOfMonth = new Date(todayForDaily.getFullYear(), todayForDaily.getMonth() + 1, 0).getDate();
-                const remainingDays = lastDayOfMonth - todayForDaily.getDate() + 1;
+                let remainingDays = lastDayOfMonth - todayForDaily.getDate() + 1;
+                if (periodFilter === 'month' && (selYear !== todayForDaily.getFullYear() || selMonthNum !== (todayForDaily.getMonth() + 1))) {
+                    remainingDays = 0;
+                }
 
                 empList.forEach(e => {
                     e.dailyReq = 0;
-                    if (periodFilter === 'mtd' && e.target > e.sales && remainingDays > 0) {
+                    if ((periodFilter === 'mtd' || periodFilter === 'month') && e.target > e.sales && remainingDays > 0) {
                         e.dailyReq = (e.target - e.sales) / remainingDays;
                     }
                 });
@@ -1027,14 +1107,14 @@
 
                 // Update KPIs
                 const totalSales = empList.reduce((s, e) => s + e.sales, 0);
-                const totalTarget = empList.reduce((s, e) => s + (periodFilter === 'mtd' ? e.target : 0), 0);
+                const totalTarget = empList.reduce((s, e) => s + ((periodFilter === 'mtd' || periodFilter === 'month') ? e.target : 0), 0);
 
                 document.getElementById('totalEmployees').textContent = empList.length.toLocaleString();
                 document.getElementById('totalSales').textContent = totalSales.toLocaleString('en-US', { maximumFractionDigits: 0 })
                     ;
 
                 // KPI 3: Avg Achievement or Avg Sales
-                if (periodFilter === 'mtd' && totalTarget > 0) {
+                if ((periodFilter === 'mtd' || periodFilter === 'month') && totalTarget > 0) {
                     const totalAch = (totalSales / totalTarget) * 100;
                     document.getElementById('avgSalesPerEmpLabel').textContent = 'نسبة تحقيق الهدف';
                     document.getElementById('avgSalesPerEmp').textContent = totalAch.toFixed(1) + '%';
@@ -1165,19 +1245,14 @@
 
             function renderTable() {
                 const periodFilter = document.getElementById('periodFilter').value;
-                const tbody = document.getElementById('leaderboardBody');
+                const container = document.getElementById('leaderboardSections');
+                if (!container) return;
 
-                tbody.innerHTML = currentEmpList.slice(0, 100).map((emp, idx) => {
-                    const rank = idx + 1;
+                function buildRow(emp, rank) {
                     const rankClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : 'rank-other';
-
-                    // Target Display
-                    const showTarget = periodFilter === 'mtd' && emp.target > 0;
+                    const showTarget = (periodFilter === 'mtd' || periodFilter === 'month') && emp.target > 0;
                     const targetText = showTarget ? emp.target.toLocaleString() : '-';
-
-                    // Daily Required
                     const dailyReqText = emp.dailyReq > 0 ? emp.dailyReq.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '-';
-
                     let achBadge = '<span class="text-muted">-</span>';
                     if (showTarget) {
                         let color = 'bg-secondary';
@@ -1186,39 +1261,78 @@
                         else color = 'bg-danger';
                         achBadge = `<span class="badge ${color}">${emp.achievement.toFixed(1)}%</span>`;
                     }
-
-                    return `
-    <tr onclick="openEmployeeInsights('${emp.id}')">
+                    return `<tr onclick="openEmployeeInsights('${emp.id}')">
         <td><span class="rank-badge ${rankClass}">${rank}</span></td>
-        <td>
-            <div class="fw-bold text-decoration-underline text-primary" style="cursor:pointer">${emp.name}</div>
-            <small class="text-muted d-block d-md-none">${emp.storeName}</small>
-        </td>
+        <td><div class="fw-bold text-decoration-underline text-primary" style="cursor:pointer">${emp.name}</div><small class="text-muted d-block d-md-none">${emp.storeName}</small></td>
         <td class="d-none d-md-table-cell"><small class="text-muted">${emp.storeName}</small></td>
         <td class="fw-bold text-success" style="font-size:1.1em">${emp.sales.toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
-        
-        <!-- Branch Share -->
-        <td class="text-center">
-            <div class="progress" style="height: 6px; width: 80px; margin: 0 auto;">
-                 <div class="progress-bar bg-info" role="progressbar" style="width: ${emp.branchShare}%"></div>
-            </div>
-            <small class="text-muted" style="font-size:0.75rem">${emp.branchShare.toFixed(1)}%</small>
-        </td>
-
-        <!-- Share Growth -->
-        <td class="text-center fw-bold ${emp.shareGrowth >= 0 ? 'text-success' : 'text-danger'}">
-             ${emp.shareGrowth > 0 ? '▲' : emp.shareGrowth < 0 ? '▼' : '-'} ${Math.abs(emp.shareGrowth).toFixed(1)}%
-        </td>
-
+        <td class="text-center"><div class="progress" style="height: 6px; width: 80px; margin: 0 auto;"><div class="progress-bar bg-info" role="progressbar" style="width: ${emp.branchShare}%"></div></div><small class="text-muted" style="font-size:0.75rem">${emp.branchShare.toFixed(1)}%</small></td>
+        <td class="text-center fw-bold ${emp.shareGrowth >= 0 ? 'text-success' : 'text-danger'}">${emp.shareGrowth > 0 ? '▲' : emp.shareGrowth < 0 ? '▼' : '-'} ${Math.abs(emp.shareGrowth).toFixed(1)}%</td>
         <td class="text-center">${targetText}</td>
         <td class="text-center">${achBadge}</td>
         <td class="text-center fw-bold text-danger">${dailyReqText}</td>
         <td class="d-none d-md-table-cell">${emp.transactions}</td>
         <td class="d-none d-md-table-cell">${emp.avg_ticket.toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
         <td class="d-none d-md-table-cell">${emp.items_per_inv.toFixed(1)}</td>
-    </tr>
-    `;
-                }).join('');
+    </tr>`;
+                }
+
+                const theadRow = `<tr>
+        <th>#</th>
+        <th class="sortable" data-sort="name" onclick="sortTable('name')">الموظف</th>
+        <th class="d-none d-md-table-cell sortable" data-sort="storeName" onclick="sortTable('storeName')">الفرع</th>
+        <th class="sortable" data-sort="sales" onclick="sortTable('sales')">المبيعات</th>
+        <th class="text-center sortable" data-sort="branchShare" onclick="sortTable('branchShare')">حصة الفرع %</th>
+        <th class="text-center sortable" data-sort="shareGrowth" onclick="sortTable('shareGrowth')">تطور الحصة</th>
+        <th class="text-center sortable" data-sort="target" onclick="sortTable('target')">الهدف</th>
+        <th class="text-center sortable" data-sort="achievement" onclick="sortTable('achievement')">التحقيق %</th>
+        <th class="text-center sortable" data-sort="dailyReq" onclick="sortTable('dailyReq')">اليومية المتبقية</th>
+        <th class="d-none d-md-table-cell sortable" data-sort="transactions" onclick="sortTable('transactions')">الفواتير</th>
+        <th class="d-none d-md-table-cell sortable" data-sort="avg_ticket" onclick="sortTable('avg_ticket')">معدل الفاتورة</th>
+        <th class="d-none d-md-table-cell sortable" data-sort="items_per_inv" onclick="sortTable('items_per_inv')">متوسط القطع</th>
+    </tr>`;
+
+                const list = (currentEmpList || []).slice(0, 500);
+                const byManager = {};
+                list.forEach(emp => {
+                    const m = emp.manager || 'غير معيّن';
+                    if (!byManager[m]) byManager[m] = [];
+                    byManager[m].push(emp);
+                });
+
+                const managerNames = Object.keys(byManager).sort((a, b) => a.localeCompare(b, 'ar'));
+                if (managerNames.length === 0) {
+                    container.innerHTML = '<div class="cockpit-section"><p class="text-muted text-center mb-0">لا توجد بيانات موظفين بعد تطبيق الفلاتر.</p></div>';
+                    return;
+                }
+
+                let html = '';
+                managerNames.forEach(managerName => {
+                    const employees = byManager[managerName];
+                    const storesSet = new Set(employees.map(e => e.storeCode));
+                    const totalSales = employees.reduce((s, e) => s + e.sales, 0);
+                    html += `<div class="cockpit-section">
+                    <div class="area-summary-card">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                            <div>
+                                <h4 class="area-summary-title mb-1">${managerName}</h4>
+                                <p class="area-summary-meta mb-0">عدد الفروع: ${storesSet.size} | الموظفين: ${employees.length}</p>
+                            </div>
+                            <div class="text-end">
+                                <p class="area-summary-value mb-0">${totalSales.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+                                <p class="area-summary-meta mb-0">إجمالي المبيعات</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
+                        <table class="table table-custom table-hover align-middle mb-0">
+                            <thead class="sticky-top bg-light">${theadRow}</thead>
+                            <tbody>${employees.map((emp, idx) => buildRow(emp, idx + 1)).join('')}</tbody>
+                        </table>
+                    </div>
+                </div>`;
+                });
+                container.innerHTML = html;
             }
 
             // === EXCEL EXPORT ===
@@ -1731,6 +1845,11 @@
             loadData();
         </script>
 
+    </div><!-- /container-fluid -->
+            </div><!-- /main-content-inner -->
+        </main><!-- /main-content -->
+    </div><!-- /app-wrap -->
+    <script src="assets/sidebar.js"></script>
 </body>
 
 </html>
