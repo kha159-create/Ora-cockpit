@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { loadManagementData } from '../services/upstreamData';
+import { KPICard } from '../components/DashboardComponents';
+import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon } from '../components/Icons';
 
 type Mode = 'mtd_yest' | 'yesterday' | 'today' | 'custom';
 
@@ -27,6 +29,9 @@ export default function DashboardPage() {
   const [mode, setMode] = useState<Mode>('mtd_yest');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+
+  const formatSAR = (val: number) =>
+    val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 
   useEffect(() => {
     loadManagementData()
@@ -113,23 +118,19 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-5">
-          <div className="text-xs font-semibold text-neutral-500">المبيعات</div>
-          <div className="text-2xl font-bold text-neutral-900 mt-1">{Math.round(totals.sales).toLocaleString()}</div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-5">
-          <div className="text-xs font-semibold text-neutral-500">الفواتير</div>
-          <div className="text-2xl font-bold text-neutral-900 mt-1">{Math.round(totals.trans).toLocaleString()}</div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-5">
-          <div className="text-xs font-semibold text-neutral-500">الزوار</div>
-          <div className="text-2xl font-bold text-neutral-900 mt-1">{Math.round(totals.visitors).toLocaleString()}</div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-5">
-          <div className="text-xs font-semibold text-neutral-500">تحقيق الهدف</div>
-          <div className="text-2xl font-bold text-neutral-900 mt-1">{ach.toFixed(1)}%</div>
-          <div className="text-xs text-neutral-500 mt-1">الهدف: {Math.round(totals.target).toLocaleString()}</div>
-        </div>
+        <KPICard title="المبيعات" value={totals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
+        <KPICard title="الفواتير" value={totals.trans} format={(v) => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
+        <KPICard title="الزوار" value={totals.visitors} format={(v) => Math.round(v).toLocaleString()} icon={<UsersIcon />} />
+        <KPICard
+          title="تحقيق الهدف"
+          value={ach}
+          format={(v) => `${v.toFixed(1)}%`}
+          icon={<ChartPieIcon />}
+          showProgress
+          progressValue={ach}
+          trend="neutral"
+          trendValue={`الهدف: ${formatSAR(totals.target)}`}
+        />
       </div>
     </div>
   );

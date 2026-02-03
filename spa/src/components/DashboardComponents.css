@@ -1,0 +1,14 @@
+/* Smaller KPI card value and spacing for compact look */
+.modern-kpi-card .kpi-value {
+  font-size: 1.2rem;
+}
+.modern-kpi-card .kpi-title {
+  font-size: 0.85rem;
+}
+.modern-kpi-card {
+  padding: 0.5rem;
+}
+.kpi-icon-container svg {
+  width: 18px;
+  height: 18px;
+}
