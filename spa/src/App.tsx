@@ -4,6 +4,7 @@ import { getCurrentUser } from './auth/storage';
 import MainLayout from './layout/MainLayout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
+import EmployeesPage from './pages/EmployeesPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const u = getCurrentUser();
@@ -33,7 +34,7 @@ export default function App() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="reports" element={<Placeholder title="Reports" />} />
-        <Route path="employees" element={<Placeholder title="Employees" />} />
+        <Route path="employees" element={<EmployeesPage />} />
         <Route path="stores" element={<Placeholder title="Stores" />} />
         <Route path="products" element={<Placeholder title="Products" />} />
       </Route>
