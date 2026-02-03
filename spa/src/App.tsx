@@ -5,6 +5,7 @@ import MainLayout from './layout/MainLayout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import EmployeesPage from './pages/EmployeesPage';
+import StoresPage from './pages/StoresPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const u = getCurrentUser();
@@ -35,7 +36,7 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="reports" element={<Placeholder title="Reports" />} />
         <Route path="employees" element={<EmployeesPage />} />
-        <Route path="stores" element={<Placeholder title="Stores" />} />
+        <Route path="stores" element={<StoresPage />} />
         <Route path="products" element={<Placeholder title="Products" />} />
       </Route>
 

@@ -308,3 +308,52 @@ html[dir="rtl"] body {
   background-size: 200px 100%;
   animation: shimmer 1.5s infinite;
 }
+
+/* عناصر مساعدة للترتيب والمقارنات (Used in Employees/Stores details) */
+.rank-badge {
+  width: 30px;
+  height: 30px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+.rank-1 {
+  background: linear-gradient(135deg, #ffd700, #ffa500);
+  color: white;
+}
+.rank-2 {
+  background: linear-gradient(135deg, #c0c0c0, #a0a0a0);
+  color: white;
+}
+.rank-3 {
+  background: linear-gradient(135deg, #cd7f32, #8b4513);
+  color: white;
+}
+.rank-other {
+  background: #e9ecef;
+  color: #495057;
+}
+
+.diff-badge {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  border-radius: 10px;
+  display: inline-block;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.diff-pos {
+  background: #d1e7dd;
+  color: #0f5132;
+}
+.diff-neg {
+  background: #f8d7da;
+  color: #842029;
+}
+.diff-neutral {
+  background: #e2e3e5;
+  color: #41464b;
+}
