@@ -8,10 +8,22 @@ function baseUrl(path: string) {
 }
 
 async function fetchJson<T>(file: string): Promise<T> {
-  const url = baseUrl(`${file}?t=${Date.now()}`);
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`Failed to fetch ${file}: ${res.status}`);
-  return (await res.json()) as T;
+  const ts = Date.now();
+  const localUrl = baseUrl(`${file}?t=${ts}`);
+  const upstreamUrl = `https://raw.githubusercontent.com/ALAAWF2/orange-dashboard/main/${file}?t=${ts}`;
+
+  // 1) Try local (GitHub Pages / SPA public)
+  try {
+    const res = await fetch(localUrl, { cache: 'no-store' });
+    if (res.ok) return (await res.json()) as T;
+  } catch {
+    // ignore
+  }
+
+  // 2) Fallback to upstream raw (guarantees no data loss)
+  const res2 = await fetch(upstreamUrl, { cache: 'no-store' });
+  if (!res2.ok) throw new Error(`Failed to fetch ${file} (local+upstream): ${res2.status}`);
+  return (await res2.json()) as T;
 }
 
 export function loadManagementData() {
