@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
-import { KPICard, ChartCard, BarChart, RankCard } from '../components/DashboardComponents';
+import { KPICard, RankCard } from '../components/DashboardComponents';
 import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon } from '../components/Icons';
 
 type Mode = 'mtd_yest' | 'yesterday' | 'today' | 'custom';
@@ -28,6 +28,8 @@ export default function DashboardPage() {
   const [raw, setRaw] = useState<any>(null);
   const [empRaw, setEmpRaw] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [mode, setMode] = useState<Mode>('mtd_yest');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
@@ -35,14 +37,22 @@ export default function DashboardPage() {
   const formatSAR = (val: number) =>
     val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
+    setRefreshing(true);
     Promise.all([loadManagementData(), loadEmployeesData()])
       .then(([m, e]) => {
         setRaw(m);
         setEmpRaw(e);
+        setLastUpdate(new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        setErr(null);
       })
-      .catch((e) => setErr(e?.message || String(e)));
+      .catch((e) => setErr(e?.message || String(e)))
+      .finally(() => setRefreshing(false));
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   useEffect(() => {
     if (mode !== 'custom') {
@@ -76,16 +86,29 @@ export default function DashboardPage() {
     return { sales, trans, visitors, target };
   }, [raw, range.start, range.end]);
 
-  const topStores = useMemo(() => {
-    if (!raw?.sales || !raw?.store_meta) return [];
-    const byStore: Record<string, number> = {};
-    const inRange = (d: string) => String(d).substring(0, 10) >= range.start && String(d).substring(0, 10) <= range.end;
-    (raw.sales || []).forEach(([d, s, v]: any[]) => { if (inRange(d)) byStore[s] = (byStore[s] || 0) + (v || 0); });
-    return Object.entries(byStore)
-      .map(([sid, sales]) => ({ name: raw.stores?.[sid] || sid, sales }))
-      .sort((a, b) => b.sales - a.sales)
-      .slice(0, 8);
-  }, [raw, range.start, range.end]);
+  // نفس الفترة من السنة الماضية للمقارنة
+  const prevYearRange = useMemo(() => {
+    const [y, m, d] = range.start.split('-').map(Number);
+    const [ye, me, de] = range.end.split('-').map(Number);
+    return {
+      start: `${y - 1}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+      end: `${ye - 1}-${String(me).padStart(2, '0')}-${String(de).padStart(2, '0')}`,
+    };
+  }, [range.start, range.end]);
+
+  const prevYearTotals = useMemo(() => {
+    if (!raw) return { sales: 0, trans: 0, visitors: 0, target: 0 };
+    const inRange = (d: string) => {
+      const x = String(d).substring(0, 10);
+      return x >= prevYearRange.start && x <= prevYearRange.end;
+    };
+    let sales = 0, trans = 0, visitors = 0, target = 0;
+    (raw.sales || []).forEach(([d, _s, v]: any[]) => { if (inRange(d)) sales += (v || 0); });
+    (raw.transactions || []).forEach(([d, _s, v]: any[]) => { if (inRange(d)) trans += (v || 0); });
+    (raw.visitors || []).forEach(([d, _s, v]: any[]) => { if (inRange(d)) visitors += (v || 0); });
+    (raw.targets || []).forEach(([d, _s, v]: any[]) => { if (inRange(d)) target += (v || 0); });
+    return { sales, trans, visitors, target };
+  }, [raw, prevYearRange.start, prevYearRange.end]);
 
   const inRange = useMemo(
     () => (d: string) => {
@@ -194,9 +217,25 @@ export default function DashboardPage() {
 
   const ach = totals.target > 0 ? (totals.sales / totals.target) * 100 : 0;
 
+  const diff = (curr: number, prev: number) =>
+    prev > 0 ? { pct: ((curr - prev) / prev) * 100, num: curr - prev } : { pct: 0, num: curr };
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <span className="text-sm text-neutral-500">
+            آخر تحديث: {lastUpdate ?? '--:--:--'}
+          </span>
+          <button
+            type="button"
+            onClick={loadData}
+            disabled={refreshing}
+            className="btn-secondary py-2 px-4 text-sm"
+          >
+            {refreshing ? 'جاري التحديث...' : 'تحديث البيانات'}
+          </button>
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <div className="text-xs font-semibold text-neutral-500 mb-1">الفترة</div>
@@ -228,9 +267,36 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KPICard title="المبيعات" value={totals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
-        <KPICard title="الفواتير" value={totals.trans} format={(v) => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
-        <KPICard title="الزوار" value={totals.visitors} format={(v) => Math.round(v).toLocaleString()} icon={<UsersIcon />} />
+        <KPICard
+          title="المبيعات"
+          value={totals.sales}
+          format={formatSAR}
+          icon={<CurrencyDollarIcon />}
+          comparisonValue={prevYearTotals.sales}
+          comparisonLabel="السنة الماضية"
+          trend={totals.sales >= prevYearTotals.sales ? 'up' : 'down'}
+          trendValue={prevYearTotals.sales > 0 ? `${diff(totals.sales, prevYearTotals.sales).pct >= 0 ? '+' : ''}${diff(totals.sales, prevYearTotals.sales).pct.toFixed(1)}% (${diff(totals.sales, prevYearTotals.sales).num >= 0 ? '+' : ''}${formatSAR(diff(totals.sales, prevYearTotals.sales).num)})` : undefined}
+        />
+        <KPICard
+          title="الفواتير"
+          value={totals.trans}
+          format={(v) => Math.round(v).toLocaleString()}
+          icon={<ReceiptTaxIcon />}
+          comparisonValue={prevYearTotals.trans}
+          comparisonLabel="السنة الماضية"
+          trend={totals.trans >= prevYearTotals.trans ? 'up' : 'down'}
+          trendValue={prevYearTotals.trans > 0 ? `${diff(totals.trans, prevYearTotals.trans).pct >= 0 ? '+' : ''}${diff(totals.trans, prevYearTotals.trans).pct.toFixed(1)}%` : undefined}
+        />
+        <KPICard
+          title="الزوار"
+          value={totals.visitors}
+          format={(v) => Math.round(v).toLocaleString()}
+          icon={<UsersIcon />}
+          comparisonValue={prevYearTotals.visitors}
+          comparisonLabel="السنة الماضية"
+          trend={totals.visitors >= prevYearTotals.visitors ? 'up' : 'down'}
+          trendValue={prevYearTotals.visitors > 0 ? `${diff(totals.visitors, prevYearTotals.visitors).pct >= 0 ? '+' : ''}${diff(totals.visitors, prevYearTotals.visitors).pct.toFixed(1)}%` : undefined}
+        />
         <KPICard
           title="تحقيق الهدف"
           value={ach}
@@ -307,12 +373,6 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* أداء المعارض (توب حسب الفترة) */}
-      {topStores.length > 0 && (
-        <ChartCard title="أعلى المعارض حسب المبيعات (الفترة الحالية)">
-          <BarChart data={topStores} dataKey="sales" nameKey="name" format={formatSAR} />
-        </ChartCard>
-      )}
     </div>
   );
 }

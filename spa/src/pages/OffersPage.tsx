@@ -26,7 +26,16 @@ export default function OffersPage() {
 
   // الريبو الأصلي: قد يكون الملف مصفوفة مباشرة أو { offers, summary }
   const offers = Array.isArray(data) ? data : (Array.isArray(data?.offers) ? data.offers : []);
-  const summary = !Array.isArray(data) && data?.summary ? data.summary : { totalSales: 0, totalFilteredSales: 0, count: 0 };
+  const summaryFromApi = !Array.isArray(data) && data?.summary ? data.summary : null;
+  const totalFilteredSales =
+    summaryFromApi != null && Number(summaryFromApi.totalFilteredSales) > 0
+      ? Number(summaryFromApi.totalFilteredSales)
+      : offers.reduce((sum: number, o: any) => sum + (Number(o.filteredSales ?? o.sales ?? o.total_sales ?? 0) || 0), 0);
+  const summary = summaryFromApi ?? {
+    totalSales: totalFilteredSales,
+    totalFilteredSales,
+    count: offers.length,
+  };
 
   return (
     <div className="space-y-6">

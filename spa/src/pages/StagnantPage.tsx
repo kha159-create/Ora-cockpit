@@ -21,9 +21,22 @@ export default function StagnantPage() {
     );
   }
 
-  const items = Array.isArray(data.items) ? data.items : (data.products ? (Array.isArray(data.products) ? data.products : []) : []);
+  // الريبو الأصلي: stagnant_data.json = { data: { "storeId": [ { id, name, qty, ... } ] } }
+  const rawItems =
+    data.data && typeof data.data === 'object'
+      ? (Object.values(data.data) as any[]).flat()
+      : Array.isArray(data.items)
+        ? data.items
+        : Array.isArray(data.products)
+          ? data.products
+          : [];
+  const items = rawItems.map((i: any) => ({
+    ...i,
+    name: i.name || i.item_name || i.id || '-',
+    qty: i.qty ?? i.count ?? 0,
+  }));
   const filtered = search
-    ? items.filter((i: any) => (i.name || i.item_name || i.id || '').toString().toLowerCase().includes(search.toLowerCase()))
+    ? items.filter((i: any) => String(i.name || '').toLowerCase().includes(search.toLowerCase()))
     : items;
 
   return (
