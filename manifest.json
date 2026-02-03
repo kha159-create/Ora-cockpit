@@ -1,8 +1,9 @@
 {
-    "name": "مبيعات اليوم - Orange Data",
-    "short_name": "مبيعات اليوم",
-    "description": "عرض مبيعات اليوم للفروع والموظفين",
-    "start_url": "./widget.html",
+    "name": "Orange Dashboard",
+    "short_name": "Orange",
+    "description": "لوحة متابعة المبيعات والأداء للفروع والموظفين",
+    "start_url": "./index.html",
+    "scope": "./",
     "display": "standalone",
     "background_color": "#f8f9fa",
     "theme_color": "#fe7900",

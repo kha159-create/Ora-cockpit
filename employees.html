@@ -3,8 +3,16 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#fe7900">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Orange">
     <title>Orange | أداء الموظفين</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="icon" href="icon-192.png">
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -378,10 +386,11 @@
                 <div class="col-md-3 col-lg-3">
                     <label class="form-label small text-muted fw-bold mb-1">الفترة</label>
                     <select id="periodFilter" class="form-select form-select-sm" onchange="toggleMonthFilter(); updatePage();">
-                        <option value="today" selected>اليوم (Today)</option>
+                        <option value="today">اليوم (Today)</option>
                         <option value="mtd">الشهر الحالي (MTD)</option>
+                        <option value="mtd_yest" selected>من بداية الشهر إلى أمس</option>
                         <option value="month">شهر محدد</option>
-                        <option value="yesterday">يوم أمس (Yesterday)</option>
+                        <option value="yesterday">يوم أمس فقط (Yesterday)</option>
                     </select>
                 </div>
                 <div id="monthFilterContainer" class="col-md-2 col-lg-2" style="display:none;">
@@ -521,6 +530,7 @@
         </div>
 
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        <script src="pwa.js"></script>
 
         <!-- Employee Insight Offcanvas -->
         <div class="offcanvas offcanvas-start" tabindex="-1" id="empInsightPanel"
@@ -1850,6 +1860,7 @@
         </main><!-- /main-content -->
     </div><!-- /app-wrap -->
     <script src="assets/sidebar.js"></script>
+    <script src="assets/pwa.js"></script>
 </body>
 
 </html>
