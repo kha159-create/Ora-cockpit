@@ -72,6 +72,17 @@ export default function DashboardPage() {
     return { sales, trans, visitors, target };
   }, [raw, range.start, range.end]);
 
+  const topStores = useMemo(() => {
+    if (!raw?.sales || !raw?.store_meta) return [];
+    const byStore: Record<string, number> = {};
+    const inRange = (d: string) => String(d).substring(0, 10) >= range.start && String(d).substring(0, 10) <= range.end;
+    (raw.sales || []).forEach(([d, s, v]: any[]) => { if (inRange(d)) byStore[s] = (byStore[s] || 0) + (v || 0); });
+    return Object.entries(byStore)
+      .map(([sid, sales]) => ({ name: raw.stores?.[sid] || sid, sales }))
+      .sort((a, b) => b.sales - a.sales)
+      .slice(0, 8);
+  }, [raw, range.start, range.end]);
+
   if (err) {
     return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
   }
@@ -84,17 +95,6 @@ export default function DashboardPage() {
   }
 
   const ach = totals.target > 0 ? (totals.sales / totals.target) * 100 : 0;
-
-  const topStores = useMemo(() => {
-    if (!raw?.sales || !raw?.store_meta) return [];
-    const byStore: Record<string, number> = {};
-    const inRange = (d: string) => String(d).substring(0, 10) >= range.start && String(d).substring(0, 10) <= range.end;
-    (raw.sales || []).forEach(([d, s, v]: any[]) => { if (inRange(d)) byStore[s] = (byStore[s] || 0) + (v || 0); });
-    return Object.entries(byStore)
-      .map(([sid, sales]) => ({ name: raw.stores?.[sid] || sid, sales }))
-      .sort((a, b) => b.sales - a.sales)
-      .slice(0, 8);
-  }, [raw, range.start, range.end]);
 
   return (
     <div className="space-y-6">
