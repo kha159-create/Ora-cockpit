@@ -56,16 +56,18 @@ export default function MainLayout() {
     return hit?.label ?? 'لوحة التحكم';
   }, [loc.pathname]);
 
+  const sidebarHidden = !isSidebarOpen;
   return (
-    <div className="relative md:flex bg-neutral-50 min-h-screen">
+    <div className="relative flex bg-neutral-50 min-h-screen">
       {isSidebarOpen && (
         <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
 
+      {/* القائمة الجانبية - تنسيقها في index.css لضمان الظهور في RTL */}
       <aside
-        className={`w-64 sm:w-72 bg-white border-r border-primary-100 h-screen flex flex-col fixed inset-y-0 ltr:left-0 rtl:right-0 transform ${
-          isSidebarOpen ? 'translate-x-0' : 'rtl:translate-x-full ltr:-translate-x-full'
-        } md:translate-x-0 transition-all duration-300 ease-in-out z-30 shadow-xl`}
+        className={`main-layout-sidebar w-64 sm:w-72 bg-white border-primary-100 h-screen flex flex-col fixed top-0 bottom-0 z-30 shadow-xl transition-transform duration-300 ease-in-out
+          ${sidebarHidden ? 'main-layout-sidebar--closed' : ''}
+        `}
       >
         <div className="p-4 sm:p-6 border-b border-primary-100">
           <div className="flex items-center gap-3">
@@ -109,7 +111,7 @@ export default function MainLayout() {
         </div>
       </aside>
 
-      <main className="flex-1 p-2 sm:p-4 md:p-6 md:ltr:ml-64 md:rtl:mr-64 lg:ltr:ml-72 lg:rtl:mr-72 bg-neutral-50 min-h-screen">
+      <main className="main-layout-main p-2 sm:p-4 md:p-6 bg-neutral-50">
         <header className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 sm:p-6 mb-4 sm:mb-6">
           <div className="flex justify-between items-center flex-wrap gap-3">
             <div className="flex items-center gap-4 min-w-0">

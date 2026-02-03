@@ -76,6 +76,54 @@ html[dir="rtl"] body {
   font-family: 'Cairo', sans-serif;
 }
 
+/* القائمة الجانبية: ظاهرة على اليمين في RTL، على اليسار في LTR. على md فما فوق تكون دائماً ظاهرة */
+.main-layout-sidebar {
+  border-right: 1px solid var(--primary-100);
+  left: 0;
+  right: auto;
+}
+html[dir="rtl"] .main-layout-sidebar {
+  right: 0;
+  left: auto;
+  border-right: none;
+  border-left: 1px solid var(--primary-100);
+}
+.main-layout-sidebar--closed {
+  transform: translateX(-100%);
+}
+html[dir="rtl"] .main-layout-sidebar--closed {
+  transform: translateX(100%);
+}
+@media (min-width: 768px) {
+  .main-layout-sidebar,
+  .main-layout-sidebar.main-layout-sidebar--closed {
+    transform: none !important;
+  }
+}
+
+/* المحتوى الرئيسي: يترك مساحة للقائمة الجانبية على الشاشات المتوسطة فما فوق */
+.main-layout-main {
+  flex: 1;
+  min-height: 100vh;
+}
+@media (min-width: 768px) {
+  .main-layout-main {
+    margin-left: 16rem; /* w-64 */
+  }
+  html[dir="rtl"] .main-layout-main {
+    margin-left: 0;
+    margin-right: 16rem;
+  }
+}
+@media (min-width: 1024px) {
+  .main-layout-main {
+    margin-left: 18rem; /* w-72 */
+  }
+  html[dir="rtl"] .main-layout-main {
+    margin-right: 18rem;
+  }
+}
+
 @layer components {
   /* المودال الحديثة */
   .modal-backdrop {

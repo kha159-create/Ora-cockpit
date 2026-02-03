@@ -27,7 +27,19 @@
 ## الإعداد (تم ✓)
 - **origin** = الـ fork عندك: https://github.com/kha159-create/Ora-cockpit
 - **upstream** = المشروع الأصلي: https://github.com/ALAAWF2/orange-dashboard
-- **الفرع الوحيد الذي نعمل عليه:** **main**. التحديث التلقائي من الريبو الأصلي (كل 15 دقيقة) والرفع اليدوي كلاهما يروحون لنفس البرانش **main** على kha159-create/Ora-cockpit. إعدادات GitHub Pages: البناء والنشر من فرع **main**.
+- **الفرع الوحيد الذي نعمل عليه:** **main**. التحديث التلقائي من الريبو الأصلي (كل 15 دقيقة) والرفع اليدوي كلاهما يروحون لنفس البرانش **main** على kha159-create/Ora-cockpit.
+
+### نشر التحديثات من الريبو الأصلي على الموقع
+- الـ workflow "Sync Data From Upstream Every 15 Min" يسحب ملفات JSON من ALAAWF2/orange-dashboard ويُدخلها كوميت على فرع **main** ثم يرفع (`git push origin main`).
+- عند أي push لـ **main** يغيّر ملفات تحت `spa/**` (بما فيها `spa/public/*.json`)، الـ workflow "Deploy SPA (gh-pages)" يشتغل تلقائياً: يبني الـ SPA ويُنشر الناتج على فرع **gh-pages**. لذلك تحديثات البيانات من الريبو الأصلي تنشر على موقعنا بشكل صحيح وعلى البرانش الصحيح (main للكود والبيانات، gh-pages لمخرجات الموقع).
+
+### إعداد GitHub Pages (مهم لظهور الموقع)
+- الموقع يُخدم من **فرع gh-pages** (وليس من main) لأن الـ SPA يُبنى ويُنشر هناك تلقائياً عند كل push لـ `spa/` على main.
+- في الريبو: **Settings → Pages → Build and deployment → Source:** اختر **Deploy from a branch** ثم:
+  - **Branch:** اختر **gh-pages** (وليس main).
+  - **Folder:** / (root).
+  - احفظ. بعد دقائق الموقع https://kha159-create.github.io/Ora-cockpit/ يعمل ويُظهر تطبيق React.
+- إذا كانت الصفحة مضبوطة على **main** و **/ (root)** فستظهر 404 لأن في جذر main لا يوجد `index.html` (الـ SPA موجود داخل `spa/` ويُنشر إلى gh-pages).
 
 ---
 
