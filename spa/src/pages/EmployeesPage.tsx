@@ -132,7 +132,8 @@ function SortableTh({
   );
 }
 
-function EmployeeDetailsModal({
+/** offcanvas تفاصيل الموظف — مطابق لمشروع التصميم employees.html (empInsightPanel) */
+function EmployeeDetailsOffcanvas({
   open,
   employee,
   branchStats,
@@ -168,87 +169,68 @@ function EmployeeDetailsModal({
   });
 
   return (
-    <div className="modal-center-screen" onClick={onClose}>
-      <div className="modal-content max-w-4xl my-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="text-xl font-bold text-neutral-900 truncate">{detail.name}</div>
-            <div className="text-sm text-neutral-500 mt-1">
-              {detail.storeName} · {detail.manager} · {periodLabel}
+    <div className="offcanvas-emp-detail" role="dialog" aria-label="تفاصيل الموظف">
+      <div className="offcanvas-header">
+        <div className="min-w-0">
+          <h5 className="text-lg font-bold text-neutral-900 truncate">{detail.name}</h5>
+          <small className="text-neutral-500 block mt-0.5">{detail.storeName}</small>
+        </div>
+        <button type="button" className="p-2 rounded-lg hover:bg-neutral-200 text-neutral-600" onClick={onClose} aria-label="إغلاق">
+          <span className="text-xl leading-none">×</span>
+        </button>
+      </div>
+      <div className="offcanvas-body">
+        {/* 1. Performance Overview — مطابق التصميم */}
+        <div className="flex justify-between mb-6 text-center">
+          <div className="w-1/2 border-l border-neutral-200 pl-3">
+            <div className="text-neutral-500 text-sm">المبيعات (MTD)</div>
+            <div className="text-2xl font-bold text-orange-600 mt-0">{formatSAR(detail.sales)}</div>
+            <div className="text-sm text-neutral-600 mt-0">{detail.branchShare.toFixed(1)}% حصة الفرع</div>
+          </div>
+          <div className="w-1/2 pr-3">
+            <div className="text-neutral-500 text-sm">التحقيق</div>
+            <div className="text-2xl font-bold text-neutral-900 mt-0">
+              {targetEnabled ? `${detail.achievement.toFixed(1)}%` : '-'}
+            </div>
+            <div className="text-sm text-neutral-500 mt-0">
+              الهدف: {targetEnabled ? formatSAR(detail.target) : '-'}
             </div>
           </div>
-          <button className="btn-secondary py-2 px-3" onClick={onClose}>
-            إغلاق
-          </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-6">
-          <KPICard title="المبيعات" value={detail.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
-          <KPICard title="الفواتير" value={detail.transactions} format={(v) => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
-          <KPICard title="معدل الفاتورة" value={detail.avg_ticket} format={formatSAR} />
-          <KPICard title="متوسط القطع" value={detail.items_per_inv} format={(v) => v.toFixed(2)} />
-          <KPICard title="حصة الفرع" value={detail.branchShare} format={(v) => `${v.toFixed(1)}%`} />
+        <hr className="border-neutral-200 my-4" />
+
+        {/* 2. Quality Metrics (مقارنة بالفرع) */}
+        <h6 className="font-bold text-neutral-800 mb-3">⚡ جودة الأداء (مقارنة بالفرع)</h6>
+
+        <div className="insight-card">
+          <div className="insight-label">معدل الفاتورة (Avg Ticket)</div>
+          <div className="flex justify-between items-center">
+            <div className="insight-value">{formatSAR(detail.avg_ticket)}</div>
+            <div className={`diff-badge ${diffClass(diffPct(detail.avg_ticket, bAvgTicket))}`}>
+              {bAvgTicket > 0 ? `${diffPct(detail.avg_ticket, bAvgTicket) >= 0 ? '▲' : '▼'} ${Math.abs(diffPct(detail.avg_ticket, bAvgTicket)).toFixed(0)}%` : '--'}
+            </div>
+          </div>
+          <small className="text-neutral-500 block mt-2">متوسط الفرع: <span className="font-semibold text-neutral-700">{formatSAR(bAvgTicket)}</span></small>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
-          <ChartCard title="⚡ مقارنة بجودة الفرع">
-            <div className="space-y-4">
-              <div className="p-4 rounded-xl border border-neutral-200 bg-neutral-50">
-                <div className="text-sm font-semibold text-neutral-700 mb-1">Avg Ticket</div>
-                <div className="flex items-end justify-between gap-3">
-                  <div className="text-2xl font-bold text-neutral-900">{formatSAR(detail.avg_ticket)}</div>
-                  <div className={`diff-badge ${diffClass(diffPct(detail.avg_ticket, bAvgTicket))}`}>
-                    {bAvgTicket > 0 ? `${diffPct(detail.avg_ticket, bAvgTicket) >= 0 ? '▲' : '▼'} ${Math.abs(diffPct(detail.avg_ticket, bAvgTicket)).toFixed(0)}%` : '-'}
-                  </div>
-                </div>
-                <div className="text-xs text-neutral-500 mt-2">
-                  متوسط الفرع: <span className="font-semibold">{formatSAR(bAvgTicket)}</span>
-                </div>
-              </div>
-
-              <div className="p-4 rounded-xl border border-neutral-200 bg-neutral-50">
-                <div className="text-sm font-semibold text-neutral-700 mb-1">Items / Inv</div>
-                <div className="flex items-end justify-between gap-3">
-                  <div className="text-2xl font-bold text-neutral-900">{detail.items_per_inv.toFixed(2)}</div>
-                  <div className={`diff-badge ${diffClass(diffPct(detail.items_per_inv, bAvgUPT))}`}>
-                    {bAvgUPT > 0 ? `${diffPct(detail.items_per_inv, bAvgUPT) >= 0 ? '▲' : '▼'} ${Math.abs(diffPct(detail.items_per_inv, bAvgUPT)).toFixed(0)}%` : '-'}
-                  </div>
-                </div>
-                <div className="text-xs text-neutral-500 mt-2">
-                  متوسط الفرع: <span className="font-semibold">{bAvgUPT.toFixed(2)}</span>
-                </div>
-              </div>
+        <div className="insight-card">
+          <div className="insight-label">متوسط القطع (Items/Inv)</div>
+          <div className="flex justify-between items-center">
+            <div className="insight-value">{detail.items_per_inv.toFixed(2)}</div>
+            <div className={`diff-badge ${diffClass(diffPct(detail.items_per_inv, bAvgUPT))}`}>
+              {bAvgUPT > 0 ? `${diffPct(detail.items_per_inv, bAvgUPT) >= 0 ? '▲' : '▼'} ${Math.abs(diffPct(detail.items_per_inv, bAvgUPT)).toFixed(0)}%` : '--'}
             </div>
-          </ChartCard>
-
-          <ChartCard title="📈 تطور المبيعات">
-            <div className="h-[280px]">
-              <LineChart data={chartData} />
-            </div>
-          </ChartCard>
-
-          <ChartCard title="🎯 الهدف والتحقيق">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-neutral-600">الهدف</div>
-                <div className="font-bold text-neutral-900">{targetEnabled ? formatSAR(detail.target) : '-'}</div>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-neutral-600">التحقيق</div>
-                <div className="font-bold text-neutral-900">{targetEnabled ? `${detail.achievement.toFixed(1)}%` : '-'}</div>
-              </div>
-              {targetEnabled && <AchievementBar percentage={detail.achievement} />}
-              <div className="text-xs text-neutral-500">
-                اليومية المتبقية: <span className="font-semibold text-neutral-900">{detail.dailyReq > 0 ? formatSAR(detail.dailyReq) : '-'}</span>
-              </div>
-            </div>
-          </ChartCard>
+          </div>
+          <small className="text-neutral-500 block mt-2">متوسط الفرع: <span className="font-semibold text-neutral-700">{bAvgUPT.toFixed(2)}</span></small>
         </div>
 
-        <div className="modal-actions">
-          <button className="btn-secondary" onClick={onClose}>
-            إغلاق
-          </button>
+        <hr className="border-neutral-200 my-4" />
+
+        {/* 3. Trend Chart */}
+        <h6 className="font-bold text-neutral-800 mb-3">📈 تطور المبيعات ({periodLabel})</h6>
+        <div className="h-[200px]">
+          <LineChart data={chartData} />
         </div>
       </div>
     </div>
@@ -962,15 +944,24 @@ export default function EmployeesPage() {
           })}
       </div>
 
-      <EmployeeDetailsModal
-        open={!!selectedEmployee}
-        employee={selectedEmployee}
-        branchStats={derived.branchStats}
-        dailyMaps={derived.employeeDailyMaps}
-        onClose={() => setSelectedEmployeeId(null)}
-        periodLabel={periodLabel}
-        targetEnabled={targetEnabled}
-      />
+      {selectedEmployee && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/30 z-40"
+            aria-hidden
+            onClick={() => setSelectedEmployeeId(null)}
+          />
+          <EmployeeDetailsOffcanvas
+            open={!!selectedEmployee}
+            employee={selectedEmployee}
+            branchStats={derived.branchStats}
+            dailyMaps={derived.employeeDailyMaps}
+            onClose={() => setSelectedEmployeeId(null)}
+            periodLabel={periodLabel}
+            targetEnabled={targetEnabled}
+          />
+        </>
+      )}
     </div>
   );
 }

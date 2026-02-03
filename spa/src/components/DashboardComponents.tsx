@@ -241,23 +241,23 @@ export const RankCard: React.FC<{
           </button>
         ))}
       </div>
-      {/* توب 10: الرقم على اليسار، الاسم على اليمين، خط الشريط أصغر ومتناسق */}
-      <div className="flex-grow space-y-2 overflow-auto min-h-0">
+      {/* توب 10: الرقم على اليسار، الاسم على اليمين، الشريط والأرقام متناسقين مع حجم البطاقة */}
+      <div className="flex-grow space-y-4 overflow-auto min-h-0">
         {list.map((item, idx) => {
           const value = item[key] ?? 0;
           const pct = maxVal > 0 ? (value / maxVal) * 100 : 0;
           return (
-            <div key={`${item.name}-${idx}`} className="flex items-center gap-2 flex-row-reverse">
-              <span className="text-xs font-bold text-neutral-800 w-16 shrink-0 text-right" dir="ltr">
+            <div key={`${item.name}-${idx}`} className="flex items-center gap-4 flex-row-reverse">
+              <span className="text-base font-bold text-neutral-800 w-24 shrink-0 text-right tabular-nums" dir="ltr">
                 {format(value, key)}
               </span>
-              <div className="flex-1 min-w-0 h-2 bg-neutral-200 rounded-full overflow-hidden">
+              <div className="flex-1 min-w-0 h-5 bg-neutral-200 rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-orange-400 to-orange-600 transition-all duration-300"
                   style={{ width: `${Math.max(pct, 2)}%` }}
                 />
               </div>
-              <span className="text-xs font-medium text-neutral-700 truncate min-w-0 flex-1 text-right" title={item.name}>
+              <span className="text-base font-medium text-neutral-700 truncate min-w-0 flex-1 text-right" title={item.name}>
                 {idx + 1}- {item.name}
               </span>
             </div>

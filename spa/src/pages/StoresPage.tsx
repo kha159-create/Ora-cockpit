@@ -23,6 +23,40 @@ type StoreRow = {
   avgInv: number;
 };
 
+type StoreSortKey = 'name' | 'val' | 'prevVal' | 'target' | 'ach' | 'growth' | 'trans' | 'avgInv' | 'visitors';
+
+function SortableTh({
+  label,
+  sortKey,
+  activeKey,
+  direction,
+  onClick,
+  className = '',
+}: {
+  label: string;
+  sortKey: StoreSortKey;
+  activeKey: StoreSortKey;
+  direction: 'asc' | 'desc';
+  onClick: (k: StoreSortKey) => void;
+  className?: string;
+}) {
+  const isActive = activeKey === sortKey;
+  return (
+    <th
+      className={`th select-none cursor-pointer hover:bg-orange-100 ${className}`}
+      onClick={() => onClick(sortKey)}
+      title="اضغط للترتيب"
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        <span className={`text-xs ${isActive ? 'opacity-100' : 'opacity-40'}`}>
+          {isActive ? (direction === 'asc' ? '↑' : '↓') : '⇅'}
+        </span>
+      </span>
+    </th>
+  );
+}
+
 type EmpRec = [string, string, number, number, number?, number?]; // [date, rawName, sales, trans, items, maxTicket]
 
 function pad2(n: number) {
@@ -234,6 +268,7 @@ function StoreDetailsModal({
     const totalT = rows.reduce((s, r) => s + safeNum(r.t), 0);
     const totalTarget = showTarget ? rows.reduce((s, r) => s + safeNum(r.target), 0) : 0;
     const totalAch = totalTarget > 0 ? (totalS / totalTarget) * 100 : 0;
+    const colCount = showTarget ? 7 : 5;
     return (
       <div className="overflow-x-auto">
         <table className="min-w-full">
@@ -241,16 +276,17 @@ function StoreDetailsModal({
             <tr>
               <th className="th">الموظف</th>
               <th className="th text-center">المبيعات</th>
-              {showTarget && <th className="th text-center">الهدف</th>}
-              {showTarget && <th className="th text-center">تحقيق%</th>}
+              {showTarget && <th className="th text-center">الهدف (Target)</th>}
+              {showTarget && <th className="th text-center">نسبة التحقيق %</th>}
+              <th className="th text-center">مساهمة %</th>
               <th className="th text-center">فواتير</th>
-              <th className="th text-center">Avg</th>
+              <th className="th text-center">Avg Inv</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td className="td text-center text-neutral-500" colSpan={showTarget ? 6 : 4}>
+                <td className="td text-center text-neutral-500" colSpan={colCount}>
                   لا توجد مبيعات
                 </td>
               </tr>
@@ -258,6 +294,7 @@ function StoreDetailsModal({
               rows.map((r: any) => {
                 const avg = r.t > 0 ? r.s / r.t : 0;
                 const ach = showTarget && r.target > 0 ? (r.s / r.target) * 100 : 0;
+                const share = totalS > 0 ? (r.s / totalS) * 100 : 0;
                 return (
                   <tr key={r.name} className="hover:bg-orange-50">
                     <td className="td font-semibold text-neutral-900">{r.name}</td>
@@ -268,6 +305,7 @@ function StoreDetailsModal({
                         {ach.toFixed(1)}%
                       </td>
                     )}
+                    <td className="td text-center">{share.toFixed(1)}%</td>
                     <td className="td text-center">{Math.round(r.t).toLocaleString()}</td>
                     <td className="td text-center">{formatSAR(avg)}</td>
                   </tr>
@@ -282,6 +320,7 @@ function StoreDetailsModal({
                 <td className="td text-center font-bold">{formatSAR(totalS)}</td>
                 {showTarget && <td className="td text-center font-bold">{formatSAR(totalTarget)}</td>}
                 {showTarget && <td className="td text-center font-bold">{totalAch.toFixed(1)}%</td>}
+                <td className="td text-center font-bold">100%</td>
                 <td className="td text-center font-bold">{Math.round(totalT).toLocaleString()}</td>
                 <td className="td text-center font-bold">{formatSAR(totalT > 0 ? totalS / totalT : 0)}</td>
               </tr>
@@ -346,7 +385,18 @@ export default function StoresPage() {
   const [branch, setBranch] = useState<string>('all');
 
   const [selectedSid, setSelectedSid] = useState<string | null>(null);
+  const [storeSortKey, setStoreSortKey] = useState<StoreSortKey>('val');
+  const [storeSortDir, setStoreSortDir] = useState<'asc' | 'desc'>('desc');
   const range = useMemo(() => getRange(mode, standardYear, standardMonth, customStart, customEnd), [customEnd, customStart, mode, standardMonth, standardYear]);
+
+  const handleStoreSort = (key: StoreSortKey) => {
+    if (storeSortKey === key) {
+      setStoreSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setStoreSortKey(key);
+      setStoreSortDir(key === 'name' ? 'asc' : 'desc');
+    }
+  };
 
   useEffect(() => {
     Promise.all([loadManagementData(), loadEmployeesData()])
@@ -488,6 +538,24 @@ export default function StoresPage() {
     if (!derived || !selectedSid) return null;
     return derived.list.find((s) => s.sid === selectedSid) || null;
   }, [derived, selectedSid]);
+
+  const sortedList = useMemo(() => {
+    if (!derived) return [];
+    const list = [...derived.list];
+    const k = storeSortKey;
+    const d = storeSortDir;
+    list.sort((a, b) => {
+      const av = k === 'name' ? (a[k] as string) : (a[k] as number) ?? 0;
+      const bv = k === 'name' ? (b[k] as string) : (b[k] as number) ?? 0;
+      if (k === 'name') {
+        const cmp = String(av).localeCompare(String(bv), 'ar');
+        return d === 'asc' ? cmp : -cmp;
+      }
+      const cmp = (av as number) - (bv as number);
+      return d === 'asc' ? cmp : -cmp;
+    });
+    return list;
+  }, [derived, storeSortKey, storeSortDir]);
 
   if (err) {
     return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
@@ -634,19 +702,19 @@ export default function StoresPage() {
             <thead>
               <tr>
                 <th className="th text-center w-[60px]">#</th>
-                <th className="th">الفرع</th>
-                <th className="th text-center">المبيعات</th>
-                <th className="th text-center">العام السابق</th>
-                <th className="th text-center">الهدف</th>
-                <th className="th text-center">التحقيق %</th>
-                <th className="th text-center">النمو %</th>
-                <th className="th text-center">الفواتير</th>
-                <th className="th text-center">متوسط الفاتورة</th>
-                <th className="th text-center">الزوار</th>
+                <SortableTh label="الفرع" sortKey="name" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} />
+                <SortableTh label="المبيعات" sortKey="val" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="العام السابق" sortKey="prevVal" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="الهدف" sortKey="target" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="التحقيق %" sortKey="ach" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="النمو %" sortKey="growth" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="الفواتير" sortKey="trans" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="متوسط الفاتورة" sortKey="avgInv" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="الزوار" sortKey="visitors" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
               </tr>
             </thead>
             <tbody>
-              {derived.list.map((b, i) => (
+              {sortedList.map((b, i) => (
                 <tr key={b.sid} className="hover:bg-orange-50 cursor-pointer" onClick={() => setSelectedSid(b.sid)}>
                   <td className="td text-center text-neutral-500">{i + 1}</td>
                   <td className="td">
@@ -669,7 +737,7 @@ export default function StoresPage() {
                   <td className="td text-center">{Math.round(b.visitors).toLocaleString()}</td>
                 </tr>
               ))}
-              {derived.list.length === 0 && (
+              {sortedList.length === 0 && (
                 <tr>
                   <td className="td text-center text-neutral-500" colSpan={10}>
                     لا توجد بيانات بعد تطبيق الفلاتر.

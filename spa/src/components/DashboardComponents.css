@@ -12,3 +12,14 @@
   width: 18px;
   height: 18px;
 }
+
+/* Top 10 Rank cards: bar and numbers proportional to card */
+.identity-card .space-y-4 > * + * {
+  margin-top: 0.75rem;
+}
+.identity-card h3 {
+  font-size: 1.125rem;
+}
+.identity-card .h-5 {
+  min-height: 1.25rem;
+}

@@ -1,8 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
+import { getCurrentUser } from '../auth/storage';
 import { KPICard, RankCard } from '../components/DashboardComponents';
 import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon } from '../components/Icons';
+
+function isAdminOrAuditor(role?: string) {
+  return role === 'Admin' || role === 'Auditor';
+}
 
 type Mode = 'mtd_yest' | 'yesterday' | 'today' | 'custom';
 
@@ -33,6 +38,13 @@ export default function DashboardPage() {
   const [mode, setMode] = useState<Mode>('mtd_yest');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [manager, setManager] = useState<string>('all');
+  const [branch, setBranch] = useState<string>('all');
+  const user = getCurrentUser();
+  const effectiveManager = useMemo(() => {
+    if (isAdminOrAuditor(user?.role)) return manager;
+    return user?.name || manager;
+  }, [manager, user?.name, user?.role]);
 
   const formatSAR = (val: number) =>
     val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
@@ -72,19 +84,42 @@ export default function DashboardPage() {
     return getDefaultRange(mode);
   }, [mode, customStart, customEnd]);
 
+  const { allowedStoreIds, managers, branches } = useMemo(() => {
+    const meta: Record<string, { manager?: string }> = raw?.store_meta || {};
+    const stores = raw?.stores || {};
+    const managersSet = new Set<string>();
+    Object.values(meta).forEach((m: any) => { if (m?.manager) managersSet.add(String(m.manager)); });
+    const managers = Array.from(managersSet).sort((a, b) => a.localeCompare(b, 'ar'));
+    const branches = Object.keys(stores).sort((a, b) => (stores[a] || a).localeCompare(stores[b] || b, 'ar'));
+    const allowed = new Set<string>();
+    if (branch === 'all' && effectiveManager === 'all') {
+      Object.keys(stores).forEach((sid) => allowed.add(sid));
+    } else {
+      Object.keys(meta).forEach((sid) => {
+        const m = meta[sid];
+        if (branch !== 'all' && sid !== branch) return;
+        if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return;
+        allowed.add(sid);
+      });
+      if (allowed.size === 0) Object.keys(stores).forEach((sid) => allowed.add(sid));
+    }
+    return { allowedStoreIds: allowed, managers, branches };
+  }, [raw, branch, effectiveManager]);
+
   const totals = useMemo(() => {
     if (!raw) return { sales: 0, trans: 0, visitors: 0, target: 0 };
     const inRange = (d: string) => {
       const x = String(d).substring(0, 10);
       return x >= range.start && x <= range.end;
     };
+    const allow = (sid: string) => allowedStoreIds.has(sid);
     let sales = 0, trans = 0, visitors = 0, target = 0;
-    (raw.sales || []).forEach(([d, _s, v]: any[]) => { if (inRange(d)) sales += (v || 0); });
-    (raw.transactions || []).forEach(([d, _s, v]: any[]) => { if (inRange(d)) trans += (v || 0); });
-    (raw.visitors || []).forEach(([d, _s, v]: any[]) => { if (inRange(d)) visitors += (v || 0); });
-    (raw.targets || []).forEach(([d, _s, v]: any[]) => { if (inRange(d)) target += (v || 0); });
+    (raw.sales || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) sales += (v || 0); });
+    (raw.transactions || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) trans += (v || 0); });
+    (raw.visitors || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) visitors += (v || 0); });
+    (raw.targets || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) target += (v || 0); });
     return { sales, trans, visitors, target };
-  }, [raw, range.start, range.end]);
+  }, [raw, range.start, range.end, allowedStoreIds]);
 
   // نفس الفترة من السنة الماضية للمقارنة
   const prevYearRange = useMemo(() => {
@@ -102,13 +137,14 @@ export default function DashboardPage() {
       const x = String(d).substring(0, 10);
       return x >= prevYearRange.start && x <= prevYearRange.end;
     };
+    const allow = (sid: string) => allowedStoreIds.has(sid);
     let sales = 0, trans = 0, visitors = 0, target = 0;
-    (raw.sales || []).forEach(([d, _s, v]: any[]) => { if (inRange(d)) sales += (v || 0); });
-    (raw.transactions || []).forEach(([d, _s, v]: any[]) => { if (inRange(d)) trans += (v || 0); });
-    (raw.visitors || []).forEach(([d, _s, v]: any[]) => { if (inRange(d)) visitors += (v || 0); });
-    (raw.targets || []).forEach(([d, _s, v]: any[]) => { if (inRange(d)) target += (v || 0); });
+    (raw.sales || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) sales += (v || 0); });
+    (raw.transactions || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) trans += (v || 0); });
+    (raw.visitors || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) visitors += (v || 0); });
+    (raw.targets || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) target += (v || 0); });
     return { sales, trans, visitors, target };
-  }, [raw, prevYearRange.start, prevYearRange.end]);
+  }, [raw, prevYearRange.start, prevYearRange.end, allowedStoreIds]);
 
   const inRange = useMemo(
     () => (d: string) => {
@@ -134,22 +170,27 @@ export default function DashboardPage() {
 
   const topStoresRank = useMemo(() => {
     if (!raw?.sales || !raw?.stores) return [];
+    const allow = (sid: string) => allowedStoreIds.has(sid);
     const byStore: Record<string, { sales: number; trans: number; visitors: number; target: number; prevSales: number; prevVisitors: number }> = {};
     (raw.sales || []).forEach(([d, s, v]: any[]) => {
+      if (!allow(s)) return;
       if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevSales: 0, prevVisitors: 0 };
       if (inRange(d)) byStore[s].sales += v || 0;
       if (inPrevRange(d)) byStore[s].prevSales += v || 0;
     });
     (raw.transactions || []).forEach(([d, s, v]: any[]) => {
+      if (!allow(s)) return;
       if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevSales: 0, prevVisitors: 0 };
       if (inRange(d)) byStore[s].trans += v || 0;
     });
     (raw.visitors || []).forEach(([d, s, v]: any[]) => {
+      if (!allow(s)) return;
       if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevSales: 0, prevVisitors: 0 };
       if (inRange(d)) byStore[s].visitors += v || 0;
       if (inPrevRange(d)) byStore[s].prevVisitors += v || 0;
     });
     (raw.targets || []).forEach(([d, s, v]: any[]) => {
+      if (!allow(s)) return;
       if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevSales: 0, prevVisitors: 0 };
       if (inRange(d)) byStore[s].target += v || 0;
     });
@@ -166,7 +207,7 @@ export default function DashboardPage() {
         avg_inv: avgInv,
       };
     });
-  }, [raw, inRange, inPrevRange]);
+  }, [raw, inRange, inPrevRange, allowedStoreIds]);
 
   const topEmployeesRank = useMemo(() => {
     if (!empRaw?.history || !empRaw?.employee_names) return [];
@@ -175,7 +216,8 @@ export default function DashboardPage() {
     const targets: Record<string, number> = empRaw.targets || {};
     const norm = (s: unknown) => String(s || '').substring(0, 10);
     const agg: Record<string, { sales: number; trans: number; target: number }> = {};
-    for (const records of Object.values(historyData)) {
+    Object.entries(historyData).forEach(([storeId, records]) => {
+      if (!allowedStoreIds.has(storeId)) return;
       for (const rec of records || []) {
         const date = rec?.[0];
         const rawId = rec?.[1];
@@ -195,14 +237,14 @@ export default function DashboardPage() {
         agg[id].sales += sales;
         agg[id].trans += trans;
       }
-    }
+    });
     return Object.entries(agg).map(([id, v]) => ({
       name: names[id] || names[id.padStart(4, '0')] || id,
       sales: v.sales,
       avg_inv: v.trans > 0 ? v.sales / v.trans : 0,
       achievement: v.target > 0 ? (v.sales / v.target) * 100 : 0,
     }));
-  }, [empRaw, range.start, range.end]);
+  }, [empRaw, range.start, range.end, allowedStoreIds]);
 
   if (err) {
     return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
@@ -236,7 +278,27 @@ export default function DashboardPage() {
             {refreshing ? 'جاري التحديث...' : 'تحديث البيانات'}
           </button>
         </div>
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+          {isAdminOrAuditor(user?.role) && (
+            <div>
+              <div className="text-xs font-semibold text-neutral-500 mb-1">مدير المنطقة</div>
+              <select className="input" value={manager} onChange={(e) => setManager(e.target.value)}>
+                <option value="all">الكل</option>
+                {managers.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div>
+            <div className="text-xs font-semibold text-neutral-500 mb-1">الفرع</div>
+            <select className="input" value={branch} onChange={(e) => setBranch(e.target.value)}>
+              <option value="all">كافة الفروع</option>
+              {branches.map((code) => (
+                <option key={code} value={code}>{raw?.stores?.[code] || code}</option>
+              ))}
+            </select>
+          </div>
           <div>
             <div className="text-xs font-semibold text-neutral-500 mb-1">الفترة</div>
             <select className="input" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
@@ -246,7 +308,6 @@ export default function DashboardPage() {
               <option value="custom">فترة مخصصة</option>
             </select>
           </div>
-
           {mode === 'custom' && (
             <>
               <div>
@@ -259,8 +320,7 @@ export default function DashboardPage() {
               </div>
             </>
           )}
-
-          <div className="text-sm font-semibold text-neutral-700 ms-auto">
+          <div className="text-sm font-semibold text-neutral-700 flex items-end">
             {range.start} → {range.end}
           </div>
         </div>

@@ -165,7 +165,69 @@ html[dir="rtl"] .main-layout-sidebar--closed {
   .modal-actions {
     @apply mt-6 flex justify-end gap-3;
   }
-  
+
+  /* Offcanvas تفاصيل الموظف (مطابق لمشروع التصميم) */
+  .offcanvas-emp-detail {
+    @apply fixed top-0 bottom-0 z-50 bg-white shadow-2xl overflow-y-auto;
+    width: 100%;
+    max-width: 28rem;
+    border-left: 5px solid #f97316;
+    animation: slideInOffcanvas 0.25s ease-out;
+  }
+  [dir="rtl"] .offcanvas-emp-detail {
+    left: auto;
+    right: 0;
+    border-left: none;
+    border-right: 5px solid #f97316;
+  }
+  [dir="ltr"] .offcanvas-emp-detail {
+    right: auto;
+    left: 0;
+  }
+  .offcanvas-emp-detail .offcanvas-header {
+    @apply bg-neutral-100 p-4 flex items-start justify-between gap-3;
+  }
+  .offcanvas-emp-detail .offcanvas-body {
+    @apply p-4;
+  }
+  /* بطاقات المقاييس داخل الـ offcanvas (مطابق employees.html) */
+  .insight-card {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 15px;
+    border: 1px solid #eee;
+  }
+  .insight-label {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 5px;
+  }
+  .insight-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #333;
+  }
+  .diff-badge {
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    border-radius: 6px;
+    display: inline-block;
+    font-weight: bold;
+  }
+  .diff-badge.diff-pos {
+    background: #d1e7dd;
+    color: #0f5132;
+  }
+  .diff-badge.diff-neg {
+    background: #f8d7da;
+    color: #842029;
+  }
+  .diff-badge.diff-neutral {
+    background: #e2e3e5;
+    color: #41464b;
+  }
+
   /* الحقول والمدخلات الحديثة */
   .label {
     @apply block text-sm font-medium mb-2;
@@ -362,6 +424,16 @@ html[dir="rtl"] .main-layout-sidebar--closed {
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.9); }
   to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideInOffcanvas {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+[dir="ltr"] .offcanvas-emp-detail { animation: slideInOffcanvasLtr 0.25s ease-out; }
+@keyframes slideInOffcanvasLtr {
+  from { opacity: 0; transform: translateX(-100%); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes pulse {

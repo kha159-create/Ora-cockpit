@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 import { KPICard } from '../components/DashboardComponents';
-import { CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon } from '../components/Icons';
+import { CurrencyDollarIcon, ReceiptTaxIcon } from '../components/Icons';
 import { getCurrentUser } from '../auth/storage';
 
 function toYMD(d: Date) {
@@ -38,15 +38,6 @@ export default function LivePage() {
 
   const today = useMemo(() => toYMD(new Date()), []);
 
-  const todayTotals = useMemo(() => {
-    if (!raw) return { sales: 0, trans: 0, visitors: 0 };
-    let sales = 0, trans = 0, visitors = 0;
-    (raw.sales || []).forEach(([d, _s, v]: any[]) => { if (String(d).startsWith(today)) sales += (v || 0); });
-    (raw.transactions || []).forEach(([d, _s, v]: any[]) => { if (String(d).startsWith(today)) trans += (v || 0); });
-    (raw.visitors || []).forEach(([d, _s, v]: any[]) => { if (String(d).startsWith(today)) visitors += (v || 0); });
-    return { sales, trans, visitors };
-  }, [raw, today]);
-
   const managers = useMemo(() => {
     if (!raw?.store_meta) return [];
     const set = new Set<string>();
@@ -60,6 +51,22 @@ export default function LivePage() {
     if (isAdminOrAuditor(user?.role)) return manager;
     return user?.name || manager;
   }, [manager, user?.name, user?.role]);
+
+  const todayTotals = useMemo(() => {
+    if (!raw) return { sales: 0, trans: 0 };
+    const meta = raw.store_meta || {};
+    const inRange = (d: string) => String(d).startsWith(today);
+    const okStore = (sid: string) =>
+      effectiveManager === 'all' || (meta[sid] && String(meta[sid].manager) === effectiveManager);
+    let sales = 0, trans = 0;
+    (raw.sales || []).forEach(([d, sid, v]: any[]) => {
+      if (inRange(d) && okStore(sid)) sales += v || 0;
+    });
+    (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
+      if (inRange(d) && okStore(sid)) trans += v || 0;
+    });
+    return { sales, trans };
+  }, [raw, today, effectiveManager]);
 
   const storeList = useMemo(() => {
     if (!raw?.sales || !raw?.stores) return [];
@@ -143,10 +150,15 @@ export default function LivePage() {
         <p className="text-sm text-neutral-600 mt-1">تاريخ اليوم: {today}</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KPICard title="المبيعات (اليوم)" value={todayTotals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
-        <KPICard title="الفواتير" value={todayTotals.trans} format={(v) => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
-        <KPICard title="الزوار" value={todayTotals.visitors} format={(v) => Math.round(v).toLocaleString()} icon={<UsersIcon />} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <KPICard title="المجموع (اليوم)" value={todayTotals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
+        <KPICard
+          title="الفواتير"
+          value={todayTotals.trans}
+          format={(v) => Math.round(v).toLocaleString()}
+          icon={<ReceiptTaxIcon />}
+          trendValue={todayTotals.trans > 0 ? `معدل الفاتورة: ${formatSAR(todayTotals.sales / todayTotals.trans)}` : undefined}
+        />
       </div>
 
       {managers.length > 0 && (
