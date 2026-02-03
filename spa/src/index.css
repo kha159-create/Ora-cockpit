@@ -127,20 +127,30 @@ html[dir="rtl"] .main-layout-sidebar--closed {
 }
 
 @layer components {
-  /* المودال: داخل حدود الصفحة (يُستخدم مع والد position: relative) */
-  .modal-in-page {
-    @apply absolute inset-0 flex items-center justify-center z-40 p-4 bg-black/50 overflow-auto;
+  /* المودال: منتصف الشاشة فقط، بدون طبقة سوداء تغطي الصفحة */
+  .modal-center-screen {
+    @apply fixed inset-0 flex items-center justify-center z-50 p-4 overflow-auto;
     animation: fadeIn 0.2s ease-out;
-    backdrop-filter: blur(4px);
+    background: transparent;
+  }
+  .modal-center-screen .modal-content {
+    @apply my-4 animate-scale-in;
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  }
+  /* المودال: داخل حدود الصفحة (يُستخدم مع والد position: relative) — للتوافق */
+  .modal-in-page {
+    @apply absolute inset-0 flex items-center justify-center z-40 p-4 overflow-auto;
+    animation: fadeIn 0.2s ease-out;
+    background: transparent;
   }
   .modal-in-page .modal-content {
     @apply my-4;
   }
   /* المودال الكامل (شاشة كاملة) للتوافق مع من يستخدمه */
   .modal-backdrop {
-    @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-auto;
+    @apply fixed inset-0 flex items-center justify-center z-50 p-4 overflow-auto;
     animation: fadeIn 0.2s ease-out;
-    backdrop-filter: blur(4px);
+    background: transparent;
   }
   .modal-content {
     @apply bg-white w-full max-w-lg p-6;
@@ -172,6 +182,17 @@ html[dir="rtl"] .main-layout-sidebar--closed {
     border-color: var(--primary);
     ring-color: var(--primary-100);
     box-shadow: var(--shadow-md);
+  }
+  select.input:focus,
+  .input:focus {
+    --tw-ring-color: var(--primary-100);
+  }
+
+  /* عنوان الصفحة بهوية البرتقالي */
+  .page-title {
+    @apply text-2xl font-bold text-neutral-900;
+    border-bottom: 3px solid var(--primary-500);
+    padding-bottom: 0.5rem;
   }
   
   /* الأزرار الحديثة */
@@ -242,6 +263,14 @@ html[dir="rtl"] .main-layout-sidebar--closed {
   }
   
   /* بطاقات KPI الحديثة */
+  /* هوية التطبيق: أسود وبرتقالي على البطاقات والروابط */
+  .identity-card {
+    border: 1px solid var(--neutral-200);
+  }
+  .identity-card:hover {
+    border-color: var(--primary-300);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  }
   .modern-kpi-card {
     @apply relative overflow-hidden transition-all duration-500 hover:-translate-y-2;
     border-radius: var(--radius-2xl);
@@ -251,7 +280,7 @@ html[dir="rtl"] .main-layout-sidebar--closed {
   }
   .modern-kpi-card:hover {
     box-shadow: var(--shadow-2xl);
-    border-color: var(--primary-200);
+    border-color: var(--primary-300);
   }
   
   .kpi-card-background {

@@ -369,8 +369,8 @@ export default function ReportsPage() {
 
       {/* Report type choice modal - داخل حدود الصفحة */}
       {showReportChoiceModal && reportChoiceType && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/50 rounded-2xl" onClick={() => setShowReportChoiceModal(false)}>
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-center-screen" onClick={() => setShowReportChoiceModal(false)}>
+          <div className="modal-content max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <h5 className="font-bold text-lg text-neutral-900 mb-4">
               {reportChoiceType === 'pdf' ? 'اختر تقرير PDF' : 'اختر تقرير Excel'}
             </h5>
@@ -412,8 +412,8 @@ export default function ReportsPage() {
 
       {/* Excel confirm modal - داخل حدود الصفحة */}
       {showExcelModal && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/50 rounded-2xl" onClick={() => setShowExcelModal(false)}>
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-center-screen" onClick={() => setShowExcelModal(false)}>
+          <div className="modal-content max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <h5 className="font-bold text-lg text-neutral-900 mb-4">تصدير Excel</h5>
             <p className="text-sm text-neutral-600 mb-2">الفترة: {range.start} → {range.end}</p>
             <p className="text-sm text-neutral-500 mb-4">{excelType === 'store' ? 'مبيعات المعارض' : 'مبيعات الموظفين'}</p>

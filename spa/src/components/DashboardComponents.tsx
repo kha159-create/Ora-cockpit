@@ -194,7 +194,7 @@ export const ChartCard: React.FC<{
   watermarkOpacity?: number;
 }> = ({ title, children, className = '', watermark, watermarkOpacity = 0.1 }) => (
   <div
-    className={`bg-white p-6 rounded-2xl shadow-lg border border-neutral-200 h-full flex flex-col transition-all duration-300 hover:shadow-xl hover:border-primary-200 ${className}`}
+    className={`bg-white p-6 rounded-2xl shadow-lg border border-neutral-200 h-full flex flex-col transition-all duration-300 hover:shadow-xl hover:border-orange-200 ${className}`}
   >
     <div className="text-xl font-bold text-neutral-800 mb-6 border-b border-neutral-100 pb-3 flex items-center justify-between">
       <span>{title}</span>
@@ -203,6 +203,69 @@ export const ChartCard: React.FC<{
     <div className="flex-grow relative">{children}</div>
   </div>
 );
+
+/** بطاقة أعلى N مع تبديل المقاييس — هوية برتقالي/أسود */
+export type RankMetric = { key: string; label: string };
+export const RankCard: React.FC<{
+  title: string;
+  metrics: RankMetric[];
+  data: { name: string; [key: string]: number }[];
+  format?: (val: number, metricKey?: string) => string;
+  maxItems?: number;
+}> = ({ title, metrics, data, format = (v) => v.toLocaleString(), maxItems = 10 }) => {
+  const [metric, setMetric] = useState(metrics[0]?.key ?? '');
+  const key = metric || metrics[0]?.key;
+  const list = useMemo(() => {
+    if (!key || !data.length) return [];
+    const sorted = [...data].sort((a, b) => (b[key] ?? 0) - (a[key] ?? 0));
+    return sorted.slice(0, maxItems);
+  }, [data, key, maxItems]);
+  const maxVal = useMemo(() => (list.length ? Math.max(...list.map((i) => i[key] ?? 0), 1) : 1), [list, key]);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-5 h-full flex flex-col identity-card">
+      <h3 className="text-lg font-bold text-neutral-800 mb-3">{title}</h3>
+      <div className="flex flex-wrap gap-2 mb-4">
+        {metrics.map((m) => (
+          <button
+            key={m.key}
+            type="button"
+            onClick={() => setMetric(m.key)}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+              metric === m.key
+                ? 'bg-orange-500 text-white shadow-md'
+                : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex-grow space-y-3 overflow-auto min-h-0">
+        {list.map((item, idx) => {
+          const value = item[key] ?? 0;
+          const pct = maxVal > 0 ? (value / maxVal) * 100 : 0;
+          return (
+            <div key={`${item.name}-${idx}`} className="flex items-center gap-3">
+              <span className="text-sm font-bold text-neutral-800 w-20 shrink-0 text-left" dir="ltr">
+                {format(value, key)}
+              </span>
+              <div className="flex-1 min-w-0 h-3 bg-neutral-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-orange-400 to-orange-600 transition-all duration-300"
+                  style={{ width: `${Math.max(pct, 2)}%` }}
+                />
+              </div>
+              <span className="text-sm font-medium text-neutral-700 truncate w-32 shrink-0" title={item.name}>
+                {idx + 1}- {item.name}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 const Tooltip: React.FC<{ content: string; x: number; y: number }> = ({ content, x, y }) => (
   <div

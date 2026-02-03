@@ -293,7 +293,7 @@ function StoreDetailsModal({
   };
 
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/50 rounded-2xl overflow-auto" onClick={onClose}>
+    <div className="modal-center-screen" onClick={onClose}>
       <div className="modal-content max-w-6xl my-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
