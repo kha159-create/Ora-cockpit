@@ -24,8 +24,9 @@ export default function OffersPage() {
     );
   }
 
-  const offers = Array.isArray(data.offers) ? data.offers : [];
-  const summary = data.summary || { totalSales: 0, totalFilteredSales: 0, count: 0 };
+  // الريبو الأصلي: قد يكون الملف مصفوفة مباشرة أو { offers, summary }
+  const offers = Array.isArray(data) ? data : (Array.isArray(data?.offers) ? data.offers : []);
+  const summary = !Array.isArray(data) && data?.summary ? data.summary : { totalSales: 0, totalFilteredSales: 0, count: 0 };
 
   return (
     <div className="space-y-6">

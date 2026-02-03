@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { loadManagementData } from '../services/upstreamData';
-import { KPICard, ChartCard, BarChart } from '../components/DashboardComponents';
+import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
+import { KPICard, ChartCard, BarChart, RankCard } from '../components/DashboardComponents';
 import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon } from '../components/Icons';
 
 type Mode = 'mtd_yest' | 'yesterday' | 'today' | 'custom';

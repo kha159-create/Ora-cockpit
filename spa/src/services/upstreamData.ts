@@ -10,23 +10,30 @@ function repoRootUrl(path: string) {
   return `${repoPrefix}${path}`;
 }
 
+const UPSTREAM_BASE = 'https://raw.githubusercontent.com/ALAAWF2/orange-dashboard/main';
+
 async function fetchJson<T>(file: string): Promise<T> {
   const ts = Date.now();
+  const upstreamUrl = `${UPSTREAM_BASE}/${file}?t=${ts}`;
   const localUrl = repoRootUrl(`${file}?t=${ts}`);
-  const upstreamUrl = `https://raw.githubusercontent.com/ALAAWF2/orange-dashboard/main/${file}?t=${ts}`;
 
-  // 1) Try local (GitHub Pages / SPA public)
+  // القاعدة: جلب البيانات من الريبو الأصلي أولاً (يُحدَّث كل 15 دقيقة)
   try {
-    const res = await fetch(localUrl, { cache: 'no-store' });
+    const res = await fetch(upstreamUrl, { cache: 'no-store' });
     if (res.ok) return (await res.json()) as T;
   } catch {
     // ignore
   }
 
-  // 2) Fallback to upstream raw (guarantees no data loss)
-  const res2 = await fetch(upstreamUrl, { cache: 'no-store' });
-  if (!res2.ok) throw new Error(`Failed to fetch ${file} (local+upstream): ${res2.status}`);
-  return (await res2.json()) as T;
+  // Fallback: من النسخة المحلية (مثلاً بعد المزامنة)
+  try {
+    const res2 = await fetch(localUrl, { cache: 'no-store' });
+    if (res2.ok) return (await res2.json()) as T;
+  } catch {
+    // ignore
+  }
+
+  throw new Error(`Failed to fetch ${file} (upstream + local): تحقق من الريبو الأصلي ALAAWF2/orange-dashboard`);
 }
 
 export function loadManagementData() {

@@ -64,8 +64,8 @@ export default function StagnantPage() {
               <tbody>
                 {filtered.slice(0, 100).map((i: any, idx: number) => (
                   <tr key={idx} className="border-b border-neutral-100 hover:bg-neutral-50">
-                    <td className="py-3 px-4 text-neutral-900">{i.name || i.item_name || i.id || '-'}</td>
-                    <td className="py-3 px-4">{Number(i.count || i.qty || 0).toLocaleString()}</td>
+                    <td className="py-3 px-4 text-neutral-900">{i.name || '-'}</td>
+                    <td className="py-3 px-4">{Number(i.qty ?? i.count ?? 0).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
