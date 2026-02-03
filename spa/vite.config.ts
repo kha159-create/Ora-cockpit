@@ -8,14 +8,18 @@ export default defineConfig(() => {
     plugins: [react()],
     publicDir: 'public',
     build: {
+      // Standard dist inside spa/ so deploy-spa-pages.yml can publish spa/dist
+      outDir: 'dist',
+      emptyOutDir: true,
       minify: 'terser',
       terserOptions: { compress: { drop_console: true, drop_debugger: true } },
-      assetsDir: 'assets',
+      // Avoid clashing with existing legacy /assets
+      assetsDir: 'spa-assets',
       rollupOptions: {
         output: {
-          assetFileNames: 'assets/[name]-[hash][extname]',
-          chunkFileNames: 'assets/[name]-[hash].js',
-          entryFileNames: 'assets/[name]-[hash].js'
+          assetFileNames: 'spa-assets/[name]-[hash][extname]',
+          chunkFileNames: 'spa-assets/[name]-[hash].js',
+          entryFileNames: 'spa-assets/[name]-[hash].js'
         }
       }
     },

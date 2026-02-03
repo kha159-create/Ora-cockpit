@@ -2,14 +2,17 @@ export type ManagementData = any;
 export type EmployeesData = any;
 export type ProductAnalysisData = any;
 
-function baseUrl(path: string) {
-  // Important for GitHub Pages: BASE_URL includes repo path
-  return `${import.meta.env.BASE_URL}${path}`;
+function repoRootUrl(path: string) {
+  // Fetch JSON from repo root so 15-min sync from ALAAWF2/orange-dashboard reflects.
+  // GitHub Pages: /<repo>/ or /<repo>/spa/ (depending on deploy). Locally: /
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  const repoPrefix = parts.length ? `/${parts[0]}/` : '/';
+  return `${repoPrefix}${path}`;
 }
 
 async function fetchJson<T>(file: string): Promise<T> {
   const ts = Date.now();
-  const localUrl = baseUrl(`${file}?t=${ts}`);
+  const localUrl = repoRootUrl(`${file}?t=${ts}`);
   const upstreamUrl = `https://raw.githubusercontent.com/ALAAWF2/orange-dashboard/main/${file}?t=${ts}`;
 
   // 1) Try local (GitHub Pages / SPA public)
