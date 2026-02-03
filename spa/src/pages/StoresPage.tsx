@@ -104,19 +104,22 @@ function StoreDetailsModal({
   store,
   employeesJson,
   mode,
+  startYMD,
+  endYMD,
 }: {
   open: boolean;
   onClose: () => void;
   store: StoreRow | null;
   employeesJson: any;
   mode: Mode;
+  startYMD: string;
+  endYMD: string;
 }) {
-  const monthPrefix = useMemo(() => {
-    const today = new Date();
-    const y = new Date(today);
-    y.setDate(today.getDate() - 1);
-    return toLocalYMD(y).substring(0, 7);
-  }, []);
+  const rangeLabel = useMemo(() => {
+    if (!startYMD || !endYMD) return '-';
+    if (startYMD === endYMD) return startYMD;
+    return `${startYMD} → ${endYMD}`;
+  }, [endYMD, startYMD]);
 
   const details = useMemo(() => {
     if (!store || !employeesJson) return null;
@@ -127,28 +130,54 @@ function StoreDetailsModal({
     const employeeNames: Record<string, string> = employeesJson?.employee_names || {};
 
     const rec: EmpRec[] = history?.[store.sid] || [];
-    const today = new Date();
-    const yester = new Date(today);
-    yester.setDate(today.getDate() - 1);
-    const dateToday = toLocalYMD(today);
-    const dateYest = toLocalYMD(yester);
+    const rangeStart = startYMD;
+    const rangeEnd = endYMD;
 
-    const resolveTarget = (empId: string) => {
+    // Build list of YYYY-MM month keys for the selected range
+    const monthKeys: string[] = [];
+    if (rangeStart && rangeEnd) {
+      const s = new Date(rangeStart);
+      const e = new Date(rangeEnd);
+      if (!Number.isNaN(s.getTime()) && !Number.isNaN(e.getTime())) {
+        const cur = new Date(s.getFullYear(), s.getMonth(), 1);
+        const endM = new Date(e.getFullYear(), e.getMonth(), 1);
+        while (cur <= endM) {
+          monthKeys.push(`${cur.getFullYear()}-${pad2(cur.getMonth() + 1)}`);
+          cur.setMonth(cur.getMonth() + 1);
+        }
+      }
+    }
+
+    const resolveTargetForRange = (empId: string) => {
       if (!empId) return 0;
       const id = String(empId).trim();
       const cands = [id, id.padStart(4, '0')];
+
+      // Prefer summing monthly targets when range spans months
+      let sum = 0;
+      if (monthKeys.length > 0) {
+        for (const mk of monthKeys) {
+          const tbm = targetsByMonth?.[mk];
+          for (const c of cands) {
+            const v = tbm?.[c];
+            if (v != null) {
+              sum += safeNum(v);
+              break;
+            }
+          }
+          // monthly_targets format: { empId: { 'YYYY-MM-01': val } }
+          const mt = monthlyTargets?.[id] || monthlyTargets?.[id.padStart(4, '0')];
+          if (mt && typeof mt === 'object') {
+            const v = (mt as any)[`${mk}-01`];
+            if (v != null) sum += safeNum(v);
+          }
+        }
+        if (sum > 0) return sum;
+      }
+
+      // Fallback single target (current month style)
       for (const c of cands) {
         if (targets[c] != null) return safeNum(targets[c]);
-      }
-      const tbm = targetsByMonth?.[monthPrefix];
-      for (const c of cands) {
-        if (tbm?.[c] != null) return safeNum(tbm[c]);
-      }
-      // monthly_targets format fallback: { empId: { 'YYYY-MM-01': val } }
-      const mt = monthlyTargets?.[id] || monthlyTargets?.[id.padStart(4, '0')];
-      if (mt && typeof mt === 'object') {
-        const v = (mt as any)[`${monthPrefix}-01`];
-        if (v != null) return safeNum(v);
       }
       return 0;
     };
@@ -167,9 +196,7 @@ function StoreDetailsModal({
       return { empId, name: hit || name || empId };
     };
 
-    const todayStats: Record<string, { s: number; t: number }> = {};
-    const yestStats: Record<string, { s: number; t: number }> = {};
-    const monthStats: Record<string, { s: number; t: number; target: number }> = {};
+    const rangeStats: Record<string, { s: number; t: number; target: number }> = {};
 
     for (const r of rec) {
       const d = normDate(r?.[0]);
@@ -180,20 +207,10 @@ function StoreDetailsModal({
 
       const { empId, name } = resolveName(rawName);
 
-      if (d === dateToday) {
-        todayStats[name] = todayStats[name] || { s: 0, t: 0 };
-        todayStats[name].s += sales;
-        todayStats[name].t += trans;
-      }
-      if (d === dateYest) {
-        yestStats[name] = yestStats[name] || { s: 0, t: 0 };
-        yestStats[name].s += sales;
-        yestStats[name].t += trans;
-      }
-      if (d && d.startsWith(monthPrefix) && d <= dateYest) {
-        if (!monthStats[name]) monthStats[name] = { s: 0, t: 0, target: resolveTarget(empId) };
-        monthStats[name].s += sales;
-        monthStats[name].t += trans;
+      if (d && d >= rangeStart && d <= rangeEnd) {
+        if (!rangeStats[name]) rangeStats[name] = { s: 0, t: 0, target: resolveTargetForRange(empId) };
+        rangeStats[name].s += sales;
+        rangeStats[name].t += trans;
       }
     }
 
@@ -203,18 +220,14 @@ function StoreDetailsModal({
         .sort((a, b) => b.s - a.s);
 
     return {
-      dateToday,
-      dateYest,
-      monthPrefix,
-      todayList: toList(todayStats),
-      yestList: toList(yestStats),
-      monthList: toList(monthStats),
+      rangeLabel,
+      rangeList: toList(rangeStats),
     };
-  }, [employeesJson, monthPrefix, store]);
+  }, [employeesJson, endYMD, rangeLabel, startYMD, store]);
 
   if (!open || !store) return null;
 
-  const showToday = mode === 'today';
+  const showTarget = mode === 'mtd_yest' || mode === 'standard' || mode === 'custom';
 
   const renderTable = (rows: any[], showTarget: boolean) => {
     const totalS = rows.reduce((s, r) => s + safeNum(r.s), 0);
@@ -301,14 +314,8 @@ function StoreDetailsModal({
           <KPICard title="تحقيق الهدف" value={store.ach} format={(v) => `${v.toFixed(1)}%`} showProgress progressValue={store.ach} />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
-          {showToday && (
-            <ChartCard title={`مبيعات اليوم (${details?.dateToday || '-'})`}>
-              {renderTable(details?.todayList || [], false)}
-            </ChartCard>
-          )}
-          <ChartCard title={`مبيعات الأمس (${details?.dateYest || '-'})`}>{renderTable(details?.yestList || [], false)}</ChartCard>
-          <ChartCard title={`مبيعات الشهر (${details?.monthPrefix || '-'})`}>{renderTable(details?.monthList || [], true)}</ChartCard>
+        <div className="grid grid-cols-1 gap-4 mt-6">
+          <ChartCard title={`مبيعات الفترة (${details?.rangeLabel || '-'})`}>{renderTable(details?.rangeList || [], showTarget)}</ChartCard>
         </div>
 
         <div className="modal-actions">
@@ -339,6 +346,7 @@ export default function StoresPage() {
   const [branch, setBranch] = useState<string>('all');
 
   const [selectedSid, setSelectedSid] = useState<string | null>(null);
+  const range = useMemo(() => getRange(mode, standardYear, standardMonth, customStart, customEnd), [customEnd, customStart, mode, standardMonth, standardYear]);
 
   useEffect(() => {
     Promise.all([loadManagementData(), loadEmployeesData()])
@@ -380,15 +388,13 @@ export default function StoresPage() {
     const managers = Array.from(managersSet).sort((a, b) => a.localeCompare(b, 'ar'));
     const cities = Array.from(citiesSet).sort((a, b) => a.localeCompare(b, 'ar'));
 
-    const { startYMD, endYMD, prevStartYMD, prevEndYMD } = getRange(mode, standardYear, standardMonth, customStart, customEnd);
-
     const inRange = (dStr: unknown) => {
       const d = normDate(dStr);
-      return d >= startYMD && d <= endYMD;
+      return d >= range.startYMD && d <= range.endYMD;
     };
     const inPrev = (dStr: unknown) => {
       const d = normDate(dStr);
-      return d >= prevStartYMD && d <= prevEndYMD;
+      return d >= range.prevStartYMD && d <= range.prevEndYMD;
     };
 
     const branchSales: Record<string, number> = {};
@@ -475,8 +481,8 @@ export default function StoresPage() {
     };
     const achTotal = totals.target > 0 ? (totals.sales / totals.target) * 100 : 0;
 
-    return { managers, cities, list, totals, achTotal };
-  }, [branch, city, customEnd, customStart, effectiveManager, manager, mgmtRaw, mode, standardMonth, standardYear, type, user?.name, user?.role]);
+    return { managers, cities, list, totals, achTotal, rangeLabel: range.startYMD === range.endYMD ? range.startYMD : `${range.startYMD} → ${range.endYMD}` };
+  }, [branch, city, effectiveManager, manager, mgmtRaw, range, type, user?.name, user?.role]);
 
   const selectedStore = useMemo(() => {
     if (!derived || !selectedSid) return null;
@@ -675,7 +681,15 @@ export default function StoresPage() {
         </div>
       </div>
 
-      <StoreDetailsModal open={!!selectedStore} onClose={() => setSelectedSid(null)} store={selectedStore} employeesJson={empRaw} mode={mode} />
+      <StoreDetailsModal
+        open={!!selectedStore}
+        onClose={() => setSelectedSid(null)}
+        store={selectedStore}
+        employeesJson={empRaw}
+        mode={mode}
+        startYMD={range.startYMD}
+        endYMD={range.endYMD}
+      />
     </div>
   );
 }
