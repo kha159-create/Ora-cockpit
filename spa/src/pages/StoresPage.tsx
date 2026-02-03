@@ -4,7 +4,7 @@ import { getCurrentUser } from '../auth/storage';
 import { ChartCard, KPICard } from '../components/DashboardComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon } from '../components/Icons';
 
-type Mode = 'mtd_yest' | 'yesterday' | 'today' | 'standard' | 'custom';
+type Mode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
 
 type StoreRow = {
   sid: string;
@@ -87,9 +87,9 @@ function getRange(mode: Mode, standardYear: number, standardMonth: string, custo
   let currStart: Date;
   let currEnd: Date;
 
-  if (mode === 'mtd_yest') {
-    currStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), 1, 0, 0, 0);
-    currEnd = new Date(yesterday);
+  if (mode === 'mtd') {
+    currStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0);
+    currEnd = new Date(today);
     currEnd.setHours(23, 59, 59, 999);
   } else if (mode === 'yesterday') {
     currStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0);
@@ -261,7 +261,7 @@ function StoreDetailsModal({
 
   if (!open || !store) return null;
 
-  const showTarget = mode === 'mtd_yest' || mode === 'standard' || mode === 'custom';
+  const showTarget = mode === 'mtd' || mode === 'standard' || mode === 'custom';
 
   const renderTable = (rows: any[], showTarget: boolean) => {
     const totalS = rows.reduce((s, r) => s + safeNum(r.s), 0);
@@ -373,7 +373,7 @@ export default function StoresPage() {
   const [empRaw, setEmpRaw] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const [mode, setMode] = useState<Mode>('mtd_yest');
+  const [mode, setMode] = useState<Mode>('mtd');
   const [standardYear, setStandardYear] = useState<number>(() => new Date().getFullYear());
   const [standardMonth, setStandardMonth] = useState<string>('all'); // 'all' or '1'..'12'
   const [customStart, setCustomStart] = useState<string>('');
@@ -408,14 +408,13 @@ export default function StoresPage() {
   }, []);
 
   useEffect(() => {
-    // initialize custom range defaults for mtd_yest
-    const today = new Date();
-    const y = new Date(today);
-    y.setDate(today.getDate() - 1);
-    const startOfMonth = new Date(y.getFullYear(), y.getMonth(), 1);
-    setCustomStart(toLocalYMD(startOfMonth));
-    setCustomEnd(toLocalYMD(y));
-  }, []);
+    if (mode === 'custom' && !customStart && !customEnd) {
+      const today = new Date();
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      setCustomStart(toLocalYMD(startOfMonth));
+      setCustomEnd(toLocalYMD(today));
+    }
+  }, [mode]);
 
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -531,7 +530,17 @@ export default function StoresPage() {
     };
     const achTotal = totals.target > 0 ? (totals.sales / totals.target) * 100 : 0;
 
-    return { managers, cities, list, totals, achTotal, rangeLabel: range.startYMD === range.endYMD ? range.startYMD : `${range.startYMD} → ${range.endYMD}` };
+    const branches = Object.keys(stores)
+      .filter((sid) => {
+        const m = meta[sid] || {};
+        if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
+        if (city !== 'all' && String(m?.city || '') !== city) return false;
+        if (type !== 'all' && String(m?.type || '') !== type) return false;
+        return true;
+      })
+      .sort((a, b) => (stores[a] || a).localeCompare(stores[b] || b, 'ar'));
+
+    return { managers, cities, branches, list, totals, achTotal, rangeLabel: range.startYMD === range.endYMD ? range.startYMD : `${range.startYMD} → ${range.endYMD}` };
   }, [branch, city, effectiveManager, manager, mgmtRaw, range, type, user?.name, user?.role]);
 
   const selectedStore = useMemo(() => {
@@ -578,10 +587,10 @@ export default function StoresPage() {
             <div>
               <div className="text-xs font-semibold text-neutral-500 mb-1">نوع التقرير</div>
               <select className="input" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-                <option value="mtd_yest">من بداية الشهر إلى أمس</option>
-                <option value="yesterday">أمس فقط</option>
                 <option value="today">اليوم</option>
-                <option value="standard">سنوي / شهري</option>
+                <option value="yesterday">أمس</option>
+                <option value="mtd">الشهر الحالي (MTD)</option>
+                <option value="standard">شهر محدد</option>
                 <option value="custom">فترة مخصصة</option>
               </select>
             </div>
@@ -664,14 +673,11 @@ export default function StoresPage() {
               <div className="text-xs font-semibold text-neutral-500 mb-1">الفرع</div>
               <select className="input" value={branch} onChange={(e) => setBranch(e.target.value)}>
                 <option value="all">كافة الفروع</option>
-                {Object.entries(mgmtRaw.stores || {})
-                  .map(([id, name]: [string, string]) => ({ id, name: name || id }))
-                  .sort((a, b) => a.name.localeCompare(b.name, 'ar'))
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
+                {derived.branches.map((sid) => (
+                  <option key={sid} value={sid}>
+                    {mgmtRaw?.stores?.[sid] || sid}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

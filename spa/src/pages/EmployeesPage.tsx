@@ -4,7 +4,7 @@ import { getCurrentUser } from '../auth/storage';
 import { AchievementBar, ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UserGroupIcon } from '../components/Icons';
 
-type Period = 'today' | 'yesterday' | 'mtd' | 'mtd_yest' | 'month';
+type Period = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
 type SortKey =
   | 'name'
   | 'storeName'
@@ -132,8 +132,8 @@ function SortableTh({
   );
 }
 
-/** offcanvas تفاصيل الموظف — مطابق لمشروع التصميم employees.html (empInsightPanel) */
-function EmployeeDetailsOffcanvas({
+/** نافذة منبثقة في وسط الصفحة لتفاصيل الموظف — مطابق تصميم الموظف 360 */
+function EmployeeDetailModal({
   open,
   employee,
   branchStats,
@@ -169,68 +169,85 @@ function EmployeeDetailsOffcanvas({
   });
 
   return (
-    <div className="offcanvas-emp-detail" role="dialog" aria-label="تفاصيل الموظف">
-      <div className="offcanvas-header">
-        <div className="min-w-0">
-          <h5 className="text-lg font-bold text-neutral-900 truncate">{detail.name}</h5>
-          <small className="text-neutral-500 block mt-0.5">{detail.storeName}</small>
-        </div>
-        <button type="button" className="p-2 rounded-lg hover:bg-neutral-200 text-neutral-600" onClick={onClose} aria-label="إغلاق">
-          <span className="text-xl leading-none">×</span>
-        </button>
-      </div>
-      <div className="offcanvas-body">
-        {/* 1. Performance Overview — مطابق التصميم */}
-        <div className="flex justify-between mb-6 text-center">
-          <div className="w-1/2 border-l border-neutral-200 pl-3">
-            <div className="text-neutral-500 text-sm">المبيعات (MTD)</div>
-            <div className="text-2xl font-bold text-orange-600 mt-0">{formatSAR(detail.sales)}</div>
-            <div className="text-sm text-neutral-600 mt-0">{detail.branchShare.toFixed(1)}% حصة الفرع</div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30" onClick={onClose} role="dialog" aria-label="تفاصيل الموظف">
+      <div className="modal-content max-w-4xl w-full my-4 max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-neutral-200 p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-neutral-200 pb-4">
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold text-neutral-900 truncate">{detail.name}</h2>
+            <p className="text-sm text-neutral-500 mt-0.5">{detail.storeName} · {detail.manager} · {periodLabel}</p>
           </div>
-          <div className="w-1/2 pr-3">
+          <button type="button" className="btn-secondary py-2 px-3" onClick={onClose} aria-label="إغلاق">إغلاق</button>
+        </div>
+
+        {/* بطاقات الملخص — مطابق التصميم */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-6">
+          <div className="bg-white rounded-xl border border-neutral-200 p-4">
+            <div className="text-neutral-500 text-sm">المبيعات الإجمالية</div>
+            <div className="text-2xl font-bold text-orange-600 mt-1">{formatSAR(detail.sales)}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-neutral-200 p-4">
+            <div className="text-neutral-500 text-sm">معدل الفاتورة (ATV)</div>
+            <div className="text-2xl font-bold text-neutral-900 mt-1">{formatSAR(detail.avg_ticket)}</div>
+            {bAvgTicket > 0 && (
+              <div className={`text-xs mt-1 ${detail.avg_ticket >= bAvgTicket ? 'text-green-600' : 'text-red-600'}`}>
+                متوسط الفرع: {formatSAR(bAvgTicket)} {detail.avg_ticket >= bAvgTicket ? '▲' : '▼'}
+              </div>
+            )}
+          </div>
+          <div className="bg-white rounded-xl border border-neutral-200 p-4">
+            <div className="text-neutral-500 text-sm">متوسط القطع/فاتورة</div>
+            <div className="text-2xl font-bold text-neutral-900 mt-1">{detail.items_per_inv.toFixed(2)}</div>
+            {bAvgUPT > 0 && (
+              <div className={`text-xs mt-1 ${detail.items_per_inv >= bAvgUPT ? 'text-green-600' : 'text-red-600'}`}>
+                متوسط الفرع: {bAvgUPT.toFixed(2)} {detail.items_per_inv >= bAvgUPT ? '▲' : '▼'}
+              </div>
+            )}
+          </div>
+          <div className="bg-white rounded-xl border border-neutral-200 p-4">
             <div className="text-neutral-500 text-sm">التحقيق</div>
-            <div className="text-2xl font-bold text-neutral-900 mt-0">
-              {targetEnabled ? `${detail.achievement.toFixed(1)}%` : '-'}
-            </div>
-            <div className="text-sm text-neutral-500 mt-0">
-              الهدف: {targetEnabled ? formatSAR(detail.target) : '-'}
-            </div>
+            <div className="text-2xl font-bold text-neutral-900 mt-1">{targetEnabled ? `${detail.achievement.toFixed(1)}%` : '-'}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-neutral-200 p-4">
+            <div className="text-neutral-500 text-sm">مساهمة مبيعات الفرع</div>
+            <div className="text-2xl font-bold text-neutral-900 mt-1">{detail.branchShare.toFixed(1)}%</div>
           </div>
         </div>
 
-        <hr className="border-neutral-200 my-4" />
-
-        {/* 2. Quality Metrics (مقارنة بالفرع) */}
-        <h6 className="font-bold text-neutral-800 mb-3">⚡ جودة الأداء (مقارنة بالفرع)</h6>
-
-        <div className="insight-card">
-          <div className="insight-label">معدل الفاتورة (Avg Ticket)</div>
-          <div className="flex justify-between items-center">
-            <div className="insight-value">{formatSAR(detail.avg_ticket)}</div>
-            <div className={`diff-badge ${diffClass(diffPct(detail.avg_ticket, bAvgTicket))}`}>
-              {bAvgTicket > 0 ? `${diffPct(detail.avg_ticket, bAvgTicket) >= 0 ? '▲' : '▼'} ${Math.abs(diffPct(detail.avg_ticket, bAvgTicket)).toFixed(0)}%` : '--'}
+        {/* جودة الأداء (مقارنة بالفرع) + تطور المبيعات */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <ChartCard title="⚡ جودة الأداء (مقارنة بالفرع)">
+            <div className="space-y-4">
+              <div className="insight-card">
+                <div className="insight-label">معدل الفاتورة</div>
+                <div className="flex justify-between items-center">
+                  <div className="insight-value">{formatSAR(detail.avg_ticket)}</div>
+                  <div className={`diff-badge ${diffClass(diffPct(detail.avg_ticket, bAvgTicket))}`}>
+                    {bAvgTicket > 0 ? `${diffPct(detail.avg_ticket, bAvgTicket) >= 0 ? '▲' : '▼'} ${Math.abs(diffPct(detail.avg_ticket, bAvgTicket)).toFixed(0)}%` : '--'}
+                  </div>
+                </div>
+                <small className="text-neutral-500 block mt-2">متوسط الفرع: <span className="font-semibold">{formatSAR(bAvgTicket)}</span></small>
+              </div>
+              <div className="insight-card">
+                <div className="insight-label">متوسط القطع (Items/Inv)</div>
+                <div className="flex justify-between items-center">
+                  <div className="insight-value">{detail.items_per_inv.toFixed(2)}</div>
+                  <div className={`diff-badge ${diffClass(diffPct(detail.items_per_inv, bAvgUPT))}`}>
+                    {bAvgUPT > 0 ? `${diffPct(detail.items_per_inv, bAvgUPT) >= 0 ? '▲' : '▼'} ${Math.abs(diffPct(detail.items_per_inv, bAvgUPT)).toFixed(0)}%` : '--'}
+                  </div>
+                </div>
+                <small className="text-neutral-500 block mt-2">متوسط الفرع: <span className="font-semibold">{bAvgUPT.toFixed(2)}</span></small>
+              </div>
             </div>
-          </div>
-          <small className="text-neutral-500 block mt-2">متوسط الفرع: <span className="font-semibold text-neutral-700">{formatSAR(bAvgTicket)}</span></small>
+          </ChartCard>
+          <ChartCard title={`📈 تطور المبيعات (${periodLabel})`}>
+            <div className="h-[240px]">
+              <LineChart data={chartData} />
+            </div>
+          </ChartCard>
         </div>
 
-        <div className="insight-card">
-          <div className="insight-label">متوسط القطع (Items/Inv)</div>
-          <div className="flex justify-between items-center">
-            <div className="insight-value">{detail.items_per_inv.toFixed(2)}</div>
-            <div className={`diff-badge ${diffClass(diffPct(detail.items_per_inv, bAvgUPT))}`}>
-              {bAvgUPT > 0 ? `${diffPct(detail.items_per_inv, bAvgUPT) >= 0 ? '▲' : '▼'} ${Math.abs(diffPct(detail.items_per_inv, bAvgUPT)).toFixed(0)}%` : '--'}
-            </div>
-          </div>
-          <small className="text-neutral-500 block mt-2">متوسط الفرع: <span className="font-semibold text-neutral-700">{bAvgUPT.toFixed(2)}</span></small>
-        </div>
-
-        <hr className="border-neutral-200 my-4" />
-
-        {/* 3. Trend Chart */}
-        <h6 className="font-bold text-neutral-800 mb-3">📈 تطور المبيعات ({periodLabel})</h6>
-        <div className="h-[200px]">
-          <LineChart data={chartData} />
+        <div className="mt-6 flex justify-end">
+          <button type="button" className="btn-secondary" onClick={onClose}>إغلاق</button>
         </div>
       </div>
     </div>
@@ -245,9 +262,12 @@ export default function EmployeesPage() {
 
   const [manager, setManager] = useState<string>('all');
   const [branch, setBranch] = useState<string>('all');
-  const [period, setPeriod] = useState<Period>('mtd_yest');
+  const [city, setCity] = useState<string>('all');
+  const [period, setPeriod] = useState<Period>('mtd');
   const [selYear, setSelYear] = useState<number>(() => new Date().getFullYear());
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1); // 1-12
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
   const [search, setSearch] = useState<string>('');
 
   const [sortKey, setSortKey] = useState<SortKey>('sales');
@@ -287,13 +307,23 @@ export default function EmployeesPage() {
     const targetsByMonth: Record<string, Record<string, number>> = normalizeTargetsByMonth(empRaw);
 
     const managersSet = new Set<string>();
+    const citiesSet = new Set<string>();
     Object.values(storeMeta).forEach((m: any) => {
       const mgr = m?.manager;
       if (mgr && mgr !== 'online') managersSet.add(String(mgr));
+      if (m?.city) citiesSet.add(String(m.city));
     });
     const managers = Array.from(managersSet).sort((a, b) => a.localeCompare(b, 'ar'));
+    const cities = Array.from(citiesSet).sort((a, b) => a.localeCompare(b, 'ar'));
 
-    const branches = Object.keys(historyData || {}).sort((a, b) => (storesData[a] || a).localeCompare(storesData[b] || b, 'ar'));
+    const branches = Object.keys(historyData || {})
+      .filter((sid) => {
+        const m = storeMeta[sid];
+        if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
+        if (city !== 'all' && String(m?.city || '') !== city) return false;
+        return true;
+      })
+      .sort((a, b) => (storesData[a] || a).localeCompare(storesData[b] || b, 'ar'));
 
     // ===== Date logic (matches employees.html) =====
     const today = new Date();
@@ -314,19 +344,47 @@ export default function EmployeesPage() {
 
     const normDate = (s: unknown) => String(s || '').substring(0, 10);
 
+    const rangeStart = period === 'custom' && customStart
+      ? customStart
+      : period === 'today'
+        ? todayStr
+        : period === 'yesterday'
+          ? yesterdayStr
+          : period === 'mtd'
+            ? toLocalYMD(new Date(todayYear, todayMonth0, 1))
+            : period === 'month'
+              ? `${selYear}-${pad2(selMonth)}-01`
+              : customStart || todayStr;
+    const rangeEnd = period === 'custom' && customEnd
+      ? customEnd
+      : period === 'today'
+        ? todayStr
+        : period === 'yesterday'
+          ? yesterdayStr
+          : period === 'mtd'
+            ? todayStr
+            : period === 'month'
+              ? toLocalYMD(new Date(selYear, selMonth, 0))
+              : customEnd || todayStr;
+
     const checkPeriod = (d: Date, dateStr: string) => {
-      // 0 none, 1 current, 2 previous
+      const dNorm = normDate(dateStr);
+      if (period === 'custom') {
+        if (dNorm >= rangeStart && dNorm <= rangeEnd) return 1;
+        const [ys, ms, ds] = rangeStart.split('-').map(Number);
+        const [ye, me, de] = rangeEnd.split('-').map(Number);
+        const prevStart = `${ys - 1}-${String(ms).padStart(2, '0')}-${String(ds).padStart(2, '0')}`;
+        const prevEnd = `${ye - 1}-${String(me).padStart(2, '0')}-${String(de).padStart(2, '0')}`;
+        if (dNorm >= prevStart && dNorm <= prevEnd) return 2;
+        return 0;
+      }
       const dYear = d.getFullYear();
       const dMonth0 = d.getMonth();
       const dDay = d.getDate();
       const dVal = dYear * 10000 + (dMonth0 + 1) * 100 + dDay;
-      const dNorm = normDate(dateStr);
 
-      // current
       if (period === 'mtd') {
         if (dYear === todayYear && dMonth0 === todayMonth0 && dVal <= todayVal) return 1;
-      } else if (period === 'mtd_yest') {
-        if (dYear === todayYear && dMonth0 === todayMonth0 && dVal < todayVal) return 1;
       } else if (period === 'month') {
         if (dYear === selYear && dMonth0 === selMonth - 1) return 1;
       } else if (period === 'yesterday') {
@@ -335,24 +393,16 @@ export default function EmployeesPage() {
         if (dNorm === todayStr) return 1;
       }
 
-      // previous
       const prevYearForMode = period === 'month' ? selYear - 1 : prevYear;
       const prevMonthForMode = period === 'month' ? selMonth - 1 : prevMonth0;
+      const yesterdayDay = yesterday.getDate();
 
       if (dYear === prevYearForMode && dMonth0 === prevMonthForMode) {
-        if (period === 'mtd') {
-          if (dDay <= todayDay) return 2;
-        } else if (period === 'mtd_yest') {
-          if (dDay <= yesterdayDay) return 2;
-        } else if (period === 'month') {
-          return 2;
-        } else if (period === 'yesterday') {
-          if (dDay === yesterdayDay) return 2;
-        } else if (period === 'today') {
-          if (dDay === todayDay) return 2;
-        }
+        if (period === 'mtd' && dDay <= todayDay) return 2;
+        if (period === 'month') return 2;
+        if (period === 'yesterday' && dDay === yesterdayDay) return 2;
+        if (period === 'today' && dDay === todayDay) return 2;
       }
-
       return 0;
     };
 
@@ -504,6 +554,10 @@ export default function EmployeesPage() {
           const meta = storeMeta[e.storeCode];
           if (!meta || String(meta.manager) !== effectiveManager) return false;
         }
+        if (city !== 'all') {
+          const meta = storeMeta[e.storeCode];
+          if (String(meta?.city || '') !== city) return false;
+        }
         // Filter non-active in period
         return e.sales > 0 || e.transactions > 0;
       })
@@ -514,7 +568,7 @@ export default function EmployeesPage() {
         const avg_ticket = e.transactions > 0 ? e.sales / e.transactions : 0;
         const items_per_inv = e.transactions > 0 ? Math.abs(e.items) / e.transactions : 0;
 
-        const showTarget = period === 'mtd' || period === 'mtd_yest' || period === 'month';
+        const showTarget = period === 'mtd' || period === 'month' || period === 'custom';
         const achievement = showTarget && e.target > 0 ? (e.sales / e.target) * 100 : 0;
 
         const bStats = branchStats[e.storeCode];
@@ -575,7 +629,7 @@ export default function EmployeesPage() {
 
     // totals
     const totalSales = sorted.reduce((s, e) => s + e.sales, 0);
-    const totalTarget = sorted.reduce((s, e) => s + ((period === 'mtd' || period === 'month' || period === 'mtd_yest') ? e.target : 0), 0);
+    const totalTarget = sorted.reduce((s, e) => s + ((period === 'mtd' || period === 'month' || period === 'custom') ? e.target : 0), 0);
     const totalEmployees = sorted.length;
     const topEmployee = sorted.length ? [...sorted].sort((a, b) => b.sales - a.sales)[0] : null;
 
@@ -598,6 +652,7 @@ export default function EmployeesPage() {
     return {
       managers,
       branches,
+      cities,
       branchStats,
       employeeDailyMaps,
       employees: sorted,
@@ -610,6 +665,9 @@ export default function EmployeesPage() {
     branch,
     chartMetric,
     chartOrder,
+    city,
+    customEnd,
+    customStart,
     effectiveManager,
     empRaw,
     mgmtRaw,
@@ -628,14 +686,23 @@ export default function EmployeesPage() {
     return derived.employees.find((e) => e.id === selectedEmployeeId) || null;
   }, [derived.employees, selectedEmployeeId]);
 
-  const targetEnabled = period === 'mtd' || period === 'mtd_yest' || period === 'month';
+  const targetEnabled = period === 'mtd' || period === 'month' || period === 'custom';
   const periodLabel = useMemo(() => {
     if (period === 'today') return `اليوم (${derived.labels.todayStr})`;
     if (period === 'yesterday') return `أمس (${derived.labels.yesterdayStr})`;
     if (period === 'mtd') return 'الشهر الحالي (MTD)';
-    if (period === 'mtd_yest') return 'من بداية الشهر إلى أمس';
+    if (period === 'custom') return `فترة مخصصة: ${customStart || '...'} → ${customEnd || '...'}`;
     return `شهر محدد: ${monthsAr[selMonth - 1] || selMonth} ${selYear}`;
-  }, [derived.labels.todayStr, derived.labels.yesterdayStr, monthsAr, period, selMonth, selYear]);
+  }, [customEnd, customStart, derived.labels.todayStr, derived.labels.yesterdayStr, monthsAr, period, selMonth, selYear]);
+
+  useEffect(() => {
+    if (period === 'custom' && (!customStart || !customEnd)) {
+      const start = new Date();
+      start.setDate(1);
+      setCustomStart(toLocalYMD(start));
+      setCustomEnd(toLocalYMD(new Date()));
+    }
+  }, [period]);
 
   const handleHeaderSort = (k: SortKey) => {
     if (sortKey === k) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
@@ -688,13 +755,23 @@ export default function EmployeesPage() {
           </div>
 
           <div>
+            <div className="text-xs font-semibold text-neutral-500 mb-1">المدينة</div>
+            <select className="input" value={city} onChange={(e) => setCity(e.target.value)}>
+              <option value="all">الكل</option>
+              {(derived.cities || []).map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <div className="text-xs font-semibold text-neutral-500 mb-1">الفترة</div>
             <select className="input" value={period} onChange={(e) => setPeriod(e.target.value as Period)}>
               <option value="today">اليوم</option>
+              <option value="yesterday">أمس</option>
               <option value="mtd">الشهر الحالي (MTD)</option>
-              <option value="mtd_yest">من بداية الشهر إلى أمس</option>
               <option value="month">شهر محدد</option>
-              <option value="yesterday">أمس فقط</option>
+              <option value="custom">فترة مخصصة</option>
             </select>
           </div>
 
@@ -719,6 +796,17 @@ export default function EmployeesPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+            </>
+          ) : period === 'custom' ? (
+            <>
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">من</div>
+                <input className="input" type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">إلى</div>
+                <input className="input" type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
               </div>
             </>
           ) : (
@@ -945,22 +1033,15 @@ export default function EmployeesPage() {
       </div>
 
       {selectedEmployee && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/30 z-40"
-            aria-hidden
-            onClick={() => setSelectedEmployeeId(null)}
-          />
-          <EmployeeDetailsOffcanvas
-            open={!!selectedEmployee}
-            employee={selectedEmployee}
-            branchStats={derived.branchStats}
-            dailyMaps={derived.employeeDailyMaps}
-            onClose={() => setSelectedEmployeeId(null)}
-            periodLabel={periodLabel}
-            targetEnabled={targetEnabled}
-          />
-        </>
+        <EmployeeDetailModal
+          open={!!selectedEmployee}
+          employee={selectedEmployee}
+          branchStats={derived.branchStats}
+          dailyMaps={derived.employeeDailyMaps}
+          onClose={() => setSelectedEmployeeId(null)}
+          periodLabel={periodLabel}
+          targetEnabled={targetEnabled}
+        />
       )}
     </div>
   );

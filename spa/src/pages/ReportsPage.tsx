@@ -3,7 +3,7 @@ import { loadEmployeesData, loadManagementData } from '../services/upstreamData'
 import { getCurrentUser } from '../auth/storage';
 import * as XLSX from 'xlsx';
 
-type FilterMode = 'mtd_yest' | 'yesterday' | 'today' | 'standard' | 'custom';
+type FilterMode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
@@ -25,9 +25,9 @@ function getRange(
 
   if (mode === 'today') return { start: toYMD(today), end: toYMD(today) };
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
-  if (mode === 'mtd_yest') {
-    const start = new Date(yesterday.getFullYear(), yesterday.getMonth(), 1);
-    return { start: toYMD(start), end: toYMD(yesterday) };
+  if (mode === 'mtd') {
+    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { start: toYMD(start), end: toYMD(today) };
   }
   if (mode === 'custom') {
     const start = customStart || toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -50,7 +50,7 @@ export default function ReportsPage() {
   const [rawMgmt, setRawMgmt] = useState<any>(null);
   const [rawEmp, setRawEmp] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [filterMode, setFilterMode] = useState<FilterMode>('mtd_yest');
+  const [filterMode, setFilterMode] = useState<FilterMode>('mtd');
   const [standardYear, setStandardYear] = useState(new Date().getFullYear());
   const [standardMonth, setStandardMonth] = useState('all');
   const [customStart, setCustomStart] = useState('');
@@ -96,11 +96,17 @@ export default function ReportsPage() {
   }, [rawMgmt]);
 
   const branches = useMemo(() => {
-    if (!rawMgmt?.stores) return [];
+    if (!rawMgmt?.stores || !rawMgmt?.store_meta) return [];
     return Object.entries(rawMgmt.stores)
+      .filter(([id]) => {
+        const meta = (rawMgmt.store_meta as Record<string, { manager?: string; city?: string }>)[id];
+        if (manager !== 'all' && (meta?.manager || '') !== manager) return false;
+        if (city !== 'all' && (meta?.city || '') !== city) return false;
+        return true;
+      })
       .map(([id, name]) => ({ id, name: (name as string) || id }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [rawMgmt]);
+  }, [rawMgmt, manager, city]);
 
   const passFilter = (storeId: string) => {
     if (branch !== 'all' && storeId !== branch) return false;
@@ -219,12 +225,8 @@ export default function ReportsPage() {
   const openPdfLegacy = () => {
     setShowReportChoiceModal(false);
     setReportChoiceType(null);
-    const pathname = window.location.pathname.replace(/\/$/, '');
-    const segments = pathname.split('/').filter(Boolean);
-    const siteIdx = segments.indexOf('site');
-    const base = siteIdx >= 0 ? `/${segments.slice(0, siteIdx).join('/')}` : '';
-    const reportsUrl = `${window.location.origin}${base || ''}/reports.html`;
-    window.open(reportsUrl, '_blank');
+    // البقاء داخل التطبيق: تصدير PDF من واجهة التقارير الحالية (لا توجيه إلى reports.html)
+    alert('سيتم إضافة تصدير PDF من هذه الصفحة قريباً. استخدم تصدير Excel في الوقت الحالي.');
   };
 
   const canExportEmployee = user?.role === 'Admin' || user?.name === 'Sales Manager';
@@ -266,10 +268,10 @@ export default function ReportsPage() {
               value={filterMode}
               onChange={(e) => setFilterMode(e.target.value as FilterMode)}
             >
-              <option value="mtd_yest">من بداية الشهر إلى أمس</option>
-              <option value="yesterday">أمس فقط</option>
               <option value="today">اليوم</option>
-              <option value="standard">سنوي / شهري</option>
+              <option value="yesterday">أمس</option>
+              <option value="mtd">الشهر الحالي (MTD)</option>
+              <option value="standard">شهر محدد</option>
               <option value="custom">فترة مخصصة</option>
             </select>
             {filterMode === 'standard' && (

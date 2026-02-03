@@ -11,11 +11,12 @@ import {
   OfficeBuildingIcon,
   PauseIcon,
   TagIcon,
+  TargetIcon,
   UserGroupIcon,
   XIcon,
 } from '../components/Icons';
 
-const navItems = [
+const baseNavItems = [
   { to: '/', label: 'لوحة التحكم', icon: <HomeIcon /> },
   { to: '/reports', label: 'التقارير', icon: <ClipboardListIcon /> },
   { to: '/employees', label: 'الموظفين', icon: <UserGroupIcon /> },
@@ -25,6 +26,8 @@ const navItems = [
   { to: '/stagnant', label: 'المنتجات الراكدة', icon: <PauseIcon /> },
   { to: '/live', label: 'لايف اليوم', icon: <FireIcon /> },
 ] as const;
+
+const targetsNavItem = { to: '/targets', label: 'تحديد الأهداف', icon: <TargetIcon /> } as const;
 
 function NavItem({ to, label, icon, onClick }: { to: string; label: string; icon: React.ReactNode; onClick?: () => void }) {
   return (
@@ -57,10 +60,15 @@ export default function MainLayout() {
   const loc = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  const navItems = useMemo(() => {
+    const canTargets = user?.role === 'Admin' || user?.name === 'Sales Manager';
+    return canTargets ? [...baseNavItems, targetsNavItem] : baseNavItems;
+  }, [user?.role, user?.name]);
+
   const activeLabel = useMemo(() => {
     const hit = navItems.find((i) => i.to === loc.pathname);
     return hit?.label ?? 'لوحة التحكم';
-  }, [loc.pathname]);
+  }, [loc.pathname, navItems]);
 
   const sidebarHidden = !isSidebarOpen;
   return (

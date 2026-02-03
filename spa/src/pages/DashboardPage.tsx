@@ -9,7 +9,7 @@ function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
 }
 
-type Mode = 'mtd_yest' | 'yesterday' | 'today' | 'custom';
+type Mode = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
 
 function toYMD(d: Date) {
   const y = d.getFullYear();
@@ -18,16 +18,24 @@ function toYMD(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
-function getDefaultRange(mode: Mode) {
+function getDefaultRange(mode: Mode, selYear?: number, selMonth?: number) {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
-  const startOfMonth = new Date(yesterday.getFullYear(), yesterday.getMonth(), 1);
+  const startOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   if (mode === 'today') return { start: toYMD(today), end: toYMD(today) };
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
-  if (mode === 'mtd_yest') return { start: toYMD(startOfMonth), end: toYMD(yesterday) };
-  return { start: toYMD(startOfMonth), end: toYMD(yesterday) };
+  if (mode === 'mtd') return { start: toYMD(startOfCurrentMonth), end: toYMD(today) };
+  if (mode === 'month' && selYear != null && selMonth != null) {
+    const start = new Date(selYear, selMonth - 1, 1);
+    let end = new Date(selYear, selMonth, 0);
+    if (end > today) end = new Date(today);
+    return { start: toYMD(start), end: toYMD(end) };
+  }
+  return { start: toYMD(startOfCurrentMonth), end: toYMD(today) };
 }
+
+const monthsAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
 export default function DashboardPage() {
   const [raw, setRaw] = useState<any>(null);
@@ -35,11 +43,14 @@ export default function DashboardPage() {
   const [err, setErr] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [mode, setMode] = useState<Mode>('mtd_yest');
+  const [mode, setMode] = useState<Mode>('mtd');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [manager, setManager] = useState<string>('all');
   const [branch, setBranch] = useState<string>('all');
+  const [city, setCity] = useState<string>('all');
+  const [selYear, setSelYear] = useState<number>(() => new Date().getFullYear());
+  const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1);
   const user = getCurrentUser();
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -67,44 +78,59 @@ export default function DashboardPage() {
   }, [loadData]);
 
   useEffect(() => {
-    if (mode !== 'custom') {
+    if (mode === 'custom') {
+      if (!customStart || !customEnd) {
+        const r = getDefaultRange('mtd');
+        setCustomStart(customStart || r.start);
+        setCustomEnd(customEnd || r.end);
+      }
+    } else if (mode !== 'month') {
       const r = getDefaultRange(mode);
       setCustomStart(r.start);
       setCustomEnd(r.end);
-    } else if (!customStart || !customEnd) {
-      const r = getDefaultRange('mtd_yest');
-      setCustomStart(customStart || r.start);
-      setCustomEnd(customEnd || r.end);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   const range = useMemo(() => {
     if (mode === 'custom') return { start: customStart, end: customEnd };
-    return getDefaultRange(mode);
-  }, [mode, customStart, customEnd]);
+    return getDefaultRange(mode, selYear, selMonth);
+  }, [mode, customStart, customEnd, selYear, selMonth]);
 
-  const { allowedStoreIds, managers, branches } = useMemo(() => {
-    const meta: Record<string, { manager?: string }> = raw?.store_meta || {};
+  const { allowedStoreIds, managers, branches, cities } = useMemo(() => {
+    const meta: Record<string, { manager?: string; city?: string }> = raw?.store_meta || {};
     const stores = raw?.stores || {};
     const managersSet = new Set<string>();
-    Object.values(meta).forEach((m: any) => { if (m?.manager) managersSet.add(String(m.manager)); });
+    const citiesSet = new Set<string>();
+    Object.values(meta).forEach((m: any) => {
+      if (m?.manager) managersSet.add(String(m.manager));
+      if (m?.city) citiesSet.add(String(m.city));
+    });
     const managers = Array.from(managersSet).sort((a, b) => a.localeCompare(b, 'ar'));
-    const branches = Object.keys(stores).sort((a, b) => (stores[a] || a).localeCompare(stores[b] || b, 'ar'));
+    const cities = Array.from(citiesSet).sort((a, b) => a.localeCompare(b, 'ar'));
+    const branches = Object.keys(stores)
+      .filter((sid) => {
+        const m = meta[sid];
+        if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
+        if (city !== 'all' && String(m?.city || '') !== city) return false;
+        return true;
+      })
+      .sort((a, b) => (stores[a] || a).localeCompare(stores[b] || b, 'ar'));
     const allowed = new Set<string>();
-    if (branch === 'all' && effectiveManager === 'all') {
+    if (branch === 'all' && effectiveManager === 'all' && city === 'all') {
       Object.keys(stores).forEach((sid) => allowed.add(sid));
     } else {
       Object.keys(meta).forEach((sid) => {
         const m = meta[sid];
         if (branch !== 'all' && sid !== branch) return;
         if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return;
+        if (city !== 'all' && String(m?.city || '') !== city) return;
         allowed.add(sid);
       });
       if (allowed.size === 0) Object.keys(stores).forEach((sid) => allowed.add(sid));
     }
-    return { allowedStoreIds: allowed, managers, branches };
-  }, [raw, branch, effectiveManager]);
+    return { allowedStoreIds: allowed, managers, branches, cities };
+  }, [raw, branch, effectiveManager, city]);
 
   const totals = useMemo(() => {
     if (!raw) return { sales: 0, trans: 0, visitors: 0, target: 0 };
@@ -300,14 +326,38 @@ export default function DashboardPage() {
             </select>
           </div>
           <div>
+            <div className="text-xs font-semibold text-neutral-500 mb-1">المدينة</div>
+            <select className="input" value={city} onChange={(e) => setCity(e.target.value)}>
+              <option value="all">الكل</option>
+              {cities.map((c) => (<option key={c} value={c}>{c}</option>))}
+            </select>
+          </div>
+          <div>
             <div className="text-xs font-semibold text-neutral-500 mb-1">الفترة</div>
             <select className="input" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-              <option value="mtd_yest">من بداية الشهر إلى أمس</option>
-              <option value="yesterday">أمس فقط</option>
               <option value="today">اليوم</option>
+              <option value="yesterday">أمس</option>
+              <option value="mtd">الشهر الحالي (MTD)</option>
+              <option value="month">شهر محدد</option>
               <option value="custom">فترة مخصصة</option>
             </select>
           </div>
+          {mode === 'month' && (
+            <>
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">الشهر</div>
+                <select className="input" value={selMonth} onChange={(e) => setSelMonth(Number(e.target.value))}>
+                  {monthsAr.map((m, i) => (<option key={m} value={i + 1}>{m}</option>))}
+                </select>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">السنة</div>
+                <select className="input" value={selYear} onChange={(e) => setSelYear(Number(e.target.value))}>
+                  {[2026, 2025, 2024].map((y) => (<option key={y} value={y}>{y}</option>))}
+                </select>
+              </div>
+            </>
+          )}
           {mode === 'custom' && (
             <>
               <div>

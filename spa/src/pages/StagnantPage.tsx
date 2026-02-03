@@ -6,7 +6,7 @@ function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
 }
 
-type Period = 'today' | 'yesterday' | 'mtd_yest' | 'mtd' | 'month';
+type Period = 'today' | 'yesterday' | 'mtd' | 'month';
 const monthsAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
 export default function StagnantPage() {
@@ -17,7 +17,8 @@ export default function StagnantPage() {
   const [search, setSearch] = useState('');
   const [manager, setManager] = useState<string>('all');
   const [branch, setBranch] = useState<string>('all');
-  const [period, setPeriod] = useState<Period>('mtd_yest');
+  const [city, setCity] = useState<string>('all');
+  const [period, setPeriod] = useState<Period>('mtd');
   const [selYear, setSelYear] = useState<number>(() => new Date().getFullYear());
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1);
 
@@ -33,15 +34,27 @@ export default function StagnantPage() {
     return user?.name || manager;
   }, [manager, user?.name, user?.role]);
 
-  const { allowedStoreIds, managers, branches } = useMemo(() => {
-    const meta: Record<string, { manager?: string }> = mgmt?.store_meta || {};
+  const { allowedStoreIds, managers, branches, cities } = useMemo(() => {
+    const meta: Record<string, { manager?: string; city?: string }> = mgmt?.store_meta || {};
     const stores = mgmt?.stores || {};
     const managersSet = new Set<string>();
-    Object.values(meta).forEach((m: any) => { if (m?.manager) managersSet.add(String(m.manager)); });
+    const citiesSet = new Set<string>();
+    Object.values(meta).forEach((m: any) => {
+      if (m?.manager) managersSet.add(String(m.manager));
+      if (m?.city) citiesSet.add(String(m.city));
+    });
     const managers = Array.from(managersSet).sort((a, b) => a.localeCompare(b, 'ar'));
-    const branches = Object.keys(stores).sort((a, b) => (stores[a] || a).localeCompare(stores[b] || b, 'ar'));
+    const cities = Array.from(citiesSet).sort((a, b) => a.localeCompare(b, 'ar'));
+    const branches = Object.keys(stores)
+      .filter((sid) => {
+        const m = meta[sid];
+        if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
+        if (city !== 'all' && String(m?.city || '') !== city) return false;
+        return true;
+      })
+      .sort((a, b) => (stores[a] || a).localeCompare(stores[b] || b, 'ar'));
     const allowed = new Set<string>();
-    if (branch === 'all' && effectiveManager === 'all') {
+    if (branch === 'all' && effectiveManager === 'all' && city === 'all') {
       Object.keys(stores).forEach((sid) => allowed.add(sid));
       if (allowed.size === 0 && data?.data && typeof data.data === 'object') Object.keys(data.data).forEach((sid) => allowed.add(sid));
     } else {
@@ -49,12 +62,13 @@ export default function StagnantPage() {
         const m = meta[sid];
         if (branch !== 'all' && sid !== branch) return;
         if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return;
+        if (city !== 'all' && String(m?.city || '') !== city) return;
         allowed.add(sid);
       });
       if (allowed.size === 0) Object.keys(stores).forEach((sid) => allowed.add(sid));
     }
-    return { allowedStoreIds: allowed, managers, branches };
-  }, [mgmt, branch, effectiveManager, data?.data]);
+    return { allowedStoreIds: allowed, managers, branches, cities };
+  }, [mgmt, branch, city, effectiveManager, data?.data]);
 
   if (err) return <div className="p-6 bg-white rounded-2xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
   if (!data) {
@@ -114,12 +128,20 @@ export default function StagnantPage() {
             </select>
           </div>
           <div>
+            <div className="text-xs font-semibold text-neutral-500 mb-1">المدينة</div>
+            <select className="input" value={city} onChange={(e) => setCity(e.target.value)}>
+              <option value="all">الكل</option>
+              {(cities || []).map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <div>
             <div className="text-xs font-semibold text-neutral-500 mb-1">الفترة</div>
             <select className="input" value={period} onChange={(e) => setPeriod(e.target.value as Period)}>
               <option value="today">اليوم</option>
               <option value="yesterday">أمس</option>
               <option value="mtd">الشهر الحالي (MTD)</option>
-              <option value="mtd_yest">من بداية الشهر إلى أمس</option>
               <option value="month">شهر محدد</option>
             </select>
           </div>

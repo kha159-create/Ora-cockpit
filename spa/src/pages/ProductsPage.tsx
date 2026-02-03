@@ -110,6 +110,7 @@ export default function ProductsPage() {
   const [metric, setMetric] = useState<Metric>('qty');
 
   const [manager, setManager] = useState<string>('all');
+  const [city, setCity] = useState<string>('all');
   const [store, setStore] = useState<string>('all');
 
   const [search, setSearch] = useState('');
@@ -159,28 +160,34 @@ export default function ProductsPage() {
       Object.keys(analysis).filter((sid) => isStoreAccessible(sid)),
     );
 
-    // Build manager + store options from the data we actually have for this period
+    // Build manager + city + store options from the data we actually have for this period
     const managersSet = new Set<string>();
-    const storeOptions: { id: string; name: string; manager: string }[] = [];
+    const citiesSet = new Set<string>();
+    const storeOptions: { id: string; name: string; manager: string; city: string }[] = [];
     for (const sid of Object.keys(analysis)) {
       if (!accessibleStoreIds.has(sid)) continue;
       const meta = storeMeta[sid] || {};
       const mgr = String(meta.manager || '');
+      const cityVal = String(meta.city || '');
       if (mgr) managersSet.add(mgr);
+      if (cityVal) citiesSet.add(cityVal);
       storeOptions.push({
         id: sid,
         name: analysis[sid]?.store_name || storesMap[sid] || meta.name || sid,
         manager: mgr,
+        city: cityVal,
       });
     }
     storeOptions.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
     const managers = Array.from(managersSet).sort((a, b) => a.localeCompare(b, 'ar'));
+    const cities = Array.from(citiesSet).sort((a, b) => a.localeCompare(b, 'ar'));
 
-    // Filter store options by manager (admin) or lock to manager (non-admin)
+    // Filter store options by manager and city (admin) or lock to manager (non-admin)
     const allowedStoreIds = new Set<string>();
     for (const s of storeOptions) {
       if (!accessibleStoreIds.has(s.id)) continue;
       if (effectiveManager !== 'all' && s.manager !== effectiveManager) continue;
+      if (city !== 'all' && s.city !== city) continue;
       allowedStoreIds.add(s.id);
     }
 
@@ -317,6 +324,7 @@ export default function ProductsPage() {
     return {
       dateRangeLabel: pData?.date_range || '-',
       managers,
+      cities,
       storeOptions,
       allowedStoreIds,
       categoriesAgg,
@@ -329,7 +337,7 @@ export default function ProductsPage() {
       selectedPairs,
       storesMap,
     };
-  }, [effectiveManager, mgmt, mode, productId, raw, search, selectedCategory, store, metric, user?.name, user?.role]);
+  }, [city, effectiveManager, mgmt, mode, productId, raw, search, selectedCategory, store, metric, user?.name, user?.role]);
 
   const productKpis = useMemo(() => {
     if (!derived || !productId) return null;
@@ -392,11 +400,21 @@ export default function ProductsPage() {
           </div>
 
           <div>
+            <div className="text-xs font-semibold text-neutral-500 mb-1">المدينة</div>
+            <select className="input" value={city} onChange={(e) => setCity(e.target.value)}>
+              <option value="all">الكل</option>
+              {(derived.cities || []).map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <div className="text-xs font-semibold text-neutral-500 mb-1">المعرض</div>
             <select className="input" value={store} onChange={(e) => setStore(e.target.value)}>
               <option value="all">🏪 كل المعارض</option>
               {derived.storeOptions
-                .filter((s) => (effectiveManager === 'all' ? true : s.manager === effectiveManager))
+                .filter((s) => (effectiveManager === 'all' ? true : s.manager === effectiveManager) && (city === 'all' ? true : s.city === city))
                 .map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
