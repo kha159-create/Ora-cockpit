@@ -76,9 +76,9 @@ html[dir="rtl"] body {
   font-family: 'Cairo', sans-serif;
 }
 
-/* القائمة الجانبية: ظاهرة على اليمين في RTL، على اليسار في LTR. على md فما فوق تكون دائماً ظاهرة */
+/* القائمة الجانبية: أسود، ظاهرة على اليمين في RTL. على md فما فوق تكون دائماً ظاهرة */
 .main-layout-sidebar {
-  border-right: 1px solid var(--primary-100);
+  border-right: 1px solid rgba(255,255,255,0.08);
   left: 0;
   right: auto;
 }
@@ -86,7 +86,7 @@ html[dir="rtl"] .main-layout-sidebar {
   right: 0;
   left: auto;
   border-right: none;
-  border-left: 1px solid var(--primary-100);
+  border-left: 1px solid rgba(255,255,255,0.08);
 }
 .main-layout-sidebar--closed {
   transform: translateX(-100%);
@@ -101,10 +101,12 @@ html[dir="rtl"] .main-layout-sidebar--closed {
   }
 }
 
-/* المحتوى الرئيسي: يترك مساحة للقائمة الجانبية على الشاشات المتوسطة فما فوق */
+/* المحتوى الرئيسي: يترك مساحة للقائمة الجانبية. relative لاحتواء النوافذ المنبثقة داخل الحدود */
 .main-layout-main {
   flex: 1;
   min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
 }
 @media (min-width: 768px) {
   .main-layout-main {
@@ -125,9 +127,18 @@ html[dir="rtl"] .main-layout-sidebar--closed {
 }
 
 @layer components {
-  /* المودال الحديثة */
+  /* المودال: داخل حدود الصفحة (يُستخدم مع والد position: relative) */
+  .modal-in-page {
+    @apply absolute inset-0 flex items-center justify-center z-40 p-4 bg-black/50 overflow-auto;
+    animation: fadeIn 0.2s ease-out;
+    backdrop-filter: blur(4px);
+  }
+  .modal-in-page .modal-content {
+    @apply my-4;
+  }
+  /* المودال الكامل (شاشة كاملة) للتوافق مع من يستخدمه */
   .modal-backdrop {
-    @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4;
+    @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-auto;
     animation: fadeIn 0.2s ease-out;
     backdrop-filter: blur(4px);
   }

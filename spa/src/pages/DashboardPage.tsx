@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { loadManagementData } from '../services/upstreamData';
-import { KPICard } from '../components/DashboardComponents';
-import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon } from '../components/Icons';
+import { KPICard, ChartCard, BarChart } from '../components/DashboardComponents';
+import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon } from '../components/Icons';
 
 type Mode = 'mtd_yest' | 'yesterday' | 'today' | 'custom';
 
@@ -84,6 +85,17 @@ export default function DashboardPage() {
 
   const ach = totals.target > 0 ? (totals.sales / totals.target) * 100 : 0;
 
+  const topStores = useMemo(() => {
+    if (!raw?.sales || !raw?.store_meta) return [];
+    const byStore: Record<string, number> = {};
+    const inRange = (d: string) => String(d).substring(0, 10) >= range.start && String(d).substring(0, 10) <= range.end;
+    (raw.sales || []).forEach(([d, s, v]: any[]) => { if (inRange(d)) byStore[s] = (byStore[s] || 0) + (v || 0); });
+    return Object.entries(byStore)
+      .map(([sid, sales]) => ({ name: raw.stores?.[sid] || sid, sales }))
+      .sort((a, b) => b.sales - a.sales)
+      .slice(0, 8);
+  }, [raw, range.start, range.end]);
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4">
@@ -132,6 +144,45 @@ export default function DashboardPage() {
           trendValue={`الهدف: ${formatSAR(totals.target)}`}
         />
       </div>
+
+      {/* بطاقات الوصول السريع */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Link to="/live" className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 flex items-center gap-3 hover:border-orange-300 hover:shadow-xl transition-all">
+          <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600"><FireIcon /></div>
+          <div>
+            <div className="font-bold text-neutral-900">لايف اليوم</div>
+            <div className="text-xs text-neutral-500">متابعة مبيعات اليوم</div>
+          </div>
+        </Link>
+        <Link to="/offers" className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 flex items-center gap-3 hover:border-orange-300 hover:shadow-xl transition-all">
+          <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600"><TagIcon /></div>
+          <div>
+            <div className="font-bold text-neutral-900">تحليل العروض</div>
+            <div className="text-xs text-neutral-500">عروض ومبيعات</div>
+          </div>
+        </Link>
+        <Link to="/stagnant" className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 flex items-center gap-3 hover:border-orange-300 hover:shadow-xl transition-all">
+          <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600"><PauseIcon /></div>
+          <div>
+            <div className="font-bold text-neutral-900">المنتجات الراكدة</div>
+            <div className="text-xs text-neutral-500">أصناف راكدة</div>
+          </div>
+        </Link>
+        <Link to="/stores" className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 flex items-center gap-3 hover:border-orange-300 hover:shadow-xl transition-all">
+          <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600"><OfficeBuildingIcon /></div>
+          <div>
+            <div className="font-bold text-neutral-900">المعارض</div>
+            <div className="text-xs text-neutral-500">تفاصيل الفروع</div>
+          </div>
+        </Link>
+      </div>
+
+      {/* أداء المعارض (توب حسب الفترة) */}
+      {topStores.length > 0 && (
+        <ChartCard title="أعلى المعارض حسب المبيعات (الفترة الحالية)">
+          <BarChart data={topStores} dataKey="sales" nameKey="name" format={formatSAR} />
+        </ChartCard>
+      )}
     </div>
   );
 }

@@ -168,8 +168,8 @@ function EmployeeDetailsModal({
   });
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-content max-w-4xl" onClick={(e) => e.stopPropagation()}>
+    <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/50 rounded-2xl overflow-auto" onClick={onClose}>
+      <div className="modal-content max-w-4xl my-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-xl font-bold text-neutral-900 truncate">{detail.name}</div>
@@ -678,7 +678,7 @@ export default function EmployeesPage() {
   const totalAch = totals.totalTarget > 0 ? (totals.totalSales / totals.totalTarget) * 100 : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative min-h-[400px]">
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4">
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
           <div className={`${isAdminOrAuditor(user?.role) ? '' : 'hidden'}`}>

@@ -8,6 +8,9 @@ import EmployeesPage from './pages/EmployeesPage';
 import StoresPage from './pages/StoresPage';
 import ProductsPage from './pages/ProductsPage';
 import ReportsPage from './pages/ReportsPage';
+import OffersPage from './pages/OffersPage';
+import StagnantPage from './pages/StagnantPage';
+import LivePage from './pages/LivePage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const u = getCurrentUser();
@@ -33,6 +36,9 @@ export default function App() {
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="stores" element={<StoresPage />} />
         <Route path="products" element={<ProductsPage />} />
+        <Route path="offers" element={<OffersPage />} />
+        <Route path="stagnant" element={<StagnantPage />} />
+        <Route path="live" element={<LivePage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

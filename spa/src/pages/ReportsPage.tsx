@@ -250,7 +250,7 @@ export default function ReportsPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative min-h-[400px]">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-neutral-500">آخر تحديث: <span className="text-primary-600 font-medium">{lastUpdate}</span></p>
       </div>
@@ -367,9 +367,9 @@ export default function ReportsPage() {
         </button>
       </div>
 
-      {/* Report type choice modal */}
+      {/* Report type choice modal - داخل حدود الصفحة */}
       {showReportChoiceModal && reportChoiceType && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowReportChoiceModal(false)}>
+        <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/50 rounded-2xl" onClick={() => setShowReportChoiceModal(false)}>
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <h5 className="font-bold text-lg text-neutral-900 mb-4">
               {reportChoiceType === 'pdf' ? 'اختر تقرير PDF' : 'اختر تقرير Excel'}
@@ -410,9 +410,9 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Excel confirm modal (date range already from filters) */}
+      {/* Excel confirm modal - داخل حدود الصفحة */}
       {showExcelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowExcelModal(false)}>
+        <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/50 rounded-2xl" onClick={() => setShowExcelModal(false)}>
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <h5 className="font-bold text-lg text-neutral-900 mb-4">تصدير Excel</h5>
             <p className="text-sm text-neutral-600 mb-2">الفترة: {range.start} → {range.end}</p>

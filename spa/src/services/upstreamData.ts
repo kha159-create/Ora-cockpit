@@ -41,3 +41,11 @@ export function loadProductAnalysisData() {
   return fetchJson<ProductAnalysisData>('product_analysis_data.json');
 }
 
+export function loadOffersData() {
+  return fetchJson<any>('offers_data.json');
+}
+
+export function loadStagnantData() {
+  return fetchJson<any>('stagnant_data.json');
+}
+

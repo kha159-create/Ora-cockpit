@@ -84,8 +84,8 @@ function Modal({
 }) {
   if (!open) return null;
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className={`modal-content ${maxWidthClass}`} onClick={(e) => e.stopPropagation()}>
+    <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/50 rounded-2xl overflow-auto" onClick={onClose}>
+      <div className={`modal-content ${maxWidthClass} my-4`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-xl font-bold text-neutral-900 truncate">{title}</div>
@@ -363,7 +363,7 @@ export default function ProductsPage() {
   const metricLabel = metric === 'qty' ? '📦 الكمية' : '💰 القيمة';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative min-h-[400px]">
       {/* Controls */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

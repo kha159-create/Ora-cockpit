@@ -293,8 +293,8 @@ function StoreDetailsModal({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-content max-w-6xl" onClick={(e) => e.stopPropagation()}>
+    <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/50 rounded-2xl overflow-auto" onClick={onClose}>
+      <div className="modal-content max-w-6xl my-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-xl font-bold text-neutral-900 truncate">{store.name}</div>
@@ -503,7 +503,7 @@ export default function StoresPage() {
   const monthsAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative min-h-[400px]">
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4">
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <div className="flex flex-wrap items-end gap-3">
