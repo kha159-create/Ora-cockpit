@@ -66,6 +66,94 @@
             <p class="page-subtitle">جميع أنواع التقارير PDF و Excel - اضغط على البطاقة لاختيار نوع التقرير</p>
         </header>
 
+        <!-- Filters (shared by PDF/Excel exporters via element IDs) -->
+        <section class="page-section">
+            <div class="card border-0 shadow-sm p-3" style="border-radius: var(--radius-2xl);">
+                <div class="row align-items-end g-3">
+                    <div class="col-12 col-xl-6">
+                        <div class="d-flex flex-wrap align-items-end gap-3">
+                            <div>
+                                <label class="form-label small text-muted fw-bold mb-1">الفترة</label>
+                                <select id="filterMode" class="form-select form-select-sm" onchange="toggleReportFilterMode(); applyReportModeDefaults();">
+                                    <option value="mtd_yest" selected>من بداية الشهر إلى أمس</option>
+                                    <option value="yesterday">أمس فقط</option>
+                                    <option value="today">اليوم</option>
+                                    <option value="standard">سنوي / شهري</option>
+                                    <option value="custom">فترة مخصصة</option>
+                                </select>
+                            </div>
+
+                            <div id="stdFilters" class="d-flex gap-2 flex-wrap" style="display:none;">
+                                <div>
+                                    <label class="form-label small text-muted fw-bold mb-1">السنة</label>
+                                    <select id="yearFilter" class="form-select form-select-sm" onchange="applyReportModeDefaults();">
+                                        <option value="2026">2026</option>
+                                        <option value="2025">2025</option>
+                                        <option value="2024">2024</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="form-label small text-muted fw-bold mb-1">الشهر</label>
+                                    <select id="monthFilter" class="form-select form-select-sm" onchange="applyReportModeDefaults();">
+                                        <option value="all">كل السنة</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div id="customFilters" class="d-flex gap-2 flex-wrap" style="display:none;">
+                                <div>
+                                    <label class="form-label small text-muted fw-bold mb-1">من تاريخ</label>
+                                    <input type="date" id="startDate" class="form-control form-control-sm" onchange="syncExcelDatesFromMain();">
+                                </div>
+                                <div>
+                                    <label class="form-label small text-muted fw-bold mb-1">إلى تاريخ</label>
+                                    <input type="date" id="endDate" class="form-control form-control-sm" onchange="syncExcelDatesFromMain();">
+                                </div>
+                            </div>
+
+                            <div id="modeLabel" class="align-self-end pb-1 text-muted small fw-bold"></div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-xl-6">
+                        <div class="d-flex flex-wrap align-items-end gap-3">
+                            <div>
+                                <label class="form-label small text-muted fw-bold mb-1">مدير المنطقة</label>
+                                <select id="managerFilter" class="form-select form-select-sm" onchange="syncPdfOptionsFilters();">
+                                    <option value="all">الكل</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label small text-muted fw-bold mb-1">المدينة</label>
+                                <select id="cityFilter" class="form-select form-select-sm">
+                                    <option value="all">الكل</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label small text-muted fw-bold mb-1">نوع المعرض</label>
+                                <select id="typeFilter" class="form-select form-select-sm">
+                                    <option value="all">الكل</option>
+                                    <option value="Showroom">معارض</option>
+                                    <option value="Online">أونلاين</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label small text-muted fw-bold mb-1">المعرض/الفرع</label>
+                                <select id="branchFilter" class="form-select form-select-sm">
+                                    <option value="all">الكل</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary btn-sm fw-bold" onclick="applyReportModeDefaults()">تطبيق 🔄</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-text small mt-2 text-muted">
+                    جميع التقارير (PDF/Excel) ستستخدم هذه الفلاتر مباشرة.
+                </div>
+            </div>
+        </section>
+
         <section class="page-section">
         <div class="row g-4">
             <div class="col-12 col-md-6 col-lg-4">
@@ -93,13 +181,6 @@
 
     </div>
 
-    <div id="hiddenFilters" style="display:none;">
-        <input type="date" id="startDate"><input type="date" id="endDate">
-        <select id="managerFilter"><option value="all">الكل</option></select>
-        <select id="cityFilter"><option value="all">الكل</option></select>
-        <select id="typeFilter"><option value="all">الكل</option></select>
-        <select id="branchFilter"><option value="all">الكل</option></select>
-    </div>
     <div class="modal fade" id="pdfOptionsModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -204,7 +285,18 @@
         function logout() { localStorage.removeItem('currentUser'); window.location.href = 'login.html'; }
 
         let rawData = null;
-        fetch('management_data.json?t=' + Date.now()).then(r=>r.json()).then(d=>{ rawData=d; window.rawData=d; populateHiddenFilters(); }).catch(()=>{});
+        fetch('management_data.json?t=' + Date.now())
+            .then(r=>r.json())
+            .then(d=>{
+                rawData=d;
+                window.rawData=d;
+                populateHiddenFilters();
+                initMonths();
+                toggleReportFilterMode();
+                applyReportModeDefaults();
+                syncPdfOptionsFilters();
+            })
+            .catch(()=>{});
 
         function populateHiddenFilters() {
             if (!rawData || !rawData.store_meta) return;
@@ -230,6 +322,87 @@
                 stores.sort((a,b)=>a.name.localeCompare(b.name));
                 bSel.innerHTML = '<option value="all">كافة الفروع</option>'+stores.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
             }
+        }
+
+        function initMonths() {
+            const mSelect = document.getElementById('monthFilter');
+            if (!mSelect) return;
+            const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+            mSelect.innerHTML = '<option value="all">كل السنة</option>' + months.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
+        }
+
+        function toggleReportFilterMode() {
+            const mode = document.getElementById('filterMode')?.value || 'mtd_yest';
+            const std = document.getElementById('stdFilters');
+            const cust = document.getElementById('customFilters');
+            if (std) std.style.display = mode === 'standard' ? 'flex' : 'none';
+            if (cust) cust.style.display = mode === 'custom' ? 'flex' : 'none';
+        }
+
+        function toYMDLocal(d) {
+            return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        }
+
+        function applyReportModeDefaults() {
+            const mode = document.getElementById('filterMode')?.value || 'mtd_yest';
+            const modeLabel = document.getElementById('modeLabel');
+            const startEl = document.getElementById('startDate');
+            const endEl = document.getElementById('endDate');
+            if (!startEl || !endEl) return;
+
+            const today = new Date();
+            const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+
+            if (mode === 'today') {
+                startEl.value = toYMDLocal(today);
+                endEl.value = toYMDLocal(today);
+                if (modeLabel) modeLabel.textContent = '📅 اليوم';
+            } else if (mode === 'yesterday') {
+                startEl.value = toYMDLocal(yesterday);
+                endEl.value = toYMDLocal(yesterday);
+                if (modeLabel) modeLabel.textContent = '📅 أمس فقط';
+            } else if (mode === 'mtd_yest') {
+                const s = new Date(yesterday.getFullYear(), yesterday.getMonth(), 1);
+                startEl.value = toYMDLocal(s);
+                endEl.value = toYMDLocal(yesterday);
+                if (modeLabel) modeLabel.textContent = '📅 من بداية الشهر إلى أمس';
+            } else if (mode === 'standard') {
+                const y = parseInt(document.getElementById('yearFilter')?.value || today.getFullYear(), 10);
+                const m = document.getElementById('monthFilter')?.value || 'all';
+                const s = m === 'all' ? new Date(y, 0, 1) : new Date(y, parseInt(m,10)-1, 1);
+                let e = m === 'all' ? new Date(y, 11, 31) : new Date(y, parseInt(m,10), 0);
+                // cap end at yesterday
+                const cap = new Date(yesterday); cap.setHours(23,59,59,999);
+                if (e > cap) e = cap;
+                startEl.value = toYMDLocal(s);
+                endEl.value = toYMDLocal(e);
+                if (modeLabel) modeLabel.textContent = '📅 نطاق سنوي/شهري';
+            } else {
+                if (modeLabel) modeLabel.textContent = '📅 فترة مخصصة';
+            }
+
+            toggleReportFilterMode();
+            syncExcelDatesFromMain();
+        }
+
+        function syncExcelDatesFromMain() {
+            try { if (typeof syncExcelDateInputs === 'function') syncExcelDateInputs(); } catch (e) {}
+        }
+
+        function syncPdfOptionsFilters() {
+            const m = document.getElementById('managerFilter')?.value;
+            const m2 = document.getElementById('pdfOptManagerFilter');
+            if (m2 && m) m2.value = m;
+        }
+
+        function ensureDashboardStateFromMainDates() {
+            const s = document.getElementById('startDate')?.value;
+            const e = document.getElementById('endDate')?.value;
+            if (!s || !e) return;
+            const start = new Date(s);
+            const end = new Date(e);
+            end.setHours(23,59,59,999);
+            window.dashboardState = { start, end };
         }
 
         function updateLastUpdate() {
@@ -305,36 +478,11 @@
             const mgrVal = document.getElementById('pdfOptManagerFilter').value;
             const mf = document.getElementById('managerFilter');
             if (mf) mf.value = mgrVal;
+            ensureDashboardStateFromMainDates();
             bootstrap.Modal.getInstance(document.getElementById('pdfOptionsModal'))?.hide();
             if (!rawData) { alert('جار تحميل البيانات...'); return; }
             window.rawData = rawData;
-            if (pendingPdfReportType === 'dashboard') {
-                const today = new Date();
-                let monthStart, end;
-                if (today.getDate() === 1) {
-                    monthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                    end = new Date(today.getFullYear(), today.getMonth(), 0);
-                } else {
-                    monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                    end = new Date(today); end.setDate(end.getDate() - 1);
-                }
-                monthStart.setHours(0,0,0,0); end.setHours(23,59,59,999);
-                window.dashboardState = { start: monthStart, end };
-                if (typeof generatePDF === 'function') generatePDF();
-            } else if (pendingPdfReportType === 'yesterday-stores') {
-                const today = new Date();
-                let monthStart, y;
-                if (today.getDate() === 1) {
-                    monthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                    y = new Date(today.getFullYear(), today.getMonth(), 0);
-                } else {
-                    monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                    y = new Date(today); y.setDate(y.getDate() - 1);
-                }
-                monthStart.setHours(0,0,0,0); y.setHours(23,59,59,999);
-                window.dashboardState = { start: monthStart, end: y };
-                if (typeof generatePDF === 'function') generatePDF();
-            }
+            if (typeof generatePDF === 'function') generatePDF();
         }
 
         function openPdfEmployeeOptionsModal() {
@@ -372,13 +520,8 @@
 
         function doExcelReport(type) {
             bootstrap.Modal.getInstance(document.getElementById('reportTypeModal'))?.hide();
-            const today = new Date();
-            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-            const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
-            const startEl = document.getElementById('startDate');
-            const endEl = document.getElementById('endDate');
-            if (startEl) startEl.value = firstDay.toLocaleDateString('en-CA');
-            if (endEl) endEl.value = yesterday.toLocaleDateString('en-CA');
+            // Use current filters (startDate/endDate) as-is
+            syncExcelDatesFromMain();
             if (typeof showExcelModal === 'function') {
                 document.getElementById('excelTypeStore').checked = (type === 'store');
                 document.getElementById('excelTypeEmployee').checked = (type === 'employee');

@@ -38,17 +38,31 @@ async function generateEmployeePDF(targetEmps = null) {
         return;
     }
 
-    let targetStores = [];
-    const storeIds = Object.keys(historyData);
+    // --- Filter Stores (use same filters as Reports page when available) ---
+    const mfEl = document.getElementById('managerFilter');
+    const cfEl = document.getElementById('cityFilter');
+    const tfEl = document.getElementById('typeFilter');
+    const bfEl = document.getElementById('branchFilter');
+    const selManager = mfEl ? mfEl.value : 'all';
+    const selCity = cfEl ? cfEl.value : 'all';
+    const selType = tfEl ? tfEl.value : 'all';
+    const selBranch = bfEl ? bfEl.value : 'all';
 
-    if (currentUser.role === 'Admin') {
-        targetStores = storeIds;
-    } else {
-        targetStores = storeIds.filter(sid => {
-            const meta = storeMeta[sid];
-            return meta && meta.manager === currentUser.name;
-        });
-    }
+    const passesStoreFilter = (sid) => {
+        const meta = storeMeta[sid];
+        if (!meta) return false;
+        // Permission
+        if (currentUser.role !== 'Admin' && meta.manager !== currentUser.name) return false;
+        // Filters
+        if (selManager !== 'all' && meta.manager !== selManager) return false;
+        if (selCity !== 'all' && meta.city !== selCity) return false;
+        if (selType !== 'all' && meta.type !== selType) return false;
+        if (selBranch !== 'all' && sid !== selBranch) return false;
+        return true;
+    };
+
+    const storeIds = Object.keys(historyData);
+    let targetStores = storeIds.filter(sid => passesStoreFilter(sid));
 
     targetStores.sort();
 
@@ -58,16 +72,31 @@ async function generateEmployeePDF(targetEmps = null) {
         return local.toISOString().split('T')[0];
     }
 
+    // --- Date range ---
     let today = new Date();
     let yestDate = new Date(today);
     yestDate.setDate(today.getDate() - 1);
 
-    const yestStrFinal = formatDate(yestDate);
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const monthStartStr = formatDate(monthStart);
+    // Default: month start -> yesterday
+    let rangeStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    let rangeEnd = new Date(yestDate);
+    rangeEnd.setHours(23, 59, 59, 999);
+
+    // If filter inputs exist (Reports page), use them
+    const startVal = document.getElementById('startDate')?.value;
+    const endVal = document.getElementById('endDate')?.value;
+    if (startVal && endVal) {
+        rangeStart = new Date(startVal);
+        rangeEnd = new Date(endVal);
+        rangeEnd.setHours(23, 59, 59, 999);
+    }
+
+    // Use end of selected range (not necessarily "yesterday")
+    const yestStrFinal = formatDate(rangeEnd);
+    const monthStartStr = formatDate(rangeStart);
 
     // Prev Period Dates (for Share Growth)
-    const prevEnd = new Date(yestDate);
+    const prevEnd = new Date(rangeEnd);
     prevEnd.setMonth(prevEnd.getMonth() - 1);
     const prevMonthEndStr = formatDate(prevEnd);
 
@@ -284,8 +313,8 @@ async function generateEmployeePDF(targetEmps = null) {
             head: [
                 [
                     { content: 'بيانات الموظف (Employee)', colSpan: 1, styles: { fillColor: [255, 255, 255], textColor: 0, halign: 'center' } },
-                    { content: `الأمس (Yesterday) - ${yestStrFinal}`, colSpan: 4, styles: { fillColor: [220, 220, 220], textColor: 0, halign: 'center' } },
-                    { content: `الشهر الحالي (MTD) - ${monthStartStr} إلى ${yestStrFinal}`, colSpan: 9, styles: { fillColor: [200, 200, 200], textColor: 0, halign: 'center' } }
+                    { content: `نهاية الفترة - ${yestStrFinal}`, colSpan: 4, styles: { fillColor: [220, 220, 220], textColor: 0, halign: 'center' } },
+                    { content: `الفترة المحددة - ${monthStartStr} إلى ${yestStrFinal}`, colSpan: 9, styles: { fillColor: [200, 200, 200], textColor: 0, halign: 'center' } }
                 ],
                 [
                     'الموظف',

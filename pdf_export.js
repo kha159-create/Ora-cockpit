@@ -75,6 +75,13 @@ async function generatePDF() {
         startDate = new Date(window.dashboardState.start);
         endDate = new Date(window.dashboardState.end);
         console.log("PDF Export: Using Dashboard Dates", startDate, endDate);
+    } else if (document.getElementById('startDate')?.value && document.getElementById('endDate')?.value) {
+        // Use explicit filter inputs when available (Reports page)
+        startDate = new Date(document.getElementById('startDate').value);
+        endDate = new Date(document.getElementById('endDate').value);
+        endDate.setHours(23, 59, 59, 999);
+        startDate.setHours(0, 0, 0, 0);
+        console.log("PDF Export: Using Filter Dates", startDate, endDate);
     } else {
         let today = new Date();
         if (today.getDate() === 1) {
