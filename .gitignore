@@ -13,3 +13,9 @@ venv/
 .DS_Store
 Thumbs.db
 *.log
+
+# Node / Vite (SPA)
+node_modules/
+spa/node_modules/
+spa/dist/
+spa/.vite/
