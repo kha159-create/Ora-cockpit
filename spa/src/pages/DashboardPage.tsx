@@ -505,8 +505,8 @@ export default function DashboardPage() {
   }, [monthlyChartData]);
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4">
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl shadow-md border border-neutral-200 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <span className="text-sm text-neutral-500">
             آخر تحديث: {lastUpdate ?? '--:--:--'}
@@ -605,7 +605,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <KPICard
           title="المبيعات"
           value={totals.sales}
@@ -809,7 +809,7 @@ export default function DashboardPage() {
       {/* نافذة مبيعات اليوم */}
       {liveModalOpen && (
         <div className="modal-center-screen" onClick={() => setLiveModalOpen(false)}>
-          <div className="modal-content max-w-6xl my-4" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content max-w-5xl my-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
                 <div className="text-xl font-bold text-neutral-900">مبيعات اليوم — لايف</div>
@@ -866,17 +866,17 @@ export default function DashboardPage() {
       {/* نافذة التقرير اليومي */}
       {dailyReportModalOpen && (
         <div className="modal-center-screen" onClick={() => setDailyReportModalOpen(false)}>
-          <div className="modal-content max-w-7xl my-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4 mb-6">
+          <div className="modal-content max-w-6xl my-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3 mb-4">
               <div>
-                <div className="text-xl font-bold text-blue-600 flex items-center gap-2">
+                <div className="text-base font-bold text-blue-600 flex items-center gap-2">
                   <span>📄</span>
                   <span>التقرير اليومي: تقرير الأمس ({yesterdayStr}) مقارنة بـ ({lastYearYesterdayStr})</span>
                 </div>
               </div>
               <button
                 type="button"
-                className="btn-secondary py-2 px-3 flex items-center gap-2"
+                className="btn-secondary py-1.5 px-3 text-sm flex items-center gap-2"
                 onClick={() => setDailyReportModalOpen(false)}
               >
                 <XIcon /> إغلاق

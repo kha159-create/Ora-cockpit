@@ -205,9 +205,9 @@ export const ChartCard: React.FC<{
   watermarkOpacity?: number;
 }> = ({ title, children, className = '', watermark, watermarkOpacity = 0.1 }) => (
   <div
-    className={`bg-white p-6 rounded-2xl shadow-lg border border-neutral-200 h-full flex flex-col transition-all duration-300 hover:shadow-xl hover:border-orange-200 ${className}`}
+    className={`bg-white p-4 rounded-xl shadow-md border border-neutral-200 h-full flex flex-col transition-all duration-300 hover:shadow-lg hover:border-orange-200 ${className}`}
   >
-    <div className="text-xl font-bold text-neutral-800 mb-6 border-b border-neutral-100 pb-3 flex items-center justify-between">
+    <div className="text-base font-bold text-neutral-800 mb-3 border-b border-neutral-100 pb-2 flex items-center justify-between">
       <span>{title}</span>
       {watermark && watermarkOpacity > 0.1 && <span className="text-xs font-normal text-orange-500 ml-2">{watermark}</span>}
     </div>

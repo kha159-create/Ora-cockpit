@@ -410,15 +410,15 @@ function StoreDetailsModal({
 
   return (
     <div className="modal-center-screen" onClick={onClose}>
-      <div className="modal-content max-w-6xl my-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-4">
+      <div className="modal-content max-w-5xl my-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 mb-4">
           <div className="min-w-0">
-            <div className="text-xl font-bold text-neutral-900 truncate">{store.name}</div>
-            <div className="text-sm text-neutral-500 mt-1">
+            <div className="text-lg font-bold text-neutral-900 truncate">{store.name}</div>
+            <div className="text-xs text-neutral-500 mt-1">
               {store.manager || '-'} · {store.city || '-'} · {store.type || '-'}
             </div>
           </div>
-          <button className="btn-secondary py-2 px-3" onClick={onClose}>
+          <button className="btn-secondary py-1.5 px-3 text-sm" onClick={onClose}>
             إغلاق
           </button>
         </div>
@@ -431,8 +431,6 @@ function StoreDetailsModal({
         </div>
 
         <div className="grid grid-cols-1 gap-4 mt-6">
-          <ChartCard title={`مبيعات الفترة (${details?.rangeLabel || '-'})`}>{renderTable(details?.rangeList || [], showTarget)}</ChartCard>
-          
           {/* Daily Details Table */}
           {details?.dailyList && details.dailyList.length > 0 && (
             <ChartCard title={`تفاصيل الأيام (${details?.rangeLabel || '-'})`}>
@@ -718,8 +716,8 @@ export default function StoresPage() {
 
   return (
     <div className="space-y-6 relative min-h-[400px]">
-      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <div className="bg-white rounded-xl shadow-md border border-neutral-200 p-3">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
           <div className="flex flex-wrap items-end gap-3">
             <div>
               <div className="text-xs font-semibold text-neutral-500 mb-1">نوع التقرير</div>
@@ -822,7 +820,7 @@ export default function StoresPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <KPICard title="المبيعات" value={derived.totals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
         <KPICard title="الفواتير" value={derived.totals.trans} format={(v) => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
         <KPICard title="الزوار" value={derived.totals.visitors} format={(v) => Math.round(v).toLocaleString()} icon={<UsersIcon />} />
@@ -830,11 +828,11 @@ export default function StoresPage() {
       </div>
 
       {/* Stores table */}
-      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
-        <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white">
+      <div className="bg-white rounded-xl shadow-md border border-neutral-200 overflow-hidden">
+        <div className="p-3 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="text-lg font-bold text-neutral-900">تفاصيل الفروع</div>
-            <div className="text-sm text-neutral-600">
+            <div className="text-base font-bold text-neutral-900">تفاصيل الفروع</div>
+            <div className="text-xs text-neutral-600">
               عدد الفروع: <span className="font-bold text-neutral-900">{derived.list.length}</span>
             </div>
           </div>
