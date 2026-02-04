@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
@@ -275,24 +275,8 @@ export default function DashboardPage() {
     }));
   }, [empRaw, range.start, range.end, allowedStoreIds]);
 
-  if (err) {
-    return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
-  }
-  if (!raw) {
-    return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
-      </div>
-    );
-  }
-
-  const ach = totals.target > 0 ? (totals.sales / totals.target) * 100 : 0;
-
-  const diff = (curr: number, prev: number) =>
-    prev > 0 ? { pct: ((curr - prev) / prev) * 100, num: curr - prev } : { pct: 0, num: curr };
-
   // Live data (today only)
-  const todayStr = toYMD(new Date());
+  const todayStr = useMemo(() => toYMD(new Date()), []);
   const liveData = useMemo(() => {
     if (!raw || !empRaw) return { totals: { sales: 0, trans: 0 }, stores: [] };
     const meta = raw.store_meta || {};
@@ -300,7 +284,7 @@ export default function DashboardPage() {
     const historyData: Record<string, any[]> = empRaw.history || {};
     const names: Record<string, string> = empRaw.employee_names || {};
     const byStore: Record<string, { sales: number; trans: number; employees: Record<string, { sales: number; trans: number; name: string }> }> = {};
-    
+
     (raw.sales || []).forEach(([d, sid, v]: any[]) => {
       if (String(d).startsWith(todayStr)) {
         if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, employees: {} };
@@ -367,19 +351,24 @@ export default function DashboardPage() {
   }, [raw, empRaw, todayStr, effectiveManager]);
 
   // Daily Report data (yesterday vs last year)
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = toYMD(yesterday);
-  const lastYearYesterday = new Date(yesterday);
-  lastYearYesterday.setFullYear(lastYearYesterday.getFullYear() - 1);
-  const lastYearYesterdayStr = toYMD(lastYearYesterday);
-  
+  const yesterday = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d;
+  }, []);
+  const yesterdayStr = useMemo(() => toYMD(yesterday), [yesterday]);
+  const lastYearYesterdayStr = useMemo(() => {
+    const d = new Date(yesterday);
+    d.setFullYear(d.getFullYear() - 1);
+    return toYMD(d);
+  }, [yesterday]);
+
   const dailyReportData = useMemo(() => {
     if (!raw) return [];
     const meta = raw.store_meta || {};
     const storesMap = raw.stores || {};
     const byStore: Record<string, { sales: number; trans: number; visitors: number; avgInv: number; prevSales: number; prevVisitors: number; dailyReq: number }> = {};
-    
+
     (raw.sales || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
       if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0 };
@@ -416,7 +405,7 @@ export default function DashboardPage() {
         return byStore[sid].sales > 0 || byStore[sid].trans > 0;
       })
       .map(([sid, v]) => {
-        v.avgInv = v.trans > 0 ? v.sales / v.trans : 0;
+        const avgInv = v.trans > 0 ? v.sales / v.trans : 0;
         const growth = v.prevSales > 0 ? ((v.sales - v.prevSales) / v.prevSales) * 100 : 0;
         const conversion = v.visitors > 0 ? (v.trans / v.visitors) * 100 : 0;
         const customerValue = v.trans > 0 ? v.sales / v.trans : 0;
@@ -427,7 +416,7 @@ export default function DashboardPage() {
           prevSales: v.prevSales,
           growth,
           trans: v.trans,
-          avgInv: v.avgInv,
+          avgInv,
           visitors: v.visitors,
           prevVisitors: v.prevVisitors,
           dailyReq: v.dailyReq,
@@ -436,41 +425,41 @@ export default function DashboardPage() {
         };
       })
       .sort((a, b) => b.sales - a.sales);
-  }, [raw, yesterdayStr, lastYearYesterdayStr, effectiveManager]);
+  }, [raw, yesterdayStr, lastYearYesterdayStr, effectiveManager, yesterday]);
 
   // Monthly chart data
   const monthlyChartData = useMemo(() => {
     if (!raw) return [];
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthsNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const currentYear = new Date().getFullYear();
-    const data: { name: string; Sales?: number; Target?: number; Current?: number; Previous?: number; CurrentVisitors?: number; PreviousVisitors?: number }[] = [];
-    
+    const data: any[] = [];
+
     for (let m = 0; m < 12; m++) {
       const monthStart = new Date(currentYear, m, 1);
       const monthEnd = new Date(currentYear, m + 1, 0);
       const monthStartStr = toYMD(monthStart);
       const monthEndStr = toYMD(monthEnd > new Date() ? new Date() : monthEnd);
-      
+
       const prevYearStart = new Date(currentYear - 1, m, 1);
       const prevYearEnd = new Date(currentYear - 1, m + 1, 0);
       const prevYearStartStr = toYMD(prevYearStart);
       const prevYearEndStr = toYMD(prevYearEnd);
 
       let sales = 0, target = 0, prevSales = 0, visitors = 0, prevVisitors = 0;
-      
+
       (raw.sales || []).forEach(([d, sid, v]: any[]) => {
         const dateStr = String(d).substring(0, 10);
         if (!allowedStoreIds.has(sid)) return;
         if (dateStr >= monthStartStr && dateStr <= monthEndStr) sales += v || 0;
         if (dateStr >= prevYearStartStr && dateStr <= prevYearEndStr) prevSales += v || 0;
       });
-      
+
       (raw.targets || []).forEach(([d, sid, v]: any[]) => {
         const dateStr = String(d).substring(0, 10);
         if (!allowedStoreIds.has(sid)) return;
         if (dateStr >= monthStartStr && dateStr <= monthEndStr) target += v || 0;
       });
-      
+
       (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
         const dateStr = String(d).substring(0, 10);
         if (!allowedStoreIds.has(sid)) return;
@@ -478,7 +467,7 @@ export default function DashboardPage() {
         if (dateStr >= prevYearStartStr && dateStr <= prevYearEndStr) prevVisitors += v || 0;
       });
 
-      const entry: any = { name: months[m] };
+      const entry: any = { name: monthsNames[m] };
       if (chartMode === 'target') {
         entry.Sales = sales;
         entry.Target = target;
@@ -491,18 +480,31 @@ export default function DashboardPage() {
       }
       data.push(entry);
     }
-    
+
     return data;
   }, [raw, allowedStoreIds, chartMode]);
 
   const chartKPIs = useMemo(() => {
     if (!monthlyChartData.length) return { ads: 0, ams: 0 };
     const totalSales = monthlyChartData.reduce((s, m) => s + (m.Sales || m.Current || 0), 0);
-    const daysInYear = new Date().getDate() + (new Date().getMonth() * 30);
-    const ads = daysInYear > 0 ? totalSales / daysInYear : 0;
+    const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+    const ads = dayOfYear > 0 ? totalSales / dayOfYear : 0;
     const ams = monthlyChartData.length > 0 ? totalSales / monthlyChartData.length : 0;
     return { ads, ams };
   }, [monthlyChartData]);
+
+  if (err) {
+    return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
+  }
+  if (!raw) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
+      </div>
+    );
+  }
+
+  const ach = totals.target > 0 ? (totals.sales / totals.target) * 100 : 0;
 
   return (
     <div className="space-y-4">
@@ -515,11 +517,10 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => setLiveModalOpen(true)}
-              className={`py-2 px-4 text-sm font-semibold rounded-xl transition-all ${
-                liveModalOpen
-                  ? 'bg-orange-500 text-white shadow-md'
-                  : 'bg-white text-orange-600 border border-orange-300 hover:bg-orange-50'
-              }`}
+              className={`py-2 px-4 text-sm font-semibold rounded-xl transition-all ${liveModalOpen
+                ? 'bg-orange-500 text-white shadow-md'
+                : 'bg-white text-orange-600 border border-orange-300 hover:bg-orange-50'
+                }`}
             >
               مبيعات اليوم
             </button>
@@ -650,33 +651,30 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setChartMode('target')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  chartMode === 'target'
-                    ? 'bg-orange-500 text-white shadow-md'
-                    : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
-                }`}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${chartMode === 'target'
+                  ? 'bg-orange-500 text-white shadow-md'
+                  : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
+                  }`}
               >
                 تارجت
               </button>
               <button
                 type="button"
                 onClick={() => setChartMode('growth')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  chartMode === 'growth'
-                    ? 'bg-orange-500 text-white shadow-md'
-                    : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
-                }`}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${chartMode === 'growth'
+                  ? 'bg-orange-500 text-white shadow-md'
+                  : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
+                  }`}
               >
                 نمو
               </button>
               <button
                 type="button"
                 onClick={() => setChartMode('visitors')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  chartMode === 'visitors'
-                    ? 'bg-orange-500 text-white shadow-md'
-                    : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
-                }`}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${chartMode === 'visitors'
+                  ? 'bg-orange-500 text-white shadow-md'
+                  : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
+                  }`}
               >
                 زوار
               </button>
@@ -783,7 +781,7 @@ export default function DashboardPage() {
             { key: 'sales', label: 'بيع' },
             { key: 'achievement', label: 'تحقيق' },
           ]}
-          data={topEmployeesRank}
+          data={topEmployeesRank as any}
           format={(v, k) => (k === 'achievement' ? `${Number(v).toFixed(1)}%` : k === 'sales' ? formatSAR(v) : Number(v).toLocaleString())}
           maxItems={10}
         />
@@ -796,7 +794,7 @@ export default function DashboardPage() {
             { key: 'achievement', label: 'تحقيق' },
             { key: 'sales', label: 'بيع' },
           ]}
-          data={topStoresRank}
+          data={topStoresRank as any}
           format={(v, k) => {
             if (k === 'achievement' || k === 'growth') return `${Number(v).toFixed(1)}%`;
             if (k === 'sales') return formatSAR(v);

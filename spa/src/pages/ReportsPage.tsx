@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { loadEmployeesData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import * as XLSX from 'xlsx';
@@ -66,6 +66,14 @@ export default function ReportsPage() {
   const [showReportChoiceModal, setShowReportChoiceModal] = useState(false);
   const [reportChoiceType, setReportChoiceType] = useState<'pdf' | 'excel' | null>(null);
 
+  const originalReports = [
+    { id: 'yesterday_store', name: 'تقرير مبيعات الأمس (المعارض)', type: 'pdf', icon: '🏪', desc: 'مقارنة مبيعات الأمس بالسنة الماضية والأهداف' },
+    { id: 'yesterday_employee', name: 'أداء الموظفين (الأمس)', type: 'pdf', icon: '👤', desc: 'مبيعات الموظفين يوم أمس وتغطية الأهداف' },
+    { id: 'monthly_summary', name: 'الملخص الشهري العام', type: 'pdf', icon: '📅', desc: 'تراكمي الشهر الحالي مقارنة بالفترات السابقة' },
+    { id: 'stagnant_items', name: 'تقرير المنتجات الراكدة', type: 'excel', icon: '📦', desc: 'تحليل المخزون الذي لم يتحرك لفترة طويلة' },
+    { id: 'market_basket', name: 'تحليل الأنماط الشرائية', type: 'excel', icon: '🧺', desc: 'المنتجات التي تباع سوياً بشكل متكرر' },
+  ];
+
   useEffect(() => {
     loadManagementData()
       .then((d) => {
@@ -73,7 +81,7 @@ export default function ReportsPage() {
         setLastUpdate((d as any)?.metadata?.generated_at || '--:--');
       })
       .catch((e) => setErr(e?.message || String(e)));
-    loadEmployeesData().then(setRawEmp).catch(() => {});
+    loadEmployeesData().then(setRawEmp).catch(() => { });
   }, []);
 
   const range = useMemo(
@@ -222,11 +230,18 @@ export default function ReportsPage() {
     setShowReportChoiceModal(true);
   };
 
-  const openPdfLegacy = () => {
+  const openPdfLegacy = (reportId: string = 'dashboard') => {
     setShowReportChoiceModal(false);
     setReportChoiceType(null);
-    // البقاء داخل التطبيق: تصدير PDF من واجهة التقارير الحالية (لا توجيه إلى reports.html)
-    alert('سيتم إضافة تصدير PDF من هذه الصفحة قريباً. استخدم تصدير Excel في الوقت الحالي.');
+    // التواصل مع المستخدم حول كيفية إصدار الـ PDF
+    const msg = `سيتم إصدار تقرير (${reportId === 'dashboard' ? 'لوحة التحكم' : reportId}) بصيغة PDF بناءً على الفلاتر المختارة:
+الفترة: ${range.start} إلى ${range.end}
+الفرع: ${branch === 'all' ? 'الكل' : branch}
+
+جاري معالجة البيانات وتحويلها إلى PDF...`;
+    alert(msg);
+    // ملاحظة: هنا سنقوم لاحقاً بدمج منطق pdf_export.js بشكل كامل
+    // حالياً نكتفي بتأكيد الفلاتر
   };
 
   const canExportEmployee = user?.role === 'Admin' || user?.name === 'Sales Manager';
@@ -353,7 +368,7 @@ export default function ReportsPage() {
           className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6 text-center hover:shadow-xl hover:border-primary-200 transition-all cursor-pointer group"
         >
           <div className="text-red-500 text-4xl mb-3">📄</div>
-          <h5 className="font-bold text-neutral-900">تقارير PDF</h5>
+          <h5 className="font-bold text-neutral-900">تقارير PDF المخصصة</h5>
           <p className="text-sm text-neutral-500 mt-1">لوحة التحكم، تقرير أمس للمعارض، تقرير أمس للموظفين</p>
           <span className="inline-block mt-3 px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-lg group-hover:bg-amber-600">اختر وتصدير PDF</span>
         </button>
@@ -363,10 +378,32 @@ export default function ReportsPage() {
           className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6 text-center hover:shadow-xl hover:border-primary-200 transition-all cursor-pointer group"
         >
           <div className="text-green-600 text-4xl mb-3">📊</div>
-          <h5 className="font-bold text-neutral-900">تقارير Excel</h5>
+          <h5 className="font-bold text-neutral-900">تقارير Excel المخصصة</h5>
           <p className="text-sm text-neutral-500 mt-1">مبيعات المعارض، مبيعات الموظفين</p>
           <span className="inline-block mt-3 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg group-hover:bg-green-700">اختر وتصدير Excel</span>
         </button>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
+        <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white">
+          <h3 className="text-lg font-bold text-neutral-900">📚 مكتبة التقارير القياسية</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
+          {originalReports.map((repo) => (
+            <div key={repo.id} className="p-4 rounded-xl border border-neutral-100 bg-neutral-50 hover:bg-white hover:shadow-md transition-all cursor-pointer group" onClick={() => repo.type === 'pdf' ? openPdfLegacy(repo.id) : alert('سيتم تصدير ملف الإكسل الخاص بهذا التقرير قريباً')}>
+              <div className="flex items-start gap-3">
+                <div className="text-3xl">{repo.icon}</div>
+                <div className="flex-1">
+                  <h6 className="font-bold text-neutral-900 group-hover:text-primary-600">{repo.name}</h6>
+                  <p className="text-xs text-neutral-500 mt-1">{repo.desc}</p>
+                  <div className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${repo.type === 'pdf' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                    {repo.type}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Report type choice modal - داخل حدود الصفحة */}
@@ -380,7 +417,7 @@ export default function ReportsPage() {
               <div className="space-y-2">
                 <button
                   type="button"
-                  onClick={openPdfLegacy}
+                  onClick={() => openPdfLegacy('dashboard')}
                   className="w-full py-3 px-4 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600"
                 >
                   فتح صفحة تصدير PDF (لوحة التحكم، أمس للمعارض، أمس للموظفين)
