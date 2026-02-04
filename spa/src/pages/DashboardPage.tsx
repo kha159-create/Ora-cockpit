@@ -428,8 +428,7 @@ export default function DashboardPage() {
           dailyReq: v.dailyReq,
           conversion,
           customerValue,
-          target: v.target, // Add target
-          ach, // Add achievement
+          ach: v.ach,
         };
       })
       .sort((a, b) => b.sales - a.sales);
@@ -488,71 +487,127 @@ export default function DashboardPage() {
     }, 500);
   };
 
-  // Monthly chart data
-  const monthlyChartData = useMemo(() => {
+  // Dynamic chart data (Daily or Monthly based on range)
+  const chartData = useMemo(() => {
     if (!raw) return [];
-    const monthsNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const currentYear = new Date().getFullYear();
+
+    const start = new Date(range.start);
+    const end = new Date(range.end);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    // Granularity: Daily (up to 35 days) or Monthly (longer)
     const data: any[] = [];
 
-    for (let m = 0; m < 12; m++) {
-      const monthStart = new Date(currentYear, m, 1);
-      const monthEnd = new Date(currentYear, m + 1, 0);
-      const monthStartStr = toYMD(monthStart);
-      const monthEndStr = toYMD(monthEnd > new Date() ? new Date() : monthEnd);
+    if (diffDays <= 35) {
+      // Daily view
+      for (let i = 0; i < diffDays; i++) {
+        const current = new Date(start);
+        current.setDate(start.getDate() + i);
+        const dayStr = toYMD(current);
 
-      const prevYearStart = new Date(currentYear - 1, m, 1);
-      const prevYearEnd = new Date(currentYear - 1, m + 1, 0);
-      const prevYearStartStr = toYMD(prevYearStart);
-      const prevYearEndStr = toYMD(prevYearEnd);
+        const prevYear = new Date(current);
+        prevYear.setFullYear(current.getFullYear() - 1);
+        const prevDayStr = toYMD(prevYear);
 
-      let sales = 0, target = 0, prevSales = 0, visitors = 0, prevVisitors = 0;
+        let sales = 0, target = 0, prevSales = 0, visitors = 0, prevVisitors = 0;
 
-      (raw.sales || []).forEach(([d, sid, v]: any[]) => {
-        const dateStr = String(d).substring(0, 10);
-        if (!allowedStoreIds.has(sid)) return;
-        if (dateStr >= monthStartStr && dateStr <= monthEndStr) sales += v || 0;
-        if (dateStr >= prevYearStartStr && dateStr <= prevYearEndStr) prevSales += v || 0;
-      });
+        (raw.sales || []).forEach(([d, sid, v]: any[]) => {
+          const ds = String(d).substring(0, 10);
+          if (!allowedStoreIds.has(sid)) return;
+          if (ds === dayStr) sales += (v || 0);
+          if (ds === prevDayStr) prevSales += (v || 0);
+        });
 
-      (raw.targets || []).forEach(([d, sid, v]: any[]) => {
-        const dateStr = String(d).substring(0, 10);
-        if (!allowedStoreIds.has(sid)) return;
-        if (dateStr >= monthStartStr && dateStr <= monthEndStr) target += v || 0;
-      });
+        (raw.targets || []).forEach(([d, sid, v]: any[]) => {
+          if (!allowedStoreIds.has(sid)) return;
+          if (String(d).substring(0, 10) === dayStr) target += (v || 0);
+        });
 
-      (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
-        const dateStr = String(d).substring(0, 10);
-        if (!allowedStoreIds.has(sid)) return;
-        if (dateStr >= monthStartStr && dateStr <= monthEndStr) visitors += v || 0;
-        if (dateStr >= prevYearStartStr && dateStr <= prevYearEndStr) prevVisitors += v || 0;
-      });
+        (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
+          const ds = String(d).substring(0, 10);
+          if (!allowedStoreIds.has(sid)) return;
+          if (ds === dayStr) visitors += (v || 0);
+          if (ds === prevDayStr) prevVisitors += (v || 0);
+        });
 
-      const entry: any = { name: monthsNames[m] };
-      if (chartMode === 'target') {
-        entry.Sales = sales;
-        entry.Target = target;
-      } else if (chartMode === 'growth') {
-        entry.Current = sales;
-        entry.Previous = prevSales;
-      } else {
-        entry.CurrentVisitors = visitors;
-        entry.PreviousVisitors = prevVisitors;
+        const entry: any = { name: dayStr.substring(5) }; // MM-DD
+        if (chartMode === 'target') {
+          entry.Sales = sales;
+          entry.Target = target;
+        } else if (chartMode === 'growth') {
+          entry.Current = sales;
+          entry.Previous = prevSales;
+        } else {
+          entry.CurrentVisitors = visitors;
+          entry.PreviousVisitors = prevVisitors;
+        }
+        data.push(entry);
       }
-      data.push(entry);
+    } else {
+      // Monthly view
+      const monthsNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const currentYear = start.getFullYear();
+
+      for (let m = 0; m < 12; m++) {
+        const monthStart = new Date(currentYear, m, 1);
+        const monthEnd = new Date(currentYear, m + 1, 0);
+        const mStartStr = toYMD(monthStart);
+        const mEndStr = toYMD(monthEnd);
+
+        const pYearStart = new Date(currentYear - 1, m, 1);
+        const pYearEnd = new Date(currentYear - 1, m + 1, 0);
+        const pStartStr = toYMD(pYearStart);
+        const pEndStr = toYMD(pYearEnd);
+
+        let sales = 0, target = 0, prevSales = 0, visitors = 0, prevVisitors = 0;
+
+        (raw.sales || []).forEach(([d, sid, v]: any[]) => {
+          const ds = String(d).substring(0, 10);
+          if (!allowedStoreIds.has(sid)) return;
+          if (ds >= mStartStr && ds <= mEndStr) sales += (v || 0);
+          if (ds >= pStartStr && ds <= pEndStr) prevSales += (v || 0);
+        });
+
+        (raw.targets || []).forEach(([d, sid, v]: any[]) => {
+          if (!allowedStoreIds.has(sid)) return;
+          const ds = String(d).substring(0, 10);
+          if (ds >= mStartStr && ds <= mEndStr) target += (v || 0);
+        });
+
+        (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
+          const ds = String(d).substring(0, 10);
+          if (!allowedStoreIds.has(sid)) return;
+          if (ds >= mStartStr && ds <= mEndStr) visitors += (v || 0);
+          if (ds >= pStartStr && ds <= pEndStr) prevVisitors += (v || 0);
+        });
+
+        const entry: any = { name: monthsNames[m] };
+        if (chartMode === 'target') {
+          entry.Sales = sales;
+          entry.Target = target;
+        } else if (chartMode === 'growth') {
+          entry.Current = sales;
+          entry.Previous = prevSales;
+        } else {
+          entry.CurrentVisitors = visitors;
+          entry.PreviousVisitors = prevVisitors;
+        }
+        data.push(entry);
+      }
     }
 
     return data;
-  }, [raw, allowedStoreIds, chartMode]);
+  }, [raw, allowedStoreIds, chartMode, range.start, range.end]);
 
   const chartKPIs = useMemo(() => {
-    if (!monthlyChartData.length) return { ads: 0, ams: 0 };
-    const totalSales = monthlyChartData.reduce((s, m) => s + (m.Sales || m.Current || 0), 0);
+    if (!chartData.length) return { ads: 0, ams: 0 };
+    const totalSales = chartData.reduce((s, m) => s + (m.Sales || m.Current || 0), 0);
     const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
     const ads = dayOfYear > 0 ? totalSales / dayOfYear : 0;
-    const ams = monthlyChartData.length > 0 ? totalSales / monthlyChartData.length : 0;
+    const ams = chartData.length > 0 ? totalSales / chartData.length : 0;
     return { ads, ams };
-  }, [monthlyChartData]);
+  }, [chartData]);
 
   if (err) {
     return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
@@ -764,7 +819,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="flex-grow min-h-[300px]">
-              <LineChart data={monthlyChartData} />
+              <LineChart data={chartData} />
             </div>
             <div className="flex items-center justify-center gap-4 pt-2 border-t border-neutral-200">
               {chartMode === 'target' && (
