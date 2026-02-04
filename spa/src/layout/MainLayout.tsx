@@ -24,7 +24,6 @@ const baseNavItems = [
   { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
   { to: '/offers', label: 'تحليل العروض', icon: <TagIcon /> },
   { to: '/stagnant', label: 'المنتجات الراكدة', icon: <PauseIcon /> },
-  { to: '/live', label: 'لايف اليوم', icon: <FireIcon /> },
 ] as const;
 
 const targetsNavItem = { to: '/targets', label: 'تحديد الأهداف', icon: <TargetIcon /> } as const;

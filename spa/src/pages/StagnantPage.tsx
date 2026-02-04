@@ -70,17 +70,12 @@ export default function StagnantPage() {
     return { allowedStoreIds: allowed, managers, branches, cities };
   }, [mgmt, branch, city, effectiveManager, data?.data]);
 
-  if (err) return <div className="p-6 bg-white rounded-2xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
-  if (!data) {
-    return (
-      <div className="flex items-center justify-center h-[40vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500" />
-      </div>
-    );
-  }
-
   // الريبو الأصلي: stagnant_data.json = { data: { "storeId": [ { id, name, qty, ... } ] } }
-  const storeData = data.data && typeof data.data === 'object' ? data.data as Record<string, any[]> : {};
+  const storeData = useMemo(() => {
+    if (!data?.data || typeof data.data !== 'object') return {};
+    return data.data as Record<string, any[]>;
+  }, [data?.data]);
+
   const rawItems = useMemo(() => {
     const out: any[] = [];
     Object.entries(storeData).forEach(([storeId, arr]) => {
@@ -94,16 +89,30 @@ export default function StagnantPage() {
     }
     return out;
   }, [storeData, allowedStoreIds]);
-  const items = rawItems.map((i: any) => ({
-    ...i,
-    name: i.name || i.item_name || i.id || '-',
-    qty: i.qty ?? i.count ?? 0,
-  }));
-  const filtered = search
-    ? items.filter((i: any) => String(i.name || '').toLowerCase().includes(search.toLowerCase()))
-    : items;
 
-  const periodLabel = period === 'today' ? 'اليوم' : period === 'yesterday' ? 'أمس' : period === 'mtd' ? 'الشهر الحالي (MTD)' : period === 'mtd_yest' ? 'من بداية الشهر إلى أمس' : `شهر محدد: ${monthsAr[selMonth - 1] || selMonth} ${selYear}`;
+  const items = useMemo(() => {
+    return rawItems.map((i: any) => ({
+      ...i,
+      name: i.name || i.item_name || i.id || '-',
+      qty: i.qty ?? i.count ?? 0,
+    }));
+  }, [rawItems]);
+
+  const filtered = useMemo(() => {
+    if (!search) return items;
+    return items.filter((i: any) => String(i.name || '').toLowerCase().includes(search.toLowerCase()));
+  }, [items, search]);
+
+  if (err) return <div className="p-6 bg-white rounded-2xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center h-[40vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500" />
+      </div>
+    );
+  }
+
+  const periodLabel = period === 'today' ? 'اليوم' : period === 'yesterday' ? 'أمس' : period === 'mtd' ? 'الشهر الحالي (MTD)' : `شهر محدد: ${monthsAr[selMonth - 1] || selMonth} ${selYear}`;
 
   return (
     <div className="space-y-6">

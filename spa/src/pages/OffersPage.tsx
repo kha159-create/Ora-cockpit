@@ -70,16 +70,11 @@ export default function OffersPage() {
     return { managers, branches, cities, allowedStoreIds: allowed };
   }, [mgmt, branch, city, effectiveManager]);
 
-  if (err) return <div className="p-6 bg-white rounded-2xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
-  if (!data) {
-    return (
-      <div className="flex items-center justify-center h-[40vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500" />
-      </div>
-    );
-  }
+  const rawOffers = useMemo(() => {
+    if (!data) return [];
+    return Array.isArray(data) ? data : (Array.isArray(data?.offers) ? data.offers : []);
+  }, [data]);
 
-  const rawOffers = Array.isArray(data) ? data : (Array.isArray(data?.offers) ? data.offers : []);
   const offers = useMemo(() => {
     let list = rawOffers.filter((o: any) => {
       const sid = o.store_id ?? o.storeId ?? o.store;
@@ -115,6 +110,15 @@ export default function OffersPage() {
       .sort((a: any, b: any) => (Number(a.efficiency ?? 0) || 0) - (Number(b.efficiency ?? 0) || 0))
       .slice(0, 5);
   }, [offers]);
+
+  if (err) return <div className="p-6 bg-white rounded-2xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center h-[40vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500" />
+      </div>
+    );
+  }
 
   const periodLabels: Record<PeriodKey, string> = { mtd: 'الشهر الحالي', '7d': '7 أيام', '14d': '14 يوم', '30d': '30 يوم', yest: 'أمس' };
 

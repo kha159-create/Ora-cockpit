@@ -142,41 +142,52 @@ export const KPICard: React.FC<{
             </div>
           </div>
 
-          {/* مؤشر الاتجاه */}
-          {trendValue && <TrendIndicator trend={trend} value={trendValue} />}
+          {/* مؤشر الاتجاه - فقط للهدف */}
+          {showProgress && trendValue && <TrendIndicator trend={trend} value={trendValue} />}
         </div>
 
         {/* القيمة الرئيسية */}
-        <div className="mb-4 flex-1 flex items-center">
+        <div className="mb-3 flex-1 flex items-center">
           <div className="kpi-value break-all leading-tight">{formattedValue}</div>
         </div>
 
         {/* القسم السفلي */}
-        <div className="flex items-end justify-between">
-          {/* شريط التقدم أو البيانات المقارنة */}
-          <div className="flex-1">
-            {showProgress ? (
-              <div className="flex items-center gap-3">
-                <CircularProgress percentage={progressValue} size={50} />
-                <div className="text-xs text-gray-500">التقدم: {Math.round(progressValue)}%</div>
-              </div>
-            ) : comparisonValue !== undefined ? (
+        <div className="flex flex-col gap-2">
+          {/* نسبة التغيير مع القيمة */}
+          {comparisonValue !== undefined && !showProgress && (
+            <div className="flex flex-col gap-1">
               <div
-                className={`text-xs font-semibold flex items-center gap-1 ${
+                className={`text-sm font-bold flex items-center gap-1 ${
                   isPositive ? 'text-green-600' : 'text-red-500'
                 }`}
               >
-                <span className="text-sm">{isPositive ? '▲' : '▼'}</span>
+                <span>{isPositive ? '▲' : '▼'}</span>
                 <span>
-                  {comparisonLabel}: {format ? format(comparisonValue) : comparisonValue.toLocaleString()}
+                  {(() => {
+                    const diff = value - comparisonValue;
+                    const pct = comparisonValue > 0 ? ((diff / comparisonValue) * 100) : 0;
+                    const diffFormatted = format ? format(Math.abs(diff)) : Math.abs(diff).toLocaleString();
+                    return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% (${diff >= 0 ? '+' : '-'}${diffFormatted})`;
+                  })()}
                 </span>
               </div>
-            ) : null}
-          </div>
+              <div className="text-xs text-neutral-500">
+                {comparisonLabel || 'السنة الماضية'}: {format ? format(comparisonValue) : comparisonValue.toLocaleString()}
+              </div>
+            </div>
+          )}
+          
+          {/* شريط التقدم */}
+          {showProgress && (
+            <div className="flex items-center gap-3">
+              <CircularProgress percentage={progressValue} size={50} />
+              <div className="text-xs text-gray-500">التقدم: {Math.round(progressValue)}%</div>
+            </div>
+          )}
 
           {/* مخطط الاتجاه */}
-          {trendData && trendData.length > 1 && (
-            <div className="ml-3">
+          {trendData && trendData.length > 1 && !showProgress && comparisonValue === undefined && (
+            <div className="mt-auto">
               <Sparkline data={trendData} />
             </div>
           )}

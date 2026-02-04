@@ -10,7 +10,6 @@ import ProductsPage from './pages/ProductsPage';
 import ReportsPage from './pages/ReportsPage';
 import OffersPage from './pages/OffersPage';
 import StagnantPage from './pages/StagnantPage';
-import LivePage from './pages/LivePage';
 import TargetSettingPage from './pages/TargetSettingPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -39,7 +38,6 @@ export default function App() {
         <Route path="products" element={<ProductsPage />} />
         <Route path="offers" element={<OffersPage />} />
         <Route path="stagnant" element={<StagnantPage />} />
-        <Route path="live" element={<LivePage />} />
         <Route path="targets" element={<TargetSettingPage />} />
       </Route>
 

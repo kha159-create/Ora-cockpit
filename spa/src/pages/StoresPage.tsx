@@ -19,11 +19,15 @@ type StoreRow = {
   visitors: number;
   prevVisitors: number;
   growth: number;
+  growthVal: number;
   ach: number;
   avgInv: number;
+  dailyReq: number;
+  conversion: number;
+  customerValue: number;
 };
 
-type StoreSortKey = 'name' | 'val' | 'prevVal' | 'target' | 'ach' | 'growth' | 'trans' | 'avgInv' | 'visitors';
+type StoreSortKey = 'name' | 'val' | 'prevVal' | 'target' | 'ach' | 'growth' | 'growthVal' | 'trans' | 'avgInv' | 'visitors' | 'prevVisitors' | 'dailyReq' | 'conversion' | 'customerValue';
 
 function SortableTh({
   label,
@@ -253,9 +257,82 @@ function StoreDetailsModal({
         .map(([name, st]) => ({ name, ...st }))
         .sort((a, b) => b.s - a.s);
 
+    // Daily breakdown
+    const dailyBreakdown: Record<string, { sales: number; trans: number; visitors: number; prevSales: number; prevVisitors: number }> = {};
+    const mgmtRaw = (employeesJson as any)?.mgmt || {};
+    const visitorsData = mgmtRaw?.visitors || [];
+    
+    // Get daily sales/trans from employee history
+    for (const r of rec) {
+      const d = normDate(r?.[0]);
+      if (d && d >= rangeStart && d <= rangeEnd) {
+        if (!dailyBreakdown[d]) dailyBreakdown[d] = { sales: 0, trans: 0, visitors: 0, prevSales: 0, prevVisitors: 0 };
+        dailyBreakdown[d].sales += safeNum(r?.[2]);
+        dailyBreakdown[d].trans += safeNum(r?.[3]);
+      }
+    }
+    
+    // Get visitors from management data
+    visitorsData.forEach(([d, sid, v]: any[]) => {
+      if (sid !== store?.sid) return;
+      const dateStr = normDate(d);
+      if (dateStr && dateStr >= rangeStart && dateStr <= rangeEnd) {
+        if (!dailyBreakdown[dateStr]) dailyBreakdown[dateStr] = { sales: 0, trans: 0, visitors: 0, prevSales: 0, prevVisitors: 0 };
+        dailyBreakdown[dateStr].visitors += safeNum(v);
+      }
+    });
+
+    // Get previous year data
+    const prevYearStart = rangeStart.split('-').map(Number);
+    prevYearStart[0] -= 1;
+    const prevYearEnd = rangeEnd.split('-').map(Number);
+    prevYearEnd[0] -= 1;
+    const prevYearStartStr = prevYearStart.map((n, i) => (i === 0 ? n : String(n).padStart(2, '0'))).join('-');
+    const prevYearEndStr = prevYearEnd.map((n, i) => (i === 0 ? n : String(n).padStart(2, '0'))).join('-');
+    
+    for (const r of rec) {
+      const d = normDate(r?.[0]);
+      if (d && d >= prevYearStartStr && d <= prevYearEndStr) {
+        const currentDate = d.split('-');
+        currentDate[0] = String(Number(currentDate[0]) + 1);
+        const currentDateStr = currentDate.join('-');
+        if (currentDateStr >= rangeStart && currentDateStr <= rangeEnd) {
+          if (!dailyBreakdown[currentDateStr]) dailyBreakdown[currentDateStr] = { sales: 0, trans: 0, visitors: 0, prevSales: 0, prevVisitors: 0 };
+          dailyBreakdown[currentDateStr].prevSales += safeNum(r?.[2]);
+        }
+      }
+    }
+    
+    visitorsData.forEach(([d, sid, v]: any[]) => {
+      if (sid !== store?.sid) return;
+      const dateStr = normDate(d);
+      if (dateStr && dateStr >= prevYearStartStr && dateStr <= prevYearEndStr) {
+        const currentDate = dateStr.split('-');
+        currentDate[0] = String(Number(currentDate[0]) + 1);
+        const currentDateStr = currentDate.join('-');
+        if (currentDateStr >= rangeStart && currentDateStr <= rangeEnd) {
+          if (!dailyBreakdown[currentDateStr]) dailyBreakdown[currentDateStr] = { sales: 0, trans: 0, visitors: 0, prevSales: 0, prevVisitors: 0 };
+          dailyBreakdown[currentDateStr].prevVisitors += safeNum(v);
+        }
+      }
+    });
+
+    const dailyList = Object.entries(dailyBreakdown)
+      .map(([date, stats]) => ({
+        date,
+        ...stats,
+        growth: stats.prevSales > 0 ? ((stats.sales - stats.prevSales) / stats.prevSales) * 100 : 0,
+        growthVal: stats.sales - stats.prevSales,
+        avgInv: stats.trans > 0 ? stats.sales / stats.trans : 0,
+        conversion: stats.visitors > 0 ? (stats.trans / stats.visitors) * 100 : 0,
+        customerValue: stats.trans > 0 ? stats.sales / stats.trans : 0,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
     return {
       rangeLabel,
       rangeList: toList(rangeStats),
+      dailyList,
     };
   }, [employeesJson, endYMD, rangeLabel, startYMD, store]);
 
@@ -355,6 +432,52 @@ function StoreDetailsModal({
 
         <div className="grid grid-cols-1 gap-4 mt-6">
           <ChartCard title={`مبيعات الفترة (${details?.rangeLabel || '-'})`}>{renderTable(details?.rangeList || [], showTarget)}</ChartCard>
+          
+          {/* Daily Details Table */}
+          {details?.dailyList && details.dailyList.length > 0 && (
+            <ChartCard title={`تفاصيل الأيام (${details?.rangeLabel || '-'})`}>
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="bg-orange-500 text-white">
+                      <th className="th text-center">التاريخ</th>
+                      <th className="th text-center">المبيعات</th>
+                      <th className="th text-center">العام الماضي</th>
+                      <th className="th text-center">النمو %</th>
+                      <th className="th text-center">قيمة النمو</th>
+                      <th className="th text-center">الفواتير</th>
+                      <th className="th text-center">متوسط الفاتورة</th>
+                      <th className="th text-center">الزوار</th>
+                      <th className="th text-center">زوار (LY)</th>
+                      <th className="th text-center">التحويل %</th>
+                      <th className="th text-center">قيمة العميل</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {details.dailyList.map((day: any) => (
+                      <tr key={day.date} className="hover:bg-orange-50">
+                        <td className="td text-center">{day.date}</td>
+                        <td className="td text-center" dir="ltr">{formatSAR(day.sales)}</td>
+                        <td className="td text-center" dir="ltr">{formatSAR(day.prevSales)}</td>
+                        <td className={`td text-center font-bold ${day.growth >= 0 ? 'text-green-600' : 'text-red-500'}`} dir="ltr">
+                          {day.prevSales > 0 ? `${day.growth >= 0 ? '+' : ''}${day.growth.toFixed(1)}%` : '-'}
+                        </td>
+                        <td className={`td text-center font-bold ${day.growthVal >= 0 ? 'text-green-600' : 'text-red-500'}`} dir="ltr">
+                          {formatSAR(Math.abs(day.growthVal))}
+                        </td>
+                        <td className="td text-center" dir="ltr">{Math.round(day.trans).toLocaleString()}</td>
+                        <td className="td text-center" dir="ltr">{Math.round(day.avgInv).toLocaleString()}</td>
+                        <td className="td text-center" dir="ltr">{Math.round(day.visitors).toLocaleString()}</td>
+                        <td className="td text-center" dir="ltr">{Math.round(day.prevVisitors).toLocaleString()}</td>
+                        <td className="td text-center" dir="ltr">{day.conversion.toFixed(1)}%</td>
+                        <td className="td text-center font-bold" dir="ltr">{Math.round(day.customerValue).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </ChartCard>
+          )}
         </div>
 
         <div className="modal-actions">
@@ -499,8 +622,18 @@ export default function StoresPage() {
       const visitorsVal = branchVisitors[sid] || 0;
       const prevVis = prevVisitors[sid] || 0;
       const growth = prevVal > 0 ? ((val - prevVal) / prevVal) * 100 : 0;
+      const growthVal = val - prevVal;
       const ach = targetVal > 0 ? (val / targetVal) * 100 : 0;
       const avgInv = transVal > 0 ? val / transVal : 0;
+      const conversion = visitorsVal > 0 ? (transVal / visitorsVal) * 100 : 0;
+      const customerValue = transVal > 0 ? val / transVal : 0;
+      
+      // Calculate daily requirement
+      const today = new Date();
+      const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+      const remainingDays = daysInMonth - today.getDate() + 1;
+      const dailyReq = remainingDays > 0 && targetVal > val ? (targetVal - val) / remainingDays : 0;
+      
       const m = meta[sid] || {};
       list.push({
         sid,
@@ -515,8 +648,12 @@ export default function StoresPage() {
         visitors: visitorsVal,
         prevVisitors: prevVis,
         growth,
+        growthVal,
         ach,
         avgInv,
+        dailyReq,
+        conversion,
+        customerValue,
       });
     });
 
@@ -706,46 +843,59 @@ export default function StoresPage() {
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr>
+              <tr className="bg-orange-500 text-white">
                 <th className="th text-center w-[60px]">#</th>
                 <SortableTh label="الفرع" sortKey="name" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} />
                 <SortableTh label="المبيعات" sortKey="val" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="العام السابق" sortKey="prevVal" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="مبيعات العام السابق" sortKey="prevVal" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="الهدف" sortKey="target" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="التحقيق %" sortKey="ach" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="النمو %" sortKey="growth" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="التحقيق (%)" sortKey="ach" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="النمو (%)" sortKey="growth" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="قيمة النمو" sortKey="growthVal" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="اليومية المتبقية" sortKey="dailyReq" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="الفواتير" sortKey="trans" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="متوسط الفاتورة" sortKey="avgInv" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="الزوار" sortKey="visitors" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="زوار العام السابق" sortKey="prevVisitors" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="قيمة العميل" sortKey="customerValue" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="التحويل (Vis Rate)" sortKey="conversion" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
               </tr>
             </thead>
             <tbody>
               {sortedList.map((b, i) => (
-                <tr key={b.sid} className="hover:bg-orange-50 cursor-pointer" onClick={() => setSelectedSid(b.sid)}>
-                  <td className="td text-center text-neutral-500">{i + 1}</td>
-                  <td className="td">
-                    <div className="font-bold text-neutral-900">{b.name}</div>
-                    <div className="text-xs text-neutral-500 mt-1">
-                      {b.manager || '-'} · {b.city || '-'} · {b.type || '-'}
+                <tr key={b.sid} className={`hover:bg-orange-50 cursor-pointer ${i % 2 === 0 ? 'bg-white' : 'bg-neutral-50'}`} onClick={() => setSelectedSid(b.sid)}>
+                  <td className="td text-center">
+                    <div className="w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-sm mx-auto">
+                      {i + 1}
                     </div>
                   </td>
-                  <td className="td text-center font-bold text-green-700">{formatSAR(b.val)}</td>
-                  <td className="td text-center text-neutral-500">{formatSAR(b.prevVal)}</td>
-                  <td className="td text-center">{formatSAR(b.target)}</td>
-                  <td className={`td text-center font-bold ${b.ach >= 100 ? 'text-green-700' : b.ach >= 80 ? 'text-amber-700' : 'text-red-600'}`}>
-                    {b.target > 0 ? `${b.ach.toFixed(1)}%` : '-'}
+                  <td className="td">
+                    <div className="font-bold text-blue-600">{b.name}</div>
                   </td>
-                  <td className={`td text-center font-bold ${b.growth >= 0 ? 'text-green-700' : 'text-red-600'}`} dir="ltr">
-                    {b.prevVal > 0 ? `${b.growth.toFixed(1)}%` : '-'}
+                  <td className="td text-center" dir="ltr">{formatSAR(b.val)}</td>
+                  <td className="td text-center" dir="ltr">{formatSAR(b.prevVal)}</td>
+                  <td className="td text-center" dir="ltr">{formatSAR(b.target)}</td>
+                  <td className={`td text-center font-bold ${b.ach > 0 ? 'text-green-600' : 'text-neutral-500'}`}>
+                    {b.target > 0 ? `${b.ach.toFixed(1)}%` : '0.0%'}
                   </td>
-                  <td className="td text-center">{Math.round(b.trans).toLocaleString()}</td>
-                  <td className="td text-center">{formatSAR(b.avgInv)}</td>
-                  <td className="td text-center">{Math.round(b.visitors).toLocaleString()}</td>
+                  <td className={`td text-center font-bold ${b.growth >= 0 ? 'text-green-600' : 'text-red-500'}`} dir="ltr">
+                    {b.prevVal > 0 ? `${b.growth >= 0 ? '+' : ''}${b.growth.toFixed(1)}%` : '-'}
+                  </td>
+                  <td className={`td text-center font-bold ${b.growthVal >= 0 ? 'text-green-600' : 'text-red-500'}`} dir="ltr">
+                    {formatSAR(Math.abs(b.growthVal))}
+                  </td>
+                  <td className="td text-center text-red-500 font-semibold" dir="ltr">{formatSAR(b.dailyReq)}</td>
+                  <td className="td text-center" dir="ltr">{Math.round(b.trans).toLocaleString()}</td>
+                  <td className="td text-center" dir="ltr">{Math.round(b.avgInv).toLocaleString()}</td>
+                  <td className="td text-center" dir="ltr">{Math.round(b.visitors).toLocaleString()}</td>
+                  <td className="td text-center" dir="ltr">{Math.round(b.prevVisitors).toLocaleString()}</td>
+                  <td className="td text-center font-bold" dir="ltr">{Math.round(b.customerValue).toLocaleString()}</td>
+                  <td className="td text-center" dir="ltr">{b.conversion.toFixed(1)}%</td>
                 </tr>
               ))}
               {sortedList.length === 0 && (
                 <tr>
-                  <td className="td text-center text-neutral-500" colSpan={10}>
+                  <td className="td text-center text-neutral-500" colSpan={14}>
                     لا توجد بيانات بعد تطبيق الفلاتر.
                   </td>
                 </tr>
