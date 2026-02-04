@@ -527,7 +527,7 @@ function StoreDetailsModal({
         </div>
       )}
     </div>
-  </div >
+  </div>
 );
 }
 
