@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { loadEmployeesData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
+import { XIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
+
+function formatSAR(val: number) {
+  return val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
+}
 
 type FilterMode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
 
@@ -27,7 +32,7 @@ function getRange(
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
   if (mode === 'mtd') {
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
-    return { start: toYMD(start), end: toYMD(today) };
+    return { start: toYMD(start), end: toYMD(yesterday) };
   }
   if (mode === 'custom') {
     const start = customStart || toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -66,6 +71,20 @@ export default function ReportsPage() {
   const [showReportChoiceModal, setShowReportChoiceModal] = useState(false);
   const [reportChoiceType, setReportChoiceType] = useState<'pdf' | 'excel' | null>(null);
 
+  // New States for Employee Selection (Image 3)
+  const [showEmpSelectModal, setShowEmpSelectModal] = useState(false);
+  const [empSelectionSearch, setEmpSelectionSearch] = useState('');
+  const [empStatusFilter, setEmpStatusFilter] = useState<string[]>(['active']); // active, review, resigned
+  const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
+
+  const range = useMemo(
+    () => getRange(filterMode, standardYear, standardMonth, customStart, customEnd),
+    [filterMode, standardYear, standardMonth, customStart, customEnd]
+  );
+
+  const [excelRangeStart, setExcelRangeStart] = useState('');
+  const [excelRangeEnd, setExcelRangeEnd] = useState('');
+
   const originalReports = [
     { id: 'yesterday_store', name: 'تقرير مبيعات الأمس (المعارض)', type: 'pdf', icon: '🏪', desc: 'مقارنة مبيعات الأمس بالسنة الماضية والأهداف' },
     { id: 'yesterday_employee', name: 'أداء الموظفين (الأمس)', type: 'pdf', icon: '👤', desc: 'مبيعات الموظفين يوم أمس وتغطية الأهداف' },
@@ -84,10 +103,10 @@ export default function ReportsPage() {
     loadEmployeesData().then(setRawEmp).catch(() => { });
   }, []);
 
-  const range = useMemo(
-    () => getRange(filterMode, standardYear, standardMonth, customStart, customEnd),
-    [filterMode, standardYear, standardMonth, customStart, customEnd]
-  );
+  useEffect(() => {
+    if (range.start) setExcelRangeStart(range.start);
+    if (range.end) setExcelRangeEnd(range.end);
+  }, [range]);
 
   const managers = useMemo(() => {
     if (!rawMgmt?.store_meta) return [];
@@ -209,7 +228,7 @@ export default function ReportsPage() {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Employee Sales');
-    XLSX.writeFile(wb, `Employee_Sales_${range.start}_${range.end}.xlsx`);
+    XLSX.writeFile(wb, `Employee_Sales_${excelRangeStart}_${excelRangeEnd}.xlsx`);
   };
 
   const runExcelExport = () => {
@@ -218,8 +237,6 @@ export default function ReportsPage() {
       if (excelType === 'store') exportStoreExcel();
       else exportEmployeeExcel();
       setShowExcelModal(false);
-      setShowReportChoiceModal(false);
-      setReportChoiceType(null);
     } finally {
       setExcelExporting(false);
     }
@@ -231,8 +248,11 @@ export default function ReportsPage() {
   };
 
   const openPdfLegacy = (reportId: string = 'dashboard') => {
-    setShowReportChoiceModal(false);
-    setReportChoiceType(null);
+    if (reportId === 'yesterday_employee') {
+      setShowEmpSelectModal(true);
+      return;
+    }
+
     // التواصل مع المستخدم حول كيفية إصدار الـ PDF
     const msg = `سيتم إصدار تقرير (${reportId === 'dashboard' ? 'لوحة التحكم' : reportId}) بصيغة PDF بناءً على الفلاتر المختارة:
 الفترة: ${range.start} إلى ${range.end}
@@ -240,8 +260,71 @@ export default function ReportsPage() {
 
 جاري معالجة البيانات وتحويلها إلى PDF...`;
     alert(msg);
-    // ملاحظة: هنا سنقوم لاحقاً بدمج منطق pdf_export.js بشكل كامل
-    // حالياً نكتفي بتأكيد الفلاتر
+  };
+
+  const allEmployees = useMemo(() => {
+    if (!rawEmp?.employee_names || !rawEmp?.history) return [];
+    const history = rawEmp.history;
+    const names = rawEmp.employee_names;
+    // Removed unused 'meta' variable
+    const emps: any[] = [];
+    const processed = new Set();
+
+    Object.entries(history).forEach(([sid, recs]: [string, any]) => {
+      recs.forEach((r: any) => {
+        const eid = String(r[1]);
+        if (processed.has(eid)) return;
+        processed.add(eid);
+
+        let name = names[eid] || eid;
+        if (eid.includes('-')) name = eid.split('-').slice(1).join('-').trim();
+
+        // In a real app, status would come from meta, here we mock it or use name heuristics
+        const status = name.includes('(مستقيل)') ? 'resigned' : name.includes('(مراجعة)') ? 'review' : 'active';
+
+        // Calculate recent sales for sorting
+        let recentSales = 0;
+        if (r[0] >= range.start) recentSales = r[2];
+
+        emps.push({
+          id: eid,
+          name,
+          store: rawMgmt?.stores?.[sid] || sid,
+          status,
+          sales: recentSales
+        });
+      });
+    });
+    return emps.sort((a, b) => b.sales - a.sales);
+  }, [rawEmp, rawMgmt, range.start]);
+
+  const filteredEmployees = useMemo(() => {
+    return allEmployees.filter(e => {
+      const matchesSearch = e.name.toLowerCase().includes(empSelectionSearch.toLowerCase()) || e.id.includes(empSelectionSearch);
+      const matchesStatus = empStatusFilter.includes(e.status);
+      return matchesSearch && matchesStatus;
+    });
+  }, [allEmployees, empSelectionSearch, empStatusFilter]);
+
+  const toggleEmpSelection = (id: string) => {
+    setSelectedEmpIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAllEmps = () => {
+    if (selectedEmpIds.size === filteredEmployees.length) {
+      setSelectedEmpIds(new Set());
+    } else {
+      setSelectedEmpIds(new Set(filteredEmployees.map(e => e.id)));
+    }
+  };
+
+  const handleSelectActiveOnly = () => {
+    setSelectedEmpIds(new Set(filteredEmployees.filter(e => e.status === 'active').map(e => e.id)));
   };
 
   const canExportEmployee = user?.role === 'Admin' || user?.name === 'Sales Manager';
@@ -449,17 +532,174 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Excel confirm modal - داخل حدود الصفحة */}
+      {/* Employee Selection Modal (Image 3) */}
+      {showEmpSelectModal && (
+        <div className="modal-center-screen" onClick={() => setShowEmpSelectModal(false)}>
+          <div className="modal-content max-w-4xl w-full p-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-neutral-100 flex items-center justify-between bg-neutral-50">
+              <div>
+                <h4 className="text-xl font-bold text-neutral-900 flex items-center gap-2">
+                  <span>📄</span> اختيار الموظفين (PDF)
+                </h4>
+                <p className="text-sm text-neutral-500 mt-1 font-medium">اختر الموظفين للتقرير وأزل المستقيلين</p>
+              </div>
+              <button type="button" onClick={() => setShowEmpSelectModal(false)} className="p-2 hover:bg-neutral-200 rounded-full transition-colors">
+                <XIcon />
+              </button>
+            </div>
+
+            <div className="p-4 bg-white border-b border-neutral-100">
+              <div className="flex flex-wrap items-center gap-4 mb-4">
+                <div className="flex items-center gap-4 bg-neutral-50 px-4 py-2 rounded-lg border border-neutral-100">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={empStatusFilter.includes('active')} onChange={e => {
+                      if (e.target.checked) setEmpStatusFilter(p => [...p, 'active']);
+                      else setEmpStatusFilter(p => p.filter(s => s !== 'active'));
+                    }} className="rounded text-green-600 focus:ring-green-500" />
+                    <span className="text-xs font-bold text-neutral-700">موظف نشط</span>
+                    <div className="w-4 h-4 rounded bg-green-100 border border-green-200"></div>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={empStatusFilter.includes('review')} onChange={e => {
+                      if (e.target.checked) setEmpStatusFilter(p => [...p, 'review']);
+                      else setEmpStatusFilter(p => p.filter(s => s !== 'review'));
+                    }} className="rounded text-amber-500 focus:ring-amber-500" />
+                    <span className="text-xs font-bold text-neutral-700">مراجعة (معيار واحد)</span>
+                    <div className="w-4 h-4 rounded bg-amber-100 border border-amber-200"></div>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={empStatusFilter.includes('resigned')} onChange={e => {
+                      if (e.target.checked) setEmpStatusFilter(p => [...p, 'resigned']);
+                      else setEmpStatusFilter(p => p.filter(s => s !== 'resigned'));
+                    }} className="rounded text-red-500 focus:ring-red-500" />
+                    <span className="text-xs font-bold text-neutral-700">مستقيل (معياران)</span>
+                    <div className="w-4 h-4 rounded bg-red-100 border border-red-200"></div>
+                  </label>
+                </div>
+                <div className="flex-grow">
+                  <input
+                    type="text"
+                    placeholder="ابحث عن موظف..."
+                    className="input w-full h-10 text-sm"
+                    value={empSelectionSearch}
+                    onChange={e => setEmpSelectionSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-sm">
+                <div className="text-neutral-500 font-medium">المحددين: <span className="text-neutral-900 font-bold">{selectedEmpIds.size} من {filteredEmployees.length}</span></div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={handleSelectAllEmps} className="btn-secondary px-3 py-1.5 text-xs font-bold flex items-center gap-1 border-blue-200 text-blue-700">
+                    {selectedEmpIds.size === filteredEmployees.length ? 'إلغاء الكل' : 'تحديد الكل'}
+                  </button>
+                  <button type="button" onClick={handleSelectActiveOnly} className="btn-secondary px-3 py-1.5 text-xs font-bold flex items-center gap-1">
+                    👤 النشطين فقط
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto max-h-[50vh]">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-neutral-800 text-white z-10">
+                  <tr>
+                    <th className="th text-right">الموظف</th>
+                    <th className="th text-right">الفرع</th>
+                    <th className="th text-center">المبيعات</th>
+                    <th className="th text-center">الحالة</th>
+                    <th className="th text-center w-12 text-black">
+                      <input type="checkbox" checked={selectedEmpIds.size === filteredEmployees.length && filteredEmployees.length > 0} onChange={handleSelectAllEmps} />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {filteredEmployees.map(emp => (
+                    <tr key={emp.id} className="hover:bg-neutral-50 transition-colors cursor-pointer" onClick={() => toggleEmpSelection(emp.id)}>
+                      <td className="td py-3">
+                        <div className="font-bold text-neutral-900">{emp.name}</div>
+                        <div className="text-[10px] text-neutral-400 font-mono">{emp.id}</div>
+                      </td>
+                      <td className="td text-neutral-600 font-medium">{emp.store}</td>
+                      <td className="td text-center font-bold text-neutral-900">{formatSAR(emp.sales)}</td>
+                      <td className="td text-center">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${emp.status === 'active' ? 'bg-green-100 text-green-700' :
+                          emp.status === 'review' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                          {emp.status === 'active' ? 'نشط' : emp.status === 'review' ? 'مراجعة' : 'مستقيل'}
+                        </span>
+                      </td>
+                      <td className="td text-center" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedEmpIds.has(emp.id)} onChange={() => toggleEmpSelection(emp.id)} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-4 bg-neutral-50 border-t border-neutral-200 flex justify-end gap-3">
+              <button type="button" onClick={() => setShowEmpSelectModal(false)} className="btn-secondary px-6 font-bold">إلغاء</button>
+              <button type="button" className="btn-primary px-8 font-bold flex items-center gap-2 bg-green-600 hover:bg-green-700" onClick={() => {
+                alert('جاري إنشاء تقرير لـ ' + selectedEmpIds.size + ' موظف...');
+                setShowEmpSelectModal(false);
+              }}>
+                📊 إنشاء التقرير
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Excel Export Modal (Image 5) */}
       {showExcelModal && (
         <div className="modal-center-screen" onClick={() => setShowExcelModal(false)}>
-          <div className="modal-content max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-            <h5 className="font-bold text-lg text-neutral-900 mb-4">تصدير Excel</h5>
-            <p className="text-sm text-neutral-600 mb-2">الفترة: {range.start} → {range.end}</p>
-            <p className="text-sm text-neutral-500 mb-4">{excelType === 'store' ? 'مبيعات المعارض' : 'مبيعات الموظفين'}</p>
-            <div className="flex gap-3">
-              <button type="button" className="flex-1 btn-secondary py-2" onClick={() => setShowExcelModal(false)}>إلغاء</button>
-              <button type="button" className="flex-1 bg-green-600 text-white font-bold py-2 rounded-xl hover:bg-green-700 disabled:opacity-50" onClick={runExcelExport} disabled={excelExporting}>
-                {excelExporting ? 'جاري التصدير...' : 'تصدير'}
+          <div className="modal-content max-w-lg w-full p-0 overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-green-700 p-4 flex items-center justify-between text-white">
+              <h4 className="text-lg font-bold">تصدير Excel</h4>
+              <button type="button" onClick={() => setShowExcelModal(false)} className="hover:bg-green-600 p-1 rounded-full"><XIcon /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-neutral-700 mb-2">اختر الفترة:</label>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-neutral-400 w-8">من</span>
+                    <input type="date" className="input flex-1 h-10" value={excelRangeStart} onChange={e => setExcelRangeStart(e.target.value)} />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-neutral-400 w-8">إلى</span>
+                    <input type="date" className="input flex-1 h-10" value={excelRangeEnd} onChange={e => setExcelRangeEnd(e.target.value)} />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-red-600 mb-3 border-b border-red-50 pb-1">نوع التقرير (Sales Manager Only):</label>
+                <div className="space-y-3">
+                  <label className="flex items-center justify-between p-3 rounded-xl border border-neutral-100 hover:border-green-200 hover:bg-green-50/30 cursor-pointer group transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-lg">🏪</div>
+                      <span className="text-sm font-bold text-neutral-700">مبيعات المعارض (Store Sales)</span>
+                    </div>
+                    <input type="radio" name="excelType" checked={excelType === 'store'} onChange={() => setExcelType('store')} className="w-5 h-5 text-green-600" />
+                  </label>
+                  <label className="flex items-center justify-between p-3 rounded-xl border border-neutral-100 hover:border-green-200 hover:bg-green-50/30 cursor-pointer group transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-lg">👤</div>
+                      <span className="text-sm font-bold text-neutral-700">مبيعات الموظفين (Employee Sales)</span>
+                    </div>
+                    <input type="radio" name="excelType" checked={excelType === 'employee'} onChange={() => setExcelType('employee')} className="w-5 h-5 text-green-600" />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-neutral-50 flex gap-3 border-t border-neutral-100">
+              <button type="button" className="flex-1 btn-secondary py-2.5 font-bold" onClick={() => setShowExcelModal(false)}>إلغاء</button>
+              <button type="button" className="flex-1 bg-green-700 text-white font-bold rounded-xl py-2.5 hover:bg-green-800 disabled:opacity-50 shadow-md" onClick={runExcelExport} disabled={excelExporting}>
+                {excelExporting ? 'جاري التصدير...' : 'تصدير (Export)'}
               </button>
             </div>
           </div>

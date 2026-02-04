@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { loadEmployeesData, loadManagementData } from '../services/upstreamData';
+import { useEffect, useMemo, useState } from 'react';
+import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { ChartCard, KPICard } from '../components/DashboardComponents';
-import { CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon } from '../components/Icons';
+import { ChartCard, KPICard, ProductValueAnalysis, MissedOpportunities } from '../components/DashboardComponents';
+import { CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, XIcon } from '../components/Icons';
+import { runProductValueAnalysis, safeNum } from '../services/analysisHelpers';
 
 type Mode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
 
@@ -26,6 +27,8 @@ type StoreRow = {
   conversion: number;
   customerValue: number;
 };
+
+type RangeStat = { s: number; t: number; i: number; target: number };
 
 type StoreSortKey = 'name' | 'val' | 'prevVal' | 'target' | 'ach' | 'growth' | 'growthVal' | 'trans' | 'avgInv' | 'visitors' | 'prevVisitors' | 'dailyReq' | 'conversion' | 'customerValue';
 
@@ -69,10 +72,6 @@ function pad2(n: number) {
 function toLocalYMD(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
-function safeNum(x: unknown) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : 0;
-}
 function formatSAR(val: number) {
   return val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 }
@@ -93,7 +92,7 @@ function getRange(mode: Mode, standardYear: number, standardMonth: string, custo
 
   if (mode === 'mtd') {
     currStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0);
-    currEnd = new Date(today);
+    currEnd = new Date(yesterday);
     currEnd.setHours(23, 59, 59, 999);
   } else if (mode === 'yesterday') {
     currStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0);
@@ -109,7 +108,6 @@ function getRange(mode: Mode, standardYear: number, standardMonth: string, custo
     currStart.setHours(0, 0, 0, 0);
     currEnd.setHours(23, 59, 59, 999);
   } else {
-    // standard: year + month (month may be 'all')
     const y = standardYear || today.getFullYear();
     if (standardMonth === 'all') {
       currStart = new Date(y, 0, 1, 0, 0, 0);
@@ -140,23 +138,27 @@ function StoreDetailsModal({
   open,
   onClose,
   store,
+  mgmtRaw,
   employeesJson,
   mode,
   startYMD,
   endYMD,
+  prodRaw,
 }: {
   open: boolean;
   onClose: () => void;
   store: StoreRow | null;
+  mgmtRaw: any;
   employeesJson: any;
   mode: Mode;
   startYMD: string;
   endYMD: string;
+  prodRaw: any;
 }) {
   const rangeLabel = useMemo(() => {
     if (!startYMD || !endYMD) return '-';
     if (startYMD === endYMD) return startYMD;
-    return `${startYMD} → ${endYMD}`;
+    return `${startYMD} → ${endYMD} `;
   }, [endYMD, startYMD]);
 
   const details = useMemo(() => {
@@ -171,7 +173,6 @@ function StoreDetailsModal({
     const rangeStart = startYMD;
     const rangeEnd = endYMD;
 
-    // Build list of YYYY-MM month keys for the selected range
     const monthKeys: string[] = [];
     if (rangeStart && rangeEnd) {
       const s = new Date(rangeStart);
@@ -180,7 +181,7 @@ function StoreDetailsModal({
         const cur = new Date(s.getFullYear(), s.getMonth(), 1);
         const endM = new Date(e.getFullYear(), e.getMonth(), 1);
         while (cur <= endM) {
-          monthKeys.push(`${cur.getFullYear()}-${pad2(cur.getMonth() + 1)}`);
+          monthKeys.push(`${cur.getFullYear()} -${pad2(cur.getMonth() + 1)} `);
           cur.setMonth(cur.getMonth() + 1);
         }
       }
@@ -191,29 +192,26 @@ function StoreDetailsModal({
       const id = String(empId).trim();
       const cands = [id, id.padStart(4, '0')];
 
-      // Prefer summing monthly targets when range spans months
-      let sum = 0;
+      let sumT = 0;
       if (monthKeys.length > 0) {
         for (const mk of monthKeys) {
           const tbm = targetsByMonth?.[mk];
           for (const c of cands) {
             const v = tbm?.[c];
             if (v != null) {
-              sum += safeNum(v);
+              sumT += safeNum(v);
               break;
             }
           }
-          // monthly_targets format: { empId: { 'YYYY-MM-01': val } }
           const mt = monthlyTargets?.[id] || monthlyTargets?.[id.padStart(4, '0')];
           if (mt && typeof mt === 'object') {
             const v = (mt as any)[`${mk}-01`];
-            if (v != null) sum += safeNum(v);
+            if (v != null) sumT += safeNum(v);
           }
         }
-        if (sum > 0) return sum;
+        if (sumT > 0) return sumT;
       }
 
-      // Fallback single target (current month style)
       for (const c of cands) {
         if (targets[c] != null) return safeNum(targets[c]);
       }
@@ -221,34 +219,33 @@ function StoreDetailsModal({
     };
 
     const resolveName = (raw: string) => {
-      let empId = raw;
-      let name = raw;
+      let empId = raw.trim();
+      let name = raw.trim();
       if (raw.includes('-')) {
         const p = raw.split('-');
         empId = p[0].trim();
         name = (p[1] || '').trim() || empId;
-      } else {
-        empId = raw.trim();
       }
       const hit = employeeNames?.[empId] || employeeNames?.[empId.padStart(4, '0')];
       return { empId, name: hit || name || empId };
     };
 
-    const rangeStats: Record<string, { s: number; t: number; target: number }> = {};
+    const rangeStats: Record<string, RangeStat> = {};
 
     for (const r of rec) {
       const d = normDate(r?.[0]);
       const rawName = String(r?.[1] || '');
       if (!rawName || rawName === 'None' || rawName === 'null') continue;
-      const sales = safeNum(r?.[2]);
-      const trans = safeNum(r?.[3]);
+      const salesVal = safeNum(r?.[2]);
+      const transVal = safeNum(r?.[3]);
 
       const { empId, name } = resolveName(rawName);
 
       if (d && d >= rangeStart && d <= rangeEnd) {
-        if (!rangeStats[name]) rangeStats[name] = { s: 0, t: 0, target: resolveTargetForRange(empId) };
-        rangeStats[name].s += sales;
-        rangeStats[name].t += trans;
+        if (!rangeStats[name]) rangeStats[name] = { s: 0, t: 0, i: 0, target: resolveTargetForRange(empId) };
+        rangeStats[name].s += salesVal;
+        rangeStats[name].t += transVal;
+        rangeStats[name].i += safeNum(r?.[4]);
       }
     }
 
@@ -257,12 +254,9 @@ function StoreDetailsModal({
         .map(([name, st]) => ({ name, ...st }))
         .sort((a, b) => b.s - a.s);
 
-    // Daily breakdown
     const dailyBreakdown: Record<string, { sales: number; trans: number; visitors: number; prevSales: number; prevVisitors: number }> = {};
-    const mgmtRaw = (employeesJson as any)?.mgmt || {};
     const visitorsData = mgmtRaw?.visitors || [];
-    
-    // Get daily sales/trans from employee history
+
     for (const r of rec) {
       const d = normDate(r?.[0]);
       if (d && d >= rangeStart && d <= rangeEnd) {
@@ -271,8 +265,7 @@ function StoreDetailsModal({
         dailyBreakdown[d].trans += safeNum(r?.[3]);
       }
     }
-    
-    // Get visitors from management data
+
     visitorsData.forEach(([d, sid, v]: any[]) => {
       if (sid !== store?.sid) return;
       const dateStr = normDate(d);
@@ -282,14 +275,13 @@ function StoreDetailsModal({
       }
     });
 
-    // Get previous year data
     const prevYearStart = rangeStart.split('-').map(Number);
     prevYearStart[0] -= 1;
     const prevYearEnd = rangeEnd.split('-').map(Number);
     prevYearEnd[0] -= 1;
     const prevYearStartStr = prevYearStart.map((n, i) => (i === 0 ? n : String(n).padStart(2, '0'))).join('-');
     const prevYearEndStr = prevYearEnd.map((n, i) => (i === 0 ? n : String(n).padStart(2, '0'))).join('-');
-    
+
     for (const r of rec) {
       const d = normDate(r?.[0]);
       if (d && d >= prevYearStartStr && d <= prevYearEndStr) {
@@ -302,20 +294,6 @@ function StoreDetailsModal({
         }
       }
     }
-    
-    visitorsData.forEach(([d, sid, v]: any[]) => {
-      if (sid !== store?.sid) return;
-      const dateStr = normDate(d);
-      if (dateStr && dateStr >= prevYearStartStr && dateStr <= prevYearEndStr) {
-        const currentDate = dateStr.split('-');
-        currentDate[0] = String(Number(currentDate[0]) + 1);
-        const currentDateStr = currentDate.join('-');
-        if (currentDateStr >= rangeStart && currentDateStr <= rangeEnd) {
-          if (!dailyBreakdown[currentDateStr]) dailyBreakdown[currentDateStr] = { sales: 0, trans: 0, visitors: 0, prevSales: 0, prevVisitors: 0 };
-          dailyBreakdown[currentDateStr].prevVisitors += safeNum(v);
-        }
-      }
-    });
 
     const dailyList = Object.entries(dailyBreakdown)
       .map(([date, stats]) => ({
@@ -329,116 +307,142 @@ function StoreDetailsModal({
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
+    const analysisMode = mode === 'yesterday' ? 'yest' : 'mtd';
+    const pData = prodRaw?.periods?.[analysisMode] || prodRaw?.periods?.mtd || {};
+    const catalogData = pData?.catalog || {};
+    const missedByStoreMap = pData?.missed_opportunities || {};
+    const branchMissed = store ? (missedByStoreMap[store.sid] || []) : [];
+
+    const valueAnalysis = runProductValueAnalysis({
+      catalog: catalogData,
+      storeId: store?.sid,
+    });
+
+    const rowsForTotal = toList(rangeStats);
+    const totalSAccum = rowsForTotal.reduce((s, r) => s + safeNum(r.s), 0);
+    const totalTAccum = rowsForTotal.reduce((s, r) => s + safeNum(r.t), 0);
+    const totalIAccum = rowsForTotal.reduce((s, r) => s + safeNum(r.i), 0);
+    const avgItemsStore = totalTAccum > 0 ? totalIAccum / totalTAccum : 0;
+
     return {
       rangeLabel,
-      rangeList: toList(rangeStats),
+      rangeList: rowsForTotal,
       dailyList,
+      valueAnalysis,
+      branchMissed,
+      avgItemsStore,
+      totalI: totalIAccum,
+      totalT: totalTAccum,
+      totalS: totalSAccum,
+      catalog: catalogData,
+      analysisMode
     };
-  }, [employeesJson, endYMD, rangeLabel, startYMD, store]);
+  }, [employeesJson, endYMD, startYMD, store, prodRaw, mode, mgmtRaw]);
+
+  const [selEmp, setSelEmp] = useState<any>(null);
 
   if (!open || !store) return null;
 
-  const showTarget = mode === 'mtd' || mode === 'standard' || mode === 'custom';
-
-  const renderTable = (rows: any[], showTarget: boolean) => {
-    const totalS = rows.reduce((s, r) => s + safeNum(r.s), 0);
-    const totalT = rows.reduce((s, r) => s + safeNum(r.t), 0);
-    const totalTarget = showTarget ? rows.reduce((s, r) => s + safeNum(r.target), 0) : 0;
-    const totalAch = totalTarget > 0 ? (totalS / totalTarget) * 100 : 0;
-    const colCount = showTarget ? 7 : 5;
-    return (
-      <div className="overflow-x-auto">
-        <table className="min-w-full">
-          <thead>
-            <tr>
-              <th className="th">الموظف</th>
-              <th className="th text-center">المبيعات</th>
-              {showTarget && <th className="th text-center">الهدف (Target)</th>}
-              {showTarget && <th className="th text-center">نسبة التحقيق %</th>}
-              <th className="th text-center">مساهمة %</th>
-              <th className="th text-center">فواتير</th>
-              <th className="th text-center">Avg Inv</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td className="td text-center text-neutral-500" colSpan={colCount}>
-                  لا توجد مبيعات
-                </td>
-              </tr>
-            ) : (
-              rows.map((r: any) => {
-                const avg = r.t > 0 ? r.s / r.t : 0;
-                const ach = showTarget && r.target > 0 ? (r.s / r.target) * 100 : 0;
-                const share = totalS > 0 ? (r.s / totalS) * 100 : 0;
-                return (
-                  <tr key={r.name} className="hover:bg-orange-50">
-                    <td className="td font-semibold text-neutral-900">{r.name}</td>
-                    <td className="td text-center font-bold text-green-700">{formatSAR(r.s)}</td>
-                    {showTarget && <td className="td text-center">{formatSAR(r.target || 0)}</td>}
-                    {showTarget && (
-                      <td className={`td text-center font-bold ${ach >= 100 ? 'text-green-700' : ach >= 80 ? 'text-amber-700' : 'text-red-600'}`}>
-                        {ach.toFixed(1)}%
-                      </td>
-                    )}
-                    <td className="td text-center">{share.toFixed(1)}%</td>
-                    <td className="td text-center">{Math.round(r.t).toLocaleString()}</td>
-                    <td className="td text-center">{formatSAR(avg)}</td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-          {rows.length > 0 && (
-            <tfoot>
-              <tr className="bg-neutral-50">
-                <td className="td font-bold">الإجمالي</td>
-                <td className="td text-center font-bold">{formatSAR(totalS)}</td>
-                {showTarget && <td className="td text-center font-bold">{formatSAR(totalTarget)}</td>}
-                {showTarget && <td className="td text-center font-bold">{totalAch.toFixed(1)}%</td>}
-                <td className="td text-center font-bold">100%</td>
-                <td className="td text-center font-bold">{Math.round(totalT).toLocaleString()}</td>
-                <td className="td text-center font-bold">{formatSAR(totalT > 0 ? totalS / totalT : 0)}</td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
-      </div>
-    );
-  };
-
   return (
     <div className="modal-center-screen" onClick={onClose}>
-      <div className="modal-content max-w-5xl my-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3 mb-4">
+      <div className="modal-content max-w-7xl my-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 mb-6">
           <div className="min-w-0">
-            <div className="text-lg font-bold text-neutral-900 truncate">{store.name}</div>
-            <div className="text-xs text-neutral-500 mt-1">
-              {store.manager || '-'} · {store.city || '-'} · {store.type || '-'}
+            <div className="text-2xl font-bold text-neutral-900 truncate">{store.name}</div>
+            <div className="text-sm text-neutral-500 mt-1">
+              {store.manager || 'مدير غير محدد'} · {store.city || '-'} · {store.type || '-'}
             </div>
           </div>
-          <button className="btn-secondary py-1.5 px-3 text-sm" onClick={onClose}>
+          <button className="btn-secondary py-2 px-4 shadow-sm" onClick={onClose}>
             إغلاق
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <KPICard title="المبيعات" value={store.val} format={formatSAR} icon={<CurrencyDollarIcon />} />
           <KPICard title="الفواتير" value={store.trans} format={(v) => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
-          <KPICard title="الزوار" value={store.visitors} format={(v) => Math.round(v).toLocaleString()} icon={<UsersIcon />} />
-          <KPICard title="تحقيق الهدف" value={store.ach} format={(v) => `${v.toFixed(1)}%`} showProgress progressValue={store.ach} />
+          <KPICard
+            title="التحويل %"
+            value={store.conversion}
+            format={(v) => `${v.toFixed(1)}% `}
+            icon={<FireIcon />}
+          />
+          <KPICard title="تحقيق الهدف" value={store.ach} format={(v) => `${v.toFixed(1)}% `} showProgress progressValue={store.ach} />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 mt-6">
-          {/* Daily Details Table */}
-          {details?.dailyList && details.dailyList.length > 0 && (
-            <ChartCard title={`تفاصيل الأيام (${details?.rangeLabel || '-'})`}>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-8 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100">
+                <ProductValueAnalysis
+                  duvetKing={details?.valueAnalysis.duvetKing}
+                  duvetFull={details?.valueAnalysis.duvetFull}
+                  pillow={details?.valueAnalysis.pillow}
+                />
+              </div>
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 flex flex-col h-[600px]">
+                <MissedOpportunities data={details?.branchMissed || []} />
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden">
+              <h3 className="text-lg font-bold text-neutral-900 mb-4">أداء الموظفين ({details?.rangeLabel || '-'})</h3>
               <div className="overflow-x-auto">
-                <table className="min-w-full">
+                <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="bg-orange-500 text-white">
-                      <th className="th text-center">التاريخ</th>
+                    <tr className="bg-neutral-50 text-neutral-500 uppercase text-[11px] tracking-wider">
+                      <th className="th text-right">الموظف</th>
+                      <th className="th text-center">المبيعات</th>
+                      <th className="th text-center">فواتير</th>
+                      <th className="th text-center">متوسط الفاتورة</th>
+                      <th className="th text-center">متوسط القطع</th>
+                      <th className="th text-center">مساهمة %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100">
+                    {details?.rangeList.map((r: any) => {
+                      const avgVal = r.t > 0 ? r.s / r.t : 0;
+                      const shareVal = (details?.rangeList.reduce((acc, x) => acc + x.s, 0) || 1);
+                      const avgItems = r.t > 0 ? (r.i || 0) / r.t : 0;
+                      return (
+                        <tr key={r.name} className="hover:bg-orange-50 transition-colors group">
+                          <td className="td font-bold text-neutral-900">
+                            <button
+                              className="text-blue-600 hover:text-blue-800 hover:underline text-right w-full"
+                              onClick={() => setSelEmp(r)}
+                            >
+                              {r.name}
+                            </button>
+                          </td>
+                          <td className="td text-center font-bold text-green-700">{formatSAR(r.s)}</td>
+                          <td className="td text-center">{Math.round(r.t).toLocaleString()}</td>
+                          <td className="td text-center">{formatSAR(avgVal)}</td>
+                          <td className="td text-center font-semibold">{avgItems.toFixed(2)}</td>
+                          <td className="td text-center">
+                            <div className="flex items-center gap-2 justify-center">
+                              <div className="w-12 bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                                <div className="bg-orange-400 h-full" style={{ width: `${(r.s / shareVal) * 100}% ` }}></div>
+                              </div>
+                              <span>{((r.s / shareVal) * 100).toFixed(0)}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden mt-6">
+              <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
+                <span>📅</span> تفاصيل الأيام ({details?.rangeLabel || '-'})
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="bg-neutral-800 text-white">
+                      <th className="th text-right">التاريخ</th>
                       <th className="th text-center">المبيعات</th>
                       <th className="th text-center">العام الماضي</th>
                       <th className="th text-center">النمو %</th>
@@ -448,41 +452,111 @@ function StoreDetailsModal({
                       <th className="th text-center">الزوار</th>
                       <th className="th text-center">زوار (LY)</th>
                       <th className="th text-center">التحويل %</th>
-                      <th className="th text-center">قيمة العميل</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {details.dailyList.map((day: any) => (
-                      <tr key={day.date} className="hover:bg-orange-50">
-                        <td className="td text-center">{day.date}</td>
-                        <td className="td text-center" dir="ltr">{formatSAR(day.sales)}</td>
-                        <td className="td text-center" dir="ltr">{formatSAR(day.prevSales)}</td>
-                        <td className={`td text-center font-bold ${day.growth >= 0 ? 'text-green-600' : 'text-red-500'}`} dir="ltr">
-                          {day.prevSales > 0 ? `${day.growth >= 0 ? '+' : ''}${day.growth.toFixed(1)}%` : '-'}
+                  <tbody className="divide-y divide-neutral-100">
+                    {details?.dailyList.map((row) => (
+                      <tr key={row.date} className="hover:bg-neutral-50 transition-colors">
+                        <td className="td font-mono font-medium text-neutral-600">{row.date}</td>
+                        <td className="td text-center font-bold text-neutral-900">{formatSAR(row.sales)}</td>
+                        <td className="td text-center text-neutral-400">{formatSAR(row.prevSales)}</td>
+                        <td className={`td text-center font-bold ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%
                         </td>
-                        <td className={`td text-center font-bold ${day.growthVal >= 0 ? 'text-green-600' : 'text-red-500'}`} dir="ltr">
-                          {formatSAR(Math.abs(day.growthVal))}
+                        <td className={`td text-center font-medium ${row.growthVal >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {formatSAR(row.growthVal)}
                         </td>
-                        <td className="td text-center" dir="ltr">{Math.round(day.trans).toLocaleString()}</td>
-                        <td className="td text-center" dir="ltr">{Math.round(day.avgInv).toLocaleString()}</td>
-                        <td className="td text-center" dir="ltr">{Math.round(day.visitors).toLocaleString()}</td>
-                        <td className="td text-center" dir="ltr">{Math.round(day.prevVisitors).toLocaleString()}</td>
-                        <td className="td text-center" dir="ltr">{day.conversion.toFixed(1)}%</td>
-                        <td className="td text-center font-bold" dir="ltr">{Math.round(day.customerValue).toLocaleString()}</td>
+                        <td className="td text-center font-medium text-neutral-700">{Math.round(row.trans)}</td>
+                        <td className="td text-center font-medium text-neutral-700">{formatSAR(row.avgInv)}</td>
+                        <td className="td text-center font-medium text-neutral-700">{Math.round(row.visitors)}</td>
+                        <td className="td text-center text-neutral-400 font-medium">{Math.round(row.prevVisitors)}</td>
+                        <td className="td text-center font-bold text-orange-600">{row.conversion.toFixed(1)}%</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </ChartCard>
-          )}
+            </div>
+          </div>
+
+          <div className="lg:col-span-4 space-y-4">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-200">
+              <div className="flex items-center gap-2 text-sm font-bold text-neutral-800 mb-6">
+                <div className="text-orange-500 w-5 h-5"><FireIcon /></div>
+                <span>جودة الأداء (مقارنة)</span>
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-neutral-50 px-4 py-3 rounded-xl border border-neutral-100">
+                  <div className="text-xs font-semibold text-neutral-500 mb-1">معدل الفاتورة</div>
+                  <div className="flex items-end justify-between">
+                    <div className="text-xl font-bold text-neutral-900">{formatSAR(store.avgInv)}</div>
+                    <div className="text-[10px] text-neutral-400 font-medium">متوسط القطع العام: {formatSAR(280)}</div>
+                  </div>
+                </div>
+
+                <div className="bg-neutral-50 px-4 py-3 rounded-xl border border-neutral-100">
+                  <div className="text-xs font-semibold text-neutral-500 mb-1">متوسط القطع (Items/Inv)</div>
+                  <div className="flex items-end justify-between">
+                    <div className="text-xl font-bold text-neutral-900">{(details?.avgItemsStore || 0).toFixed(2)}</div>
+                    <div className="text-[10px] text-neutral-400 font-medium">متوسط القطع العام: 2.15</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-6 rounded-2xl text-white shadow-lg">
+              <div className="text-sm font-medium opacity-80 mb-1">مساهمة الفرع</div>
+              <div className="text-3xl font-bold mb-4">{(store.val > 0 ? 100 : 0).toFixed(1)}%</div>
+              <div className="text-xs opacity-90 leading-relaxed font-arabic">
+                الفرع يحقق حالياً نسبة أداء {store.ach.toFixed(1)}% من الهدف المرصود للشهر الحالي.
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="modal-actions">
-          <button className="btn-secondary" onClick={onClose}>
-            إغلاق
-          </button>
-        </div>
+        {selEmp && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setSelEmp(null)}>
+            <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 md:p-8 shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-neutral-900">{selEmp.name}</h2>
+                  <p className="text-neutral-500 text-sm mt-1">تـحليل أداء الموظف التفصيلي</p>
+                </div>
+                <button onClick={() => setSelEmp(null)} className="p-2 hover:bg-neutral-100 rounded-full transition-colors">
+                  <XIcon />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                <div className="p-4 bg-green-50 rounded-2xl border border-green-100">
+                  <div className="text-[10px] font-bold text-green-600 uppercase mb-1">المبيعات</div>
+                  <div className="text-xl font-bold text-green-800">{formatSAR(selEmp.s)}</div>
+                </div>
+                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                  <div className="text-[10px] font-bold text-blue-600 uppercase mb-1">الفواتير</div>
+                  <div className="text-xl font-bold text-blue-800">{selEmp.t}</div>
+                </div>
+              </div>
+
+              <div className="space-y-8">
+                <div>
+                  <ProductValueAnalysis
+                    duvetKing={runProductValueAnalysis({ catalog: details?.catalog, storeId: store.sid }).duvetKing}
+                    duvetFull={runProductValueAnalysis({ catalog: details?.catalog, storeId: store.sid }).duvetFull}
+                    pillow={runProductValueAnalysis({ catalog: details?.catalog, storeId: store.sid }).pillow}
+                    title="تحليل مبيعات الأصناف للموظف"
+                  />
+                  <p className="text-[10px] text-neutral-400 mt-2 italic">* ملاحظة: التحليل مبني على مستوى المعرض الحالي للموظف.</p>
+                </div>
+              </div>
+
+              <div className="mt-8 pt-6 border-t flex justify-end">
+                <button className="btn-secondary w-full md:w-auto" onClick={() => setSelEmp(null)}>إغلاق النافذة</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -496,7 +570,7 @@ export default function StoresPage() {
 
   const [mode, setMode] = useState<Mode>('mtd');
   const [standardYear, setStandardYear] = useState<number>(() => new Date().getFullYear());
-  const [standardMonth, setStandardMonth] = useState<string>('all'); // 'all' or '1'..'12'
+  const [standardMonth, setStandardMonth] = useState<string>('all');
   const [customStart, setCustomStart] = useState<string>('');
   const [customEnd, setCustomEnd] = useState<string>('');
 
@@ -506,6 +580,7 @@ export default function StoresPage() {
   const [branch, setBranch] = useState<string>('all');
 
   const [selectedSid, setSelectedSid] = useState<string | null>(null);
+  const [prodRaw, setProdRaw] = useState<any>(null);
   const [storeSortKey, setStoreSortKey] = useState<StoreSortKey>('val');
   const [storeSortDir, setStoreSortDir] = useState<'asc' | 'desc'>('desc');
   const range = useMemo(() => getRange(mode, standardYear, standardMonth, customStart, customEnd), [customEnd, customStart, mode, standardMonth, standardYear]);
@@ -520,10 +595,11 @@ export default function StoresPage() {
   };
 
   useEffect(() => {
-    Promise.all([loadManagementData(), loadEmployeesData()])
-      .then(([m, e]) => {
+    Promise.all([loadManagementData(), loadEmployeesData(), loadProductAnalysisData()])
+      .then(([m, e, p]) => {
         setMgmtRaw(m);
         setEmpRaw(e);
+        setProdRaw(p);
       })
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
@@ -535,7 +611,7 @@ export default function StoresPage() {
       setCustomStart(toLocalYMD(startOfMonth));
       setCustomEnd(toLocalYMD(today));
     }
-  }, [mode]);
+  }, [mode, customStart, customEnd]);
 
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -555,8 +631,8 @@ export default function StoresPage() {
       if (m?.manager) managersSet.add(String(m.manager));
       if (m?.city) citiesSet.add(String(m.city));
     });
-    const managers = Array.from(managersSet).sort((a, b) => a.localeCompare(b, 'ar'));
-    const cities = Array.from(citiesSet).sort((a, b) => a.localeCompare(b, 'ar'));
+    const managersList = Array.from(managersSet).sort((a, b) => a.localeCompare(b, 'ar'));
+    const citiesList = Array.from(citiesSet).sort((a, b) => a.localeCompare(b, 'ar'));
 
     const inRange = (dStr: unknown) => {
       const d = normDate(dStr);
@@ -614,24 +690,23 @@ export default function StoresPage() {
     allIds.forEach((sid) => {
       if (!metaFilter(sid)) return;
       const val = branchSales[sid] || 0;
-      const prevVal = prevSales[sid] || 0;
+      const prevValVal = prevSales[sid] || 0;
       const targetVal = branchTarget[sid] || 0;
       const transVal = branchTrans[sid] || 0;
       const visitorsVal = branchVisitors[sid] || 0;
       const prevVis = prevVisitors[sid] || 0;
-      const growth = prevVal > 0 ? ((val - prevVal) / prevVal) * 100 : 0;
-      const growthVal = val - prevVal;
+      const growthVal = val - prevValVal;
+      const growth = prevValVal > 0 ? (growthVal / prevValVal) * 100 : 0;
       const ach = targetVal > 0 ? (val / targetVal) * 100 : 0;
       const avgInv = transVal > 0 ? val / transVal : 0;
       const conversion = visitorsVal > 0 ? (transVal / visitorsVal) * 100 : 0;
       const customerValue = transVal > 0 ? val / transVal : 0;
-      
-      // Calculate daily requirement
-      const today = new Date();
-      const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-      const remainingDays = daysInMonth - today.getDate() + 1;
-      const dailyReq = remainingDays > 0 && targetVal > val ? (targetVal - val) / remainingDays : 0;
-      
+
+      const todayNow = new Date();
+      const daysInM = new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0).getDate();
+      const remDays = daysInM - todayNow.getDate() + 1;
+      const dailyReq = remDays > 0 && targetVal > val ? (targetVal - val) / remDays : 0;
+
       const m = meta[sid] || {};
       list.push({
         sid,
@@ -640,7 +715,7 @@ export default function StoresPage() {
         city: String(m?.city || ''),
         type: String(m?.type || ''),
         val,
-        prevVal,
+        prevVal: prevValVal,
         target: targetVal,
         trans: transVal,
         visitors: visitorsVal,
@@ -657,15 +732,15 @@ export default function StoresPage() {
 
     list.sort((a, b) => (b.val || 0) - (a.val || 0));
 
-    const totals = {
-      sales: list.reduce((s, r) => s + r.val, 0),
-      trans: list.reduce((s, r) => s + r.trans, 0),
-      visitors: list.reduce((s, r) => s + r.visitors, 0),
-      target: list.reduce((s, r) => s + r.target, 0),
+    const totalsValues = {
+      sales: list.reduce((acc, r) => acc + r.val, 0),
+      trans: list.reduce((acc, r) => acc + r.trans, 0),
+      visitors: list.reduce((acc, r) => acc + r.visitors, 0),
+      target: list.reduce((acc, r) => acc + r.target, 0),
     };
-    const achTotal = totals.target > 0 ? (totals.sales / totals.target) * 100 : 0;
+    const achTotal = totalsValues.target > 0 ? (totalsValues.sales / totalsValues.target) * 100 : 0;
 
-    const branches = Object.keys(stores)
+    const branchesList = Object.keys(stores)
       .filter((sid) => {
         const m = meta[sid] || {};
         if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
@@ -675,7 +750,7 @@ export default function StoresPage() {
       })
       .sort((a, b) => (stores[a] || a).localeCompare(stores[b] || b, 'ar'));
 
-    return { managers, cities, branches, list, totals, achTotal, rangeLabel: range.startYMD === range.endYMD ? range.startYMD : `${range.startYMD} → ${range.endYMD}` };
+    return { managers: managersList, cities: citiesList, branches: branchesList, list, totals: totalsValues, achTotal, rangeLabel: range.startYMD === range.endYMD ? range.startYMD : `${range.startYMD} → ${range.endYMD} ` };
   }, [branch, city, effectiveManager, manager, mgmtRaw, range, type, user?.name, user?.role]);
 
   const selectedStore = useMemo(() => {
@@ -685,10 +760,10 @@ export default function StoresPage() {
 
   const sortedList = useMemo(() => {
     if (!derived) return [];
-    const list = [...derived.list];
+    const l = [...derived.list];
     const k = storeSortKey;
     const d = storeSortDir;
-    list.sort((a, b) => {
+    l.sort((a, b) => {
       const av = k === 'name' ? (a[k] as string) : (a[k] as number) ?? 0;
       const bv = k === 'name' ? (b[k] as string) : (b[k] as number) ?? 0;
       if (k === 'name') {
@@ -698,7 +773,7 @@ export default function StoresPage() {
       const cmp = (av as number) - (bv as number);
       return d === 'asc' ? cmp : -cmp;
     });
-    return list;
+    return l;
   }, [derived, storeSortKey, storeSortDir]);
 
   if (err) {
@@ -712,7 +787,7 @@ export default function StoresPage() {
     );
   }
 
-  const monthsAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+  const monthsArNames = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
   return (
     <div className="space-y-6 relative min-h-[400px]">
@@ -733,24 +808,16 @@ export default function StoresPage() {
             {mode === 'standard' && (
               <>
                 <div>
-                  <div className="text-xs font-semibold text-neutral-500 mb-1">السنة</div>
-                  <select className="input" value={standardYear} onChange={(e) => setStandardYear(Number(e.target.value))}>
-                    {[2026, 2025, 2024].map((y) => (
-                      <option key={y} value={y}>
-                        {y}
-                      </option>
-                    ))}
+                  <div className="text-xs font-semibold text-neutral-500 mb-1">الشهر</div>
+                  <select className="input px-2" value={standardMonth} onChange={(e) => setStandardMonth(e.target.value)}>
+                    <option value="all">كامل السنة</option>
+                    {monthsArNames.map((m, i) => (<option key={m} value={String(i + 1)}>{m}</option>))}
                   </select>
                 </div>
                 <div>
-                  <div className="text-xs font-semibold text-neutral-500 mb-1">الشهر</div>
-                  <select className="input" value={standardMonth} onChange={(e) => setStandardMonth(e.target.value)}>
-                    <option value="all">كل السنة</option>
-                    {monthsAr.map((m, i) => (
-                      <option key={m} value={String(i + 1)}>
-                        {m}
-                      </option>
-                    ))}
+                  <div className="text-xs font-semibold text-neutral-500 mb-1">السنة</div>
+                  <select className="input px-2" value={standardYear} onChange={(e) => setStandardYear(Number(e.target.value))}>
+                    {[2026, 2025, 2024].map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
                 </div>
               </>
@@ -760,159 +827,122 @@ export default function StoresPage() {
               <>
                 <div>
                   <div className="text-xs font-semibold text-neutral-500 mb-1">من</div>
-                  <input className="input" type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+                  <input type="date" className="input" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
                 </div>
                 <div>
                   <div className="text-xs font-semibold text-neutral-500 mb-1">إلى</div>
-                  <input className="input" type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+                  <input type="date" className="input" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
                 </div>
               </>
             )}
           </div>
 
-          <div className="flex flex-wrap items-end gap-3">
-            <div className={`${isAdminOrAuditor(user?.role) ? '' : 'hidden'}`}>
-              <div className="text-xs font-semibold text-neutral-500 mb-1">مدير المنطقة</div>
-              <select className="input" value={manager} onChange={(e) => setManager(e.target.value)}>
-                <option value="all">الكل</option>
-                {derived.managers.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </div>
-
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {isAdminOrAuditor(user?.role) && (
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">مدير المنطقة</div>
+                <select className="input" value={manager} onChange={(e) => setManager(e.target.value)}>
+                  <option value="all">الكل</option>
+                  {derived.managers.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            )}
             <div>
               <div className="text-xs font-semibold text-neutral-500 mb-1">المدينة</div>
               <select className="input" value={city} onChange={(e) => setCity(e.target.value)}>
                 <option value="all">الكل</option>
-                {derived.cities.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
+                {derived.cities.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-
             <div>
-              <div className="text-xs font-semibold text-neutral-500 mb-1">نوع المعرض</div>
+              <div className="text-xs font-semibold text-neutral-500 mb-1">نوع الفرع</div>
               <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
                 <option value="all">الكل</option>
-                <option value="Showroom">معارض</option>
-                <option value="Online">أونلاين</option>
+                <option value="فرع">فرع</option>
+                <option value="معرض">معرض</option>
+                <option value="أخرى">أخرى</option>
               </select>
             </div>
-
             <div>
-              <div className="text-xs font-semibold text-neutral-500 mb-1">الفرع</div>
+              <div className="text-xs font-semibold text-neutral-500 mb-1">فرع محدد</div>
               <select className="input" value={branch} onChange={(e) => setBranch(e.target.value)}>
                 <option value="all">كافة الفروع</option>
-                {derived.branches.map((sid) => (
-                  <option key={sid} value={sid}>
-                    {mgmtRaw?.stores?.[sid] || sid}
-                  </option>
-                ))}
+                {derived.branches.map(sid => <option key={sid} value={sid}>{mgmtRaw?.stores?.[sid] || sid}</option>)}
               </select>
             </div>
           </div>
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-        <KPICard title="المبيعات" value={derived.totals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
-        <KPICard title="الفواتير" value={derived.totals.trans} format={(v) => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
-        <KPICard title="الزوار" value={derived.totals.visitors} format={(v) => Math.round(v).toLocaleString()} icon={<UsersIcon />} />
-        <KPICard title="تحقيق الهدف" value={derived.achTotal} format={(v) => `${v.toFixed(1)}%`} showProgress progressValue={derived.achTotal} trend="neutral" trendValue={`الهدف: ${formatSAR(derived.totals.target)}`} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard title="إجمالي المبيعات" value={derived.totals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
+        <KPICard title="إجمالي الفواتير" value={derived.totals.trans} format={v => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
+        <KPICard title="إجمالي الزوار" value={derived.totals.visitors} format={v => Math.round(v).toLocaleString()} icon={<UsersIcon />} />
+        <KPICard title="متوسط الإنجاز" value={derived.achTotal} format={v => `${v.toFixed(1)}% `} progressValue={derived.achTotal} showProgress />
       </div>
 
-      {/* Stores table */}
-      <div className="bg-white rounded-xl shadow-md border border-neutral-200 overflow-hidden">
-        <div className="p-3 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="text-base font-bold text-neutral-900">تفاصيل الفروع</div>
-            <div className="text-xs text-neutral-600">
-              عدد الفروع: <span className="font-bold text-neutral-900">{derived.list.length}</span>
-            </div>
-          </div>
-        </div>
-
+      <ChartCard title={`أداء الفروع(${derived.rangeLabel})`}>
         <div className="overflow-x-auto">
-          <table className="min-w-full">
+          <table className="min-w-full text-sm">
             <thead>
-              <tr className="bg-orange-500 text-white">
-                <th className="th text-center w-[60px]">#</th>
-                <SortableTh label="الفرع" sortKey="name" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} />
+              <tr className="bg-neutral-50 text-neutral-500 uppercase text-[11px] tracking-wider">
+                <SortableTh label="الفرع" sortKey="name" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-right" />
                 <SortableTh label="المبيعات" sortKey="val" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="مبيعات العام السابق" sortKey="prevVal" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="الهدف" sortKey="target" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="التحقيق (%)" sortKey="ach" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="النمو (%)" sortKey="growth" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="قيمة النمو" sortKey="growthVal" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="اليومية المتبقية" sortKey="dailyReq" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="تحقيق %" sortKey="ach" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="النمو %" sortKey="growth" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="الفواتير" sortKey="trans" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="متوسط الفاتورة" sortKey="avgInv" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="الزوار" sortKey="visitors" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="زوار العام السابق" sortKey="prevVisitors" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="قيمة العميل" sortKey="customerValue" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="التحويل (Vis Rate)" sortKey="conversion" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="التحويل %" sortKey="conversion" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <th className="th text-center">إجراءات</th>
               </tr>
             </thead>
-            <tbody>
-              {sortedList.map((b, i) => (
-                <tr key={b.sid} className={`hover:bg-orange-50 cursor-pointer ${i % 2 === 0 ? 'bg-white' : 'bg-neutral-50'}`} onClick={() => setSelectedSid(b.sid)}>
+            <tbody className="divide-y divide-neutral-100">
+              {sortedList.map((s) => (
+                <tr key={s.sid} className="hover:bg-orange-50 transition-colors">
+                  <td className="td font-bold text-neutral-900">{s.name}</td>
+                  <td className="td text-center font-bold text-green-700 font-mono">{formatSAR(s.val)}</td>
                   <td className="td text-center">
-                    <div className="w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-sm mx-auto">
-                      {i + 1}
+                    <div className="flex items-center gap-2 justify-center">
+                      <div className="w-12 bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-orange-500 h-full" style={{ width: `${Math.min(100, s.ach)}% ` }}></div>
+                      </div>
+                      <span className="font-bold">{s.ach.toFixed(1)}%</span>
                     </div>
                   </td>
-                  <td className="td">
-                    <div className="font-bold text-blue-600">{b.name}</div>
+                  <td className={`td text-center font-bold font-mono ${s.growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    {s.growth >= 0 ? '+' : ''}{s.growth.toFixed(1)}%
                   </td>
-                  <td className="td text-center" dir="ltr">{formatSAR(b.val)}</td>
-                  <td className="td text-center" dir="ltr">{formatSAR(b.prevVal)}</td>
-                  <td className="td text-center" dir="ltr">{formatSAR(b.target)}</td>
-                  <td className={`td text-center font-bold ${b.ach > 0 ? 'text-green-600' : 'text-neutral-500'}`}>
-                    {b.target > 0 ? `${b.ach.toFixed(1)}%` : '0.0%'}
+                  <td className="td text-center font-medium">{Math.round(s.trans).toLocaleString()}</td>
+                  <td className="td text-center font-mono">{formatSAR(s.avgInv)}</td>
+                  <td className="td text-center">{s.conversion.toFixed(1)}%</td>
+                  <td className="td text-center">
+                    <button
+                      className="text-orange-600 hover:text-orange-800 font-bold bg-orange-50 px-3 py-1 rounded-lg border border-orange-200 transition-all"
+                      onClick={() => setSelectedSid(s.sid)}
+                    >
+                      التفاصيل
+                    </button>
                   </td>
-                  <td className={`td text-center font-bold ${b.growth >= 0 ? 'text-green-600' : 'text-red-500'}`} dir="ltr">
-                    {b.prevVal > 0 ? `${b.growth >= 0 ? '+' : ''}${b.growth.toFixed(1)}%` : '-'}
-                  </td>
-                  <td className={`td text-center font-bold ${b.growthVal >= 0 ? 'text-green-600' : 'text-red-500'}`} dir="ltr">
-                    {formatSAR(Math.abs(b.growthVal))}
-                  </td>
-                  <td className="td text-center text-red-500 font-semibold" dir="ltr">{formatSAR(b.dailyReq)}</td>
-                  <td className="td text-center" dir="ltr">{Math.round(b.trans).toLocaleString()}</td>
-                  <td className="td text-center" dir="ltr">{Math.round(b.avgInv).toLocaleString()}</td>
-                  <td className="td text-center" dir="ltr">{Math.round(b.visitors).toLocaleString()}</td>
-                  <td className="td text-center" dir="ltr">{Math.round(b.prevVisitors).toLocaleString()}</td>
-                  <td className="td text-center font-bold" dir="ltr">{Math.round(b.customerValue).toLocaleString()}</td>
-                  <td className="td text-center" dir="ltr">{b.conversion.toFixed(1)}%</td>
                 </tr>
               ))}
-              {sortedList.length === 0 && (
-                <tr>
-                  <td className="td text-center text-neutral-500" colSpan={14}>
-                    لا توجد بيانات بعد تطبيق الفلاتر.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
-      </div>
+      </ChartCard>
 
-      <StoreDetailsModal
-        open={!!selectedStore}
-        onClose={() => setSelectedSid(null)}
-        store={selectedStore}
-        employeesJson={empRaw}
-        mode={mode}
-        startYMD={range.startYMD}
-        endYMD={range.endYMD}
-      />
+      {selectedSid && (
+        <StoreDetailsModal
+          open={!!selectedSid && !!mgmtRaw}
+          onClose={() => setSelectedSid(null)}
+          store={selectedStore}
+          mgmtRaw={mgmtRaw}
+          employeesJson={empRaw}
+          mode={mode}
+          startYMD={range.startYMD}
+          endYMD={range.endYMD}
+          prodRaw={prodRaw}
+        />
+      )}
     </div>
   );
 }
-

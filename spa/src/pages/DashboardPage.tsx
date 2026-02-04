@@ -25,14 +25,14 @@ function getDefaultRange(mode: Mode, selYear?: number, selMonth?: number) {
   const startOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   if (mode === 'today') return { start: toYMD(today), end: toYMD(today) };
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
-  if (mode === 'mtd') return { start: toYMD(startOfCurrentMonth), end: toYMD(today) };
+  if (mode === 'mtd') return { start: toYMD(startOfCurrentMonth), end: toYMD(yesterday) };
   if (mode === 'month' && selYear != null && selMonth != null) {
     const start = new Date(selYear, selMonth - 1, 1);
     let end = new Date(selYear, selMonth, 0);
-    if (end > today) end = new Date(today);
+    if (end > yesterday) end = new Date(yesterday);
     return { start: toYMD(start), end: toYMD(end) };
   }
-  return { start: toYMD(startOfCurrentMonth), end: toYMD(today) };
+  return { start: toYMD(startOfCurrentMonth), end: toYMD(yesterday) };
 }
 
 const monthsAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [selYear, setSelYear] = useState<number>(() => new Date().getFullYear());
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [liveModalOpen, setLiveModalOpen] = useState(false);
+  const [liveManager, setLiveManager] = useState<string>('all');
   const [dailyReportModalOpen, setDailyReportModalOpen] = useState(false);
   const [chartMode, setChartMode] = useState<'target' | 'growth' | 'visitors'>('target');
   const user = getCurrentUser();
@@ -324,7 +325,8 @@ export default function DashboardPage() {
     const storeList = Object.entries(byStore)
       .filter(([sid]) => {
         const m = meta[sid];
-        if (effectiveManager !== 'all' && (!m || String(m.manager) !== effectiveManager)) return false;
+        const targetManager = liveManager !== 'all' ? liveManager : effectiveManager;
+        if (targetManager !== 'all' && (!m || String(m.manager) !== targetManager)) return false;
         return (byStore[sid].sales > 0 || byStore[sid].trans > 0);
       })
       .map(([sid, v]) => ({
@@ -348,7 +350,7 @@ export default function DashboardPage() {
     const totalTrans = storeList.reduce((s, st) => s + st.trans, 0);
 
     return { totals: { sales: totalSales, trans: totalTrans }, stores: storeList };
-  }, [raw, empRaw, todayStr, effectiveManager]);
+  }, [raw, empRaw, todayStr, effectiveManager, liveManager]);
 
   // Daily Report data (yesterday vs last year)
   const yesterday = useMemo(() => {
@@ -821,15 +823,32 @@ export default function DashboardPage() {
                 <XIcon /> إغلاق
               </button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
               <KPICard title="المجموع (اليوم)" value={liveData.totals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
               <KPICard
                 title="الفواتير"
                 value={liveData.totals.trans}
                 format={(v) => Math.round(v).toLocaleString()}
                 icon={<ReceiptTaxIcon />}
-                trendValue={liveData.totals.trans > 0 ? `معدل الفاتورة: ${formatSAR(liveData.totals.sales / liveData.totals.trans)}` : undefined}
               />
+              <KPICard
+                title="معدل الفاتورة"
+                value={liveData.totals.trans > 0 ? liveData.totals.sales / liveData.totals.trans : 0}
+                format={formatSAR}
+                icon={<FireIcon />}
+              />
+            </div>
+
+            <div className="bg-orange-50 p-4 rounded-xl border border-orange-200 mb-6">
+              <div className="text-xs font-bold text-orange-800 mb-2 uppercase tracking-wider">تصفية حسب مدير المنطقة</div>
+              <select
+                className="input bg-white border-orange-200 focus:ring-orange-500"
+                value={liveManager}
+                onChange={(e) => setLiveManager(e.target.value)}
+              >
+                <option value="all">كل مدراء المناطق</option>
+                {managers.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-h-[60vh] overflow-y-auto">
               {liveData.stores.map((store) => (
@@ -872,13 +891,29 @@ export default function DashboardPage() {
                   <span>التقرير اليومي: تقرير الأمس ({yesterdayStr}) مقارنة بـ ({lastYearYesterdayStr})</span>
                 </div>
               </div>
-              <button
-                type="button"
-                className="btn-secondary py-1.5 px-3 text-sm flex items-center gap-2"
-                onClick={() => setDailyReportModalOpen(false)}
-              >
-                <XIcon /> إغلاق
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary py-1.5 px-4 text-xs font-bold flex items-center gap-2 border-red-200 text-red-600 hover:bg-red-50"
+                  onClick={() => alert('جاري إصدار تقرير PDF للموظفين...')}
+                >
+                  📄 PDF موظفين
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary py-1.5 px-4 text-xs font-bold flex items-center gap-2 border-primary-200 text-primary-700 hover:bg-orange-50"
+                  onClick={() => alert('جاري إصدار تقرير PDF للمعارض...')}
+                >
+                  🏢 PDF معارض
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary py-1.5 px-3 text-sm flex items-center gap-2"
+                  onClick={() => setDailyReportModalOpen(false)}
+                >
+                  <XIcon /> إغلاق
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

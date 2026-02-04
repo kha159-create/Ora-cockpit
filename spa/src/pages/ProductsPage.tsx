@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { BarChart, ChartCard, KPICard, LineChart, PieChart } from '../components/DashboardComponents';
+import { BarChart, ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
 import { CubeIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, XIcon } from '../components/Icons';
 
 type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest';
@@ -535,9 +535,6 @@ export default function ProductsPage() {
               nameKey="name"
               format={(v) => (metric === 'qty' ? `${Math.round(v).toLocaleString()} وحدة` : formatSAR(v))}
             />
-          </div>
-          <div className="mt-4 h-[280px]">
-            <PieChart data={derived.categoriesAgg.slice(0, 10).map((c) => ({ name: c.category, value: metric === 'qty' ? c.qty : c.amount }))} vertical />
           </div>
         </ChartCard>
 

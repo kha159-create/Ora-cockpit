@@ -27,7 +27,7 @@ export default function OffersPage() {
     loadOffersData()
       .then(setData)
       .catch((e) => setErr(e?.message || String(e)));
-    loadManagementData().then(setMgmt).catch(() => {});
+    loadManagementData().then(setMgmt).catch(() => { });
   }, []);
 
   const effectiveManager = useMemo(() => {
@@ -75,8 +75,32 @@ export default function OffersPage() {
     return Array.isArray(data) ? data : (Array.isArray(data?.offers) ? data.offers : []);
   }, [data]);
 
+  const periodSuf = useMemo(() => {
+    if (period === 'mtd') return 'mtd';
+    if (period === '7d') return '7d';
+    if (period === '14d') return '14d';
+    if (period === '30d') return '30d';
+    if (period === 'yest') return 'yest';
+    return 'mtd';
+  }, [period]);
+
   const offers = useMemo(() => {
-    let list = rawOffers.filter((o: any) => {
+    const suf = periodSuf;
+    let list = rawOffers.map((o: any) => {
+      // Map dynamic period properties to standard names for easier consumption
+      const sales = Number(o[`s_${suf}`] ?? o.filteredSales ?? o.sales ?? o.total_sales ?? 0) || 0;
+      const discount = Number(o[`d_${suf}`] ?? o.discount ?? o.total_discount ?? 0) || 0;
+      const ops = Number(o[`t_${suf}`] ?? o.operations ?? o.transactions ?? o.count ?? 0) || 0;
+      const eff = sales > 0 ? (sales / (sales + discount)) * 100 : 100;
+
+      return {
+        ...o,
+        dispSales: sales,
+        dispDiscount: discount,
+        dispOps: ops,
+        dispEff: eff
+      };
+    }).filter((o: any) => {
       const sid = o.store_id ?? o.storeId ?? o.store;
       if (allowedStoreIds.size > 0 && sid != null && sid !== '' && !allowedStoreIds.has(String(sid))) return false;
       if (statusFilter === 'Enabled' && (o.status === 'Disabled' || o.enabled === false)) return false;
@@ -84,30 +108,27 @@ export default function OffersPage() {
       return true;
     });
     return list;
-  }, [rawOffers, allowedStoreIds, statusFilter]);
+  }, [rawOffers, allowedStoreIds, statusFilter, periodSuf]);
 
   const stats = useMemo(() => {
-    const totalSales = offers.reduce((s: number, o: any) => s + (Number(o.filteredSales ?? o.sales ?? o.total_sales ?? 0) || 0), 0);
-    const totalDiscount = offers.reduce((s: number, o: any) => s + (Number(o.discount ?? o.total_discount ?? o.خصم ?? 0) || 0), 0);
-    const totalOps = offers.reduce((s: number, o: any) => s + (Number(o.operations ?? o.transactions ?? o.عدد_العمليات ?? o.count ?? 0) || 0), 0);
+    const totalSales = offers.reduce((s: number, o: any) => s + o.dispSales, 0);
+    const totalDiscount = offers.reduce((s: number, o: any) => s + o.dispDiscount, 0);
+    const totalOps = offers.reduce((s: number, o: any) => s + o.dispOps, 0);
     const avgBasket = totalOps > 0 ? Math.round(totalSales / totalOps) : 0;
-    const efficiency = totalSales > 0 && totalDiscount > 0 ? (totalSales / (totalSales + totalDiscount)) * 100 : (offers.length ? 100 : 0);
+    const efficiency = totalSales > 0 ? (totalSales / (totalSales + totalDiscount)) * 100 : (offers.length ? 100 : 0);
     return { totalOffers: offers.length, totalSales, totalDiscount, totalOps, avgBasket, efficiency };
   }, [offers]);
 
   const top5 = useMemo(() => {
     return [...offers]
-      .sort((a: any, b: any) => (Number(b.filteredSales ?? b.sales ?? 0) || 0) - (Number(a.filteredSales ?? a.sales ?? 0) || 0))
+      .sort((a: any, b: any) => b.dispSales - a.dispSales)
       .slice(0, 5);
   }, [offers]);
 
   const weakOffers = useMemo(() => {
     return [...offers]
-      .filter((o: any) => {
-        const eff = Number(o.efficiency ?? o.efficiency_ratio ?? 0);
-        return eff > 0 && eff < 50;
-      })
-      .sort((a: any, b: any) => (Number(a.efficiency ?? 0) || 0) - (Number(b.efficiency ?? 0) || 0))
+      .filter((o: any) => o.dispEff > 0 && o.dispEff < 50)
+      .sort((a: any, b: any) => a.dispEff - b.dispEff)
       .slice(0, 5);
   }, [offers]);
 
@@ -139,11 +160,10 @@ export default function OffersPage() {
                 key={key}
                 type="button"
                 onClick={() => setPeriod(key)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
-                  period === key
+                className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${period === key
                     ? 'bg-orange-500 text-white border-orange-500 shadow-md'
                     : 'bg-white text-neutral-700 border-neutral-200 hover:bg-orange-50 hover:border-orange-200'
-                }`}
+                  }`}
               >
                 {key === 'mtd' && '📅 '}
                 {key === 'yest' && '⏳ '}
@@ -227,9 +247,9 @@ export default function OffersPage() {
             <p className="text-neutral-500 col-span-full">لا توجد عروض لعرضها.</p>
           ) : (
             top5.map((o: any, i: number) => {
-              const sales = Number(o.filteredSales ?? o.sales ?? 0) || 0;
-              const discount = Number(o.discount ?? 0) || 0;
-              const ops = Number(o.operations ?? o.transactions ?? 0) || 0;
+              const sales = o.dispSales;
+              const discount = o.dispDiscount;
+              const ops = o.dispOps;
               const pct = stats.totalSales > 0 ? (sales / stats.totalSales) * 100 : 0;
               return (
                 <div key={i} className="rounded-xl border border-neutral-200 p-4 border-r-4 border-r-orange-500 bg-neutral-50/50 hover:shadow-md transition-shadow">
@@ -258,10 +278,10 @@ export default function OffersPage() {
             <p className="text-neutral-500 col-span-full">لا توجد عروض ضعيفة الأداء حسب معيار الكفاءة.</p>
           ) : (
             weakOffers.map((o: any, i: number) => {
-              const sales = Number(o.filteredSales ?? o.sales ?? 0) || 0;
-              const discount = Number(o.discount ?? 0) || 0;
-              const ops = Number(o.operations ?? 0) || 0;
-              const eff = Number(o.efficiency ?? 0) || 0;
+              const sales = o.dispSales;
+              const discount = o.dispDiscount;
+              const ops = o.dispOps;
+              const eff = o.dispEff;
               return (
                 <div key={i} className="rounded-xl border border-red-200 p-4 bg-red-50/50 hover:shadow-md transition-shadow">
                   <div className="flex justify-between items-start mb-2">
@@ -306,10 +326,10 @@ export default function OffersPage() {
                   <tr key={i} className="border-b border-neutral-100 hover:bg-orange-50">
                     <td className="py-3 px-4 text-neutral-500">{i + 1}</td>
                     <td className="py-3 px-4 font-medium text-neutral-900">{o.name || o.offer_name || o.id || '-'}</td>
-                    <td className="py-3 px-4">{formatSAR(Number(o.filteredSales ?? o.sales ?? 0))}</td>
-                    <td className="py-3 px-4">{(Number(o.discount ?? 0) || 0).toLocaleString()}</td>
-                    <td className="py-3 px-4">{(Number(o.operations ?? o.transactions ?? 0) || 0).toLocaleString()}</td>
-                    <td className="py-3 px-4">{Number(o.efficiency ?? 0).toFixed(1)}%</td>
+                    <td className="py-3 px-4">{formatSAR(o.dispSales)}</td>
+                    <td className="py-3 px-4">{(o.dispDiscount).toLocaleString()}</td>
+                    <td className="py-3 px-4">{(o.dispOps).toLocaleString()}</td>
+                    <td className="py-3 px-4">{o.dispEff.toFixed(1)}%</td>
                   </tr>
                 ))}
               </tbody>

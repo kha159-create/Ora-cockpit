@@ -118,84 +118,83 @@ export const KPICard: React.FC<{
   trend = 'neutral',
   trendValue,
 }) => {
-  const isPositive = comparisonValue !== undefined && value >= comparisonValue;
-  const formattedValue =
-    format && typeof value === 'number' ? format(value) : (value?.toLocaleString() || 0);
+    const isPositive = comparisonValue !== undefined && value >= comparisonValue;
+    const formattedValue =
+      format && typeof value === 'number' ? format(value) : (value?.toLocaleString() || 0);
 
-  return (
-    <button
-      onClick={onClick}
-      disabled={!onClick}
-      className="modern-kpi-card group p-4 flex flex-col text-left w-full h-full disabled:cursor-default"
-    >
-      {/* تأثير الخلفية المتحرك */}
-      <div className="kpi-card-background" />
+    return (
+      <button
+        onClick={onClick}
+        disabled={!onClick}
+        className="modern-kpi-card group p-4 flex flex-col text-left w-full h-full disabled:cursor-default"
+      >
+        {/* تأثير الخلفية المتحرك */}
+        <div className="kpi-card-background" />
 
-      {/* المحتوى الرئيسي */}
-      <div className="relative z-10 flex-1 flex flex-col">
-        {/* الرأس - الأيقونة والعنوان */}
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-start gap-3 flex-1 min-w-0">
-            {icon && <div className="kpi-icon-container flex-shrink-0">{icon}</div>}
-            <div className="flex-1 min-w-0">
-              <h3 className="kpi-title truncate">{title}</h3>
+        {/* المحتوى الرئيسي */}
+        <div className="relative z-10 flex-1 flex flex-col">
+          {/* الرأس - الأيقونة والعنوان */}
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              {icon && <div className="kpi-icon-container flex-shrink-0">{icon}</div>}
+              <div className="flex-1 min-w-0">
+                <h3 className="kpi-title truncate">{title}</h3>
+              </div>
             </div>
+
+            {/* مؤشر الاتجاه - فقط للهدف */}
+            {showProgress && trendValue && <TrendIndicator trend={trend} value={trendValue} />}
           </div>
 
-          {/* مؤشر الاتجاه - فقط للهدف */}
-          {showProgress && trendValue && <TrendIndicator trend={trend} value={trendValue} />}
-        </div>
+          {/* القيمة الرئيسية */}
+          <div className="mb-3 flex-1 flex items-center">
+            <div className="kpi-value break-all leading-tight">{formattedValue}</div>
+          </div>
 
-        {/* القيمة الرئيسية */}
-        <div className="mb-3 flex-1 flex items-center">
-          <div className="kpi-value break-all leading-tight">{formattedValue}</div>
-        </div>
-
-        {/* القسم السفلي */}
-        <div className="flex flex-col gap-2">
-          {/* نسبة التغيير مع القيمة */}
-          {comparisonValue !== undefined && !showProgress && (
-            <div className="flex flex-col gap-1">
-              <div
-                className={`text-sm font-bold flex items-center gap-1 ${
-                  isPositive ? 'text-green-600' : 'text-red-500'
-                }`}
-              >
-                <span>{isPositive ? '▲' : '▼'}</span>
-                <span>
-                  {(() => {
-                    const diff = value - comparisonValue;
-                    const pct = comparisonValue > 0 ? ((diff / comparisonValue) * 100) : 0;
-                    const diffFormatted = format ? format(Math.abs(diff)) : Math.abs(diff).toLocaleString();
-                    return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% (${diff >= 0 ? '+' : '-'}${diffFormatted})`;
-                  })()}
-                </span>
+          {/* القسم السفلي */}
+          <div className="flex flex-col gap-2">
+            {/* نسبة التغيير مع القيمة */}
+            {comparisonValue !== undefined && !showProgress && (
+              <div className="flex flex-col gap-1">
+                <div
+                  className={`text-sm font-bold flex items-center gap-1 ${isPositive ? 'text-green-600' : 'text-red-500'
+                    }`}
+                >
+                  <span>{isPositive ? '▲' : '▼'}</span>
+                  <span>
+                    {(() => {
+                      const diff = value - comparisonValue;
+                      const pct = comparisonValue > 0 ? ((diff / comparisonValue) * 100) : 0;
+                      const diffFormatted = format ? format(Math.abs(diff)) : Math.abs(diff).toLocaleString();
+                      return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% (${diff >= 0 ? '+' : '-'}${diffFormatted})`;
+                    })()}
+                  </span>
+                </div>
+                <div className="text-xs text-neutral-500">
+                  {comparisonLabel || 'السنة الماضية'}: {format ? format(comparisonValue) : comparisonValue.toLocaleString()}
+                </div>
               </div>
-              <div className="text-xs text-neutral-500">
-                {comparisonLabel || 'السنة الماضية'}: {format ? format(comparisonValue) : comparisonValue.toLocaleString()}
-              </div>
-            </div>
-          )}
-          
-          {/* شريط التقدم */}
-          {showProgress && (
-            <div className="flex items-center gap-3">
-              <CircularProgress percentage={progressValue} size={50} />
-              <div className="text-xs text-gray-500">التقدم: {Math.round(progressValue)}%</div>
-            </div>
-          )}
+            )}
 
-          {/* مخطط الاتجاه */}
-          {trendData && trendData.length > 1 && !showProgress && comparisonValue === undefined && (
-            <div className="mt-auto">
-              <Sparkline data={trendData} />
-            </div>
-          )}
+            {/* شريط التقدم */}
+            {showProgress && (
+              <div className="flex items-center gap-3">
+                <CircularProgress percentage={progressValue} size={50} />
+                <div className="text-xs text-gray-500">التقدم: {Math.round(progressValue)}%</div>
+              </div>
+            )}
+
+            {/* مخطط الاتجاه */}
+            {trendData && trendData.length > 1 && !showProgress && comparisonValue === undefined && (
+              <div className="mt-auto">
+                <Sparkline data={trendData} />
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    </button>
-  );
-};
+      </button>
+    );
+  };
 
 export const ChartCard: React.FC<{
   title: React.ReactNode;
@@ -220,7 +219,7 @@ export type RankMetric = { key: string; label: string };
 export const RankCard: React.FC<{
   title: string;
   metrics: RankMetric[];
-  data: { name: string; [key: string]: number }[];
+  data: { name: string;[key: string]: number }[];
   format?: (val: number, metricKey?: string) => string;
   maxItems?: number;
 }> = ({ title, metrics, data, format = (v) => v.toLocaleString(), maxItems = 10 }) => {
@@ -242,11 +241,10 @@ export const RankCard: React.FC<{
             key={m.key}
             type="button"
             onClick={() => setMetric(m.key)}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-              metric === m.key
-                ? 'bg-orange-500 text-white shadow-md'
-                : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
-            }`}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${metric === m.key
+              ? 'bg-orange-500 text-white shadow-md'
+              : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+              }`}
           >
             {m.label}
           </button>
@@ -497,7 +495,7 @@ export const PieChart: React.FC<{
   );
 };
 
-export const LineChart: React.FC<{ data: { name: string; [key: string]: any }[] }> = ({ data }) => {
+export const LineChart: React.FC<{ data: { name: string;[key: string]: any }[] }> = ({ data }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<{ content: string; x: number; y: number } | null>(null);
 
@@ -530,7 +528,7 @@ export const LineChart: React.FC<{ data: { name: string; [key: string]: any }[] 
 
   const width = 600;
   const height = 250;
-  const padding = { top: 10, right: 20, bottom: 30, left: 40 };
+  const padding = { top: 30, right: 30, bottom: 40, left: 50 };
 
   const allValues = data.flatMap((d) => keys.filter((k) => visibleKeys.has(k)).map((k) => d[k] as number));
   const maxVal = allValues.length > 0 ? Math.max(...allValues, 1) : 1;
@@ -595,7 +593,7 @@ export const LineChart: React.FC<{ data: { name: string; [key: string]: any }[] 
     <div className="w-full h-full relative flex flex-col" ref={containerRef}>
       <div className="flex-grow" onMouseLeave={() => setTooltip(null)}>
         {tooltip && <Tooltip {...tooltip} />}
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full preserve-3d" preserveAspectRatio="xMidYMid meet">
           {/* Grid Lines and Y-Axis */}
           {Array.from({ length: yTicks }).map((_, i) => {
             const y = height - padding.bottom - (i * (height - padding.top - padding.bottom)) / (yTicks - 1);
@@ -603,7 +601,7 @@ export const LineChart: React.FC<{ data: { name: string; [key: string]: any }[] 
             return (
               <g key={i} className="text-gray-400">
                 <text x={padding.left - 8} y={y + 4} textAnchor="end" fontSize="10" fill="currentColor">
-                  {val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val.toFixed(0)}
+                  {val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val.toFixed(0)}
                 </text>
                 <line
                   x1={padding.left}
@@ -622,7 +620,7 @@ export const LineChart: React.FC<{ data: { name: string; [key: string]: any }[] 
           {data.map((item, i) => (
             <text
               key={item.name}
-              x={padding.left + (i * (width - padding.left - padding.right)) / (data.length - 1)}
+              x={padding.left + (i * (width - padding.left - padding.right)) / Math.max(1, data.length - 1)}
               y={height - padding.bottom + 15}
               textAnchor="middle"
               fontSize="10"
@@ -650,10 +648,10 @@ export const LineChart: React.FC<{ data: { name: string; [key: string]: any }[] 
               ),
           )}
 
-          <rect x="0" y="0" width={width} height={height} fill="transparent" onMouseMove={handleMouseMove} />
+          <rect x={padding.left} y={padding.top} width={width - padding.left - padding.right} height={height - padding.top - padding.bottom} fill="transparent" onMouseMove={handleMouseMove} />
         </svg>
       </div>
-      <div className="flex justify-center gap-6 text-sm mt-2">
+      <div className="flex justify-center flex-wrap gap-x-6 gap-y-2 text-sm mt-2">
         {keys.map((key) => (
           <button
             key={key}
@@ -747,4 +745,106 @@ export const AchievementBar: React.FC<{ percentage: number }> = ({ percentage })
     </div>
   );
 };
+
+export const ProductValueAnalysis: React.FC<{
+  duvetKing?: { breakdown: any[] };
+  duvetFull?: { breakdown: any[] };
+  pillow?: { breakdown: any[] };
+  title?: string;
+}> = ({ duvetKing, duvetFull, pillow, title = 'تحليل المبيعات حسب السعر (Sales Analysis by Value)' }) => (
+  <div className="space-y-6">
+    <h3 className="text-lg font-bold text-neutral-800 border-b pb-2 mb-4">{title}</h3>
+
+    {duvetKing && duvetKing.breakdown.length > 0 && (
+      <div>
+        <h4 className="text-sm font-bold text-neutral-800 mb-2 pb-1 border-b">ألحفة (King)</h4>
+        <div className="space-y-2">
+          {duvetKing.breakdown.map((it) => (
+            <div key={it.name}>
+              <div className="flex justify-between text-[11px] mb-1">
+                <span className="font-semibold text-neutral-600">{it.name}</span>
+                <span className="font-bold text-neutral-900">{it.units.toLocaleString()} وحدة ({it.percentage.toFixed(1)}%)</span>
+              </div>
+              <div className="w-full bg-neutral-100 rounded-full h-2">
+                <div className="bg-orange-500 h-full rounded-full" style={{ width: `${it.percentage}%` }}></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {duvetFull && duvetFull.breakdown.length > 0 && (
+      <div className="pt-2">
+        <h4 className="text-sm font-bold text-neutral-800 mb-2 pb-1 border-b">ألحفة (Full)</h4>
+        <div className="space-y-2">
+          {duvetFull.breakdown.map((it) => (
+            <div key={it.name}>
+              <div className="flex justify-between text-[11px] mb-1">
+                <span className="font-semibold text-neutral-600">{it.name}</span>
+                <span className="font-bold text-neutral-900">{it.units.toLocaleString()} وحدة ({it.percentage.toFixed(1)}%)</span>
+              </div>
+              <div className="w-full bg-neutral-100 rounded-full h-2">
+                <div className="bg-blue-500 h-full rounded-full" style={{ width: `${it.percentage}%` }}></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {pillow && pillow.breakdown.length > 0 && (
+      <div className="pt-2">
+        <h4 className="text-sm font-bold text-neutral-800 mb-2 pb-1 border-b">وسائد (Pillows)</h4>
+        <div className="space-y-2">
+          {pillow.breakdown.map((it) => (
+            <div key={it.name}>
+              <div className="flex justify-between text-[11px] mb-1">
+                <span className="font-semibold text-neutral-600">{it.name}</span>
+                <span className="font-bold text-neutral-900">{it.units.toLocaleString()} وحدة ({it.percentage.toFixed(1)}%)</span>
+              </div>
+              <div className="w-full bg-neutral-100 rounded-full h-2">
+                <div className="bg-green-600 h-full rounded-full" style={{ width: `${it.percentage}%` }}></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+);
+
+export const MissedOpportunities: React.FC<{
+  data: any[];
+  title?: string;
+  onRowClick?: (row: any) => void;
+}> = ({ data, title = 'الفرص الضائعة (Missed Opportunities)', onRowClick }) => (
+  <div className="flex flex-col h-full">
+    <h3 className="text-lg font-bold text-neutral-800 border-b pb-2 mb-4">{title}</h3>
+    <div className="overflow-y-auto flex-grow pr-1 custom-scrollbar">
+      {data.length === 0 ? (
+        <div className="flex items-center justify-center h-40 text-neutral-400 italic">لا توجد بيانات متاحة</div>
+      ) : (
+        <div className="space-y-3">
+          {data.slice(0, 50).map((row, idx) => (
+            <div
+              key={idx}
+              onClick={() => onRowClick && onRowClick(row)}
+              className={`p-3 rounded-xl border border-neutral-100 hover:border-orange-300 hover:bg-orange-50 transition-all cursor-pointer ${onRowClick ? 'group' : ''}`}
+            >
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-sm font-bold text-neutral-900 group-hover:text-orange-700">{row.name || row.item_name || row.id}</span>
+                <span className="text-xs font-bold px-2 py-0.5 bg-orange-100 text-orange-700 rounded-lg">{row.total_count || row.count}</span>
+              </div>
+              <div className="flex justify-between text-[10px] text-neutral-500 font-medium">
+                <span>{row.category || 'صنف غير محدد'}</span>
+                {row.reason && <span className="text-red-500">{row.reason}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+);
 
