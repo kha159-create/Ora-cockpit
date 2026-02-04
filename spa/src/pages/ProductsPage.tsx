@@ -788,8 +788,8 @@ export default function ProductsPage() {
               <div className="text-xs text-neutral-500 mt-2">عرضنا أول 100 منتج فقط داخل نافذة التصفح.</div>
             )}
           </div>
-        </div >
-      </Modal >
+        </div>
+      </Modal>
 
       {/* Product details modal */}
       < Modal

@@ -344,128 +344,129 @@ function StoreDetailsModal({
   if (!open || !store) return null;
 
   return (
-    <div className="modal-center-screen" onClick={onClose}>
-      <div className="modal-content max-w-7xl my-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3 mb-6">
-          <div className="min-w-0">
-            <div className="text-2xl font-bold text-neutral-900 truncate">{store.name}</div>
-            <div className="text-sm text-neutral-500 mt-1">
-              {store.manager || 'مدير غير محدد'} · {store.city || '-'} · {store.type || '-'}
+    <>
+      <div className="modal-center-screen" onClick={onClose}>
+        <div className="modal-content max-w-7xl my-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-start justify-between gap-3 mb-6">
+            <div className="min-w-0">
+              <div className="text-2xl font-bold text-neutral-900 truncate">{store.name}</div>
+              <div className="text-sm text-neutral-500 mt-1">
+                {store.manager || 'مدير غير محدد'} · {store.city || '-'} · {store.type || '-'}
+              </div>
             </div>
-          </div>
-          <button className="btn-secondary py-2 px-4 shadow-sm" onClick={onClose}>
-            إغلاق
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <KPICard title="المبيعات" value={store.val} format={formatSAR} icon={<CurrencyDollarIcon />} />
-          <KPICard title="الفواتير" value={store.trans} format={(v) => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
-          <KPICard
-            title="التحويل %"
-            value={store.conversion}
-            format={(v) => `${v.toFixed(1)}% `}
-            icon={<FireIcon />}
-          />
-          <KPICard title="تحقيق الهدف" value={store.ach} format={(v) => `${v.toFixed(1)}% `} showProgress progressValue={store.ach} />
-        </div>
-
-        <div className="lg:col-span-12 space-y-6">
-
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden">
-            <h3 className="text-lg font-bold text-neutral-900 mb-4">أداء الموظفين ({details?.rangeLabel || '-'})</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="bg-neutral-50 text-neutral-500 uppercase text-[11px] tracking-wider">
-                    <th className="th text-right">الموظف</th>
-                    <th className="th text-center">المبيعات</th>
-                    <th className="th text-center">فواتير</th>
-                    <th className="th text-center">متوسط الفاتورة</th>
-                    <th className="th text-center">متوسط القطع</th>
-                    <th className="th text-center">مساهمة %</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  {details?.rangeList.map((r: any) => {
-                    const avgVal = r.t > 0 ? r.s / r.t : 0;
-                    const shareVal = (details?.rangeList.reduce((acc, x) => acc + x.s, 0) || 1);
-                    const avgItems = r.t > 0 ? (r.i || 0) / r.t : 0;
-                    return (
-                      <tr key={r.name} className="hover:bg-orange-50 transition-colors group">
-                        <td className="td font-bold text-neutral-900">
-                          <button
-                            className="text-blue-600 hover:text-blue-800 hover:underline text-right w-full"
-                            onClick={() => setSelEmp(r)}
-                          >
-                            {r.name}
-                          </button>
-                        </td>
-                        <td className="td text-center font-bold text-green-700">{formatSAR(r.s)}</td>
-                        <td className="td text-center">{Math.round(r.t).toLocaleString()}</td>
-                        <td className="td text-center">{formatSAR(avgVal)}</td>
-                        <td className="td text-center font-semibold">{avgItems.toFixed(2)}</td>
-                        <td className="td text-center">
-                          <div className="flex items-center gap-2 justify-center">
-                            <div className="w-12 bg-neutral-100 h-1.5 rounded-full overflow-hidden">
-                              <div className="bg-orange-400 h-full" style={{ width: `${(r.s / shareVal) * 100}% ` }}></div>
-                            </div>
-                            <span>{((r.s / shareVal) * 100).toFixed(0)}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <button className="btn-secondary py-2 px-4 shadow-sm" onClick={onClose}>
+              إغلاق
+            </button>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden mt-6">
-            <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
-              <span>📅</span> تفاصيل الأيام ({details?.rangeLabel || '-'})
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="bg-neutral-800 text-white">
-                    <th className="th text-right">التاريخ</th>
-                    <th className="th text-center">المبيعات</th>
-                    <th className="th text-center">العام الماضي</th>
-                    <th className="th text-center">النمو %</th>
-                    <th className="th text-center">قيمة النمو</th>
-                    <th className="th text-center">الفواتير</th>
-                    <th className="th text-center">متوسط الفاتورة</th>
-                    <th className="th text-center">الزوار</th>
-                    <th className="th text-center">زوار (LY)</th>
-                    <th className="th text-center">التحويل %</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  {details?.dailyList.map((row) => (
-                    <tr key={row.date} className="hover:bg-neutral-50 transition-colors">
-                      <td className="td font-mono font-medium text-neutral-600">{row.date}</td>
-                      <td className="td text-center font-bold text-neutral-900">{formatSAR(row.sales)}</td>
-                      <td className="td text-center text-neutral-400">{formatSAR(row.prevSales)}</td>
-                      <td className={`td text-center font-bold ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                        {row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%
-                      </td>
-                      <td className={`td text-center font-medium ${row.growthVal >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                        {formatSAR(row.growthVal)}
-                      </td>
-                      <td className="td text-center font-medium text-neutral-700">{Math.round(row.trans)}</td>
-                      <td className="td text-center font-medium text-neutral-700">{formatSAR(row.avgInv)}</td>
-                      <td className="td text-center font-medium text-neutral-700">{Math.round(row.visitors)}</td>
-                      <td className="td text-center text-neutral-400 font-medium">{Math.round(row.prevVisitors)}</td>
-                      <td className="td text-center font-bold text-orange-600">{row.conversion.toFixed(1)}%</td>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <KPICard title="المبيعات" value={store.val} format={formatSAR} icon={<CurrencyDollarIcon />} />
+            <KPICard title="الفواتير" value={store.trans} format={(v) => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
+            <KPICard
+              title="التحويل %"
+              value={store.conversion}
+              format={(v) => `${v.toFixed(1)}% `}
+              icon={<FireIcon />}
+            />
+            <KPICard title="تحقيق الهدف" value={store.ach} format={(v) => `${v.toFixed(1)}% `} showProgress progressValue={store.ach} />
+          </div>
+
+          <div className="lg:col-span-12 space-y-6">
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden">
+              <h3 className="text-lg font-bold text-neutral-900 mb-4">أداء الموظفين ({details?.rangeLabel || '-'})</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="bg-neutral-50 text-neutral-500 uppercase text-[11px] tracking-wider">
+                      <th className="th text-right">الموظف</th>
+                      <th className="th text-center">المبيعات</th>
+                      <th className="th text-center">فواتير</th>
+                      <th className="th text-center">متوسط الفاتورة</th>
+                      <th className="th text-center">متوسط القطع</th>
+                      <th className="th text-center">مساهمة %</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100">
+                    {details?.rangeList.map((r: any) => {
+                      const avgVal = r.t > 0 ? r.s / r.t : 0;
+                      const shareVal = (details?.rangeList.reduce((acc, x) => acc + x.s, 0) || 1);
+                      const avgItems = r.t > 0 ? (r.i || 0) / r.t : 0;
+                      return (
+                        <tr key={r.name} className="hover:bg-orange-50 transition-colors group">
+                          <td className="td font-bold text-neutral-900">
+                            <button
+                              className="text-blue-600 hover:text-blue-800 hover:underline text-right w-full"
+                              onClick={() => setSelEmp(r)}
+                            >
+                              {r.name}
+                            </button>
+                          </td>
+                          <td className="td text-center font-bold text-green-700">{formatSAR(r.s)}</td>
+                          <td className="td text-center">{Math.round(r.t).toLocaleString()}</td>
+                          <td className="td text-center">{formatSAR(avgVal)}</td>
+                          <td className="td text-center font-semibold">{avgItems.toFixed(2)}</td>
+                          <td className="td text-center">
+                            <div className="flex items-center gap-2 justify-center">
+                              <div className="w-12 bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                                <div className="bg-orange-400 h-full" style={{ width: `${(r.s / shareVal) * 100}%` }}></div>
+                              </div>
+                              <span>{((r.s / shareVal) * 100).toFixed(0)}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden mt-6">
+              <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
+                <span>📅</span> تفاصيل الأيام ({details?.rangeLabel || '-'})
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="bg-neutral-800 text-white">
+                      <th className="th text-right">التاريخ</th>
+                      <th className="th text-center">المبيعات</th>
+                      <th className="th text-center">العام الماضي</th>
+                      <th className="th text-center">النمو %</th>
+                      <th className="th text-center">قيمة النمو</th>
+                      <th className="th text-center">الفواتير</th>
+                      <th className="th text-center">متوسط الفاتورة</th>
+                      <th className="th text-center">الزوار</th>
+                      <th className="th text-center">زوار (LY)</th>
+                      <th className="th text-center">التحويل %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100">
+                    {details?.dailyList.map((row) => (
+                      <tr key={row.date} className="hover:bg-neutral-50 transition-colors">
+                        <td className="td font-mono font-medium text-neutral-600">{row.date}</td>
+                        <td className="td text-center font-bold text-neutral-900">{formatSAR(row.sales)}</td>
+                        <td className="td text-center text-neutral-400">{formatSAR(row.prevSales)}</td>
+                        <td className={`td text-center font-bold ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%
+                        </td>
+                        <td className={`td text-center font-medium ${row.growthVal >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {formatSAR(row.growthVal)}
+                        </td>
+                        <td className="td text-center font-medium text-neutral-700">{Math.round(row.trans)}</td>
+                        <td className="td text-center font-medium text-neutral-700">{formatSAR(row.avgInv)}</td>
+                        <td className="td text-center font-medium text-neutral-700">{Math.round(row.visitors)}</td>
+                        <td className="td text-center text-neutral-400 font-medium">{Math.round(row.prevVisitors)}</td>
+                        <td className="td text-center font-bold text-orange-600">{row.conversion.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
-
       </div>
 
       {selEmp && (
@@ -526,9 +527,8 @@ function StoreDetailsModal({
           </div>
         </div>
       )}
-    </div>
-  </div>
-);
+    </>
+  );
 }
 
 export default function StoresPage() {
