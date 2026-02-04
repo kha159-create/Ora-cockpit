@@ -303,7 +303,7 @@ function StoreDetailsModal({
         growthVal: stats.sales - stats.prevSales,
         avgInv: stats.trans > 0 ? stats.sales / stats.trans : 0,
         conversion: stats.visitors > 0 ? (stats.trans / stats.visitors) * 100 : 0,
-        customerValue: stats.trans > 0 ? stats.sales / stats.trans : 0,
+        customerValue: stats.visitors > 0 ? stats.sales / stats.visitors : 0,
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
@@ -370,196 +370,165 @@ function StoreDetailsModal({
           <KPICard title="تحقيق الهدف" value={store.ach} format={(v) => `${v.toFixed(1)}% `} showProgress progressValue={store.ach} />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-8 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100">
-                <ProductValueAnalysis
-                  duvetKing={details?.valueAnalysis.duvetKing}
-                  duvetFull={details?.valueAnalysis.duvetFull}
-                  pillow={details?.valueAnalysis.pillow}
-                />
-              </div>
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 flex flex-col h-[600px]">
-                <MissedOpportunities data={details?.branchMissed || []} />
-              </div>
-            </div>
+        <div className="lg:col-span-12 space-y-6">
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden">
-              <h3 className="text-lg font-bold text-neutral-900 mb-4">أداء الموظفين ({details?.rangeLabel || '-'})</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="bg-neutral-50 text-neutral-500 uppercase text-[11px] tracking-wider">
-                      <th className="th text-right">الموظف</th>
-                      <th className="th text-center">المبيعات</th>
-                      <th className="th text-center">فواتير</th>
-                      <th className="th text-center">متوسط الفاتورة</th>
-                      <th className="th text-center">متوسط القطع</th>
-                      <th className="th text-center">مساهمة %</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-neutral-100">
-                    {details?.rangeList.map((r: any) => {
-                      const avgVal = r.t > 0 ? r.s / r.t : 0;
-                      const shareVal = (details?.rangeList.reduce((acc, x) => acc + x.s, 0) || 1);
-                      const avgItems = r.t > 0 ? (r.i || 0) / r.t : 0;
-                      return (
-                        <tr key={r.name} className="hover:bg-orange-50 transition-colors group">
-                          <td className="td font-bold text-neutral-900">
-                            <button
-                              className="text-blue-600 hover:text-blue-800 hover:underline text-right w-full"
-                              onClick={() => setSelEmp(r)}
-                            >
-                              {r.name}
-                            </button>
-                          </td>
-                          <td className="td text-center font-bold text-green-700">{formatSAR(r.s)}</td>
-                          <td className="td text-center">{Math.round(r.t).toLocaleString()}</td>
-                          <td className="td text-center">{formatSAR(avgVal)}</td>
-                          <td className="td text-center font-semibold">{avgItems.toFixed(2)}</td>
-                          <td className="td text-center">
-                            <div className="flex items-center gap-2 justify-center">
-                              <div className="w-12 bg-neutral-100 h-1.5 rounded-full overflow-hidden">
-                                <div className="bg-orange-400 h-full" style={{ width: `${(r.s / shareVal) * 100}% ` }}></div>
-                              </div>
-                              <span>{((r.s / shareVal) * 100).toFixed(0)}%</span>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden">
+            <h3 className="text-lg font-bold text-neutral-900 mb-4">أداء الموظفين ({details?.rangeLabel || '-'})</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-neutral-50 text-neutral-500 uppercase text-[11px] tracking-wider">
+                    <th className="th text-right">الموظف</th>
+                    <th className="th text-center">المبيعات</th>
+                    <th className="th text-center">فواتير</th>
+                    <th className="th text-center">متوسط الفاتورة</th>
+                    <th className="th text-center">متوسط القطع</th>
+                    <th className="th text-center">مساهمة %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {details?.rangeList.map((r: any) => {
+                    const avgVal = r.t > 0 ? r.s / r.t : 0;
+                    const shareVal = (details?.rangeList.reduce((acc, x) => acc + x.s, 0) || 1);
+                    const avgItems = r.t > 0 ? (r.i || 0) / r.t : 0;
+                    return (
+                      <tr key={r.name} className="hover:bg-orange-50 transition-colors group">
+                        <td className="td font-bold text-neutral-900">
+                          <button
+                            className="text-blue-600 hover:text-blue-800 hover:underline text-right w-full"
+                            onClick={() => setSelEmp(r)}
+                          >
+                            {r.name}
+                          </button>
+                        </td>
+                        <td className="td text-center font-bold text-green-700">{formatSAR(r.s)}</td>
+                        <td className="td text-center">{Math.round(r.t).toLocaleString()}</td>
+                        <td className="td text-center">{formatSAR(avgVal)}</td>
+                        <td className="td text-center font-semibold">{avgItems.toFixed(2)}</td>
+                        <td className="td text-center">
+                          <div className="flex items-center gap-2 justify-center">
+                            <div className="w-12 bg-neutral-100 h-1.5 rounded-full overflow-hidden">
+                              <div className="bg-orange-400 h-full" style={{ width: `${(r.s / shareVal) * 100}% ` }}></div>
                             </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden mt-6">
-              <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
-                <span>📅</span> تفاصيل الأيام ({details?.rangeLabel || '-'})
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="bg-neutral-800 text-white">
-                      <th className="th text-right">التاريخ</th>
-                      <th className="th text-center">المبيعات</th>
-                      <th className="th text-center">العام الماضي</th>
-                      <th className="th text-center">النمو %</th>
-                      <th className="th text-center">قيمة النمو</th>
-                      <th className="th text-center">الفواتير</th>
-                      <th className="th text-center">متوسط الفاتورة</th>
-                      <th className="th text-center">الزوار</th>
-                      <th className="th text-center">زوار (LY)</th>
-                      <th className="th text-center">التحويل %</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-neutral-100">
-                    {details?.dailyList.map((row) => (
-                      <tr key={row.date} className="hover:bg-neutral-50 transition-colors">
-                        <td className="td font-mono font-medium text-neutral-600">{row.date}</td>
-                        <td className="td text-center font-bold text-neutral-900">{formatSAR(row.sales)}</td>
-                        <td className="td text-center text-neutral-400">{formatSAR(row.prevSales)}</td>
-                        <td className={`td text-center font-bold ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                          {row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%
+                            <span>{((r.s / shareVal) * 100).toFixed(0)}%</span>
+                          </div>
                         </td>
-                        <td className={`td text-center font-medium ${row.growthVal >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                          {formatSAR(row.growthVal)}
-                        </td>
-                        <td className="td text-center font-medium text-neutral-700">{Math.round(row.trans)}</td>
-                        <td className="td text-center font-medium text-neutral-700">{formatSAR(row.avgInv)}</td>
-                        <td className="td text-center font-medium text-neutral-700">{Math.round(row.visitors)}</td>
-                        <td className="td text-center text-neutral-400 font-medium">{Math.round(row.prevVisitors)}</td>
-                        <td className="td text-center font-bold text-orange-600">{row.conversion.toFixed(1)}%</td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <div className="lg:col-span-4 space-y-4">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-200">
-              <div className="flex items-center gap-2 text-sm font-bold text-neutral-800 mb-6">
-                <div className="text-orange-500 w-5 h-5"><FireIcon /></div>
-                <span>جودة الأداء (مقارنة)</span>
-              </div>
-
-              <div className="space-y-4">
-                <div className="bg-neutral-50 px-4 py-3 rounded-xl border border-neutral-100">
-                  <div className="text-xs font-semibold text-neutral-500 mb-1">معدل الفاتورة</div>
-                  <div className="flex items-end justify-between">
-                    <div className="text-xl font-bold text-neutral-900">{formatSAR(store.avgInv)}</div>
-                    <div className="text-[10px] text-neutral-400 font-medium">متوسط القطع العام: {formatSAR(280)}</div>
-                  </div>
-                </div>
-
-                <div className="bg-neutral-50 px-4 py-3 rounded-xl border border-neutral-100">
-                  <div className="text-xs font-semibold text-neutral-500 mb-1">متوسط القطع (Items/Inv)</div>
-                  <div className="flex items-end justify-between">
-                    <div className="text-xl font-bold text-neutral-900">{(details?.avgItemsStore || 0).toFixed(2)}</div>
-                    <div className="text-[10px] text-neutral-400 font-medium">متوسط القطع العام: 2.15</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-6 rounded-2xl text-white shadow-lg">
-              <div className="text-sm font-medium opacity-80 mb-1">مساهمة الفرع</div>
-              <div className="text-3xl font-bold mb-4">{(store.val > 0 ? 100 : 0).toFixed(1)}%</div>
-              <div className="text-xs opacity-90 leading-relaxed font-arabic">
-                الفرع يحقق حالياً نسبة أداء {store.ach.toFixed(1)}% من الهدف المرصود للشهر الحالي.
-              </div>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden mt-6">
+            <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
+              <span>📅</span> تفاصيل الأيام ({details?.rangeLabel || '-'})
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-neutral-800 text-white">
+                    <th className="th text-right">التاريخ</th>
+                    <th className="th text-center">المبيعات</th>
+                    <th className="th text-center">العام الماضي</th>
+                    <th className="th text-center">النمو %</th>
+                    <th className="th text-center">قيمة النمو</th>
+                    <th className="th text-center">الفواتير</th>
+                    <th className="th text-center">متوسط الفاتورة</th>
+                    <th className="th text-center">الزوار</th>
+                    <th className="th text-center">زوار (LY)</th>
+                    <th className="th text-center">التحويل %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {details?.dailyList.map((row) => (
+                    <tr key={row.date} className="hover:bg-neutral-50 transition-colors">
+                      <td className="td font-mono font-medium text-neutral-600">{row.date}</td>
+                      <td className="td text-center font-bold text-neutral-900">{formatSAR(row.sales)}</td>
+                      <td className="td text-center text-neutral-400">{formatSAR(row.prevSales)}</td>
+                      <td className={`td text-center font-bold ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        {row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%
+                      </td>
+                      <td className={`td text-center font-medium ${row.growthVal >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        {formatSAR(row.growthVal)}
+                      </td>
+                      <td className="td text-center font-medium text-neutral-700">{Math.round(row.trans)}</td>
+                      <td className="td text-center font-medium text-neutral-700">{formatSAR(row.avgInv)}</td>
+                      <td className="td text-center font-medium text-neutral-700">{Math.round(row.visitors)}</td>
+                      <td className="td text-center text-neutral-400 font-medium">{Math.round(row.prevVisitors)}</td>
+                      <td className="td text-center font-bold text-orange-600">{row.conversion.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
 
-        {selEmp && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setSelEmp(null)}>
-            <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 md:p-8 shadow-2xl" onClick={e => e.stopPropagation()}>
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-neutral-900">{selEmp.name}</h2>
-                  <p className="text-neutral-500 text-sm mt-1">تـحليل أداء الموظف التفصيلي</p>
-                </div>
-                <button onClick={() => setSelEmp(null)} className="p-2 hover:bg-neutral-100 rounded-full transition-colors">
-                  <XIcon />
-                </button>
-              </div>
+      </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-8">
-                <div className="p-4 bg-green-50 rounded-2xl border border-green-100">
-                  <div className="text-[10px] font-bold text-green-600 uppercase mb-1">المبيعات</div>
-                  <div className="text-xl font-bold text-green-800">{formatSAR(selEmp.s)}</div>
-                </div>
-                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                  <div className="text-[10px] font-bold text-blue-600 uppercase mb-1">الفواتير</div>
-                  <div className="text-xl font-bold text-blue-800">{selEmp.t}</div>
-                </div>
+      {selEmp && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setSelEmp(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 md:p-8 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-neutral-900">{selEmp.name}</h2>
+                <p className="text-neutral-500 text-sm mt-1">تـحليل أداء الموظف التفصيلي</p>
               </div>
+              <button onClick={() => setSelEmp(null)} className="p-2 hover:bg-neutral-100 rounded-full transition-colors">
+                <XIcon />
+              </button>
+            </div>
 
-              <div className="space-y-8">
-                <div>
-                  <ProductValueAnalysis
-                    duvetKing={runProductValueAnalysis({ catalog: details?.catalog, storeId: store.sid }).duvetKing}
-                    duvetFull={runProductValueAnalysis({ catalog: details?.catalog, storeId: store.sid }).duvetFull}
-                    pillow={runProductValueAnalysis({ catalog: details?.catalog, storeId: store.sid }).pillow}
-                    title="تحليل مبيعات الأصناف للموظف"
-                  />
-                  <p className="text-[10px] text-neutral-400 mt-2 italic">* ملاحظة: التحليل مبني على مستوى المعرض الحالي للموظف.</p>
-                </div>
+            <div className="grid grid-cols-2 gap-4 mb-8">
+              <div className="p-4 bg-green-50 rounded-2xl border border-green-100">
+                <div className="text-[10px] font-bold text-green-600 uppercase mb-1">المبيعات</div>
+                <div className="text-xl font-bold text-green-800">{formatSAR(selEmp.s)}</div>
               </div>
-
-              <div className="mt-8 pt-6 border-t flex justify-end">
-                <button className="btn-secondary w-full md:w-auto" onClick={() => setSelEmp(null)}>إغلاق النافذة</button>
+              <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                <div className="text-[10px] font-bold text-blue-600 uppercase mb-1">الفواتير</div>
+                <div className="text-xl font-bold text-blue-800">{selEmp.t}</div>
               </div>
             </div>
+
+            <div className="space-y-8">
+              <div>
+                <h3 className="text-lg font-bold text-neutral-900 mb-4 pb-2 border-b flex items-center gap-2">
+                  <span>🛒</span> تحلیل مبيعات الأصناف للموظف
+                </h3>
+                <ProductValueAnalysis
+                  duvetKing={runProductValueAnalysis({ catalog: details?.catalog, storeId: store.sid }).duvetKing}
+                  duvetFull={runProductValueAnalysis({ catalog: details?.catalog, storeId: store.sid }).duvetFull}
+                  pillow={{
+                    breakdown: [
+                      ...(runProductValueAnalysis({ catalog: details?.catalog, storeId: store.sid }).pillow?.breakdown || [])
+                    ]
+                  }}
+                  title="تحليل مبيعات الأصناف"
+                />
+                <p className="text-[10px] text-neutral-400 mt-2 italic">* ملاحظة: التحليل مبني على مستوى المعرض الحالي للموظف.</p>
+              </div>
+
+              <div className="bg-neutral-50 p-6 rounded-2xl border border-neutral-100">
+                <h3 className="text-lg font-bold text-neutral-900 mb-4 pb-2 border-b flex items-center gap-2">
+                  <span>📉</span> الفرص الضائعة للموظف
+                </h3>
+                <div className="h-[400px] overflow-auto">
+                  <MissedOpportunities data={details?.branchMissed || []} />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 pt-6 border-t flex justify-end">
+              <button className="btn-secondary w-full md:w-auto" onClick={() => setSelEmp(null)}>إغلاق النافذة</button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
-  );
+  </div >
+);
 }
 
 export default function StoresPage() {
@@ -698,22 +667,21 @@ export default function StoresPage() {
       const growthVal = val - prevValVal;
       const growth = prevValVal > 0 ? (growthVal / prevValVal) * 100 : 0;
       const ach = targetVal > 0 ? (val / targetVal) * 100 : 0;
-      const avgInv = transVal > 0 ? val / transVal : 0;
       const conversion = visitorsVal > 0 ? (transVal / visitorsVal) * 100 : 0;
-      const customerValue = transVal > 0 ? val / transVal : 0;
+      const customerValue = visitorsVal > 0 ? val / visitorsVal : 0;
+      const avgInv = transVal > 0 ? val / transVal : 0;
 
       const todayNow = new Date();
       const daysInM = new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0).getDate();
       const remDays = daysInM - todayNow.getDate() + 1;
       const dailyReq = remDays > 0 && targetVal > val ? (targetVal - val) / remDays : 0;
 
-      const m = meta[sid] || {};
       list.push({
         sid,
         name: stores[sid] || sid,
-        manager: String(m?.manager || ''),
-        city: String(m?.city || ''),
-        type: String(m?.type || ''),
+        manager: meta[sid]?.manager || '-',
+        city: meta[sid]?.city || '-',
+        type: meta[sid]?.type || '-',
         val,
         prevVal: prevValVal,
         target: targetVal,

@@ -87,10 +87,27 @@ export default function OffersPage() {
   const offers = useMemo(() => {
     const suf = periodSuf;
     let list = rawOffers.map((o: any) => {
-      // Map dynamic period properties to standard names for easier consumption
-      const sales = Number(o[`s_${suf}`] ?? o.filteredSales ?? o.sales ?? o.total_sales ?? 0) || 0;
-      const discount = Number(o[`d_${suf}`] ?? o.discount ?? o.total_discount ?? 0) || 0;
-      const ops = Number(o[`t_${suf}`] ?? o.operations ?? o.transactions ?? o.count ?? 0) || 0;
+      let sales = 0;
+      let discount = 0;
+      let ops = 0;
+
+      const storeData = o.stores || {};
+      Object.keys(storeData).forEach(sid => {
+        if (allowedStoreIds.has(String(sid))) {
+          const sObj = storeData[sid] || {};
+          sales += Number(sObj[`s_${suf}`] ?? 0);
+          discount += Number(sObj[`d_${suf}`] ?? 0);
+          ops += Number(sObj[`t_${suf}`] ?? 0);
+        }
+      });
+
+      // Fallback for global totals if no store breakdown exists (legacy structure)
+      if (sales === 0 && ops === 0) {
+        sales = Number(o[`s_${suf}`] ?? o.filteredSales ?? o.sales ?? o.total_sales ?? 0) || 0;
+        discount = Number(o[`d_${suf}`] ?? o.discount ?? o.total_discount ?? 0) || 0;
+        ops = Number(o[`t_${suf}`] ?? o.operations ?? o.transactions ?? o.count ?? 0) || 0;
+      }
+
       const eff = sales > 0 ? (sales / (sales + discount)) * 100 : 100;
 
       return {
@@ -101,11 +118,9 @@ export default function OffersPage() {
         dispEff: eff
       };
     }).filter((o: any) => {
-      const sid = o.store_id ?? o.storeId ?? o.store;
-      if (allowedStoreIds.size > 0 && sid != null && sid !== '' && !allowedStoreIds.has(String(sid))) return false;
       if (statusFilter === 'Enabled' && (o.status === 'Disabled' || o.enabled === false)) return false;
       if (statusFilter === 'Disabled' && (o.status !== 'Disabled' && o.enabled !== false)) return false;
-      return true;
+      return o.dispSales > 0 || o.dispOps > 0;
     });
     return list;
   }, [rawOffers, allowedStoreIds, statusFilter, periodSuf]);
@@ -161,8 +176,8 @@ export default function OffersPage() {
                 type="button"
                 onClick={() => setPeriod(key)}
                 className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${period === key
-                    ? 'bg-orange-500 text-white border-orange-500 shadow-md'
-                    : 'bg-white text-neutral-700 border-neutral-200 hover:bg-orange-50 hover:border-orange-200'
+                  ? 'bg-orange-500 text-white border-orange-500 shadow-md'
+                  : 'bg-white text-neutral-700 border-neutral-200 hover:bg-orange-50 hover:border-orange-200'
                   }`}
               >
                 {key === 'mtd' && '📅 '}

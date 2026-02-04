@@ -85,6 +85,9 @@ export default function ReportsPage() {
   const [excelRangeStart, setExcelRangeStart] = useState('');
   const [excelRangeEnd, setExcelRangeEnd] = useState('');
 
+  // Print States
+  const [printData, setPrintData] = useState<{ type: 'stores' | 'employees'; title: string; rows: any[]; range: string } | null>(null);
+
   const originalReports = [
     { id: 'yesterday_store', name: 'تقرير مبيعات الأمس (المعارض)', type: 'pdf', icon: '🏪', desc: 'مقارنة مبيعات الأمس بالسنة الماضية والأهداف' },
     { id: 'yesterday_employee', name: 'أداء الموظفين (الأمس)', type: 'pdf', icon: '👤', desc: 'مبيعات الموظفين يوم أمس وتغطية الأهداف' },
@@ -238,8 +241,75 @@ export default function ReportsPage() {
       else exportEmployeeExcel();
       setShowExcelModal(false);
     } finally {
-      setExcelExporting(false);
+      setTimeout(() => { // Added setTimeout here
+        setExcelExporting(false);
+      }, 1000);
     }
+  };
+
+  const handlePdfGeneration = (type: 'yesterday_store' | 'yesterday_employee' | 'monthly_summary') => {
+    if (!rawMgmt) return;
+    const { start, end } = range;
+    let title = '';
+    let rows: any[] = [];
+
+    if (type === 'yesterday_store' || type === 'monthly_summary') {
+      title = type === 'yesterday_store' ? `تقرير المعارض - أمس (${range.start})` : `الملخص الشهري للمعارض (${range.start} إلى ${range.end})`;
+      const dataMap: Record<string, any> = {};
+      (rawMgmt.sales || []).forEach(([d, s, v]: any[]) => {
+        if (inRange(d) && passFilter(s)) {
+          if (!dataMap[s]) dataMap[s] = { name: rawMgmt.stores?.[s] || s, sales: 0, trans: 0, visitors: 0, target: 0 };
+          dataMap[s].sales += v || 0;
+        }
+      });
+      (rawMgmt.transactions || []).forEach(([d, s, v]: any[]) => {
+        if (inRange(d) && passFilter(s) && dataMap[s]) dataMap[s].trans += v || 0;
+      });
+      (rawMgmt.visitors || []).forEach(([d, s, v]: any[]) => {
+        if (inRange(d) && passFilter(s) && dataMap[s]) dataMap[s].visitors += v || 0;
+      });
+      (rawMgmt.targets || []).forEach(([d, s, v]: any[]) => {
+        if (inRange(d) && passFilter(s) && dataMap[s]) dataMap[s].target += v || 0;
+      });
+      rows = Object.values(dataMap).map(r => ({
+        ...r,
+        avgInv: r.trans > 0 ? r.sales / r.trans : 0,
+        ach: r.target > 0 ? (r.sales / r.target) * 100 : 0,
+        conversion: r.visitors > 0 ? (r.trans / r.visitors) * 100 : 0
+      })).sort((a, b) => b.sales - a.sales);
+
+      setPrintData({ type: 'stores', title, rows, range: `${start} إلى ${end}` }); // Updated range format
+    } else if (type === 'yesterday_employee') {
+      title = `أداء الموظفين (${range.start})`;
+      const history = rawEmp?.history || {};
+      const names = rawEmp?.employee_names || {};
+      const empData: Record<string, any> = {};
+      const selectedIdsArray = Array.from(selectedEmpIds); // Use selectedEmpIds for filtering
+
+      Object.entries(history).forEach(([sid, recs]: [string, any]) => {
+        if (!passFilter(sid)) return;
+        recs.forEach((rec: any[]) => {
+          if (inRange(rec[0])) {
+            const rawId = String(rec[1] || '').split('-')[0].trim();
+            const id = rawId.padStart(4, '0');
+            if (rawId === 'مرتجع') return;
+            // Only include if employee is selected (if yesterday_employee report is triggered via selection modal)
+            if (selectedIdsArray.length > 0 && !selectedIdsArray.includes(id)) return;
+
+            if (!empData[id]) empData[id] = { id, name: names[id] || rawId, sales: 0, trans: 0, store: rawMgmt.stores?.[sid] || sid };
+            empData[id].sales += Number(rec[2]) || 0;
+            empData[id].trans += Number(rec[3]) || 0;
+          }
+        });
+      });
+      rows = Object.values(empData).sort((a, b) => b.sales - a.sales);
+      setPrintData({ type: 'employees', title, rows, range: `${start} إلى ${end}` }); // Updated range format
+    }
+
+    setTimeout(() => {
+      window.print();
+      setPrintData(null);
+    }, 500);
   };
 
   const openReportChoice = (type: 'pdf' | 'excel') => {
@@ -253,13 +323,9 @@ export default function ReportsPage() {
       return;
     }
 
-    // التواصل مع المستخدم حول كيفية إصدار الـ PDF
-    const msg = `سيتم إصدار تقرير (${reportId === 'dashboard' ? 'لوحة التحكم' : reportId}) بصيغة PDF بناءً على الفلاتر المختارة:
-الفترة: ${range.start} إلى ${range.end}
-الفرع: ${branch === 'all' ? 'الكل' : branch}
-
-جاري معالجة البيانات وتحويلها إلى PDF...`;
-    alert(msg);
+    // Directly call handlePdfGeneration for other PDF reports
+    const reportType = reportId === 'dashboard' ? 'monthly_summary' : reportId as 'yesterday_store' | 'monthly_summary';
+    handlePdfGeneration(reportType);
   };
 
   const allEmployees = useMemo(() => {
@@ -473,7 +539,15 @@ export default function ReportsPage() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
           {originalReports.map((repo) => (
-            <div key={repo.id} className="p-4 rounded-xl border border-neutral-100 bg-neutral-50 hover:bg-white hover:shadow-md transition-all cursor-pointer group" onClick={() => repo.type === 'pdf' ? openPdfLegacy(repo.id) : alert('سيتم تصدير ملف الإكسل الخاص بهذا التقرير قريباً')}>
+            <div key={repo.id} className="p-4 rounded-xl border border-neutral-100 bg-neutral-50 hover:bg-white hover:shadow-md transition-all cursor-pointer group"
+              onClick={() => {
+                if (repo.type === 'excel') {
+                  setExcelType(repo.id.includes('employee') ? 'employee' : 'store'); // Assuming 'stagnant_items' and 'market_basket' are store-related
+                  setShowExcelModal(true);
+                } else { // PDF reports
+                  openPdfLegacy(repo.id); // Use openPdfLegacy which now calls handlePdfGeneration
+                }
+              }}>
               <div className="flex items-start gap-3">
                 <div className="text-3xl">{repo.icon}</div>
                 <div className="flex-1">
@@ -500,12 +574,26 @@ export default function ReportsPage() {
               <div className="space-y-2">
                 <button
                   type="button"
-                  onClick={() => openPdfLegacy('dashboard')}
+                  onClick={() => { setShowReportChoiceModal(false); handlePdfGeneration('monthly_summary'); }} // Dashboard
                   className="w-full py-3 px-4 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600"
                 >
-                  فتح صفحة تصدير PDF (لوحة التحكم، أمس للمعارض، أمس للموظفين)
+                  لوحة التحكم (PDF)
                 </button>
-                <p className="text-sm text-neutral-500">ستفتح نافذة جديدة لتصدير PDF باستخدام الفلاتر الحالية.</p>
+                <button
+                  type="button"
+                  onClick={() => { setShowReportChoiceModal(false); handlePdfGeneration('yesterday_store'); }} // Yesterday Store
+                  className="w-full py-3 px-4 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600"
+                >
+                  مبيعات الأمس للمعارض (PDF)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowReportChoiceModal(false); setShowEmpSelectModal(true); }} // Yesterday Employee
+                  className="w-full py-3 px-4 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600"
+                >
+                  أداء الموظفين (PDF)
+                </button>
+                <p className="text-sm text-neutral-500">سيتم إنشاء تقرير PDF باستخدام الفلاتر الحالية.</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -641,8 +729,12 @@ export default function ReportsPage() {
             <div className="p-4 bg-neutral-50 border-t border-neutral-200 flex justify-end gap-3">
               <button type="button" onClick={() => setShowEmpSelectModal(false)} className="btn-secondary px-6 font-bold">إلغاء</button>
               <button type="button" className="btn-primary px-8 font-bold flex items-center gap-2 bg-green-600 hover:bg-green-700" onClick={() => {
-                alert('جاري إنشاء تقرير لـ ' + selectedEmpIds.size + ' موظف...');
+                if (selectedEmpIds.size === 0) {
+                  alert('الرجاء اختيار موظف واحد على الأقل.');
+                  return;
+                }
                 setShowEmpSelectModal(false);
+                handlePdfGeneration('yesterday_employee');
               }}>
                 📊 إنشاء التقرير
               </button>
@@ -703,6 +795,79 @@ export default function ReportsPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Print-only View */}
+      {printData && (
+        <div className="fixed inset-0 bg-white z-[9999] p-8 overflow-y-auto print-view" dir="rtl">
+          <div className="flex justify-between items-center border-b-4 border-orange-600 pb-4 mb-6">
+            <div>
+              <h1 className="text-3xl font-black text-neutral-900">{printData.title}</h1>
+              <p className="text-neutral-500 font-bold mt-1">الفترة: {printData.range} | استخرج بواسطة: {user?.name}</p>
+            </div>
+            <div className="text-left">
+              <div className="text-2xl font-black text-orange-600 italic">ORA COCKPIT</div>
+              <div className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">Business Intelligence Report</div>
+            </div>
+          </div>
+
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-neutral-900 text-white print:bg-neutral-900 border-b-2 border-orange-600">
+                <th className="p-3 text-right">#</th>
+                <th className="p-3 text-right">{printData.type === 'stores' ? 'المعرض' : 'الموظف'}</th>
+                {printData.type === 'stores' && <th className="p-3 text-center">الهدف</th>}
+                <th className="p-3 text-center">المبيعات</th>
+                <th className="p-3 text-center">الفواتير</th>
+                <th className="p-3 text-center">متوسط الفاتورة</th>
+                {printData.type === 'stores' && <th className="p-3 text-center">التحويل %</th>}
+                {printData.type === 'stores' && <th className="p-3 text-center">التحقيق %</th>}
+                {printData.type === 'employees' && <th className="p-3 text-center">المعرض</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {printData.rows.map((row, idx) => (
+                <tr key={idx} className="border-b border-neutral-200 hover:bg-neutral-50 even:bg-neutral-50">
+                  <td className="p-3 text-neutral-500 font-bold">{idx + 1}</td>
+                  <td className="p-3 font-black text-neutral-900">{row.name}</td>
+                  {printData.type === 'stores' && <td className="p-3 text-center font-mono">{formatSAR(row.target)}</td>}
+                  <td className="p-3 text-center font-black text-green-700 font-mono">{formatSAR(row.sales)}</td>
+                  <td className="p-3 text-center font-bold text-neutral-700">{row.trans}</td>
+                  <td className="p-3 text-center font-bold text-neutral-900 font-mono">{formatSAR(row.avgInv || (row.trans > 0 ? row.sales / row.trans : 0))}</td>
+                  {printData.type === 'stores' && <td className="p-3 text-center font-black text-orange-600">{(row.conversion || 0).toFixed(1)}%</td>}
+                  {printData.type === 'stores' && (
+                    <td className="p-3 text-center">
+                      <span className={`font-black ${row.ach >= 100 ? 'text-green-600' : 'text-orange-600'}`}>
+                        {(row.ach || 0).toFixed(1)}%
+                      </span>
+                    </td>
+                  )}
+                  {printData.type === 'employees' && <td className="p-3 text-center text-neutral-600 font-medium">{row.store}</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="mt-8 pt-6 border-t border-neutral-100 flex justify-between items-center text-[10px] text-neutral-400 font-bold uppercase">
+            <div>Generated on {new Date().toLocaleString()}</div>
+            <div>Copyright &copy; {new Date().getFullYear()} ORA Cockpit</div>
+          </div>
+
+          <style dangerouslySetInnerHTML={{
+            __html: `
+            @media print {
+              @page { size: A4; margin: 1cm; }
+              body * { visibility: hidden; }
+              .print-view, .print-view * { visibility: visible; }
+              .print-view { position: absolute; left: 0; top: 0; width: 100%; border: none; padding: 0; }
+              .bg-neutral-900 { background-color: #171717 !important; -webkit-print-color-adjust: exact; }
+              .text-white { color: white !important; }
+              .text-green-700 { color: #15803d !important; }
+              .text-orange-600 { color: #ea580c !important; }
+              .bg-neutral-50 { background-color: #fafafa !important; }
+            }
+          ` }} />
         </div>
       )}
     </div>

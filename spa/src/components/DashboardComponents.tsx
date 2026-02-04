@@ -52,7 +52,7 @@ const CircularProgress: React.FC<{ percentage: number; size?: number }> = ({ per
           }}
         />
       </svg>
-      <div className="circular-progress-text">{Math.round(percentage)}%</div>
+      <div className="circular-progress-text text-neutral-900 font-bold">{Math.round(percentage)}%</div>
     </div>
   );
 };
@@ -176,11 +176,14 @@ export const KPICard: React.FC<{
               </div>
             )}
 
-            {/* شريط التقدم */}
             {showProgress && (
               <div className="flex items-center gap-3">
                 <CircularProgress percentage={progressValue} size={50} />
-                <div className="text-xs text-gray-500">التقدم: {Math.round(progressValue)}%</div>
+                <div className="text-xs font-bold text-neutral-900">
+                  {comparisonValue !== undefined && (
+                    <span>{format ? format(value) : value.toLocaleString()} / {format ? format(comparisonValue) : comparisonValue.toLocaleString()}</span>
+                  )}
+                </div>
               </div>
             )}
 
@@ -219,7 +222,7 @@ export type RankMetric = { key: string; label: string };
 export const RankCard: React.FC<{
   title: string;
   metrics: RankMetric[];
-  data: { name: string;[key: string]: number }[];
+  data: { name: string;[key: string]: string | number }[];
   format?: (val: number, metricKey?: string) => string;
   maxItems?: number;
 }> = ({ title, metrics, data, format = (v) => v.toLocaleString(), maxItems = 10 }) => {
@@ -227,10 +230,10 @@ export const RankCard: React.FC<{
   const key = metric || metrics[0]?.key;
   const list = useMemo(() => {
     if (!key || !data.length) return [];
-    const sorted = [...data].sort((a, b) => (b[key] ?? 0) - (a[key] ?? 0));
+    const sorted = [...data].sort((a, b) => (Number(b[key] || 0)) - (Number(a[key] || 0)));
     return sorted.slice(0, maxItems);
   }, [data, key, maxItems]);
-  const maxVal = useMemo(() => (list.length ? Math.max(...list.map((i) => i[key] ?? 0), 1) : 1), [list, key]);
+  const maxVal = useMemo(() => (list.length ? Math.max(...list.map((i) => Number(i[key] || 0)), 1) : 1), [list, key]);
 
   return (
     <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-5 h-full flex flex-col identity-card">
@@ -253,7 +256,7 @@ export const RankCard: React.FC<{
       {/* توب 10: الرقم على اليسار، الاسم على اليمين، الشريط والأرقام متناسقين مع حجم البطاقة */}
       <div className="flex-grow space-y-4 overflow-auto min-h-0">
         {list.map((item, idx) => {
-          const value = item[key] ?? 0;
+          const value = Number(item[key] || 0);
           const pct = maxVal > 0 ? (value / maxVal) * 100 : 0;
           return (
             <div key={`${item.name}-${idx}`} className="flex items-center gap-4 flex-row-reverse">
@@ -751,13 +754,13 @@ export const ProductValueAnalysis: React.FC<{
   duvetFull?: { breakdown: any[] };
   pillow?: { breakdown: any[] };
   title?: string;
-}> = ({ duvetKing, duvetFull, pillow, title = 'تحليل المبيعات حسب السعر (Sales Analysis by Value)' }) => (
+}> = ({ duvetKing, duvetFull, pillow, title = 'تحليل مبيعات الأصناف (Product Analysis)' }) => (
   <div className="space-y-6">
     <h3 className="text-lg font-bold text-neutral-800 border-b pb-2 mb-4">{title}</h3>
 
     {duvetKing && duvetKing.breakdown.length > 0 && (
       <div>
-        <h4 className="text-sm font-bold text-neutral-800 mb-2 pb-1 border-b">ألحفة (King)</h4>
+        <h4 className="text-sm font-bold text-neutral-800 mb-2 pb-1 border-b">لحافات كينج</h4>
         <div className="space-y-2">
           {duvetKing.breakdown.map((it) => (
             <div key={it.name}>
@@ -776,7 +779,7 @@ export const ProductValueAnalysis: React.FC<{
 
     {duvetFull && duvetFull.breakdown.length > 0 && (
       <div className="pt-2">
-        <h4 className="text-sm font-bold text-neutral-800 mb-2 pb-1 border-b">ألحفة (Full)</h4>
+        <h4 className="text-sm font-bold text-neutral-800 mb-2 pb-1 border-b">لحافات فل</h4>
         <div className="space-y-2">
           {duvetFull.breakdown.map((it) => (
             <div key={it.name}>
@@ -795,7 +798,7 @@ export const ProductValueAnalysis: React.FC<{
 
     {pillow && pillow.breakdown.length > 0 && (
       <div className="pt-2">
-        <h4 className="text-sm font-bold text-neutral-800 mb-2 pb-1 border-b">وسائد (Pillows)</h4>
+        <h4 className="text-sm font-bold text-neutral-800 mb-2 pb-1 border-b">مخدات</h4>
         <div className="space-y-2">
           {pillow.breakdown.map((it) => (
             <div key={it.name}>

@@ -129,21 +129,21 @@ export default function ProductsPage() {
 
   // --- Helpers for price categorization ---
   const getSmartDuvetCategories = () => ({
-    low: { min: 99, max: 300, label: 'Low Value (99-300)' },
-    medium: { min: 301, max: 600, label: 'Medium Value (301-600)' },
-    high: { min: 601, max: Infinity, label: 'High Value (600+)' }
+    low: { min: 99, max: 400, label: 'Standard (99-400)' },
+    medium: { min: 401, max: 700, label: 'Premium (401-700)' },
+    high: { min: 701, max: Infinity, label: 'Luxury (700+)' }
   });
 
   const getSmartDuvetFullCategories = () => ({
-    low: { min: 99, max: 300, label: 'Low Value (99-300)' },
-    medium: { min: 301, max: 499, label: 'Medium Value (301-499)' },
-    high: { min: 500, max: Infinity, label: 'High Value (500+)' }
+    low: { min: 99, max: 350, label: 'Standard (99-350)' },
+    medium: { min: 351, max: 550, label: 'Premium (351-550)' },
+    high: { min: 551, max: Infinity, label: 'Luxury (550+)' }
   });
 
   const getSmartPillowCategories = () => ({
-    low: { min: 39, max: 99, label: 'Low Value (39-99)' },
-    medium: { min: 100, max: 189, label: 'Medium Value (100-189)' },
-    high: { min: 190, max: Infinity, label: 'High Value (190+)' }
+    low: { min: 39, max: 120, label: 'Economy (39-120)' },
+    medium: { min: 121, max: 250, label: 'Comfort (121-250)' },
+    high: { min: 251, max: Infinity, label: 'Premium (250+)' }
   });
 
   const effectiveManager = useMemo(() => {
@@ -313,19 +313,6 @@ export default function ProductsPage() {
     // ===== Market basket =====
     const basket = activeStore === 'all' ? (marketBasketAll['all'] || []) : (marketBasketAll[activeStore] || []);
 
-    // ===== Missed opportunities =====
-    let missedList: any[] = [];
-    if (activeStore === 'all') {
-      Object.entries(missedByStore).forEach(([sid, rows]) => {
-        if (!storeInScope(sid)) return;
-        missedList = missedList.concat(rows || []);
-      });
-      missedList.sort((a, b) => safeNum(b.total_count) - safeNum(a.total_count));
-      missedList = missedList.slice(0, 100);
-    } else {
-      missedList = missedByStore[activeStore] || [];
-    }
-
     // ===== Product details =====
     const selectedHistory = productId ? (dailyHistory[productId] || []) : [];
     const selectedPairs = (() => {
@@ -390,7 +377,6 @@ export default function ProductsPage() {
       catalogCategories: Object.keys(catalog).sort((a, b) => a.localeCompare(b, 'ar')),
       filteredCatalog,
       basket,
-      missedList,
       selectedHistory,
       selectedPairs,
       storesMap,
@@ -732,61 +718,13 @@ export default function ProductsPage() {
         </div>
       </ChartCard>
 
-      {/* Missed opportunities */}
-      <ChartCard title="❗ فرص ضائعة (Missed Opportunities)">
-        <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead>
-              <tr>
-                <th className="th text-center w-[60px]">#</th>
-                <th className="th">الموظف</th>
-                <th className="th">المنتج المباع</th>
-                <th className="th">المنتجات المفقودة</th>
-                <th className="th text-center">Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              {derived.missedList.map((r: any, i: number) => {
-                const missed = Array.isArray(r.missed_items) ? [...r.missed_items].sort((a, b) => safeNum(b.count) - safeNum(a.count)) : [];
-                const top = missed[0];
-                const others = missed.length - 1;
-                return (
-                  <tr
-                    key={`${r.employee_id}-${i}`}
-                    className="hover:bg-orange-50 cursor-pointer"
-                    onClick={() => {
-                      setMissedRow({ ...r, missed_items: missed });
-                      setMissedOpen(true);
-                    }}
-                  >
-                    <td className="td text-center text-neutral-500">{i + 1}</td>
-                    <td className="td">
-                      <div className="font-bold text-neutral-900">{r.employee_name}</div>
-                      <div className="font-mono text-xs text-neutral-500">{r.employee_id}</div>
-                    </td>
-                    <td className="td text-green-700 font-semibold">{r.sold_item}</td>
-                    <td className="td text-red-700">
-                      <span className="font-semibold">{top?.name || '-'}</span>
-                      {others > 0 && <span className="text-xs text-neutral-500 ms-2">+{others} أخرى</span>}
-                    </td>
-                    <td className="td text-center font-extrabold text-orange-700">{Math.round(safeNum(r.total_count)).toLocaleString()}</td>
-                  </tr>
-                );
-              })}
-              {derived.missedList.length === 0 && (
-                <tr>
-                  <td className="td text-center text-neutral-500" colSpan={5}>
-                    لا توجد بيانات (أو فرص ضائعة) لهذا النطاق.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </ChartCard>
-
       {/* Catalog modal */}
-      <Modal open={catalogOpen} onClose={() => setCatalogOpen(false)} title="📂 تصفح الأقسام" maxWidthClass="max-w-6xl">
+      <Modal
+        open={catalogOpen}
+        onClose={() => setCatalogOpen(false)}
+        title="📂 تصفح الأقسام"
+        maxWidthClass="max-w-6xl"
+      >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-1">
             <div className="text-sm font-semibold text-neutral-700 mb-2">الأقسام</div>
@@ -850,11 +788,11 @@ export default function ProductsPage() {
               <div className="text-xs text-neutral-500 mt-2">عرضنا أول 100 منتج فقط داخل نافذة التصفح.</div>
             )}
           </div>
-        </div>
-      </Modal>
+        </div >
+      </Modal >
 
       {/* Product details modal */}
-      <Modal
+      < Modal
         open={productOpen && !!productId}
         onClose={() => setProductOpen(false)}
         title={productId ? `تفاصيل المنتج: ${productId}` : 'تفاصيل المنتج'}
@@ -915,37 +853,6 @@ export default function ProductsPage() {
                   )}
                 </div>
               </ChartCard>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* Missed details modal */}
-      <Modal open={missedOpen && !!missedRow} onClose={() => setMissedOpen(false)} title="تفاصيل الفرص الضائعة" maxWidthClass="max-w-3xl">
-        {!missedRow ? null : (
-          <div className="space-y-4">
-            <div className="p-4 rounded-xl border border-neutral-200 bg-neutral-50">
-              <div className="font-bold text-neutral-900">{missedRow.employee_name}</div>
-              <div className="text-xs text-neutral-500 font-mono">{missedRow.employee_id}</div>
-              <div className="mt-2 text-sm">
-                <span className="text-neutral-600">المنتج المباع:</span> <span className="font-semibold text-green-700">{missedRow.sold_item}</span>
-              </div>
-              <div className="mt-1 text-sm">
-                <span className="text-neutral-600">عدد مرات الفرصة:</span> <span className="font-extrabold text-orange-700">{missedRow.total_count}</span>
-              </div>
-            </div>
-
-            <div className="border border-neutral-200 rounded-xl overflow-hidden">
-              <div className="p-3 bg-white border-b border-neutral-200 font-semibold">المنتجات المفقودة</div>
-              <ul className="divide-y divide-neutral-200 bg-white">
-                {(missedRow.missed_items || []).map((m: any, idx: number) => (
-                  <li key={idx} className="p-3 flex items-center justify-between">
-                    <span className="text-sm text-neutral-900">{m.name}</span>
-                    <span className="text-xs font-extrabold bg-red-100 text-red-700 px-3 py-1 rounded-full">{m.count}</span>
-                  </li>
-                ))}
-                {(missedRow.missed_items || []).length === 0 && <li className="p-3 text-sm text-neutral-500 text-center">لا توجد بيانات.</li>}
-              </ul>
             </div>
           </div>
         )}

@@ -54,6 +54,7 @@ export default function DashboardPage() {
   const [liveModalOpen, setLiveModalOpen] = useState(false);
   const [liveManager, setLiveManager] = useState<string>('all');
   const [dailyReportModalOpen, setDailyReportModalOpen] = useState(false);
+  const [printData, setPrintData] = useState<{ type: 'stores' | 'employees'; title: string; rows: any[]; range: string } | null>(null);
   const [chartMode, setChartMode] = useState<'target' | 'growth' | 'visitors'>('target');
   const user = getCurrentUser();
   const effectiveManager = useMemo(() => {
@@ -343,6 +344,7 @@ export default function DashboardPage() {
             avgInv: e.trans > 0 ? e.sales / e.trans : 0,
           }))
           .sort((a, b) => b.sales - a.sales),
+        avgInv: v.trans > 0 ? v.sales / v.trans : 0,
       }))
       .sort((a, b) => b.sales - a.sales);
 
@@ -369,34 +371,36 @@ export default function DashboardPage() {
     if (!raw) return [];
     const meta = raw.store_meta || {};
     const storesMap = raw.stores || {};
-    const byStore: Record<string, { sales: number; trans: number; visitors: number; avgInv: number; prevSales: number; prevVisitors: number; dailyReq: number }> = {};
+    const byStore: Record<string, { sales: number; trans: number; visitors: number; avgInv: number; prevSales: number; prevVisitors: number; dailyReq: number; target: number; ach: number }> = {};
 
     (raw.sales || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
-      if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0 };
+      if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
       if (dateStr === yesterdayStr) byStore[sid].sales += v || 0;
       if (dateStr === lastYearYesterdayStr) byStore[sid].prevSales += v || 0;
     });
     (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
-      if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0 };
+      if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
       if (dateStr === yesterdayStr) byStore[sid].trans += v || 0;
     });
     (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
-      if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0 };
+      if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
       if (dateStr === yesterdayStr) byStore[sid].visitors += v || 0;
       if (dateStr === lastYearYesterdayStr) byStore[sid].prevVisitors += v || 0;
     });
     (raw.targets || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
-      if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0 };
+      if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
       if (dateStr === yesterdayStr) {
         const target = v || 0;
+        byStore[sid].target = target;
         const remaining = target - byStore[sid].sales;
         const daysInMonth = new Date(yesterday.getFullYear(), yesterday.getMonth() + 1, 0).getDate();
         const remainingDays = daysInMonth - yesterday.getDate() + 1;
         byStore[sid].dailyReq = remainingDays > 0 ? remaining / remainingDays : 0;
+        byStore[sid].ach = target > 0 ? (byStore[sid].sales / target) * 100 : 0;
       }
     });
 
@@ -410,7 +414,7 @@ export default function DashboardPage() {
         const avgInv = v.trans > 0 ? v.sales / v.trans : 0;
         const growth = v.prevSales > 0 ? ((v.sales - v.prevSales) / v.prevSales) * 100 : 0;
         const conversion = v.visitors > 0 ? (v.trans / v.visitors) * 100 : 0;
-        const customerValue = v.trans > 0 ? v.sales / v.trans : 0;
+        const customerValue = v.visitors > 0 ? v.sales / v.visitors : 0;
         return {
           sid,
           name: storesMap[sid] || sid,
@@ -424,10 +428,65 @@ export default function DashboardPage() {
           dailyReq: v.dailyReq,
           conversion,
           customerValue,
+          target: v.target, // Add target
+          ach, // Add achievement
         };
       })
       .sort((a, b) => b.sales - a.sales);
   }, [raw, yesterdayStr, lastYearYesterdayStr, effectiveManager, yesterday]);
+
+  const handlePrintDailyReport = (type: 'stores' | 'employees') => {
+    if (type === 'stores') {
+      setPrintData({
+        type: 'stores',
+        title: `تقرير المعارض اليومي - ${yesterdayStr}`,
+        range: yesterdayStr,
+        rows: dailyReportData.map(r => ({
+          name: r.name,
+          sales: r.sales,
+          target: r.target,
+          trans: r.trans,
+          avgInv: r.avgInv,
+          conversion: r.conversion,
+          ach: r.ach
+        }))
+      });
+    } else {
+      // For employees, we need to aggregate employee sales for yesterday
+      const history = empRaw?.history || {};
+      const names = empRaw?.employee_names || {};
+      const empData: Record<string, any> = {};
+      Object.entries(history).forEach(([sid, recs]: [string, any]) => {
+        const meta = raw?.store_meta?.[sid] || {};
+        if (effectiveManager !== 'all' && meta.manager !== effectiveManager) return;
+        if (city !== 'all' && meta.city !== city) return;
+        if (branch !== 'all' && sid !== branch) return;
+
+        recs.forEach((rec: any[]) => {
+          if (rec[0] === yesterdayStr) {
+            const rawId = String(rec[1] || '').split('-')[0].trim();
+            const id = rawId.padStart(4, '0');
+            if (rawId === 'مرتجع') return;
+            if (!empData[id]) empData[id] = { name: names[id] || rawId, sales: 0, trans: 0, store: raw?.stores?.[sid] || sid };
+            empData[id].sales += Number(rec[2]) || 0;
+            empData[id].trans += Number(rec[3]) || 0;
+          }
+        });
+      });
+      const rows = Object.values(empData).sort((a, b) => b.sales - a.sales);
+      setPrintData({
+        type: 'employees',
+        title: `أداء الموظفين اليومي - ${yesterdayStr}`,
+        range: yesterdayStr,
+        rows
+      });
+    }
+
+    setTimeout(() => {
+      window.print();
+      setPrintData(null);
+    }, 500);
+  };
 
   // Monthly chart data
   const monthlyChartData = useMemo(() => {
@@ -638,105 +697,116 @@ export default function DashboardPage() {
           value={ach}
           format={(v) => `${v.toFixed(1)}%`}
           icon={<ChartPieIcon />}
+          comparisonValue={totals.target}
           showProgress
           progressValue={ach}
           trend="neutral"
-          trendValue={`الهدف: ${formatSAR(totals.target)}`}
+          trendValue={`المستهدف: ${formatSAR(totals.target)}`}
+        />
+        <KPICard
+          title="قيمة العميل"
+          value={totals.visitors > 0 ? totals.sales / totals.visitors : 0}
+          format={formatSAR}
+          icon={<UsersIcon />}
+          comparisonValue={prevYearTotals.visitors > 0 ? prevYearTotals.sales / prevYearTotals.visitors : 0}
+          comparisonLabel="السنة الماضية"
         />
       </div>
 
       {/* Monthly Performance Chart */}
-      <ChartCard title="Monthly Sales Performance">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setChartMode('target')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${chartMode === 'target'
-                  ? 'bg-orange-500 text-white shadow-md'
-                  : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
-                  }`}
-              >
-                تارجت
-              </button>
-              <button
-                type="button"
-                onClick={() => setChartMode('growth')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${chartMode === 'growth'
-                  ? 'bg-orange-500 text-white shadow-md'
-                  : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
-                  }`}
-              >
-                نمو
-              </button>
-              <button
-                type="button"
-                onClick={() => setChartMode('visitors')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${chartMode === 'visitors'
-                  ? 'bg-orange-500 text-white shadow-md'
-                  : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
-                  }`}
-              >
-                زوار
-              </button>
+      <div className="mb-8">
+        <ChartCard title="أداء المبيعات الشهري (Monthly Sales Performance)" className="h-[480px]">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setChartMode('target')}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${chartMode === 'target'
+                    ? 'bg-orange-500 text-white shadow-md'
+                    : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
+                    }`}
+                >
+                  تارجت
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartMode('growth')}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${chartMode === 'growth'
+                    ? 'bg-orange-500 text-white shadow-md'
+                    : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
+                    }`}
+                >
+                  نمو
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartMode('visitors')}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${chartMode === 'visitors'
+                    ? 'bg-orange-500 text-white shadow-md'
+                    : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
+                    }`}
+                >
+                  زوار
+                </button>
+              </div>
+              <div className="flex items-center gap-3">
+                {chartMode === 'target' && (
+                  <>
+                    <div className="px-3 py-1.5 rounded-full bg-green-100 text-green-700 text-xs font-semibold">
+                      ADS: {formatSAR(chartKPIs.ads)}
+                    </div>
+                    <div className="px-3 py-1.5 rounded-full bg-green-50 text-green-600 text-xs font-semibold">
+                      AMS: {formatSAR(chartKPIs.ams)}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex-grow min-h-[300px]">
+              <LineChart data={monthlyChartData} />
+            </div>
+            <div className="flex items-center justify-center gap-4 pt-2 border-t border-neutral-200">
               {chartMode === 'target' && (
                 <>
-                  <div className="px-3 py-1.5 rounded-full bg-green-100 text-green-700 text-xs font-semibold">
-                    ADS: {formatSAR(chartKPIs.ads)}
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <span className="text-sm text-neutral-600">Sales</span>
                   </div>
-                  <div className="px-3 py-1.5 rounded-full bg-green-50 text-green-600 text-xs font-semibold">
-                    AMS: {formatSAR(chartKPIs.ams)}
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-purple-500 border-2 border-dashed border-purple-500"></div>
+                    <span className="text-sm text-neutral-600">Target</span>
+                  </div>
+                </>
+              )}
+              {chartMode === 'growth' && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                    <span className="text-sm text-neutral-600">Current</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                    <span className="text-sm text-neutral-600">Previous Year</span>
+                  </div>
+                </>
+              )}
+              {chartMode === 'visitors' && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <span className="text-sm text-neutral-600">Current Visitors</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-indigo-500"></div>
+                    <span className="text-sm text-neutral-600">Previous Year Visitors</span>
                   </div>
                 </>
               )}
             </div>
           </div>
-          <div className="h-64">
-            <LineChart data={monthlyChartData} />
-          </div>
-          <div className="flex items-center justify-center gap-4 pt-2 border-t border-neutral-200">
-            {chartMode === 'target' && (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                  <span className="text-sm text-neutral-600">Sales</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-purple-500 border-2 border-dashed border-purple-500"></div>
-                  <span className="text-sm text-neutral-600">Target</span>
-                </div>
-              </>
-            )}
-            {chartMode === 'growth' && (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                  <span className="text-sm text-neutral-600">Current</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                  <span className="text-sm text-neutral-600">Previous Year</span>
-                </div>
-              </>
-            )}
-            {chartMode === 'visitors' && (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                  <span className="text-sm text-neutral-600">Current Visitors</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-indigo-500"></div>
-                  <span className="text-sm text-neutral-600">Previous Year Visitors</span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </ChartCard>
+        </ChartCard>
+      </div>
 
       {/* بطاقات الوصول السريع */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -857,17 +927,26 @@ export default function DashboardPage() {
                   className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden identity-card"
                 >
                   <div className="p-4 text-right">
-                    <div className="font-bold text-neutral-900 truncate">{store.name}</div>
-                    <div className="text-orange-600 font-bold mt-1" dir="ltr">{formatSAR(store.sales)}</div>
+                    <div className="flex items-center justify-between gap-2 overflow-hidden">
+                      <div className="font-bold text-neutral-900 truncate flex-grow text-right">{store.name}</div>
+                      <div className="text-[10px] font-bold text-neutral-400 bg-neutral-50 px-2 py-0.5 rounded border border-neutral-100 whitespace-nowrap">
+                        Avg: {formatSAR(store.avgInv)}
+                      </div>
+                    </div>
+                    <div className="text-orange-600 font-bold mt-1 text-lg" dir="ltr">{formatSAR(store.sales)}</div>
                     {store.employees.length > 0 && (
                       <div className="mt-3 space-y-2">
                         <div className="text-xs font-semibold text-neutral-500 mb-2">الموظفون</div>
                         {store.employees.slice(0, 5).map((emp) => (
-                          <div key={emp.id} className="flex justify-between items-center text-sm py-1 border-b border-neutral-100 last:border-0">
-                            <span className="text-neutral-800 truncate ml-2">{emp.name}</span>
-                            <span className="shrink-0 text-neutral-600" dir="ltr">
-                              {formatSAR(emp.avgInv)} / {Math.round(emp.trans)}
-                            </span>
+                          <div key={emp.id} className="flex flex-col py-2 border-b border-neutral-100 last:border-0">
+                            <div className="flex justify-between items-center text-sm mb-1">
+                              <span className="text-neutral-800 font-medium truncate ml-2">{emp.name}</span>
+                              <span className="shrink-0 text-orange-600 font-bold" dir="ltr">{formatSAR(emp.sales)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-[10px] text-neutral-400 font-medium">
+                              <span>معدل الفاتورة: {formatSAR(emp.avgInv)}</span>
+                              <span>{Math.round(emp.trans)} فاتورة</span>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -895,14 +974,14 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   className="btn-secondary py-1.5 px-4 text-xs font-bold flex items-center gap-2 border-red-200 text-red-600 hover:bg-red-50"
-                  onClick={() => alert('جاري إصدار تقرير PDF للموظفين...')}
+                  onClick={() => handlePrintDailyReport('employees')}
                 >
                   📄 PDF موظفين
                 </button>
                 <button
                   type="button"
                   className="btn-secondary py-1.5 px-4 text-xs font-bold flex items-center gap-2 border-primary-200 text-primary-700 hover:bg-orange-50"
-                  onClick={() => alert('جاري إصدار تقرير PDF للمعارض...')}
+                  onClick={() => handlePrintDailyReport('stores')}
                 >
                   🏢 PDF معارض
                 </button>
@@ -959,7 +1038,78 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Print-only View Layout (Unified Style) */}
+      {printData && (
+        <div className="fixed inset-0 bg-white z-[9999] p-8 overflow-y-auto print-view" dir="rtl">
+          <div className="flex justify-between items-center border-b-4 border-orange-600 pb-4 mb-6">
+            <div>
+              <h1 className="text-3xl font-black text-neutral-900">{printData.title}</h1>
+              <p className="text-neutral-500 font-bold mt-1">الفترة: {printData.range} | استخرج بواسطة: {user?.name}</p>
+            </div>
+            <div className="text-left font-arabic">
+              <div className="text-2xl font-black text-orange-600 italic">ORA COCKPIT</div>
+              <div className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">Business Intelligence Report</div>
+            </div>
+          </div>
+
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-neutral-900 text-white print:bg-neutral-900 border-b-2 border-orange-600">
+                <th className="p-3 text-right">#</th>
+                <th className="p-3 text-right">{printData.type === 'stores' ? 'المعرض' : 'الموظف'}</th>
+                {printData.type === 'stores' && <th className="p-3 text-center">الهدف</th>}
+                <th className="p-3 text-center">المبيعات</th>
+                <th className="p-3 text-center">الفواتير</th>
+                <th className="p-3 text-center">متوسط الفاتورة</th>
+                {printData.type === 'stores' && <th className="p-3 text-center">التحويل %</th>}
+                {printData.type === 'stores' && <th className="p-3 text-center">التحقيق %</th>}
+                {printData.type === 'employees' && <th className="p-3 text-center">المعرض</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {printData.rows.map((row: any, idx: number) => (
+                <tr key={idx} className="border-b border-neutral-200 hover:bg-neutral-50 even:bg-neutral-50">
+                  <td className="p-3 text-neutral-500 font-bold">{idx + 1}</td>
+                  <td className="p-3 font-black text-neutral-900">{row.name}</td>
+                  {printData.type === 'stores' && <td className="p-3 text-center font-mono">{formatSAR(row.target)}</td>}
+                  <td className="p-3 text-center font-black text-green-700 font-mono">{formatSAR(row.sales)}</td>
+                  <td className="p-3 text-center font-bold text-neutral-700">{row.trans}</td>
+                  <td className="p-3 text-center font-bold text-neutral-900 font-mono">{formatSAR(row.avgInv || (row.trans > 0 ? row.sales / row.trans : 0))}</td>
+                  {printData.type === 'stores' && <td className="p-3 text-center font-black text-orange-600">{(row.conversion || 0).toFixed(1)}%</td>}
+                  {printData.type === 'stores' && (
+                    <td className="p-3 text-center">
+                      <span className={`font-black ${row.ach >= 100 ? 'text-green-600' : 'text-orange-600'}`}>
+                        {(row.ach || 0).toFixed(1)}%
+                      </span>
+                    </td>
+                  )}
+                  {printData.type === 'employees' && <td className="p-3 text-center text-neutral-600 font-medium">{row.store}</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="mt-8 pt-6 border-t border-neutral-100 flex justify-between items-center text-[10px] text-neutral-400 font-bold uppercase">
+            <div>Generated on {new Date().toLocaleString()}</div>
+            <div>Copyright &copy; {new Date().getFullYear()} ORA Cockpit</div>
+          </div>
+
+          <style dangerouslySetInnerHTML={{
+            __html: `
+            @media print {
+              @page { size: A4; margin: 1cm; }
+              body * { visibility: hidden; }
+              .print-view, .print-view * { visibility: visible; }
+              .print-view { position: absolute; left: 0; top: 0; width: 100%; border: none; padding: 0; }
+              .bg-neutral-900 { background-color: #171717 !important; -webkit-print-color-adjust: exact; }
+              .text-white { color: white !important; }
+              .text-green-700 { color: #15803d !important; }
+              .text-orange-600 { color: #ea580c !important; }
+              .bg-neutral-50 { background-color: #fafafa !important; }
+            }
+          ` }} />
+        </div>
+      )}
     </div>
   );
 }
-
