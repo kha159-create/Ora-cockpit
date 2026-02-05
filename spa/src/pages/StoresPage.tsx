@@ -633,11 +633,19 @@ export default function StoresPage() {
     const branchVisitors: Record<string, number> = {};
     const prevSales: Record<string, number> = {};
     const prevVisitors: Record<string, number> = {};
+    const branchMonthSales: Record<string, number> = {};
+    const branchMonthTarget: Record<string, number> = {};
+    const todayNow = new Date();
+    const curMonthStart = `${toLocalYMD(todayNow).substring(0, 8)}01`;
 
     (raw.sales || []).forEach((x: any[]) => {
       const [d, s, v] = x;
+      const ds = normDate(d);
       if (inRange(d)) branchSales[s] = (branchSales[s] || 0) + safeNum(v);
       if (inPrev(d)) prevSales[s] = (prevSales[s] || 0) + safeNum(v);
+      if (ds >= curMonthStart && ds <= toLocalYMD(todayNow)) {
+        branchMonthSales[s] = (branchMonthSales[s] || 0) + safeNum(v);
+      }
     });
     (raw.transactions || []).forEach((x: any[]) => {
       const [d, s, v] = x;
@@ -645,7 +653,11 @@ export default function StoresPage() {
     });
     (raw.targets || []).forEach((x: any[]) => {
       const [d, s, v] = x;
+      const ds = normDate(d);
       if (inRange(d)) branchTarget[s] = (branchTarget[s] || 0) + safeNum(v);
+      if (ds >= curMonthStart && ds <= toLocalYMD(new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0))) {
+        branchMonthTarget[s] = (branchMonthTarget[s] || 0) + safeNum(v);
+      }
     });
     (raw.visitors || []).forEach((x: any[]) => {
       const [d, s, v] = x;
@@ -686,10 +698,11 @@ export default function StoresPage() {
       const customerValue = visitorsVal > 0 ? val / visitorsVal : 0;
       const avgInv = transVal > 0 ? val / transVal : 0;
 
-      const todayNow = new Date();
       const daysInM = new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0).getDate();
       const remDays = daysInM - todayNow.getDate() + 1;
-      const dailyReq = remDays > 0 && targetVal > val ? (targetVal - val) / remDays : 0;
+      const mTarget = branchMonthTarget[sid] || targetVal || 0;
+      const mSales = branchMonthSales[sid] || 0;
+      const dailyReq = remDays > 0 && mTarget > mSales ? (mTarget - mSales) / remDays : 0;
 
       list.push({
         sid,

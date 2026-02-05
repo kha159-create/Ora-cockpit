@@ -1,11 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { BarChart, ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
+import { BarChart, ChartCard, KPICard, LineChart, PieChart } from '../components/DashboardComponents';
 import { CubeIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, XIcon } from '../components/Icons';
 
 type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest';
 type Metric = 'qty' | 'val';
+
+function pad2(n: number) {
+  return String(n).padStart(2, '0');
+}
 
 function safeNum(x: unknown) {
   const n = Number(x);
@@ -52,10 +56,11 @@ function PeriodButton({
 }) {
   return (
     <button
-      className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-all ${active
-        ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white border-orange-500 shadow'
-        : 'bg-white text-neutral-700 border-neutral-200 hover:bg-orange-50'
-        }`}
+      className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-all ${
+        active
+          ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white border-orange-500 shadow'
+          : 'bg-white text-neutral-700 border-neutral-200 hover:bg-orange-50'
+      }`}
       onClick={onClick}
       type="button"
     >
@@ -127,25 +132,6 @@ export default function ProductsPage() {
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
 
-  // --- Helpers for price categorization ---
-  const getSmartDuvetCategories = () => ({
-    low: { min: 99, max: 400, label: 'Standard (99-400)' },
-    medium: { min: 401, max: 700, label: 'Premium (401-700)' },
-    high: { min: 701, max: Infinity, label: 'Luxury (700+)' }
-  });
-
-  const getSmartDuvetFullCategories = () => ({
-    low: { min: 99, max: 350, label: 'Standard (99-350)' },
-    medium: { min: 351, max: 550, label: 'Premium (351-550)' },
-    high: { min: 551, max: Infinity, label: 'Luxury (550+)' }
-  });
-
-  const getSmartPillowCategories = () => ({
-    low: { min: 39, max: 120, label: 'Economy (39-120)' },
-    medium: { min: 121, max: 250, label: 'Comfort (121-250)' },
-    high: { min: 251, max: Infinity, label: 'Premium (250+)' }
-  });
-
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
     return user?.name || manager;
@@ -157,14 +143,12 @@ export default function ProductsPage() {
     const storeMeta: Record<string, any> = mgmt.store_meta || {};
     const storesMap: Record<string, string> = mgmt.stores || {};
 
-    const normalizedMode = mode.toLowerCase();
-    const pData = raw.periods?.[normalizedMode] || raw.periods?.['mtd'] || raw.periods?.['MTD'] || null;
+    const pData = raw.periods?.[mode] || null;
     const analysis: Record<string, any> = (pData?.analysis || {}) as any;
     const catalog: Record<string, any[]> = (pData?.catalog || {}) as any;
     const missedByStore: Record<string, any[]> = (pData?.missed_opportunities || {}) as any;
     const marketBasketAll: Record<string, any[]> = raw.market_basket || {};
     const dailyHistory: Record<string, any[]> = raw.product_daily_history || {};
-    const stagnantData: any[] = raw.stagnant_items || [];
 
     const isStoreAccessible = (sid: string) => {
       if (isAdminOrAuditor(user?.role)) return true;
@@ -254,19 +238,16 @@ export default function ProductsPage() {
 
     const denom = metric === 'qty' ? Math.max(1, totalQty) : Math.max(1, totalAmt);
     const categoriesAgg: CategoryRow[] = Array.from(catMap.entries()).map(([category, data]) => {
-      const shareFromData = (data as any).share_percent || (data as any).sharePercent;
-      const calculatedShare = ((metric === 'qty' ? data.qty : data.amount) / denom) * 100;
-      const sharePercent = shareFromData != null ? safeNum(shareFromData) : calculatedShare;
-
+      const sharePercent = ((metric === 'qty' ? data.qty : data.amount) / denom) * 100;
       return {
         category,
         qty: data.qty,
         amount: data.amount,
         sharePercent,
-        topItemId: data.top?.top_item_id || data.top?.topItemId || '',
-        topItemName: data.top?.top_item_name || data.top?.topItemName || '',
-        topItemQty: safeNum(data.top?.top_item_qty || data.top?.topItemQty),
-        topItemAmount: safeNum(data.top?.top_item_amount || data.top?.topItemAmount),
+        topItemId: data.top?.top_item_id || '',
+        topItemName: data.top?.top_item_name || '',
+        topItemQty: safeNum(data.top?.top_item_qty),
+        topItemAmount: safeNum(data.top?.top_item_amount),
       };
     });
 
@@ -318,6 +299,19 @@ export default function ProductsPage() {
     // ===== Market basket =====
     const basket = activeStore === 'all' ? (marketBasketAll['all'] || []) : (marketBasketAll[activeStore] || []);
 
+    // ===== Missed opportunities =====
+    let missedList: any[] = [];
+    if (activeStore === 'all') {
+      Object.entries(missedByStore).forEach(([sid, rows]) => {
+        if (!storeInScope(sid)) return;
+        missedList = missedList.concat(rows || []);
+      });
+      missedList.sort((a, b) => safeNum(b.total_count) - safeNum(a.total_count));
+      missedList = missedList.slice(0, 100);
+    } else {
+      missedList = missedByStore[activeStore] || [];
+    }
+
     // ===== Product details =====
     const selectedHistory = productId ? (dailyHistory[productId] || []) : [];
     const selectedPairs = (() => {
@@ -326,50 +320,6 @@ export default function ProductsPage() {
       pairs.sort((a, b) => safeNum(b.frequency) - safeNum(a.frequency));
       return pairs.slice(0, 10);
     })();
-
-    // ===== Product Analysis (Duvet, Pillow) =====
-    const resolveUnitPrice = (it: any) => {
-      let qty = 0;
-      let amount = 0;
-      const stores = it?.stores || {};
-      for (const [sid, st] of Object.entries(stores)) {
-        if (!storeInScope(String(sid))) continue;
-        qty += safeNum((st as any)?.q);
-        amount += safeNum((st as any)?.a);
-      }
-      return qty > 0 ? amount / qty : 0;
-    };
-
-    const analyzeCategory = (items: any[], getCats: () => any) => {
-      const cats = getCats();
-      const labels = [cats.low.label, cats.medium.label, cats.high.label];
-      const buckets: Record<string, number> = { [labels[0]]: 0, [labels[1]]: 0, [labels[2]]: 0 };
-      let totalUnits = 0;
-
-      items.forEach(it => {
-        const p = resolveUnitPrice(it);
-        if (p <= 0) return;
-        let label = null;
-        if (p >= cats.low.min && p <= cats.low.max) label = cats.low.label;
-        else if (p >= cats.medium.min && p <= cats.medium.max) label = cats.medium.label;
-        else if (p >= cats.high.min) label = cats.high.label;
-
-        if (label) {
-          const qty = Object.entries(it.stores || {}).reduce((s, [sid, st]: any) => storeInScope(sid) ? s + safeNum(st.q) : s, 0);
-          buckets[label] += qty;
-          totalUnits += qty;
-        }
-      });
-
-      return {
-        totalUnits,
-        breakdown: labels.map(l => ({ name: l, units: buckets[l], percentage: totalUnits > 0 ? (buckets[l] / totalUnits) * 100 : 0 }))
-      };
-    };
-
-    const duvetKingAnalysis = analyzeCategory(catalog['Duvet (King)'] || catalog['Duvets'] || [], getSmartDuvetCategories);
-    const duvetFullAnalysis = analyzeCategory(catalog['Duvet Full'] || catalog['Duvets Full'] || [], getSmartDuvetFullCategories);
-    const pillowAnalysis = analyzeCategory(catalog['Pillows'] || [], getSmartPillowCategories);
 
     return {
       dateRangeLabel: pData?.date_range || '-',
@@ -382,12 +332,10 @@ export default function ProductsPage() {
       catalogCategories: Object.keys(catalog).sort((a, b) => a.localeCompare(b, 'ar')),
       filteredCatalog,
       basket,
+      missedList,
       selectedHistory,
       selectedPairs,
       storesMap,
-      duvetKingAnalysis,
-      duvetFullAnalysis,
-      pillowAnalysis,
     };
   }, [city, effectiveManager, mgmt, mode, productId, raw, search, selectedCategory, store, metric, user?.name, user?.role]);
 
@@ -514,7 +462,44 @@ export default function ProductsPage() {
       </div>
 
       {/* Category performance */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <ChartCard title={`المنتج الأكثر مبيعاً حسب الفئة (${metricLabel})`}>
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr>
+                  <th className="th">التصنيف</th>
+                  <th className="th">Top Item</th>
+                  <th className="th text-center">الكمية</th>
+                  <th className="th text-center">القيمة</th>
+                  <th className="th text-center">Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                {derived.categoriesAgg.slice(0, 50).map((c) => (
+                  <tr key={c.category} className="hover:bg-orange-50 cursor-pointer" onClick={() => setSelectedCategory(c.category)}>
+                    <td className="td font-semibold text-neutral-900">{c.category}</td>
+                    <td className="td text-neutral-700">
+                      <div className="font-mono text-xs text-neutral-500">{c.topItemId || '-'}</div>
+                      <div className="font-semibold">{c.topItemName || '-'}</div>
+                    </td>
+                    <td className="td text-center">{Math.round(c.qty).toLocaleString()}</td>
+                    <td className="td text-center font-bold text-green-700">{formatSAR(c.amount)}</td>
+                    <td className="td text-center font-bold text-orange-700">{c.sharePercent.toFixed(1)}%</td>
+                  </tr>
+                ))}
+                {derived.categoriesAgg.length === 0 && (
+                  <tr>
+                    <td className="td text-center text-neutral-500" colSpan={5}>
+                      لا توجد بيانات.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </ChartCard>
+
         <ChartCard title={`أداء الفئات (مرتبة حسب ${metricLabel})`}>
           <div className="h-[360px]">
             <BarChart
@@ -527,88 +512,8 @@ export default function ProductsPage() {
               format={(v) => (metric === 'qty' ? `${Math.round(v).toLocaleString()} وحدة` : formatSAR(v))}
             />
           </div>
-        </ChartCard>
-
-        <ChartCard title="تحليل المبيعات حسب السعر (Sales Analysis by Value)">
-          <div className="space-y-6">
-            {/* Duvet King */}
-            <div>
-              <h4 className="text-sm font-bold text-neutral-800 mb-3 pb-1 border-b">ألحفة (King)</h4>
-              <div className="space-y-2">
-                {derived.duvetKingAnalysis.breakdown.map((it) => (
-                  <div key={it.name}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span>{it.name}</span>
-                      <span>{it.units} وحدة ({it.percentage.toFixed(1)}%)</span>
-                    </div>
-                    <div className="w-full bg-neutral-100 rounded-full h-2">
-                      <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${it.percentage}%` }}></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* Duvet Full */}
-            <div>
-              <h4 className="text-sm font-bold text-neutral-800 mb-3 pb-1 border-b">ألحفة (Full)</h4>
-              <div className="space-y-2">
-                {derived.duvetFullAnalysis.breakdown.map((it) => (
-                  <div key={it.name}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span>{it.name}</span>
-                      <span>{it.units} وحدة ({it.percentage.toFixed(1)}%)</span>
-                    </div>
-                    <div className="w-full bg-neutral-100 rounded-full h-2">
-                      <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${it.percentage}%` }}></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* Pillows */}
-            <div>
-              <h4 className="text-sm font-bold text-neutral-800 mb-3 pb-1 border-b">وسائد (Pillows)</h4>
-              <div className="space-y-2">
-                {derived.pillowAnalysis.breakdown.map((it) => (
-                  <div key={it.name}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span>{it.name}</span>
-                      <span>{it.units} وحدة ({it.percentage.toFixed(1)}%)</span>
-                    </div>
-                    <div className="w-full bg-neutral-100 rounded-full h-2">
-                      <div className="bg-green-600 h-2 rounded-full" style={{ width: `${it.percentage}%` }}></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </ChartCard>
-
-        <ChartCard title={`أفضل المنتجات مبيعاً (${metricLabel})`}>
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr>
-                  <th className="th">التصنيف</th>
-                  <th className="th">المنتج</th>
-                  <th className="th text-center">الكمية</th>
-                  <th className="th text-center">القيمة</th>
-                </tr>
-              </thead>
-              <tbody>
-                {derived.categoriesAgg.slice(0, 10).map((c) => (
-                  <tr key={c.category} className="hover:bg-orange-50 cursor-pointer" onClick={() => setSelectedCategory(c.category)}>
-                    <td className="td font-semibold text-neutral-900">{c.category}</td>
-                    <td className="td text-neutral-700">
-                      <div className="font-semibold text-xs">{c.topItemName || '-'}</div>
-                    </td>
-                    <td className="td text-center">{Math.round(c.qty).toLocaleString()}</td>
-                    <td className="td text-center font-bold text-green-700">{formatSAR(c.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="mt-4 h-[280px]">
+            <PieChart data={derived.categoriesAgg.slice(0, 10).map((c) => ({ name: c.category, value: metric === 'qty' ? c.qty : c.amount }))} vertical />
           </div>
         </ChartCard>
       </div>
@@ -723,13 +628,61 @@ export default function ProductsPage() {
         </div>
       </ChartCard>
 
+      {/* Missed opportunities */}
+      <ChartCard title="❗ فرص ضائعة (Missed Opportunities)">
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead>
+              <tr>
+                <th className="th text-center w-[60px]">#</th>
+                <th className="th">الموظف</th>
+                <th className="th">المنتج المباع</th>
+                <th className="th">المنتجات المفقودة</th>
+                <th className="th text-center">Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {derived.missedList.map((r: any, i: number) => {
+                const missed = Array.isArray(r.missed_items) ? [...r.missed_items].sort((a, b) => safeNum(b.count) - safeNum(a.count)) : [];
+                const top = missed[0];
+                const others = missed.length - 1;
+                return (
+                  <tr
+                    key={`${r.employee_id}-${i}`}
+                    className="hover:bg-orange-50 cursor-pointer"
+                    onClick={() => {
+                      setMissedRow({ ...r, missed_items: missed });
+                      setMissedOpen(true);
+                    }}
+                  >
+                    <td className="td text-center text-neutral-500">{i + 1}</td>
+                    <td className="td">
+                      <div className="font-bold text-neutral-900">{r.employee_name}</div>
+                      <div className="font-mono text-xs text-neutral-500">{r.employee_id}</div>
+                    </td>
+                    <td className="td text-green-700 font-semibold">{r.sold_item}</td>
+                    <td className="td text-red-700">
+                      <span className="font-semibold">{top?.name || '-'}</span>
+                      {others > 0 && <span className="text-xs text-neutral-500 ms-2">+{others} أخرى</span>}
+                    </td>
+                    <td className="td text-center font-extrabold text-orange-700">{Math.round(safeNum(r.total_count)).toLocaleString()}</td>
+                  </tr>
+                );
+              })}
+              {derived.missedList.length === 0 && (
+                <tr>
+                  <td className="td text-center text-neutral-500" colSpan={5}>
+                    لا توجد بيانات (أو فرص ضائعة) لهذا النطاق.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </ChartCard>
+
       {/* Catalog modal */}
-      <Modal
-        open={catalogOpen}
-        onClose={() => setCatalogOpen(false)}
-        title="📂 تصفح الأقسام"
-        maxWidthClass="max-w-6xl"
-      >
+      <Modal open={catalogOpen} onClose={() => setCatalogOpen(false)} title="📂 تصفح الأقسام" maxWidthClass="max-w-6xl">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-1">
             <div className="text-sm font-semibold text-neutral-700 mb-2">الأقسام</div>
@@ -739,8 +692,9 @@ export default function ProductsPage() {
                   <button
                     key={c}
                     type="button"
-                    className={`w-full text-right px-4 py-2 text-sm font-semibold border-b border-neutral-200 hover:bg-orange-50 ${selectedCategory === c ? 'bg-orange-100 text-orange-800' : 'bg-white text-neutral-700'
-                      }`}
+                    className={`w-full text-right px-4 py-2 text-sm font-semibold border-b border-neutral-200 hover:bg-orange-50 ${
+                      selectedCategory === c ? 'bg-orange-100 text-orange-800' : 'bg-white text-neutral-700'
+                    }`}
                     onClick={() => setSelectedCategory(c)}
                   >
                     {c}
@@ -797,7 +751,7 @@ export default function ProductsPage() {
       </Modal>
 
       {/* Product details modal */}
-      < Modal
+      <Modal
         open={productOpen && !!productId}
         onClose={() => setProductOpen(false)}
         title={productId ? `تفاصيل المنتج: ${productId}` : 'تفاصيل المنتج'}
@@ -858,6 +812,37 @@ export default function ProductsPage() {
                   )}
                 </div>
               </ChartCard>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Missed details modal */}
+      <Modal open={missedOpen && !!missedRow} onClose={() => setMissedOpen(false)} title="تفاصيل الفرص الضائعة" maxWidthClass="max-w-3xl">
+        {!missedRow ? null : (
+          <div className="space-y-4">
+            <div className="p-4 rounded-xl border border-neutral-200 bg-neutral-50">
+              <div className="font-bold text-neutral-900">{missedRow.employee_name}</div>
+              <div className="text-xs text-neutral-500 font-mono">{missedRow.employee_id}</div>
+              <div className="mt-2 text-sm">
+                <span className="text-neutral-600">المنتج المباع:</span> <span className="font-semibold text-green-700">{missedRow.sold_item}</span>
+              </div>
+              <div className="mt-1 text-sm">
+                <span className="text-neutral-600">عدد مرات الفرصة:</span> <span className="font-extrabold text-orange-700">{missedRow.total_count}</span>
+              </div>
+            </div>
+
+            <div className="border border-neutral-200 rounded-xl overflow-hidden">
+              <div className="p-3 bg-white border-b border-neutral-200 font-semibold">المنتجات المفقودة</div>
+              <ul className="divide-y divide-neutral-200 bg-white">
+                {(missedRow.missed_items || []).map((m: any, idx: number) => (
+                  <li key={idx} className="p-3 flex items-center justify-between">
+                    <span className="text-sm text-neutral-900">{m.name}</span>
+                    <span className="text-xs font-extrabold bg-red-100 text-red-700 px-3 py-1 rounded-full">{m.count}</span>
+                  </li>
+                ))}
+                {(missedRow.missed_items || []).length === 0 && <li className="p-3 text-sm text-neutral-500 text-center">لا توجد بيانات.</li>}
+              </ul>
             </div>
           </div>
         )}
