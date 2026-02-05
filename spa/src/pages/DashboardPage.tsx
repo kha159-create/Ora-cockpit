@@ -55,7 +55,7 @@ export default function DashboardPage() {
   const [liveModalOpen, setLiveModalOpen] = useState(false);
   const [dailyReportModalOpen, setDailyReportModalOpen] = useState(false);
   const [chartMode, setChartMode] = useState<'SALES' | 'VISITORS' | 'TARGET'>('SALES');
-  const [selectedLiveEmps, setSelectedLiveEmps] = useState<Record<string, string>>({});
+  const [viewStoreId, setViewStoreId] = useState<string | null>(null);
   const user = getCurrentUser();
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -527,9 +527,11 @@ export default function DashboardPage() {
         // Remaining is Target - MTD Sales
         const remaining = Math.max(0, target - byStore[sid].sales);
 
-        // Remaining Days: Days in month - Yesterday's Date (so today + future)
-        const daysInMonth = new Date(yesterday.getFullYear(), yesterday.getMonth() + 1, 0).getDate();
-        const remainingDays = Math.max(0, daysInMonth - yesterday.getDate());
+        // Remaining Days: Days in month - Today's Date (Remaining Work Days)
+        const nowForReq = new Date();
+        const lastDayOfMonth = new Date(nowForReq.getFullYear(), nowForReq.getMonth() + 1, 0).getDate();
+        let remainingDays = lastDayOfMonth - nowForReq.getDate() + 1;
+        if (remainingDays < 1) remainingDays = 1;
 
         byStore[sid].dailyReq = remainingDays > 0 ? remaining / remainingDays : 0;
         byStore[sid].ach = target > 0 ? (byStore[sid].sales / target) * 100 : 0;
@@ -876,84 +878,108 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              {/* Area Manager Filter (For Admin) */}
-              {isAdminOrAuditor(user?.role) && (
-                <div className="flex items-center gap-2 bg-neutral-50 p-3 rounded-xl border border-neutral-100">
-                  <span className="text-sm font-semibold text-neutral-600">مدير المنطقة:</span>
-                  <select
-                    className="input py-1 px-3 text-sm min-w-[200px]"
-                    value={manager}
-                    onChange={(e) => setManager(e.target.value)}
+              {/* Header / Navigation */}
+              {viewStoreId ? (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setViewStoreId(null)}
+                    className="p-2 bg-neutral-100 rounded-lg hover:bg-neutral-200 transition-colors"
                   >
-                    <option value="all">الكل</option>
-                    {managers.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
+                    ⬅️ عودة للقائمة
+                  </button>
+                  <h3 className="font-bold text-lg text-primary-700">
+                    {liveData.stores.find(s => s.sid === viewStoreId)?.name || 'تفاصيل الفرع'}
+                  </h3>
                 </div>
+              ) : (
+                isAdminOrAuditor(user?.role) && (
+                  <div className="flex items-center gap-2 bg-neutral-50 p-3 rounded-xl border border-neutral-100">
+                    <span className="text-sm font-semibold text-neutral-600">مدير المنطقة:</span>
+                    <select
+                      className="input py-1 px-3 text-sm min-w-[200px]"
+                      value={manager}
+                      onChange={(e) => setManager(e.target.value)}
+                    >
+                      <option value="all">الكل</option>
+                      {managers.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                )
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              <KPICard title="المجموع (اليوم)" value={liveData.totals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
-              <KPICard
-                title="الفواتير"
-                value={liveData.totals.trans}
-                format={(v) => Math.round(v).toLocaleString()}
-                icon={<ReceiptTaxIcon />}
-                subtitle={`متوسط: ${formatSAR(liveData.totals.trans > 0 ? liveData.totals.sales / liveData.totals.trans : 0)}`}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-h-[60vh] overflow-y-auto">
-              {liveData.stores.map((store) => {
-                const selectedEmpId = selectedLiveEmps[store.sid] || '';
-                const selectedEmp = store.employees.find(e => e.id === selectedEmpId) || store.employees[0]; // Default to first
+            {/* Content Switch */}
+            {viewStoreId ? (
+              // DETAIL VIEW
+              <div className="bg-white rounded-2xl shadow-sm border border-neutral-200 p-4">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-neutral-50 border-b border-neutral-200">
+                      <th className="py-2 px-3 text-right">الموظف</th>
+                      <th className="py-2 px-3 text-right">المبيعات</th>
+                      <th className="py-2 px-3 text-right">الفواتير</th>
+                      <th className="py-2 px-3 text-right">متوسط الفاتورة</th>
+                      <th className="py-2 px-3 text-right">حصة الفرع</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const store = liveData.stores.find(s => s.sid === viewStoreId);
+                      if (!store) return <tr><td colSpan={5} className="text-center p-4">لا توجد بيانات</td></tr>;
 
-                return (
-                  <div key={store.sid} className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden identity-card">
-                    <div className="p-4 text-right">
-                      <div className="font-bold text-neutral-900 truncate">{store.name}</div>
-                      <div className="text-orange-600 font-bold mt-1" dir="ltr">{formatSAR(store.sales)}</div>
+                      return store.employees.sort((a, b) => b.sales - a.sales).map((emp, idx) => (
+                        <tr key={emp.id} className="border-b border-neutral-100 hover:bg-neutral-50">
+                          <td className="py-3 px-3 font-medium text-neutral-900">
+                            {idx + 1}. {emp.name}
+                          </td>
+                          <td className="py-3 px-3 font-bold text-primary-600" dir="ltr">{formatSAR(emp.sales)}</td>
+                          <td className="py-3 px-3">{emp.trans}</td>
+                          <td className="py-3 px-3" dir="ltr">{formatSAR(emp.avgInv)}</td>
+                          <td className="py-3 px-3">
+                            {store.sales > 0 ? ((emp.sales / store.sales) * 100).toFixed(1) : 0}%
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              // GRID VIEW
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                  <KPICard title="المجموع (اليوم)" value={liveData.totals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
+                  <KPICard
+                    title="الفواتير"
+                    value={liveData.totals.trans}
+                    format={(v) => Math.round(v).toLocaleString()}
+                    icon={<ReceiptTaxIcon />}
+                    subtitle={`متوسط: ${formatSAR(liveData.totals.trans > 0 ? liveData.totals.sales / liveData.totals.trans : 0)}`}
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-h-[60vh] overflow-y-auto">
+                  {liveData.stores.map((store) => (
+                    <div
+                      key={store.sid}
+                      onClick={() => setViewStoreId(store.sid)}
+                      className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden identity-card cursor-pointer hover:border-orange-400 transition-all"
+                    >
+                      <div className="p-4 text-right">
+                        <div className="font-bold text-neutral-900 truncate">{store.name}</div>
+                        <div className="text-orange-600 font-bold mt-1 text-xl" dir="ltr">{formatSAR(store.sales)}</div>
 
-                      {store.employees.length > 0 && (
-                        <div className="mt-4 pt-3 border-t border-neutral-100">
-                          <label className="text-[10px] font-bold text-neutral-400 uppercase mb-1 block">الموظف</label>
-                          <select
-                            className="w-full text-xs p-2 rounded-lg border border-neutral-200 bg-neutral-50 font-semibold mb-3 outline-none focus:border-orange-500"
-                            value={selectedEmpId}
-                            onChange={(e) => setSelectedLiveEmps(prev => ({ ...prev, [store.sid]: e.target.value }))}
-                          >
-                            <option value="" disabled>اختر موظف...</option>
-                            {store.employees.map(e => (
-                              <option key={e.id} value={e.id}>{e.name}</option>
-                            ))}
-                          </select>
-
-                          {selectedEmp && (
-                            <div className="bg-orange-50 rounded-xl p-3 border border-orange-100 space-y-2">
-                              <div className="flex justify-between items-center border-b border-orange-200/50 pb-2">
-                                <span className="text-xs text-orange-800 font-bold">المبيعات</span>
-                                <span className="text-sm font-black text-orange-600" dir="ltr">{formatSAR(selectedEmp.sales)}</span>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <span className="text-[9px] text-orange-600/70 font-bold block">الفواتير</span>
-                                  <span className="text-xs font-bold text-orange-900" dir="ltr">{Math.round(selectedEmp.trans)}</span>
-                                </div>
-                                <div>
-                                  <span className="text-[9px] text-orange-600/70 font-bold block">المتوسط</span>
-                                  <span className="text-xs font-bold text-orange-900" dir="ltr">{formatSAR(selectedEmp.avgInv)}</span>
-                                </div>
-                              </div>
-                            </div>
-                          )}
+                        <div className="flex justify-between mt-3 text-xs text-neutral-500">
+                          <span>{store.employees.length} موظفين</span>
+                          <span>{store.trans} فاتورة</span>
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
