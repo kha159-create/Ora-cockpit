@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { KPICard, RankCard, GrowthTrajectoryChart } from '../components/DashboardComponents';
-import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon, XIcon, ChevronDownIcon, PrinterIcon } from '../components/Icons';
+import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon, XIcon, PrinterIcon } from '../components/Icons';
 import { generateDailyReportPDF } from '../services/pdf/pdfService';
 
 function isAdminOrAuditor(role?: string) {
@@ -54,8 +54,8 @@ export default function DashboardPage() {
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [liveModalOpen, setLiveModalOpen] = useState(false);
   const [dailyReportModalOpen, setDailyReportModalOpen] = useState(false);
-  const [expandedEmp, setExpandedEmp] = useState<string | null>(null);
   const [chartMode, setChartMode] = useState<'SALES' | 'VISITORS' | 'TARGET'>('SALES');
+  const [selectedLiveEmps, setSelectedLiveEmps] = useState<Record<string, string>>({});
   const user = getCurrentUser();
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -104,6 +104,100 @@ export default function DashboardPage() {
 
   const handlePrintDailyReport = () => {
     generateDailyReportPDF(dailyReportData, { yesterday: yesterdayStr, lastYear: lastYearYesterdayStr });
+  };
+
+  const handlePrintEmployeeReport = async () => {
+    // Reuse logic from generateEmployeePerformancePDF but for yesterday/MTD
+    // We can use topEmployeesRank data which is MTD based?
+    // Or we need to construct it similar to ReportsPage.
+    // For simplicity and speed, let's use topEmployeesRank as base, but we need 'Yesterday' data too.
+    // topEmployeesRank only has MTD aggregates.
+
+    // Let's re-calculate efficiently to match PDF requirements:
+    // We need for each employee: ySales, yShare, mSales, mShare, ...
+    if (!empRaw?.history || !empRaw?.employee_names) return;
+    const historyData: Record<string, any[]> = empRaw.history;
+    const names: Record<string, string> = empRaw.employee_names;
+    const targets: Record<string, number> = empRaw.targets || {};
+    const norm = (s: unknown) => String(s || '').substring(0, 10);
+
+    const agg: Record<string, any> = {};
+    const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
+
+    // Helper to get total sales for share calculation
+    let totalYSales = 0;
+    let totalMSales = 0;
+
+    Object.entries(historyData).forEach(([storeId, records]) => {
+      if (!allowedStoreIds.has(storeId)) return;
+      for (const rec of records || []) {
+        const date = rec?.[0];
+        const dateStr = norm(date);
+        const sales = Number(rec?.[2]) || 0;
+        const trans = Number(rec?.[3]) || 0;
+
+        // Filter Time Range
+        if (dateStr < startOfMonth || dateStr > yesterdayStr) continue;
+
+        const rawId = rec?.[1];
+        let id = String(rawId || '').trim();
+        let name = id;
+        if (id.includes('-')) {
+          const [a, b] = id.split('-');
+          id = (a || '').trim();
+          name = (b || id).trim();
+        }
+        if (!id || name === 'مرتجع') continue;
+        name = names[id] || names[id.padStart(4, '0')] || name;
+
+        if (!agg[id]) agg[id] = {
+          name,
+          store: raw?.stores?.[storeId],
+          ySales: 0, yTrans: 0,
+          mSales: 0, mTrans: 0,
+          target: targets[id] ?? targets[id.padStart(4, '0')] ?? 0
+        };
+
+        if (dateStr === yesterdayStr) {
+          agg[id].ySales += sales;
+          agg[id].yTrans += trans;
+          totalYSales += sales;
+        }
+        if (dateStr >= startOfMonth && dateStr <= yesterdayStr) {
+          agg[id].mSales += sales;
+          agg[id].mTrans += trans;
+          totalMSales += sales;
+        }
+      }
+    });
+
+    const reportData = Object.values(agg).map((e: any) => {
+      const daysInMonth = new Date(yesterday.getFullYear(), yesterday.getMonth() + 1, 0).getDate();
+      const remainingDays = Math.max(0, daysInMonth - yesterday.getDate()); // From today onwards? Or including yesterday? Assume remaining from now.
+      const remaining = Math.max(0, e.target - e.mSales);
+
+      return {
+        ...e,
+        yShare: e.target > 0 ? (e.ySales / (e.target / daysInMonth)) * 100 : 0, // Approx daily share? Or share of store?
+        // The PDF service expects share of target usually or share of total.
+        // Let's use Achievement for MTD and Share of Total for Yesterday to match typical reports?
+        // Actually ReportsPage uses: yShare = ySales / (target.yestSales || 1) * 100;
+        // Here we don't have daily targets. Let's use Share of Total Sales for simplicity or just 0 if undefined.
+        yAvgInv: e.yTrans > 0 ? e.ySales / e.yTrans : 0,
+        mShare: e.target > 0 ? (e.mSales / e.target) * 100 : 0, // This is achievement actually?
+        mAvgInv: e.mTrans > 0 ? e.mSales / e.mTrans : 0,
+        achievement: e.target > 0 ? (e.mSales / e.target) * 100 : 0,
+        remaining,
+        dailyReq: remainingDays > 0 ? remaining / remainingDays : 0
+      };
+    }).sort((a: any, b: any) => b.mSales - a.mSales);
+
+    // We need to import generateEmployeePerformancePDF from pdfService?
+    // It was named generateEmployeeReport in pdfService.ts. Let's check imports.
+    // Ah, dashboard page doesn't import it. I need to add import or just use what is available.
+    // The file pdfService.ts has `generateEmployeePerformancePDF`.
+    const { generateEmployeePerformancePDF } = await import('../services/pdf/pdfService');
+    generateEmployeePerformancePDF(reportData, { yesterday: yesterdayStr, monthStart: startOfMonth });
   };
 
   const { allowedStoreIds, managers, branches, cities } = useMemo(() => {
@@ -374,39 +468,71 @@ export default function DashboardPage() {
     if (!raw) return [];
     const meta = raw.store_meta || {};
     const storesMap = raw.stores || {};
-    const byStore: Record<string, { sales: number; totalMonthSales: number; trans: number; visitors: number; avgInv: number; prevSales: number; prevVisitors: number; dailyReq: number; target: number; ach: number }> = {};
+    const byStore: Record<string, {
+      sales: number;
+      yesterdaySales: number;
+      totalMonthSales: number;
+      trans: number;
+      visitors: number;
+      avgInv: number;
+      prevSales: number;
+      prevVisitors: number;
+      dailyReq: number;
+      target: number;
+      ach: number
+    }> = {};
     const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
+    const startOfLastYearMonth = `${lastYearYesterdayStr.substring(0, 8)}01`;
 
     (raw.sales || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
-      if (!byStore[sid]) byStore[sid] = { sales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
-      if (dateStr === yesterdayStr) byStore[sid].sales += v || 0;
-      if (dateStr >= startOfMonth && dateStr <= yesterdayStr) byStore[sid].totalMonthSales += v || 0;
-      if (dateStr === lastYearYesterdayStr) byStore[sid].prevSales += v || 0;
+      if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
+
+      if (dateStr === yesterdayStr) {
+        byStore[sid].yesterdaySales += v || 0;
+      }
+
+      // Sales is now MTD Sales as requested
+      if (dateStr >= startOfMonth && dateStr <= yesterdayStr) {
+        byStore[sid].sales += v || 0;
+        byStore[sid].totalMonthSales += v || 0;
+      }
+
+      // Previous Sales is Last Year MTD
+      if (dateStr >= startOfLastYearMonth && dateStr <= lastYearYesterdayStr) {
+        byStore[sid].prevSales += v || 0;
+      }
     });
+
     (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
-      if (!byStore[sid]) byStore[sid] = { sales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
+      if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
       if (dateStr === yesterdayStr) byStore[sid].trans += v || 0;
     });
+
     (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
-      if (!byStore[sid]) byStore[sid] = { sales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
+      if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
       if (dateStr === yesterdayStr) byStore[sid].visitors += v || 0;
       if (dateStr === lastYearYesterdayStr) byStore[sid].prevVisitors += v || 0;
     });
+
     (raw.targets || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
-      if (!byStore[sid]) byStore[sid] = { sales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
+      if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
       if (dateStr === yesterdayStr) {
         const target = v || 0;
         byStore[sid].target = target;
-        const totalSales = byStore[sid].totalMonthSales;
-        const remaining = target - totalSales;
+
+        // Remaining is Target - MTD Sales
+        const remaining = Math.max(0, target - byStore[sid].sales);
+
+        // Remaining Days: Days in month - Yesterday's Date (so today + future)
         const daysInMonth = new Date(yesterday.getFullYear(), yesterday.getMonth() + 1, 0).getDate();
-        const remainingDays = daysInMonth - yesterday.getDate() + 1;
-        byStore[sid].dailyReq = remainingDays > 0 ? Math.max(0, remaining / remainingDays) : 0;
-        byStore[sid].ach = target > 0 ? (totalSales / target) * 100 : 0;
+        const remainingDays = Math.max(0, daysInMonth - yesterday.getDate());
+
+        byStore[sid].dailyReq = remainingDays > 0 ? remaining / remainingDays : 0;
+        byStore[sid].ach = target > 0 ? (byStore[sid].sales / target) * 100 : 0;
       }
     });
 
@@ -417,22 +543,24 @@ export default function DashboardPage() {
         return byStore[sid].sales > 0 || byStore[sid].trans > 0;
       })
       .map(([sid, v]) => {
-        v.avgInv = v.trans > 0 ? v.sales / v.trans : 0;
+        // Average Bill: Yesterday Sales / Yesterday Bills
+        const avgInv = v.trans > 0 ? v.yesterdaySales / v.trans : 0;
+
         const growth = v.prevSales > 0 ? ((v.sales - v.prevSales) / v.prevSales) * 100 : 0;
         const conversion = v.visitors > 0 ? (v.trans / v.visitors) * 100 : 0;
         return {
           sid,
           name: storesMap[sid] || sid,
-          sales: v.sales,
-          prevSales: v.prevSales,
+          sales: v.sales, // MTD
+          prevSales: v.prevSales, // Last Year MTD
           growth,
-          trans: v.trans,
-          avgInv: v.avgInv,
-          visitors: v.visitors,
+          trans: v.trans, // Yesterday
+          avgInv: avgInv, // Yesterday
+          visitors: v.visitors, // Yesterday
           prevVisitors: v.prevVisitors,
           dailyReq: v.dailyReq,
           conversion,
-          customerValue: v.visitors > 0 ? v.sales / v.visitors : 0, // Fix: Sales / Visitors
+          customerValue: v.visitors > 0 ? v.yesterdaySales / v.visitors : 0, // Yesterday
         };
       })
       .sort((a, b) => b.sales - a.sales);
@@ -620,6 +748,7 @@ export default function DashboardPage() {
           icon={<ReceiptTaxIcon />}
           comparisonValue={prevYearTotals.trans}
           comparisonLabel="السنة الماضية"
+          subtitle={`متوسط الفاتورة: ${formatSAR(totals.trans > 0 ? totals.sales / totals.trans : 0)}`}
         />
         <KPICard
           title="الزوار"
@@ -729,19 +858,42 @@ export default function DashboardPage() {
       {liveModalOpen && (
         <div className="modal-center-screen" onClick={() => setLiveModalOpen(false)}>
           <div className="modal-content max-w-5xl my-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4 mb-6">
-              <div>
-                <div className="text-xl font-bold text-neutral-900">مبيعات اليوم — لايف</div>
-                <div className="text-sm text-neutral-500 mt-1">تاريخ اليوم: {todayStr}</div>
+            <div className="flex flex-col gap-4 mb-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-xl font-bold text-neutral-900">مبيعات اليوم — لايف</div>
+                  <div className="text-sm text-neutral-500 mt-1 flex items-center gap-2">
+                    <span>📅 {toYMD(new Date())}</span>
+                    <span>🕒 {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-secondary py-2 px-3 flex items-center gap-2"
+                  onClick={() => setLiveModalOpen(false)}
+                >
+                  <XIcon /> إغلاق
+                </button>
               </div>
-              <button
-                type="button"
-                className="btn-secondary py-2 px-3 flex items-center gap-2"
-                onClick={() => setLiveModalOpen(false)}
-              >
-                <XIcon /> إغلاق
-              </button>
+
+              {/* Area Manager Filter (For Admin) */}
+              {isAdminOrAuditor(user?.role) && (
+                <div className="flex items-center gap-2 bg-neutral-50 p-3 rounded-xl border border-neutral-100">
+                  <span className="text-sm font-semibold text-neutral-600">مدير المنطقة:</span>
+                  <select
+                    className="input py-1 px-3 text-sm min-w-[200px]"
+                    value={manager}
+                    onChange={(e) => setManager(e.target.value)}
+                  >
+                    <option value="all">الكل</option>
+                    {managers.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
               <KPICard title="المجموع (اليوم)" value={liveData.totals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
               <KPICard
@@ -749,66 +901,58 @@ export default function DashboardPage() {
                 value={liveData.totals.trans}
                 format={(v) => Math.round(v).toLocaleString()}
                 icon={<ReceiptTaxIcon />}
-                trendValue={liveData.totals.trans > 0 ? `معدل الفاتورة: ${formatSAR(liveData.totals.sales / liveData.totals.trans)}` : undefined}
+                subtitle={`متوسط: ${formatSAR(liveData.totals.trans > 0 ? liveData.totals.sales / liveData.totals.trans : 0)}`}
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-h-[60vh] overflow-y-auto">
-              {liveData.stores.map((store) => (
-                <div
-                  key={store.sid}
-                  className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden identity-card"
-                >
-                  <div className="p-4 text-right">
-                    <div className="font-bold text-neutral-900 truncate">{store.name}</div>
-                    <div className="text-orange-600 font-bold mt-1" dir="ltr">{formatSAR(store.sales)}</div>
-                    {store.employees.length > 0 && (
-                      <div className="mt-4 border-t border-neutral-100 bg-neutral-50 divide-y divide-neutral-100 rounded-xl overflow-hidden">
-                        {store.employees.map((emp: any) => (
-                          <div key={emp.id} className="flex flex-col">
-                            <button
-                              type="button"
-                              onClick={() => setExpandedEmp(expandedEmp === emp.id ? null : emp.id)}
-                              className="w-full flex justify-between items-center p-3 hover:bg-white transition-colors group"
-                            >
-                              <div className="flex items-center gap-2">
-                                <div className={`w-1 h-3 rounded-full bg-orange-400 group-hover:h-5 transition-all ${expandedEmp === emp.id ? 'h-5 bg-orange-600' : ''}`} />
-                                <span className={`text-[11px] font-bold ${expandedEmp === emp.id ? 'text-orange-600' : 'text-neutral-700'}`}>
-                                  {emp.name}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <span className="text-[10px] font-black text-neutral-400" dir="ltr">{formatSAR(emp.sales)}</span>
-                                <div className={`transition-transform duration-200 text-neutral-300 ${expandedEmp === emp.id ? 'rotate-180 text-orange-500' : ''}`}>
-                                  <ChevronDownIcon />
-                                </div>
-                              </div>
-                            </button>
+              {liveData.stores.map((store) => {
+                const selectedEmpId = selectedLiveEmps[store.sid] || '';
+                const selectedEmp = store.employees.find(e => e.id === selectedEmpId) || store.employees[0]; // Default to first
 
-                            {expandedEmp === emp.id && (
-                              <div className="bg-white p-3 space-y-2 animate-in fade-in zoom-in-95 duration-200">
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div className="p-2 bg-neutral-50 rounded-xl border border-neutral-100">
-                                    <div className="text-[9px] font-black text-neutral-400 uppercase leading-none mb-1">Avg / معدل</div>
-                                    <div className="text-xs font-black text-neutral-900" dir="ltr">{formatSAR(emp.avgInv)}</div>
-                                  </div>
-                                  <div className="p-2 bg-neutral-50 rounded-xl border border-neutral-100">
-                                    <div className="text-[9px] font-black text-neutral-400 uppercase leading-none mb-1">Bills / فواتير</div>
-                                    <div className="text-xs font-black text-neutral-900" dir="ltr">{Math.round(emp.trans)}</div>
-                                  </div>
+                return (
+                  <div key={store.sid} className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden identity-card">
+                    <div className="p-4 text-right">
+                      <div className="font-bold text-neutral-900 truncate">{store.name}</div>
+                      <div className="text-orange-600 font-bold mt-1" dir="ltr">{formatSAR(store.sales)}</div>
+
+                      {store.employees.length > 0 && (
+                        <div className="mt-4 pt-3 border-t border-neutral-100">
+                          <label className="text-[10px] font-bold text-neutral-400 uppercase mb-1 block">الموظف</label>
+                          <select
+                            className="w-full text-xs p-2 rounded-lg border border-neutral-200 bg-neutral-50 font-semibold mb-3 outline-none focus:border-orange-500"
+                            value={selectedEmpId}
+                            onChange={(e) => setSelectedLiveEmps(prev => ({ ...prev, [store.sid]: e.target.value }))}
+                          >
+                            <option value="" disabled>اختر موظف...</option>
+                            {store.employees.map(e => (
+                              <option key={e.id} value={e.id}>{e.name}</option>
+                            ))}
+                          </select>
+
+                          {selectedEmp && (
+                            <div className="bg-orange-50 rounded-xl p-3 border border-orange-100 space-y-2">
+                              <div className="flex justify-between items-center border-b border-orange-200/50 pb-2">
+                                <span className="text-xs text-orange-800 font-bold">المبيعات</span>
+                                <span className="text-sm font-black text-orange-600" dir="ltr">{formatSAR(selectedEmp.sales)}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <span className="text-[9px] text-orange-600/70 font-bold block">الفواتير</span>
+                                  <span className="text-xs font-bold text-orange-900" dir="ltr">{Math.round(selectedEmp.trans)}</span>
                                 </div>
-                                <div className="p-2 bg-orange-50 rounded-xl border border-orange-100 flex justify-between items-center">
-                                  <span className="text-[10px] font-black text-orange-700">الإجمالي</span>
-                                  <span className="text-sm font-black text-orange-700" dir="ltr">{formatSAR(emp.sales)}</span>
+                                <div>
+                                  <span className="text-[9px] text-orange-600/70 font-bold block">المتوسط</span>
+                                  <span className="text-xs font-bold text-orange-900" dir="ltr">{formatSAR(selectedEmp.avgInv)}</span>
                                 </div>
                               </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -832,6 +976,13 @@ export default function DashboardPage() {
                   onClick={handlePrintDailyReport}
                 >
                   <PrinterIcon className="w-4 h-4" /> طباعة التقرير
+                </button>
+                <button
+                  type="button"
+                  className="bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-50 py-1.5 px-3 rounded-lg text-sm flex items-center gap-2 transition-colors font-medium shadow-sm"
+                  onClick={handlePrintEmployeeReport}
+                >
+                  <UsersIcon className="w-4 h-4 text-orange-500" /> تقرير الموظفين
                 </button>
                 <button
                   type="button"

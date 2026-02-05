@@ -102,6 +102,7 @@ export const KPICard: React.FC<{
   progressValue?: number;
   trend?: 'up' | 'down' | 'neutral';
   trendValue?: string;
+  subtitle?: string; // New prop for secondary metric
   compactTarget?: boolean;
 }> = ({
   title,
@@ -116,6 +117,7 @@ export const KPICard: React.FC<{
   progressValue = 0,
   trend = 'neutral',
   trendValue,
+  subtitle,
   compactTarget = false,
 }) => {
     const isPositive = comparisonValue !== undefined && value >= comparisonValue;
@@ -147,8 +149,9 @@ export const KPICard: React.FC<{
           </div>
 
           {/* القيمة الرئيسية */}
-          <div className="mb-3 flex-1 flex items-center">
+          <div className="mb-3 flex-1 flex flex-col justify-center">
             <div className="kpi-value break-all leading-tight">{formattedValue}</div>
+            {subtitle && <div className="text-xs text-neutral-500 mt-1 font-medium">{subtitle}</div>}
           </div>
 
           {/* القسم السفلي */}
@@ -298,7 +301,7 @@ export const RankCard: React.FC<{
 
 const Tooltip: React.FC<{ content: string; x: number; y: number }> = ({ content, x, y }) => (
   <div
-    className="absolute p-2 bg-gray-800 text-white text-xs rounded-md shadow-lg pointer-events-none"
+    className="absolute p-2 bg-gray-800 text-white text-xs rounded-md shadow-lg pointer-events-none z-50"
     style={{ left: x, top: y, transform: 'translate(-50%, -110%)' }}
     dangerouslySetInnerHTML={{ __html: content }}
   />
