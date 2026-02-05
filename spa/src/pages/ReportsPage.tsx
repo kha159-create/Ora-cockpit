@@ -65,6 +65,7 @@ export default function ReportsPage() {
   const [showExcelModal, setShowExcelModal] = useState(false);
   const [showReportChoiceModal, setShowReportChoiceModal] = useState(false);
   const [reportChoiceType, setReportChoiceType] = useState<'pdf' | 'excel' | null>(null);
+  const [previewReport, setPreviewReport] = useState<{ type: string; data: any } | null>(null);
 
   useEffect(() => {
     loadManagementData()
@@ -73,7 +74,7 @@ export default function ReportsPage() {
         setLastUpdate((d as any)?.metadata?.generated_at || '--:--');
       })
       .catch((e) => setErr(e?.message || String(e)));
-    loadEmployeesData().then(setRawEmp).catch(() => {});
+    loadEmployeesData().then(setRawEmp).catch(() => { });
   }, []);
 
   const range = useMemo(
@@ -161,6 +162,110 @@ export default function ReportsPage() {
     XLSX.writeFile(wb, `Store_Sales_${range.start}_${range.end}.xlsx`);
   };
 
+  const generateGlobalSummary = () => {
+    if (!rawMgmt) return;
+    const days: string[] = [];
+    let curr = new Date(range.start);
+    const end = new Date(range.end);
+    while (curr <= end) {
+      days.push(toYMD(curr));
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    const reportData = days.map(d => {
+      const prevD = new Date(d);
+      prevD.setFullYear(prevD.getFullYear() - 1);
+      const dPrev = toYMD(prevD);
+
+      let s = 0, sPrev = 0, t = 0, v = 0, vPrev = 0;
+      (rawMgmt.sales || []).forEach(([dt, sid, val]: any[]) => {
+        if (passFilter(sid)) {
+          if (dt === d) s += val || 0;
+          if (dt === dPrev) sPrev += val || 0;
+        }
+      });
+      (rawMgmt.transactions || []).forEach(([dt, sid, val]: any[]) => {
+        if (passFilter(sid) && dt === d) t += val || 0;
+      });
+      (rawMgmt.visitors || []).forEach(([dt, sid, val]: any[]) => {
+        if (passFilter(sid)) {
+          if (dt === d) v += val || 0;
+          if (dt === dPrev) vPrev += val || 0;
+        }
+      });
+
+      return {
+        date: d,
+        sales: s,
+        salesPrev: sPrev,
+        growth: sPrev > 0 ? ((s - sPrev) / sPrev) * 100 : 0,
+        trans: t,
+        avgInv: t > 0 ? s / t : 0,
+        customerValue: t > 0 ? s / t : 0,
+        visitors: v,
+        visitorsPrev: vPrev,
+        conversion: v > 0 ? (t / v) * 100 : 0
+      };
+    });
+
+    setPreviewReport({ type: 'global', data: reportData });
+    setShowReportChoiceModal(false);
+  };
+
+  const generateEmployeePerformance = () => {
+    if (!rawMgmt || !rawEmp) return;
+    const history = rawEmp.history || {};
+    const names = rawEmp.employee_names || {};
+    const targets = rawEmp.targets || {};
+
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const yStr = toYMD(yesterday);
+
+    const empData: Record<string, any> = {};
+
+    Object.entries(history).forEach(([sid, recs]: [string, any]) => {
+      if (!passFilter(sid)) return;
+      (recs || []).forEach(([dt, eid, s, t]: any[]) => {
+        if (!empData[eid]) {
+          empData[eid] = {
+            id: eid,
+            name: names[eid] || eid,
+            ySales: 0, yTrans: 0,
+            mSales: 0, mTrans: 0,
+            target: targets[eid] || 0
+          };
+        }
+        if (dt === yStr) {
+          empData[eid].ySales += s || 0;
+          empData[eid].yTrans += t || 0;
+        }
+        if (dt >= range.start && dt <= range.end) {
+          empData[eid].mSales += s || 0;
+          empData[eid].mTrans += t || 0;
+        }
+      });
+    });
+
+    const totalYSales = Object.values(empData).reduce((sum, e) => sum + e.ySales, 0);
+    const totalMSales = Object.values(empData).reduce((sum, e) => sum + e.mSales, 0);
+
+    const list = Object.values(empData).map(e => ({
+      ...e,
+      yShare: totalYSales > 0 ? (e.ySales / totalYSales) * 100 : 0,
+      mShare: totalMSales > 0 ? (e.mSales / totalMSales) * 100 : 0,
+      yAvgInv: e.yTrans > 0 ? e.ySales / e.yTrans : 0,
+      mAvgInv: e.mTrans > 0 ? e.mSales / e.mTrans : 0,
+      achievement: e.target > 0 ? (e.mSales / e.target) * 100 : 0,
+      remaining: Math.max(0, e.target - e.mSales),
+      dailyReq: 0 // Will calculate based on remaining days in month
+    }));
+
+    setPreviewReport({ type: 'employee', data: list });
+    setShowReportChoiceModal(false);
+  };
+
   const exportEmployeeExcel = () => {
     if (!rawMgmt || !rawEmp) return;
     const history = rawEmp.history || {};
@@ -225,8 +330,7 @@ export default function ReportsPage() {
   const openPdfLegacy = () => {
     setShowReportChoiceModal(false);
     setReportChoiceType(null);
-    // البقاء داخل التطبيق: تصدير PDF من واجهة التقارير الحالية (لا توجيه إلى reports.html)
-    alert('سيتم إضافة تصدير PDF من هذه الصفحة قريباً. استخدم تصدير Excel في الوقت الحالي.');
+    generateGlobalSummary();
   };
 
   const canExportEmployee = user?.role === 'Admin' || user?.name === 'Sales Manager';
@@ -354,8 +458,8 @@ export default function ReportsPage() {
         >
           <div className="text-red-500 text-4xl mb-3">📄</div>
           <h5 className="font-bold text-neutral-900">تقارير PDF</h5>
-          <p className="text-sm text-neutral-500 mt-1">لوحة التحكم، تقرير أمس للمعارض، تقرير أمس للموظفين</p>
-          <span className="inline-block mt-3 px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-lg group-hover:bg-amber-600">اختر وتصدير PDF</span>
+          <p className="text-sm text-neutral-500 mt-1">لوحة التحكم، ملخص عام، أداء الموظفين</p>
+          <span className="inline-block mt-3 px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-lg group-hover:bg-amber-600">اختر وتنسيق التقرير</span>
         </button>
         <button
           type="button"
@@ -369,23 +473,32 @@ export default function ReportsPage() {
         </button>
       </div>
 
-      {/* Report type choice modal - داخل حدود الصفحة */}
+      {/* Report type choice modal */}
       {showReportChoiceModal && reportChoiceType && (
         <div className="modal-center-screen" onClick={() => setShowReportChoiceModal(false)}>
           <div className="modal-content max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <h5 className="font-bold text-lg text-neutral-900 mb-4">
-              {reportChoiceType === 'pdf' ? 'اختر تقرير PDF' : 'اختر تقرير Excel'}
+              {reportChoiceType === 'pdf' ? 'اختر التقرير للمعاينة' : 'اختر تقرير Excel'}
             </h5>
             {reportChoiceType === 'pdf' ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <button
                   type="button"
                   onClick={openPdfLegacy}
                   className="w-full py-3 px-4 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600"
                 >
-                  فتح صفحة تصدير PDF (لوحة التحكم، أمس للمعارض، أمس للموظفين)
+                  فتح تقرير ملخص عام (Global Summary)
                 </button>
-                <p className="text-sm text-neutral-500">ستفتح نافذة جديدة لتصدير PDF باستخدام الفلاتر الحالية.</p>
+                {canExportEmployee && (
+                  <button
+                    type="button"
+                    onClick={() => { generateEmployeePerformance(); setShowReportChoiceModal(false); }}
+                    className="w-full py-3 px-4 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700"
+                  >
+                    فتح تقرير أداء الموظفين (Employee Performance)
+                  </button>
+                )}
+                <p className="text-sm text-neutral-500">سيتم فتح التقرير للمراجعة أولاً، ثم يمكنك اختيار الطباعة.</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -412,7 +525,7 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Excel confirm modal - داخل حدود الصفحة */}
+      {/* Excel confirm modal */}
       {showExcelModal && (
         <div className="modal-center-screen" onClick={() => setShowExcelModal(false)}>
           <div className="modal-content max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
@@ -424,6 +537,175 @@ export default function ReportsPage() {
               <button type="button" className="flex-1 bg-green-600 text-white font-bold py-2 rounded-xl hover:bg-green-700 disabled:opacity-50" onClick={runExcelExport} disabled={excelExporting}>
                 {excelExporting ? 'جاري التصدير...' : 'تصدير'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report View Modal */}
+      {previewReport && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+            <div className="p-4 border-b border-neutral-100 flex items-center justify-between bg-neutral-50">
+              <h3 className="font-bold text-neutral-900">
+                {previewReport.type === 'global' ? 'Global Summary - ملخص عام' : 'Employee Performance - أداء الموظفين'}
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg font-bold text-sm hover:bg-primary-700 transition-colors flex items-center gap-2"
+                >
+                  <span>🖨️</span> طباعة
+                </button>
+                <button
+                  onClick={() => setPreviewReport(null)}
+                  className="px-4 py-2 bg-neutral-200 text-neutral-700 rounded-lg font-bold text-sm hover:bg-neutral-300 transition-colors"
+                >
+                  إغلاق
+                </button>
+              </div>
+            </div>
+
+            <div className="p-8 overflow-y-auto flex-1 print:p-0" id="printable-report">
+              <style>{`
+                @media print {
+                  body * { visibility: hidden; }
+                  #printable-report, #printable-report * { visibility: visible; }
+                  #printable-report { position: absolute; left: 0; top: 0; width: 100%; }
+                  .no-print { display: none !important; }
+                }
+                .report-table th { background: #f97316; color: white; text-align: center; padding: 8px; font-size: 11px; border: 1px solid #ddd; }
+                .report-table td { padding: 6px 8px; border: 1px solid #eee; text-align: center; font-size: 12px; }
+                .report-header { margin-bottom: 20px; border-bottom: 2px solid #f97316; padding-bottom: 10px; }
+              `}</style>
+
+              <div className="report-header flex justify-between items-end">
+                <div>
+                  <h1 className="text-2xl font-bold text-neutral-900">Ora Cockpit</h1>
+                  <p className="text-sm text-neutral-500">{previewReport.type === 'global' ? 'Global Summary - ملخص عام' : 'Employee Performance - أداء الموظفين'}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold">التاريخ: {range.start} إلى {range.end}</p>
+                  <p className="text-xs text-neutral-400">تم الاستخراج في: {new Date().toLocaleString('ar-SA')}</p>
+                </div>
+              </div>
+
+              {previewReport.type === 'global' && (
+                <table className="w-full report-table border-collapse">
+                  <thead>
+                    <tr>
+                      <th>التاريخ</th>
+                      <th>مبيعات 2026</th>
+                      <th>مبيعات 2025</th>
+                      <th>% النمو</th>
+                      <th>عدد الفواتير</th>
+                      <th>م. الفاتورة</th>
+                      <th>قيمة العميل</th>
+                      <th>زوار 2026</th>
+                      <th>زوار 2025</th>
+                      <th>% التحويل</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewReport.data.map((r: any) => (
+                      <tr key={r.date}>
+                        <td className="font-mono">{r.date}</td>
+                        <td className="font-bold">{Math.round(r.sales).toLocaleString()}</td>
+                        <td className="text-neutral-500">{Math.round(r.salesPrev).toLocaleString()}</td>
+                        <td className={`font-bold ${r.growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {r.growth >= 0 ? '+' : ''}{r.growth.toFixed(1)}%
+                        </td>
+                        <td>{r.trans.toLocaleString()}</td>
+                        <td>{Math.round(r.avgInv).toLocaleString()}</td>
+                        <td className="font-bold">{Math.round(r.customerValue).toLocaleString()}</td>
+                        <td>{r.visitors.toLocaleString()}</td>
+                        <td className="text-neutral-400">{r.visitorsPrev.toLocaleString()}</td>
+                        <td className="text-orange-600 font-bold">{r.conversion.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-neutral-100 font-bold">
+                      <td>الإجمالي</td>
+                      <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.sales, 0)).toLocaleString()}</td>
+                      <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.salesPrev, 0)).toLocaleString()}</td>
+                      <td>{((previewReport.data.reduce((s: any, x: any) => s + x.sales, 0) - previewReport.data.reduce((s: any, x: any) => s + x.salesPrev, 0)) / (previewReport.data.reduce((s: any, x: any) => s + x.salesPrev, 0) || 1) * 100).toFixed(1)}%</td>
+                      <td>{previewReport.data.reduce((s: any, x: any) => s + x.trans, 0).toLocaleString()}</td>
+                      <td>-</td>
+                      <td>-</td>
+                      <td>{previewReport.data.reduce((s: any, x: any) => s + x.visitors, 0).toLocaleString()}</td>
+                      <td>{previewReport.data.reduce((s: any, x: any) => s + x.visitorsPrev, 0).toLocaleString()}</td>
+                      <td>{(previewReport.data.reduce((s: any, x: any) => s + x.trans, 0) / (previewReport.data.reduce((s: any, x: any) => s + x.visitors, 0) || 1) * 100).toFixed(1)}%</td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+
+              {previewReport.type === 'employee' && (
+                <div className="space-y-8">
+                  <table className="w-full report-table border-collapse">
+                    <thead>
+                      <tr>
+                        <th rowSpan={2}>الموظف</th>
+                        <th colSpan={4} className="bg-neutral-600">الأمس (Yesterday)</th>
+                        <th colSpan={8} className="bg-primary-600">الشهر الحالي (MTD)</th>
+                      </tr>
+                      <tr>
+                        <th>المبيعات</th>
+                        <th>مساهمة %</th>
+                        <th>العدد</th>
+                        <th>م. فاتورة</th>
+                        <th>المبيعات</th>
+                        <th>مساهمة %</th>
+                        <th>العدد</th>
+                        <th>م. فاتورة</th>
+                        <th>الهدف</th>
+                        <th>% تحقيق</th>
+                        <th>المتبقي</th>
+                        <th>يومية متبقية</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewReport.data.map((e: any) => {
+                        const now = new Date();
+                        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                        const remainingDays = daysInMonth - now.getDate() + 1;
+                        const dailyReq = remainingDays > 0 ? e.remaining / remainingDays : 0;
+                        return (
+                          <tr key={e.id}>
+                            <td className="text-right font-bold">{e.name}</td>
+                            <td>{Math.round(e.ySales).toLocaleString()}</td>
+                            <td>{e.yShare.toFixed(0)}%</td>
+                            <td>{e.yTrans}</td>
+                            <td>{Math.round(e.yAvgInv).toLocaleString()}</td>
+                            <td className="font-bold text-primary-700">{Math.round(e.mSales).toLocaleString()}</td>
+                            <td>{e.mShare.toFixed(0)}%</td>
+                            <td>{e.mTrans}</td>
+                            <td>{Math.round(e.mAvgInv).toLocaleString()}</td>
+                            <td className="text-neutral-500">{Math.round(e.target).toLocaleString()}</td>
+                            <td className="font-bold">{e.achievement.toFixed(1)}%</td>
+                            <td className="text-red-500">{Math.round(e.remaining).toLocaleString()}</td>
+                            <td className="font-bold">{Math.round(dailyReq).toLocaleString()}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="bg-neutral-100 font-bold">
+                        <td>الإجمالي</td>
+                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.ySales, 0)).toLocaleString()}</td>
+                        <td>100%</td>
+                        <td>{previewReport.data.reduce((s: any, x: any) => s + x.yTrans, 0)}</td>
+                        <td>-</td>
+                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.mSales, 0)).toLocaleString()}</td>
+                        <td>100%</td>
+                        <td>{previewReport.data.reduce((s: any, x: any) => s + x.mTrans, 0)}</td>
+                        <td>-</td>
+                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.target, 0)).toLocaleString()}</td>
+                        <td>{(previewReport.data.reduce((s: any, x: any) => s + x.mSales, 0) / (previewReport.data.reduce((s: any, x: any) => s + x.target, 0) || 1) * 100).toFixed(1)}%</td>
+                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.remaining, 0)).toLocaleString()}</td>
+                        <td>-</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>

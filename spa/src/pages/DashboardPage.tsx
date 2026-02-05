@@ -278,17 +278,8 @@ export default function DashboardPage() {
   if (err) {
     return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
   }
-  if (!raw) {
-    return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
-      </div>
-    );
-  }
-
+  // Move calculations before early returns to satisfy React Hook rules
   const ach = totals.target > 0 ? (totals.sales / totals.target) * 100 : 0;
-
-
   // Live data (today only)
   const todayStr = toYMD(new Date());
   const liveData = useMemo(() => {
@@ -506,6 +497,14 @@ export default function DashboardPage() {
     const ams = monthlyChartData.length > 0 ? totalSales / monthlyChartData.length : 0;
     return { ads, ams };
   }, [monthlyChartData]);
+
+  if (!raw) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -900,7 +899,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {dailyReportData.map((row, idx) => (
+                  {dailyReportData.map((row: any, idx) => (
                     <tr key={row.sid} className={`border-b border-neutral-100 hover:bg-neutral-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-neutral-50'}`}>
                       <td className="py-3 px-4 text-neutral-500">{idx + 1}</td>
                       <td className="py-3 px-4 font-medium text-blue-600">{row.name}</td>
