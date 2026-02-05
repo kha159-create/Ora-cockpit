@@ -4,11 +4,6 @@ import { getCurrentUser } from '../auth/storage';
 import { DownloadIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
 
-function safeNum(x: unknown) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : 0;
-}
-
 function formatSAR(val: number) {
   return val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 }
@@ -99,125 +94,119 @@ export default function OffersPage() {
 
   const today = useMemo(() => new Date('2026-02-04'), []); // Using metadata time
 
-  const dateRange = useMemo(() => {
-    const end = new Date(today);
-    const start = new Date(today);
-    if (period === 'mtd') start.setDate(1);
-    else if (period === '7d') start.setDate(end.getDate() - 6);
-    else if (period === '14d') start.setDate(end.getDate() - 13);
-    else if (period === '30d') start.setDate(end.getDate() - 29);
-    else if (period === 'yest') { start.setDate(end.getDate() - 1); end.setDate(end.getDate() - 1); }
+  // No dateRange needed anymore
 
-    const toYMD = (d: Date) => d.toISOString().split('T')[0];
-    return { start: toYMD(start), end: toYMD(end) };
-  }, [period, today]);
-
-  const periodSuf = useMemo(() => {
-    if (period === 'mtd') return 'm';
-    if (period === '7d') return '7d';
-    if (period === '14d') return '14d';
-    if (period === '30d') return '30d';
-    if (period === 'yest') return 'y';
-    return 'm'; // Default
-  }, [period]);
+  // No periodSuf needed anymore
 
   const offers = useMemo(() => {
-    const { start: startYMD, end: endYMD } = dateRange;
+    const yesterdayDate = new Date(today);
+    yesterdayDate.setDate(today.getDate() - 1);
+    const yesterdayYMD = yesterdayDate.toISOString().split('T')[0];
 
-    let list = rawOffers.map((o: any) => {
-      let sales = 0;
-      let discount = 0;
-      let ops = 0;
+    const mtdStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const mtdStartYMD = mtdStart.toISOString().split('T')[0];
+
+    return rawOffers.map((o: any) => {
+      let yestSales = 0, yestDisc = 0, yestOps = 0;
+      let mtdSales = 0, mtdDisc = 0, mtdOps = 0;
 
       const statsArray = o.stats || [];
       statsArray.forEach((s: any) => {
         const d = s.d;
         const sid = String(s.s);
-        if (d >= startYMD && d <= endYMD && allowedStoreIds.has(sid)) {
-          sales += Number(s.bill ?? s.sale ?? 0);
-          discount += Number(s.disc ?? 0);
-          ops += Number(s.cnt ?? 0);
+        if (!allowedStoreIds.has(sid)) return;
+
+        // MTD
+        if (d >= mtdStartYMD && d <= yesterdayYMD) {
+          mtdSales += Number(s.bill ?? s.sale ?? 0);
+          mtdDisc += Number(s.disc ?? 0);
+          mtdOps += Number(s.cnt ?? 0);
+        }
+        // Yesterday
+        if (d === yesterdayYMD) {
+          yestSales += Number(s.bill ?? s.sale ?? 0);
+          yestDisc += Number(s.disc ?? 0);
+          yestOps += Number(s.cnt ?? 0);
         }
       });
 
-      // Legacy support check if stats were empty but stores existed
-      if (sales === 0 && ops === 0 && o.stores) {
-        const suf = periodSuf;
-        const storeData = o.stores || {};
-        Object.keys(storeData).forEach(sid => {
+      // Legacy/Fallback check
+      if (mtdSales === 0 && mtdOps === 0 && o.stores) {
+        Object.keys(o.stores).forEach(sid => {
           if (allowedStoreIds.has(String(sid))) {
-            const sObj = storeData[sid] || {};
-            sales += Number(sObj[`s_${suf}`] ?? 0);
-            discount += Number(sObj[`d_${suf}`] ?? 0);
-            ops += Number(sObj[`t_${suf}`] ?? 0);
+            const sObj = o.stores[sid] || {};
+            mtdSales += Number(sObj.s_m ?? 0);
+            mtdDisc += Number(sObj.d_m ?? 0);
+            mtdOps += Number(sObj.t_m ?? 0);
+            yestSales += Number(sObj.s_y ?? 0);
+            yestDisc += Number(sObj.d_y ?? 0);
+            yestOps += Number(sObj.t_y ?? 0);
           }
         });
       }
 
-      // Final fallbacks for variety of field names
-      if (sales === 0 && ops === 0) {
-        sales = safeNum(o[`s_${periodSuf}`] || o.filteredSales || o.sales || o.amount || o.totalSales || o.bill_total || 0);
-        discount = safeNum(o[`d_${periodSuf}`] || o.discount || o.totalDiscount || o.disc_total || 0);
-        ops = safeNum(o[`t_${periodSuf}`] || o.operations || o.transactions || o.ops || o.cnt || 0);
-      }
-
-      const eff = sales > 0 ? (sales / (sales + discount)) * 100 : 100;
-
       return {
         ...o,
-        dispSales: sales,
-        dispDiscount: discount,
-        dispOps: ops,
-        dispEff: eff
+        yestSales, yestDisc, yestOps,
+        mtdSales, mtdDisc, mtdOps,
+        yestEff: yestSales > 0 ? (yestSales / (yestSales + yestDisc)) * 100 : 100,
+        mtdEff: mtdSales > 0 ? (mtdSales / (mtdSales + mtdDisc)) * 100 : 100,
       };
     }).filter((o: any) => {
       if (statusFilter === 'Enabled' && (o.status === 'Disabled' || o.enabled === false)) return false;
       if (statusFilter === 'Disabled' && (o.status !== 'Disabled' && o.enabled !== false)) return false;
-      return o.dispSales > 0 || o.dispOps > 0;
+      return o.mtdSales > 0 || o.mtdOps > 0 || o.yestSales > 0;
     });
-    return list;
-  }, [rawOffers, dateRange, allowedStoreIds, periodSuf, statusFilter]);
+  }, [rawOffers, allowedStoreIds, today, statusFilter]);
 
   const stats = useMemo(() => {
-    const totalSales = offers.reduce((s: number, o: any) => s + o.dispSales, 0);
-    const totalDiscount = offers.reduce((s: number, o: any) => s + o.dispDiscount, 0);
-    const totalOps = offers.reduce((s: number, o: any) => s + o.dispOps, 0);
-    const avgBasket = totalOps > 0 ? Math.round(totalSales / totalOps) : 0;
-    const efficiency = totalSales > 0 ? (totalSales / (totalSales + totalDiscount)) * 100 : (offers.length ? 100 : 0);
-    return { totalOffers: offers.length, totalSales, totalDiscount, totalOps, avgBasket, efficiency };
+    const totalYest = offers.reduce((acc, o) => acc + o.yestSales, 0);
+    const totalMTD = offers.reduce((acc, o) => acc + o.mtdSales, 0);
+    const totalYestOps = offers.reduce((acc, o) => acc + o.yestOps, 0);
+    const totalMTDOps = offers.reduce((acc, o) => acc + o.mtdOps, 0);
+    return {
+      totalOffers: offers.length,
+      totalYest,
+      totalMTD,
+      totalYestOps,
+      totalMTDOps,
+      mtdEff: totalMTD > 0 ? (totalMTD / (totalMTD + offers.reduce((acc, o) => acc + o.mtdDisc, 0))) * 100 : 0
+    };
   }, [offers]);
 
   const exportToExcel = () => {
     const rows = offers.map(o => ({
       'اسم العرض': o.name,
-      'النوع': o.type || 'خصم مباشر',
       'الحالة': o.status === 'Disabled' ? 'معطل' : 'نشط',
-      'فترة العرض': `${o.start} إلى ${o.end}`,
-      'المبيعات': o.dispSales,
-      'الخصم': o.dispDiscount,
-      'عدد العمليات': o.dispOps,
-      'الفعالية %': o.dispEff.toFixed(1) + '%'
+      'مبيعات أمس': o.yestSales,
+      'فواتير أمس': o.yestOps,
+      'مبيعات MTD': o.mtdSales,
+      'فواتير MTD': o.mtdOps,
+      'خصم MTD': o.mtdDisc,
+      'كفاءة MTD %': o.mtdEff.toFixed(1) + '%'
     }));
 
+    const mtdStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const mtdStartYMD = mtdStart.toISOString().split('T')[0];
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Offers Report');
-    XLSX.writeFile(wb, `Offers_Report_${dateRange.start}_${dateRange.end}.xlsx`);
+    XLSX.writeFile(wb, `Offers_Report_MTD_${mtdStartYMD}.xlsx`);
   };
 
   const top5 = useMemo(() => {
     return [...offers]
-      .sort((a: any, b: any) => b.dispSales - a.dispSales)
+      .sort((a: any, b: any) => b.mtdSales - a.mtdSales)
       .slice(0, 5);
   }, [offers]);
 
   const filteredOffers = useMemo(() => {
-    return offers.filter((o: any) => o.dispEff > 0 && o.dispEff < 50);
+    return offers.filter((o: any) => o.mtdEff > 0 && o.mtdEff < 50);
   }, [offers]);
 
   const weakOffers = useMemo(() => {
     return [...filteredOffers]
-      .sort((a: any, b: any) => a.dispEff - b.dispEff)
+      .sort((a: any, b: any) => a.mtdEff - b.mtdEff)
       .slice(0, 5);
   }, [filteredOffers]);
 
@@ -240,14 +229,12 @@ export default function OffersPage() {
       {/* شريط الفلاتر — هوية التطبيق */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4">
         <div className="flex flex-wrap items-center gap-3 mb-3">
-          <span className="text-sm font-semibold text-neutral-600">الفترة:</span>
+          <span className="text-sm font-semibold text-neutral-600">الفترة (للمقارنة):</span>
           <div className="flex flex-wrap gap-2">
             <PeriodButton active={period === 'yest'} label="أمس" onClick={() => setPeriod('yest')} />
             <PeriodButton active={period === 'mtd'} label="الشهر الحالي" onClick={() => setPeriod('mtd')} />
-            <PeriodButton active={period === '7d'} label="آخر 7 أيام" onClick={() => setPeriod('7d')} />
-            <PeriodButton active={period === '14d'} label="آخر 14 يوم" onClick={() => setPeriod('14d')} />
-            <PeriodButton active={period === '30d'} label="آخر 30 يوم" onClick={() => setPeriod('30d')} />
           </div>
+          <span className="text-xs text-neutral-400 mr-auto">يتم عرض بيانات "أمس" و "تراكمي الشهر" جنباً إلى جنب تلقائياً.</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {isAdminOrAuditor(user?.role) && (
@@ -296,30 +283,26 @@ export default function OffersPage() {
       </div>
 
       {/* بطاقات المؤشرات — 6 كروت مثل الريبو الأصلي */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 text-center identity-card">
           <div className="text-xs font-semibold text-neutral-500">إجمالي العروض</div>
           <div className="text-xl font-bold text-orange-600 mt-1">{stats.totalOffers}</div>
         </div>
         <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 text-center" style={{ borderRight: '4px solid #10b981' }}>
-          <div className="text-xs font-semibold text-neutral-500">إجمالي المبيعات</div>
-          <div className="text-xl font-bold text-neutral-900 mt-1">{formatSAR(stats.totalSales)}</div>
+          <div className="text-xs font-semibold text-neutral-500">مبعيات أمس</div>
+          <div className="text-xl font-bold text-neutral-900 mt-1">{formatSAR(stats.totalYest)}</div>
         </div>
-        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 text-center" style={{ borderRight: '4px solid #ef4444' }}>
-          <div className="text-xs font-semibold text-neutral-500">إجمالي الخصم</div>
-          <div className="text-xl font-bold text-neutral-900 mt-1">{stats.totalDiscount.toLocaleString()}</div>
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 text-center" style={{ borderRight: '4px solid #10b981' }}>
+          <div className="text-xs font-semibold text-neutral-500">مبيعات MTD</div>
+          <div className="text-xl font-bold text-neutral-900 mt-1">{formatSAR(stats.totalMTD)}</div>
         </div>
         <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 text-center" style={{ borderRight: '4px solid #3b82f6' }}>
-          <div className="text-xs font-semibold text-neutral-500">عدد العمليات</div>
-          <div className="text-xl font-bold text-neutral-900 mt-1">{stats.totalOps.toLocaleString()}</div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 text-center" style={{ borderRight: '4px solid #6366f1' }}>
-          <div className="text-xs font-semibold text-neutral-500">متوسط السلة</div>
-          <div className="text-xl font-bold text-neutral-900 mt-1">{stats.avgBasket}</div>
+          <div className="text-xs font-semibold text-neutral-500">عمليات MTD</div>
+          <div className="text-xl font-bold text-neutral-900 mt-1">{stats.totalMTDOps.toLocaleString()}</div>
         </div>
         <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 text-center" style={{ borderRight: '4px solid #8b5cf6' }}>
-          <div className="text-xs font-semibold text-neutral-500">نسبة الكفاءة</div>
-          <div className="text-xl font-bold text-neutral-900 mt-1">{stats.efficiency.toFixed(1)}%</div>
+          <div className="text-xs font-semibold text-neutral-500">كفاءة MTD</div>
+          <div className="text-xl font-bold text-neutral-900 mt-1">{stats.mtdEff.toFixed(1)}%</div>
         </div>
       </div>
 
@@ -331,10 +314,10 @@ export default function OffersPage() {
             <p className="text-neutral-500 col-span-full">لا توجد عروض لعرضها.</p>
           ) : (
             top5.map((o: any, i: number) => {
-              const sales = o.dispSales;
-              const discount = o.dispDiscount;
-              const ops = o.dispOps;
-              const pct = stats.totalSales > 0 ? (sales / stats.totalSales) * 100 : 0;
+              const sales = o.mtdSales;
+              const discount = o.mtdDisc;
+              const ops = o.mtdOps;
+              const pct = stats.totalMTD > 0 ? (sales / stats.totalMTD) * 100 : 0;
               return (
                 <div key={i} className="rounded-xl border border-neutral-200 p-4 border-r-4 border-r-orange-500 bg-neutral-50/50 hover:shadow-md transition-shadow">
                   <div className="flex justify-between items-start mb-2">
@@ -343,8 +326,8 @@ export default function OffersPage() {
                   </div>
                   <div className="font-semibold text-neutral-900 text-sm mb-3 line-clamp-2">{o.name || o.offer_name || o.id || '-'}</div>
                   <div className="text-xs space-y-1 text-neutral-600">
-                    <div>المبيعات: {formatSAR(sales)}</div>
-                    <div>الخصم: {discount.toLocaleString()}</div>
+                    <div>مبيعات MTD: {formatSAR(sales)}</div>
+                    <div>مبيعات أمس: {formatSAR(o.yestSales)}</div>
                     <div>العمليات: {ops.toLocaleString()}</div>
                   </div>
                 </div>
@@ -396,24 +379,28 @@ export default function OffersPage() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-neutral-100 border-b border-neutral-200">
-                  <th className="text-right py-3 px-4 font-semibold text-neutral-700">#</th>
-                  <th className="text-right py-3 px-4 font-semibold text-neutral-700">اسم العرض</th>
-                  <th className="text-right py-3 px-4 font-semibold text-neutral-700">المبيعات</th>
-                  <th className="text-right py-3 px-4 font-semibold text-neutral-700">الخصم</th>
-                  <th className="text-right py-3 px-4 font-semibold text-neutral-700">العمليات</th>
-                  <th className="text-right py-3 px-4 font-semibold text-neutral-700">الكفاءة %</th>
+                <tr className="bg-neutral-800 text-white">
+                  <th className="py-3 px-4 text-right">#</th>
+                  <th className="py-3 px-4 text-right">اسم العرض</th>
+                  <th className="py-3 px-4 text-center bg-neutral-700/50">مبيعات أمس</th>
+                  <th className="py-3 px-4 text-center bg-neutral-700/50">فواتير أمس</th>
+                  <th className="py-3 px-4 text-center">مبيعات MTD</th>
+                  <th className="py-3 px-4 text-center">فواتير MTD</th>
+                  <th className="py-3 px-4 text-center">خصم MTD</th>
+                  <th className="py-3 px-4 text-center">كفاءة MTD</th>
                 </tr>
               </thead>
               <tbody>
                 {offers.slice(0, 100).map((o: any, i: number) => (
-                  <tr key={i} className="border-b border-neutral-100 hover:bg-orange-50">
+                  <tr key={i} className="border-b border-neutral-100 hover:bg-orange-50 transition-colors">
                     <td className="py-3 px-4 text-neutral-500">{i + 1}</td>
-                    <td className="py-3 px-4 font-medium text-neutral-900">{o.name || o.offer_name || o.id || '-'}</td>
-                    <td className="py-3 px-4">{formatSAR(o.dispSales)}</td>
-                    <td className="py-3 px-4">{(o.dispDiscount).toLocaleString()}</td>
-                    <td className="py-3 px-4">{(o.dispOps).toLocaleString()}</td>
-                    <td className="py-3 px-4">{o.dispEff.toFixed(1)}%</td>
+                    <td className="py-3 px-4 font-bold text-neutral-900">{o.name || o.offer_name || o.id || '-'}</td>
+                    <td className="py-3 px-4 text-center font-bold text-green-600 bg-green-50/30">{formatSAR(o.yestSales)}</td>
+                    <td className="py-3 px-4 text-center text-neutral-600 bg-green-50/30">{o.yestOps.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-center font-bold text-blue-700">{formatSAR(o.mtdSales)}</td>
+                    <td className="py-3 px-4 text-center font-medium">{o.mtdOps.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-center text-red-500 font-mono">{o.mtdDisc.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-center font-black text-orange-600">{o.mtdEff.toFixed(1)}%</td>
                   </tr>
                 ))}
               </tbody>

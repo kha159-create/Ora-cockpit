@@ -169,17 +169,34 @@ export default function ReportsPage() {
       if (inRange(d) && passFilter(s)) ensure(d, s).visitors += v || 0;
     });
     const rows = Object.values(dataMap).map((r) => {
-      const meta = rawMgmt.store_meta?.[r.storeId] || {};
+      const prevRange = {
+        start: r.date.replace(/^\d{4}/, (y) => String(Number(y) - 1)),
+        end: r.date.replace(/^\d{4}/, (y) => String(Number(y) - 1))
+      };
+      let prevSales = 0;
+      let prevVisitors = 0;
+      (rawMgmt.sales || []).forEach(([d, s, v]: any[]) => {
+        if (d === prevRange.start && s === r.storeId) prevSales += v || 0;
+      });
+      (rawMgmt.visitors || []).forEach(([d, s, v]: any[]) => {
+        if (d === prevRange.start && s === r.storeId) prevVisitors += v || 0;
+      });
+
+      const growth = prevSales > 0 ? ((r.sales - prevSales) / prevSales) * 100 : 0;
+      const customerValue = r.visitors > 0 ? r.sales / r.visitors : 0;
+
       return {
         'التاريخ': r.date,
         'المعرض': rawMgmt.stores?.[r.storeId] || r.storeId,
-        'المدينة': meta.city || '-',
-        'مدير المنطقة': meta.manager || '-',
-        'المبيعات': r.sales,
+        'المبيعات الحالية': r.sales,
+        'مبيعات العام الماضي': prevSales,
+        'النمو %': growth.toFixed(1) + '%',
         'عدد الفواتير': r.trans,
         'الزوار': r.visitors,
+        'زوار العام الماضي': prevVisitors,
         'متوسط الفاتورة': r.trans > 0 ? Math.round(r.sales / r.trans) : 0,
         'نسبة التحويل': r.visitors > 0 ? ((r.trans / r.visitors) * 100).toFixed(1) + '%' : '0%',
+        'قيمة العميل': Math.round(customerValue)
       };
     });
     if (rows.length === 0) {
@@ -299,30 +316,37 @@ export default function ReportsPage() {
 
       setPrintData({ type: 'stores', title, rows, range: `${start} إلى ${end}` }); // Updated range format
     } else if (type === 'yesterday_employee') {
-      title = `أداء الموظفين (${range.start})`;
+      const today = new Date();
+      const yesterdayDate = new Date(today);
+      yesterdayDate.setDate(today.getDate() - 1);
+      const yesterdayYMD = toYMD(yesterdayDate);
+      const mtdStartYMD = toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
+
+      title = `أداء الموظفين (أمس vs MTD)`;
       const history = rawEmp?.history || {};
       const names = rawEmp?.employee_names || {};
       const empData: Record<string, any> = {};
-      const selectedIdsArray = Array.from(selectedEmpIds); // Use selectedEmpIds for filtering
+      const selectedIdsArray = Array.from(selectedEmpIds);
 
       Object.entries(history).forEach(([sid, recs]: [string, any]) => {
         if (!passFilter(sid)) return;
         recs.forEach((rec: any[]) => {
-          if (inRange(rec[0])) {
-            const rawId = String(rec[1] || '').split('-')[0].trim();
-            const id = rawId.padStart(4, '0');
-            if (rawId === 'مرتجع') return;
-            // Only include if employee is selected (if yesterday_employee report is triggered via selection modal)
-            if (selectedIdsArray.length > 0 && !selectedIdsArray.includes(id)) return;
+          const d = rec[0];
+          const rawId = String(rec[1] || '').split('-')[0].trim();
+          const id = rawId.padStart(4, '0');
+          if (rawId === 'مرتجع') return;
+          if (selectedIdsArray.length > 0 && !selectedIdsArray.includes(id)) return;
 
-            if (!empData[id]) empData[id] = { id, name: names[id] || rawId, sales: 0, trans: 0, store: rawMgmt.stores?.[sid] || sid };
-            empData[id].sales += Number(rec[2]) || 0;
-            empData[id].trans += Number(rec[3]) || 0;
+          if (!empData[id]) {
+            const entTarget = rawEmp.targets?.[id] || rawEmp.targets?.[id.padStart(4, '0')] || 0;
+            empData[id] = { id, name: names[id] || rawId, yestSales: 0, mtdSales: 0, target: entTarget, store: rawMgmt.stores?.[sid] || sid };
           }
+          if (d === yesterdayYMD) empData[id].yestSales += Number(rec[2]) || 0;
+          if (d >= mtdStartYMD && d <= yesterdayYMD) empData[id].mtdSales += Number(rec[2]) || 0;
         });
       });
-      rows = Object.values(empData).sort((a, b) => b.sales - a.sales);
-      setPrintData({ type: 'employees', title, rows, range: `${start} إلى ${end}` }); // Updated range format
+      rows = Object.values(empData).sort((a, b) => b.mtdSales - a.mtdSales);
+      setPrintData({ type: 'employees', title, rows, range: `أمس: ${yesterdayYMD} | MTD: ${mtdStartYMD} -> ${yesterdayYMD}` });
     }
 
     setTimeout(() => {
@@ -851,9 +875,10 @@ export default function ReportsPage() {
                 {printData.type === 'stores' && <th className="p-3 text-center">التحويل %</th>}
                 {printData.type === 'stores' && <th className="p-3 text-center">قيمة العميل</th>}
                 {printData.type === 'employees' && <th className="p-3 text-center">المعرض</th>}
-                {printData.type === 'employees' && <th className="p-3 text-center">المبيعات</th>}
-                {printData.type === 'employees' && <th className="p-3 text-center">الفواتير</th>}
-                {printData.type === 'employees' && <th className="p-3 text-center">متوسط الفاتورة</th>}
+                {printData.type === 'employees' && <th className="p-3 text-center">مبيعات أمس</th>}
+                {printData.type === 'employees' && <th className="p-3 text-center">مبيعات MTD</th>}
+                {printData.type === 'employees' && <th className="p-3 text-center">الهدف</th>}
+                {printData.type === 'employees' && <th className="p-3 text-center">تحقيق %</th>}
               </tr>
             </thead>
             <tbody>
@@ -886,9 +911,14 @@ export default function ReportsPage() {
                   {printData.type === 'employees' && (
                     <>
                       <td className="p-2 text-center text-neutral-600 font-medium text-xs">{row.store}</td>
-                      <td className="p-2 text-center font-black text-green-700 font-mono text-xs">{formatSAR(row.sales)}</td>
-                      <td className="p-2 text-center font-bold text-neutral-700 text-xs">{Math.round(row.trans)}</td>
-                      <td className="p-2 text-center font-bold text-neutral-900 font-mono text-xs">{formatSAR(row.avgInv || (row.trans > 0 ? row.sales / row.trans : 0))}</td>
+                      <td className="p-2 text-center font-black text-green-700 font-mono text-xs">{formatSAR(row.yestSales)}</td>
+                      <td className="p-2 text-center font-black text-blue-700 font-mono text-xs">{formatSAR(row.mtdSales)}</td>
+                      <td className="p-2 text-center font-bold text-neutral-400 font-mono text-xs">{formatSAR(row.target || 0)}</td>
+                      <td className="p-2 text-center">
+                        <span className={`font-black text-xs ${(row.mtdSales / (row.target || 1)) * 100 >= 100 ? 'text-green-600' : 'text-orange-600'}`}>
+                          {row.target > 0 ? ((row.mtdSales / row.target) * 100).toFixed(1) + '%' : '-'}
+                        </span>
+                      </td>
                     </>
                   )}
                 </tr>

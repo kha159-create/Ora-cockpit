@@ -869,24 +869,40 @@ export default function StoresPage() {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="bg-neutral-50 text-neutral-500 uppercase text-[11px] tracking-wider">
+                <th className="th text-right">#</th>
                 <SortableTh label="الفرع" sortKey="name" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-right" />
                 <SortableTh label="المبيعات" sortKey="val" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <SortableTh label="تحقيق %" sortKey="ach" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="العام الماضي" sortKey="prevVal" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="النمو %" sortKey="growth" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="اليومية المتبقية" sortKey="dailyReq" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="الفواتير" sortKey="trans" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="تحقيق %" sortKey="ach" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="متوسط الفاتورة" sortKey="avgInv" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="التحويل %" sortKey="conversion" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="الزوار" sortKey="visitors" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="زوار LY" sortKey="prevVisitors" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="قيمة العميل" sortKey="customerValue" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
-                <th className="th text-center">إجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
-              {sortedList.map((s) => (
+              {sortedList.map((s, idx) => (
                 <tr key={s.sid} className="hover:bg-orange-50 transition-colors">
-                  <td className="td font-bold text-neutral-900">{s.name}</td>
+                  <td className="td text-neutral-400 font-bold">{idx + 1}</td>
+                  <td className="td font-bold">
+                    <button
+                      onClick={() => setSelectedSid(s.sid)}
+                      className="text-neutral-900 hover:text-orange-600 hover:underline text-right w-full"
+                    >
+                      {s.name}
+                    </button>
+                  </td>
                   <td className="td text-center font-bold text-green-700 font-mono">{formatSAR(s.val)}</td>
+                  <td className="td text-center text-neutral-400 font-mono">{formatSAR(s.prevVal)}</td>
+                  <td className={`td text-center font-bold font-mono ${s.growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    {s.growth >= 0 ? '+' : ''}{s.growth.toFixed(1)}%
+                  </td>
+                  <td className="td text-center font-bold text-blue-600 font-mono">{formatSAR(s.dailyReq)}</td>
+                  <td className="td text-center font-medium">{Math.round(s.trans).toLocaleString()}</td>
                   <td className="td text-center">
                     <div className="flex items-center gap-2 justify-center">
                       <div className="w-12 bg-neutral-100 h-1.5 rounded-full overflow-hidden">
@@ -895,28 +911,17 @@ export default function StoresPage() {
                       <span className="font-bold">{s.ach.toFixed(1)}%</span>
                     </div>
                   </td>
-                  <td className={`td text-center font-bold font-mono ${s.growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                    {s.growth >= 0 ? '+' : ''}{s.growth.toFixed(1)}%
-                  </td>
-                  <td className="td text-center font-medium">{Math.round(s.trans).toLocaleString()}</td>
                   <td className="td text-center font-mono">{formatSAR(s.avgInv)}</td>
+                  <td className="td text-center font-bold text-orange-600">{s.conversion.toFixed(1)}%</td>
                   <td className="td text-center font-medium">{Math.round(s.visitors).toLocaleString()}</td>
                   <td className="td text-center text-neutral-400">{Math.round(s.prevVisitors).toLocaleString()}</td>
                   <td className="td text-center font-bold text-blue-600">{formatSAR(s.customerValue)}</td>
-                  <td className="td text-center">
-                    <button
-                      className="text-orange-600 hover:text-orange-800 font-bold bg-orange-50 px-3 py-1 rounded-lg border border-orange-200 transition-all"
-                      onClick={() => setSelectedSid(s.sid)}
-                    >
-                      التفاصيل
-                    </button>
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </ChartCard>
+      </ChartCard >
 
       {selectedSid && (
         <StoreDetailsModal
@@ -930,7 +935,8 @@ export default function StoresPage() {
           endYMD={range.endYMD}
           prodRaw={prodRaw}
         />
-      )}
-    </div>
+      )
+      }
+    </div >
   );
 }
