@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { KPICard, RankCard, LineChart, ChartCard } from '../components/DashboardComponents';
+import { KPICard, RankCard, GrowthTrajectoryChart } from '../components/DashboardComponents';
 import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon, XIcon } from '../components/Icons';
 
 function isAdminOrAuditor(role?: string) {
@@ -53,7 +53,7 @@ export default function DashboardPage() {
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [liveModalOpen, setLiveModalOpen] = useState(false);
   const [dailyReportModalOpen, setDailyReportModalOpen] = useState(false);
-  const [chartMode, setChartMode] = useState<'target' | 'growth' | 'visitors'>('target');
+  const [chartMode, setChartMode] = useState<'SALES' | 'VISITORS' | 'TARGET'>('SALES');
   const user = getCurrentUser();
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -473,15 +473,15 @@ export default function DashboardPage() {
       });
 
       const entry: any = { name: months[m] };
-      if (chartMode === 'target') {
-        entry.Sales = sales;
-        entry.Target = target;
-      } else if (chartMode === 'growth') {
+      if (chartMode === 'TARGET') {
+        entry.Current = sales;
+        entry.Previous = target;
+      } else if (chartMode === 'SALES') {
         entry.Current = sales;
         entry.Previous = prevSales;
       } else {
-        entry.CurrentVisitors = visitors;
-        entry.PreviousVisitors = prevVisitors;
+        entry.Current = visitors;
+        entry.Previous = prevVisitors;
       }
       data.push(entry);
     }
@@ -489,14 +489,6 @@ export default function DashboardPage() {
     return data;
   }, [raw, allowedStoreIds, chartMode]);
 
-  const chartKPIs = useMemo(() => {
-    if (!monthlyChartData.length) return { ads: 0, ams: 0 };
-    const totalSales = monthlyChartData.reduce((s, m) => s + (m.Sales || m.Current || 0), 0);
-    const daysInYear = new Date().getDate() + (new Date().getMonth() * 30);
-    const ads = daysInYear > 0 ? totalSales / daysInYear : 0;
-    const ams = monthlyChartData.length > 0 ? totalSales / monthlyChartData.length : 0;
-    return { ads, ams };
-  }, [monthlyChartData]);
 
   if (!raw) {
     return (
@@ -644,97 +636,12 @@ export default function DashboardPage() {
       </div>
 
       {/* Monthly Performance Chart */}
-      <ChartCard title="Monthly Sales Performance">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setChartMode('target')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${chartMode === 'target'
-                  ? 'bg-orange-500 text-white shadow-md'
-                  : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
-                  }`}
-              >
-                تارجت
-              </button>
-              <button
-                type="button"
-                onClick={() => setChartMode('growth')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${chartMode === 'growth'
-                  ? 'bg-orange-500 text-white shadow-md'
-                  : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
-                  }`}
-              >
-                نمو
-              </button>
-              <button
-                type="button"
-                onClick={() => setChartMode('visitors')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${chartMode === 'visitors'
-                  ? 'bg-orange-500 text-white shadow-md'
-                  : 'bg-white text-neutral-700 border border-neutral-200 hover:bg-orange-50'
-                  }`}
-              >
-                زوار
-              </button>
-            </div>
-            <div className="flex items-center gap-3">
-              {chartMode === 'target' && (
-                <>
-                  <div className="px-3 py-1.5 rounded-full bg-green-100 text-green-700 text-xs font-semibold">
-                    ADS: {formatSAR(chartKPIs.ads)}
-                  </div>
-                  <div className="px-3 py-1.5 rounded-full bg-green-50 text-green-600 text-xs font-semibold">
-                    AMS: {formatSAR(chartKPIs.ams)}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="h-64">
-            <LineChart data={monthlyChartData} />
-          </div>
-          <div className="flex items-center justify-center gap-4 pt-2 border-t border-neutral-200">
-            {chartMode === 'target' && (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                  <span className="text-sm text-neutral-600">Sales</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-purple-500 border-2 border-dashed border-purple-500"></div>
-                  <span className="text-sm text-neutral-600">Target</span>
-                </div>
-              </>
-            )}
-            {chartMode === 'growth' && (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                  <span className="text-sm text-neutral-600">Current</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                  <span className="text-sm text-neutral-600">Previous Year</span>
-                </div>
-              </>
-            )}
-            {chartMode === 'visitors' && (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                  <span className="text-sm text-neutral-600">Current Visitors</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-indigo-500"></div>
-                  <span className="text-sm text-neutral-600">Previous Year Visitors</span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </ChartCard>
+      <GrowthTrajectoryChart
+        data={monthlyChartData as any}
+        mode={chartMode}
+        onModeChange={setChartMode}
+        format={chartMode === 'VISITORS' ? undefined : (v) => v.toLocaleString()}
+      />
 
       {/* بطاقات الوصول السريع */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

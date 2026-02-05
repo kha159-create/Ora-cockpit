@@ -356,6 +356,117 @@ export const VerticalBarChart: React.FC<{
   );
 };
 
+export const GrowthTrajectoryChart: React.FC<{
+  data: { name: string; Current: number; Previous: number }[];
+  mode: 'SALES' | 'VISITORS' | 'TARGET';
+  onModeChange: (m: 'SALES' | 'VISITORS' | 'TARGET') => void;
+  format?: (val: number) => string;
+}> = ({ data, mode, onModeChange, format }) => {
+  const maxVal = Math.max(...data.flatMap(d => [d.Current, d.Previous]), 1);
+
+  const formatY = (v: number) => {
+    if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
+    if (v >= 1000) return `${(v / 1000).toFixed(0)}k`;
+    return v.toString();
+  };
+
+  const ySteps = [0, 0.25, 0.5, 0.75, 1];
+
+  return (
+    <div className="bg-white rounded-3xl shadow-sm border border-neutral-100 p-8 w-full">
+      <div className="flex justify-between items-start mb-12">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="w-1 h-4 bg-orange-500 rounded-full" />
+            <span className="text-[10px] font-black text-neutral-400 tracking-[0.2em] uppercase">Growth Trajectory</span>
+          </div>
+          <h2 className="text-xl font-black text-neutral-900 tracking-tight">TOTAL PORTFOLIO ANALYSIS</h2>
+        </div>
+
+        <div className="flex flex-col items-end gap-6">
+          <div className="flex bg-neutral-50 p-1 rounded-2xl border border-neutral-100 shadow-inner">
+            {(['SALES', 'VISITORS', 'TARGET'] as const).map(m => (
+              <button
+                key={m}
+                onClick={() => onModeChange(m)}
+                className={`px-6 py-2 rounded-xl text-[10px] font-black tracking-widest transition-all ${mode === m
+                    ? 'bg-white text-orange-600 shadow-sm'
+                    : 'text-neutral-400 hover:text-neutral-600'
+                  }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-6">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-orange-500" />
+              <span className="text-[10px] font-black text-neutral-900 tracking-tight uppercase">2025 ACTUAL</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#0f172a]" />
+              <span className="text-[10px] font-black text-neutral-900 tracking-tight uppercase">2024 COMPARISON</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative h-80 flex gap-4">
+        {/* Y Axis Labels */}
+        <div className="absolute left-0 top-0 bottom-8 flex flex-col justify-between text-[10px] font-black text-neutral-400 z-10">
+          {ySteps.reverse().map(s => (
+            <span key={s} className="bg-white pr-2">{formatY(maxVal * s)}</span>
+          ))}
+        </div>
+
+        {/* Chart Content */}
+        <div className="flex-1 flex flex-col ml-12">
+          <div className="flex-1 relative border-b border-neutral-100">
+            {/* Grid lines */}
+            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+              {ySteps.map(s => (
+                <div key={s} className="w-full border-t border-dashed border-neutral-100" />
+              ))}
+            </div>
+
+            {/* Bars */}
+            <div className="absolute inset-0 flex items-end justify-around px-4">
+              {data.map((d, i) => (
+                <div key={i} className="flex items-end gap-[2px] group relative h-full w-full justify-center">
+                  <div
+                    className="w-3 bg-orange-500 rounded-t-sm transition-all duration-700 hover:brightness-110 cursor-pointer"
+                    style={{ height: `${(d.Current / maxVal) * 100}%` }}
+                  >
+                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-neutral-900 text-white text-[8px] font-black py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity z-20 whitespace-nowrap shadow-xl">
+                      2025: {format ? format(d.Current) : d.Current.toLocaleString()}
+                    </div>
+                  </div>
+                  <div
+                    className="w-3 bg-[#0f172a] rounded-t-sm transition-all duration-700 hover:brightness-150 cursor-pointer"
+                    style={{ height: `${(d.Previous / maxVal) * 100}%` }}
+                  >
+                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-neutral-900 text-white text-[8px] font-black py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity z-20 whitespace-nowrap shadow-xl">
+                      2024: {format ? format(d.Previous) : d.Previous.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* X Axis Labels */}
+          <div className="flex justify-around pt-4">
+            {data.map((d, i) => (
+              <span key={i} className="text-[10px] font-black text-neutral-400 uppercase tracking-tighter w-full text-center">{d.name}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const BarChart: React.FC<{ data: any[]; dataKey: string; nameKey: string; format?: (val: number) => string }> = ({
   data,
   dataKey,
