@@ -53,6 +53,8 @@ export default function DashboardPage() {
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [liveModalOpen, setLiveModalOpen] = useState(false);
   const [dailyReportModalOpen, setDailyReportModalOpen] = useState(false);
+  const [expandedEmp, setExpandedEmp] = useState<string | null>(null);
+  const [selectedEmps, setSelectedEmps] = useState<Record<string, string>>({});
   const [chartMode, setChartMode] = useState<'SALES' | 'VISITORS' | 'TARGET'>('SALES');
   const user = getCurrentUser();
   const effectiveManager = useMemo(() => {
@@ -748,14 +750,46 @@ export default function DashboardPage() {
                     <div className="font-bold text-neutral-900 truncate">{store.name}</div>
                     <div className="text-orange-600 font-bold mt-1" dir="ltr">{formatSAR(store.sales)}</div>
                     {store.employees.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        <div className="text-xs font-semibold text-neutral-500 mb-2">الموظفون</div>
-                        {store.employees.slice(0, 5).map((emp) => (
-                          <div key={emp.id} className="flex justify-between items-center text-sm py-1 border-b border-neutral-100 last:border-0">
-                            <span className="text-neutral-800 truncate ml-2">{emp.name}</span>
-                            <span className="shrink-0 text-neutral-600" dir="ltr">
-                              {formatSAR(emp.avgInv)} / {Math.round(emp.trans)}
-                            </span>
+                      <div className="mt-4 border-t border-neutral-100 bg-neutral-50 divide-y divide-neutral-100 rounded-xl overflow-hidden">
+                        {store.employees.map((emp: any) => (
+                          <div key={emp.id} className="flex flex-col">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedEmp(expandedEmp === emp.id ? null : emp.id)}
+                              className="w-full flex justify-between items-center p-3 hover:bg-white transition-colors group"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className={`w-1 h-3 rounded-full bg-orange-400 group-hover:h-5 transition-all ${expandedEmp === emp.id ? 'h-5 bg-orange-600' : ''}`} />
+                                <span className={`text-[11px] font-bold ${expandedEmp === emp.id ? 'text-orange-600' : 'text-neutral-700'}`}>
+                                  {emp.name}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] font-black text-neutral-400" dir="ltr">{formatSAR(emp.sales)}</span>
+                                <div className={`transition-transform duration-200 text-neutral-300 ${expandedEmp === emp.id ? 'rotate-180 text-orange-500' : ''}`}>
+                                  <ChevronDownIcon />
+                                </div>
+                              </div>
+                            </button>
+
+                            {expandedEmp === emp.id && (
+                              <div className="bg-white p-3 space-y-2 animate-in fade-in zoom-in-95 duration-200">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="p-2 bg-neutral-50 rounded-xl border border-neutral-100">
+                                    <div className="text-[9px] font-black text-neutral-400 uppercase leading-none mb-1">Avg / معدل</div>
+                                    <div className="text-xs font-black text-neutral-900" dir="ltr">{formatSAR(emp.avgInv)}</div>
+                                  </div>
+                                  <div className="p-2 bg-neutral-50 rounded-xl border border-neutral-100">
+                                    <div className="text-[9px] font-black text-neutral-400 uppercase leading-none mb-1">Bills / فواتير</div>
+                                    <div className="text-xs font-black text-neutral-900" dir="ltr">{Math.round(emp.trans)}</div>
+                                  </div>
+                                </div>
+                                <div className="p-2 bg-orange-50 rounded-xl border border-orange-100 flex justify-between items-center">
+                                  <span className="text-[10px] font-black text-orange-700">الإجمالي</span>
+                                  <span className="text-sm font-black text-orange-700" dir="ltr">{formatSAR(emp.sales)}</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
