@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { ChartCard, KPICard, ProductValueAnalysis, MissedOpportunities } from '../components/DashboardComponents';
+import { ChartCard, KPICard, ProductValueAnalysis } from '../components/DashboardComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, XIcon } from '../components/Icons';
 import { runProductValueAnalysis, safeNum } from '../services/analysisHelpers';
 
@@ -324,12 +324,24 @@ function StoreDetailsModal({
     const totalIAccum = rowsForTotal.reduce((s, r) => s + safeNum(r.i), 0);
     const avgItemsStore = totalTAccum > 0 ? totalIAccum / totalTAccum : 0;
 
+    const missedByEmployee = useMemo(() => {
+      const agg: Record<string, number> = {};
+      branchMissed.forEach((m: any) => {
+        const empName = m.employee || m.emp_name || m.processed_by || '';
+        if (empName) {
+          agg[empName] = (agg[empName] || 0) + safeNum(m.total_count || m.count || 1);
+        }
+      });
+      return agg;
+    }, [branchMissed]);
+
     return {
       rangeLabel,
       rangeList: rowsForTotal,
       dailyList,
       valueAnalysis,
       branchMissed,
+      missedByEmployee,
       avgItemsStore,
       totalI: totalIAccum,
       totalT: totalTAccum,
@@ -385,6 +397,7 @@ function StoreDetailsModal({
                       <th className="th text-center">متوسط الفاتورة</th>
                       <th className="th text-center">متوسط القطع</th>
                       <th className="th text-center">مساهمة %</th>
+                      <th className="th text-center">الفرص الضائعة</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-100">
@@ -414,6 +427,15 @@ function StoreDetailsModal({
                               <span>{((r.s / shareVal) * 100).toFixed(0)}%</span>
                             </div>
                           </td>
+                          <td className="td text-center">
+                            {details?.missedByEmployee[r.name] ? (
+                              <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 bg-red-100 text-red-600 rounded-full font-black text-xs">
+                                {details.missedByEmployee[r.name]}
+                              </span>
+                            ) : (
+                              <span className="text-neutral-300">-</span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
@@ -440,6 +462,7 @@ function StoreDetailsModal({
                       <th className="th text-center">الزوار</th>
                       <th className="th text-center">زوار (LY)</th>
                       <th className="th text-center">التحويل %</th>
+                      <th className="th text-center">قيمة العميل</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-100">
@@ -459,6 +482,7 @@ function StoreDetailsModal({
                         <td className="td text-center font-medium text-neutral-700">{Math.round(row.visitors)}</td>
                         <td className="td text-center text-neutral-400 font-medium">{Math.round(row.prevVisitors)}</td>
                         <td className="td text-center font-bold text-orange-600">{row.conversion.toFixed(1)}%</td>
+                        <td className="td text-center font-bold text-blue-600">{formatSAR(row.customerValue)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -509,15 +533,6 @@ function StoreDetailsModal({
                   title="تحليل مبيعات الأصناف"
                 />
                 <p className="text-[10px] text-neutral-400 mt-2 italic">* ملاحظة: التحليل مبني على مستوى المعرض الحالي للموظف.</p>
-              </div>
-
-              <div className="bg-neutral-50 p-6 rounded-2xl border border-neutral-100">
-                <h3 className="text-lg font-bold text-neutral-900 mb-4 pb-2 border-b flex items-center gap-2">
-                  <span>📉</span> الفرص الضائعة للموظف
-                </h3>
-                <div className="h-[400px] overflow-auto">
-                  <MissedOpportunities data={details?.branchMissed || []} />
-                </div>
               </div>
             </div>
 
@@ -861,6 +876,9 @@ export default function StoresPage() {
                 <SortableTh label="الفواتير" sortKey="trans" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="متوسط الفاتورة" sortKey="avgInv" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="التحويل %" sortKey="conversion" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="الزوار" sortKey="visitors" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="زوار LY" sortKey="prevVisitors" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <SortableTh label="قيمة العميل" sortKey="customerValue" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <th className="th text-center">إجراءات</th>
               </tr>
             </thead>
@@ -882,7 +900,9 @@ export default function StoresPage() {
                   </td>
                   <td className="td text-center font-medium">{Math.round(s.trans).toLocaleString()}</td>
                   <td className="td text-center font-mono">{formatSAR(s.avgInv)}</td>
-                  <td className="td text-center">{s.conversion.toFixed(1)}%</td>
+                  <td className="td text-center font-medium">{Math.round(s.visitors).toLocaleString()}</td>
+                  <td className="td text-center text-neutral-400">{Math.round(s.prevVisitors).toLocaleString()}</td>
+                  <td className="td text-center font-bold text-blue-600">{formatSAR(s.customerValue)}</td>
                   <td className="td text-center">
                     <button
                       className="text-orange-600 hover:text-orange-800 font-bold bg-orange-50 px-3 py-1 rounded-lg border border-orange-200 transition-all"

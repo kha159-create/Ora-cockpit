@@ -92,7 +92,9 @@ export default function ReportsPage() {
     { id: 'yesterday_store', name: 'تقرير مبيعات الأمس (المعارض)', type: 'pdf', icon: '🏪', desc: 'مقارنة مبيعات الأمس بالسنة الماضية والأهداف' },
     { id: 'yesterday_employee', name: 'أداء الموظفين (الأمس)', type: 'pdf', icon: '👤', desc: 'مبيعات الموظفين يوم أمس وتغطية الأهداف' },
     { id: 'monthly_summary', name: 'الملخص الشهري العام', type: 'pdf', icon: '📅', desc: 'تراكمي الشهر الحالي مقارنة بالفترات السابقة' },
-    { id: 'stagnant_items', name: 'تقرير المنتجات الراكدة', type: 'excel', icon: '📦', desc: 'تحليل المخزون الذي لم يتحرك لفترة طويلة' },
+    { id: 'offers_analysis', name: 'تحليل العروض والخصومات', type: 'link', icon: '🏷️', desc: 'تحليل أداء العروض الترويجية والفعالية' },
+    { id: 'products_analysis', name: 'تحليل المنتجات والأصناف', type: 'link', icon: '📦', desc: 'تحليل مبيعات الأصناف وتوزيعها وتحليل القيمة' },
+    { id: 'stagnant_items', name: 'تقرير المنتجات الراكدة', type: 'excel', icon: '📉', desc: 'تحليل المخزون الذي لم يتحرك لفترة طويلة' },
     { id: 'market_basket', name: 'تحليل الأنماط الشرائية', type: 'excel', icon: '🧺', desc: 'المنتجات التي تباع سوياً بشكل متكرر' },
   ];
 
@@ -256,26 +258,43 @@ export default function ReportsPage() {
     if (type === 'yesterday_store' || type === 'monthly_summary') {
       title = type === 'yesterday_store' ? `تقرير المعارض - أمس (${range.start})` : `الملخص الشهري للمعارض (${range.start} إلى ${range.end})`;
       const dataMap: Record<string, any> = {};
+      const prevRange = {
+        start: range.start.replace(/^\d{4}/, (y) => String(Number(y) - 1)),
+        end: range.end.replace(/^\d{4}/, (y) => String(Number(y) - 1))
+      };
+      const inPrevRange = (d: string) => d >= prevRange.start && d <= prevRange.end;
+
       (rawMgmt.sales || []).forEach(([d, s, v]: any[]) => {
-        if (inRange(d) && passFilter(s)) {
-          if (!dataMap[s]) dataMap[s] = { name: rawMgmt.stores?.[s] || s, sales: 0, trans: 0, visitors: 0, target: 0 };
-          dataMap[s].sales += v || 0;
-        }
+        if (!passFilter(s)) return;
+        if (!dataMap[s]) dataMap[s] = { name: rawMgmt.stores?.[s] || s, sales: 0, prevSales: 0, trans: 0, visitors: 0, prevVisitors: 0, target: 0 };
+        if (inRange(d)) dataMap[s].sales += v || 0;
+        if (inPrevRange(d)) dataMap[s].prevSales += v || 0;
       });
       (rawMgmt.transactions || []).forEach(([d, s, v]: any[]) => {
-        if (inRange(d) && passFilter(s) && dataMap[s]) dataMap[s].trans += v || 0;
+        if (inRange(d) && passFilter(s)) {
+          if (!dataMap[s]) dataMap[s] = { name: rawMgmt.stores?.[s] || s, sales: 0, prevSales: 0, trans: 0, visitors: 0, prevVisitors: 0, target: 0 };
+          dataMap[s].trans += v || 0;
+        }
       });
       (rawMgmt.visitors || []).forEach(([d, s, v]: any[]) => {
-        if (inRange(d) && passFilter(s) && dataMap[s]) dataMap[s].visitors += v || 0;
+        if (!passFilter(s)) return;
+        if (!dataMap[s]) dataMap[s] = { name: rawMgmt.stores?.[s] || s, sales: 0, prevSales: 0, trans: 0, visitors: 0, prevVisitors: 0, target: 0 };
+        if (inRange(d)) dataMap[s].visitors += v || 0;
+        if (inPrevRange(d)) dataMap[s].prevVisitors += v || 0;
       });
       (rawMgmt.targets || []).forEach(([d, s, v]: any[]) => {
-        if (inRange(d) && passFilter(s) && dataMap[s]) dataMap[s].target += v || 0;
+        if (inRange(d) && passFilter(s)) {
+          if (!dataMap[s]) dataMap[s] = { name: rawMgmt.stores?.[s] || s, sales: 0, prevSales: 0, trans: 0, visitors: 0, prevVisitors: 0, target: 0 };
+          dataMap[s].target += v || 0;
+        }
       });
       rows = Object.values(dataMap).map(r => ({
         ...r,
         avgInv: r.trans > 0 ? r.sales / r.trans : 0,
         ach: r.target > 0 ? (r.sales / r.target) * 100 : 0,
-        conversion: r.visitors > 0 ? (r.trans / r.visitors) * 100 : 0
+        conversion: r.visitors > 0 ? (r.trans / r.visitors) * 100 : 0,
+        growth: r.prevSales > 0 ? ((r.sales - r.prevSales) / r.prevSales) * 100 : 0,
+        customerValue: r.visitors > 0 ? r.sales / r.visitors : 0
       })).sort((a, b) => b.sales - a.sales);
 
       setPrintData({ type: 'stores', title, rows, range: `${start} إلى ${end}` }); // Updated range format
@@ -542,10 +561,14 @@ export default function ReportsPage() {
             <div key={repo.id} className="p-4 rounded-xl border border-neutral-100 bg-neutral-50 hover:bg-white hover:shadow-md transition-all cursor-pointer group"
               onClick={() => {
                 if (repo.type === 'excel') {
-                  setExcelType(repo.id.includes('employee') ? 'employee' : 'store'); // Assuming 'stagnant_items' and 'market_basket' are store-related
+                  setExcelType(repo.id.includes('employee') ? 'employee' : 'store');
                   setShowExcelModal(true);
+                } else if (repo.type === 'link') {
+                  // Navigate to the respective page
+                  const path = repo.id === 'offers_analysis' ? '/offers' : '/products';
+                  window.location.hash = path; // Simple hash navigation if using HashRouter, otherwise use navigate
                 } else { // PDF reports
-                  openPdfLegacy(repo.id); // Use openPdfLegacy which now calls handlePdfGeneration
+                  openPdfLegacy(repo.id);
                 }
               }}>
               <div className="flex items-start gap-3">
@@ -817,33 +840,57 @@ export default function ReportsPage() {
               <tr className="bg-neutral-900 text-white print:bg-neutral-900 border-b-2 border-orange-600">
                 <th className="p-3 text-right">#</th>
                 <th className="p-3 text-right">{printData.type === 'stores' ? 'المعرض' : 'الموظف'}</th>
+                {printData.type === 'stores' && <th className="p-3 text-center">المبيعات</th>}
+                {printData.type === 'stores' && <th className="p-3 text-center">العام الماضي</th>}
+                {printData.type === 'stores' && <th className="p-3 text-center">النمو %</th>}
                 {printData.type === 'stores' && <th className="p-3 text-center">الهدف</th>}
-                <th className="p-3 text-center">المبيعات</th>
-                <th className="p-3 text-center">الفواتير</th>
-                <th className="p-3 text-center">متوسط الفاتورة</th>
-                {printData.type === 'stores' && <th className="p-3 text-center">التحويل %</th>}
                 {printData.type === 'stores' && <th className="p-3 text-center">التحقيق %</th>}
+                {printData.type === 'stores' && <th className="p-3 text-center">الفواتير</th>}
+                {printData.type === 'stores' && <th className="p-3 text-center">الزوار</th>}
+                {printData.type === 'stores' && <th className="p-3 text-center">زوار LY</th>}
+                {printData.type === 'stores' && <th className="p-3 text-center">التحويل %</th>}
+                {printData.type === 'stores' && <th className="p-3 text-center">قيمة العميل</th>}
                 {printData.type === 'employees' && <th className="p-3 text-center">المعرض</th>}
+                {printData.type === 'employees' && <th className="p-3 text-center">المبيعات</th>}
+                {printData.type === 'employees' && <th className="p-3 text-center">الفواتير</th>}
+                {printData.type === 'employees' && <th className="p-3 text-center">متوسط الفاتورة</th>}
               </tr>
             </thead>
             <tbody>
               {printData.rows.map((row, idx) => (
                 <tr key={idx} className="border-b border-neutral-200 hover:bg-neutral-50 even:bg-neutral-50">
-                  <td className="p-3 text-neutral-500 font-bold">{idx + 1}</td>
-                  <td className="p-3 font-black text-neutral-900">{row.name}</td>
-                  {printData.type === 'stores' && <td className="p-3 text-center font-mono">{formatSAR(row.target)}</td>}
-                  <td className="p-3 text-center font-black text-green-700 font-mono">{formatSAR(row.sales)}</td>
-                  <td className="p-3 text-center font-bold text-neutral-700">{row.trans}</td>
-                  <td className="p-3 text-center font-bold text-neutral-900 font-mono">{formatSAR(row.avgInv || (row.trans > 0 ? row.sales / row.trans : 0))}</td>
-                  {printData.type === 'stores' && <td className="p-3 text-center font-black text-orange-600">{(row.conversion || 0).toFixed(1)}%</td>}
+                  <td className="p-2 text-neutral-500 font-bold text-xs">{idx + 1}</td>
+                  <td className="p-2 font-black text-neutral-900 text-xs">{row.name}</td>
+
                   {printData.type === 'stores' && (
-                    <td className="p-3 text-center">
-                      <span className={`font-black ${row.ach >= 100 ? 'text-green-600' : 'text-orange-600'}`}>
-                        {(row.ach || 0).toFixed(1)}%
-                      </span>
-                    </td>
+                    <>
+                      <td className="p-2 text-center font-black text-green-700 font-mono text-xs">{formatSAR(row.sales)}</td>
+                      <td className="p-2 text-center text-neutral-400 font-mono text-xs">{formatSAR(row.prevSales)}</td>
+                      <td className={`p-2 text-center font-bold text-xs ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        {row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%
+                      </td>
+                      <td className="p-2 text-center font-mono text-xs">{formatSAR(row.target)}</td>
+                      <td className="p-2 text-center">
+                        <span className={`font-black text-xs ${row.ach >= 100 ? 'text-green-600' : 'text-orange-600'}`}>
+                          {(row.ach || 0).toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className="p-2 text-center font-bold text-neutral-700 text-xs">{Math.round(row.trans)}</td>
+                      <td className="p-2 text-center font-bold text-neutral-700 text-xs">{Math.round(row.visitors)}</td>
+                      <td className="p-2 text-center text-neutral-400 text-xs">{Math.round(row.prevVisitors)}</td>
+                      <td className="p-2 text-center font-black text-orange-600 text-xs">{(row.conversion || 0).toFixed(1)}%</td>
+                      <td className="p-2 text-center font-black text-blue-600 text-xs">{formatSAR(row.customerValue)}</td>
+                    </>
                   )}
-                  {printData.type === 'employees' && <td className="p-3 text-center text-neutral-600 font-medium">{row.store}</td>}
+
+                  {printData.type === 'employees' && (
+                    <>
+                      <td className="p-2 text-center text-neutral-600 font-medium text-xs">{row.store}</td>
+                      <td className="p-2 text-center font-black text-green-700 font-mono text-xs">{formatSAR(row.sales)}</td>
+                      <td className="p-2 text-center font-bold text-neutral-700 text-xs">{Math.round(row.trans)}</td>
+                      <td className="p-2 text-center font-bold text-neutral-900 font-mono text-xs">{formatSAR(row.avgInv || (row.trans > 0 ? row.sales / row.trans : 0))}</td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>

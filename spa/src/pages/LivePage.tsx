@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 import { KPICard } from '../components/DashboardComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon } from '../components/Icons';
@@ -181,11 +181,17 @@ export default function LivePage() {
           >
             <button
               type="button"
-              className="w-full p-4 text-right flex items-center justify-between gap-2 hover:bg-neutral-50 transition-colors"
+              className="w-full p-4 text-right flex flex-col gap-1 hover:bg-neutral-50 transition-colors"
               onClick={() => setExpandedStore(expandedStore === store.sid ? null : store.sid)}
             >
-              <span className="font-bold text-neutral-900 truncate">{store.name}</span>
-              <span className="text-orange-600 font-bold shrink-0" dir="ltr">{formatSAR(store.sales)}</span>
+              <div className="flex items-center justify-between w-full gap-2">
+                <span className="font-bold text-neutral-900 truncate flex-1">{store.name}</span>
+                <span className="text-orange-600 font-bold shrink-0" dir="ltr">{formatSAR(store.sales)}</span>
+              </div>
+              <div className="text-xs text-neutral-500 font-medium flex items-center justify-between">
+                <span>معدل الفاتورة: {formatSAR(store.trans > 0 ? store.sales / store.trans : 0)}</span>
+                <span>فواتير: {Math.round(store.trans)}</span>
+              </div>
             </button>
             {expandedStore === store.sid && store.employees.length > 0 && (
               <div className="border-t border-neutral-200 bg-neutral-50 p-3 space-y-2 max-h-64 overflow-y-auto">

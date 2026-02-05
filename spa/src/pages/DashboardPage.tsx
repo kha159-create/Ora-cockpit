@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { KPICard, RankCard, LineChart, ChartCard } from '../components/DashboardComponents';
+import { KPICard, RankCard, BarChart, ChartCard, VerticalBarChart } from '../components/DashboardComponents';
 import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon, XIcon } from '../components/Icons';
 
 function isAdminOrAuditor(role?: string) {
@@ -428,6 +428,7 @@ export default function DashboardPage() {
           dailyReq: v.dailyReq,
           conversion,
           customerValue,
+          target: v.target,
           ach: v.ach,
         };
       })
@@ -722,7 +723,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
         <KPICard
           title="المبيعات"
           value={totals.sales}
@@ -748,15 +749,15 @@ export default function DashboardPage() {
           comparisonLabel="السنة الماضية"
         />
         <KPICard
-          title="تحقيق الهدف"
+          title="الهدف"
           value={ach}
           format={(v) => `${v.toFixed(1)}%`}
           icon={<ChartPieIcon />}
           comparisonValue={totals.target}
           showProgress
           progressValue={ach}
-          trend="neutral"
-          trendValue={`المستهدف: ${formatSAR(totals.target)}`}
+          compactTarget
+          trendValue={totals.target.toLocaleString('en-US')}
         />
         <KPICard
           title="قيمة العميل"
@@ -818,8 +819,14 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
-            <div className="flex-grow min-h-[300px]">
-              <LineChart data={chartData} />
+            <div className="h-[300px] w-full mt-4">
+              <VerticalBarChart
+                data={chartData.slice(-12)}
+                dataKey={chartMode === 'target' ? 'Sales' : (chartMode === 'growth' ? 'Current' : 'CurrentVisitors')}
+                nameKey="name"
+                targetKey={chartMode === 'target' ? 'Target' : undefined}
+                format={(v) => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v.toString()}
+              />
             </div>
             <div className="flex items-center justify-center gap-4 pt-2 border-t border-neutral-200">
               {chartMode === 'target' && (
@@ -982,10 +989,10 @@ export default function DashboardPage() {
                   className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden identity-card"
                 >
                   <div className="p-4 text-right">
-                    <div className="flex items-center justify-between gap-2 overflow-hidden">
-                      <div className="font-bold text-neutral-900 truncate flex-grow text-right">{store.name}</div>
-                      <div className="text-[10px] font-bold text-neutral-400 bg-neutral-50 px-2 py-0.5 rounded border border-neutral-100 whitespace-nowrap">
-                        Avg: {formatSAR(store.avgInv)}
+                    <div className="flex flex-col">
+                      <div className="font-bold text-neutral-900 truncate">{store.name}</div>
+                      <div className="text-[10px] font-bold text-orange-600 mt-1">
+                        Avg Inv: {formatSAR(store.avgInv)}
                       </div>
                     </div>
                     <div className="text-orange-600 font-bold mt-1 text-lg" dir="ltr">{formatSAR(store.sales)}</div>

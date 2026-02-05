@@ -96,13 +96,13 @@ export const KPICard: React.FC<{
   comparisonValue?: number;
   comparisonLabel?: string;
   icon?: React.ReactNode;
-  iconBgColor?: string;
   onClick?: () => void;
   trendData?: number[];
   showProgress?: boolean;
   progressValue?: number;
   trend?: 'up' | 'down' | 'neutral';
   trendValue?: string;
+  compactTarget?: boolean;
 }> = ({
   title,
   value,
@@ -110,13 +110,13 @@ export const KPICard: React.FC<{
   comparisonValue,
   comparisonLabel,
   icon,
-  iconBgColor,
   onClick,
   trendData,
   showProgress = false,
   progressValue = 0,
   trend = 'neutral',
   trendValue,
+  compactTarget = false,
 }) => {
     const isPositive = comparisonValue !== undefined && value >= comparisonValue;
     const formattedValue =
@@ -176,13 +176,32 @@ export const KPICard: React.FC<{
               </div>
             )}
 
-            {showProgress && (
+            {showProgress && !compactTarget && (
               <div className="flex items-center gap-3">
                 <CircularProgress percentage={progressValue} size={50} />
                 <div className="text-xs font-bold text-neutral-900">
                   {comparisonValue !== undefined && (
                     <span>{format ? format(value) : value.toLocaleString()} / {format ? format(comparisonValue) : comparisonValue.toLocaleString()}</span>
                   )}
+                </div>
+              </div>
+            )}
+
+            {showProgress && compactTarget && (
+              <div className="flex flex-col items-center justify-center p-3 bg-neutral-900 rounded-2xl border border-neutral-800 shadow-xl overflow-hidden relative">
+                <div className="absolute top-0 right-0 p-1 opacity-20">
+                  <div className="w-16 h-16 rounded-full border-4 border-orange-600 border-t-transparent animate-spin-slow"></div>
+                </div>
+                <div className="flex items-center gap-4 relative z-10 w-full justify-center">
+                  <div className="relative flex-shrink-0">
+                    <CircularProgress percentage={progressValue} size={64} />
+                  </div>
+                  <div className="flex flex-col">
+                    <div className="text-[10px] font-black text-orange-500 uppercase tracking-tighter mb-1">Target / الهدف</div>
+                    <div className="text-3xl font-black text-white tabular-nums leading-none flex items-baseline gap-1">
+                      {trendValue}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -287,6 +306,58 @@ const Tooltip: React.FC<{ content: string; x: number; y: number }> = ({ content,
     dangerouslySetInnerHTML={{ __html: content }}
   />
 );
+
+export const VerticalBarChart: React.FC<{
+  data: any[];
+  dataKey: string;
+  nameKey: string;
+  targetKey?: string;
+  format?: (val: number) => string;
+}> = ({ data, dataKey, nameKey, targetKey, format }) => {
+  if (!data || data.length === 0) return <div className="flex items-center justify-center h-full text-neutral-500">No data</div>;
+
+  const allVals = data.flatMap(d => [Number(d[dataKey] || 0), targetKey ? Number(d[targetKey] || 0) : 0]);
+  const maxVal = Math.max(...allVals, 1);
+
+  return (
+    <div className="w-full h-full flex items-end justify-between gap-2 px-2 pb-8 pt-4">
+      {data.map((item, idx) => {
+        const val = Number(item[dataKey] || 0);
+        const target = targetKey ? Number(item[targetKey] || 0) : 0;
+        const valPct = (val / maxVal) * 100;
+        const targetPct = targetKey ? (target / maxVal) * 100 : 0;
+
+        return (
+          <div key={idx} className="flex-1 flex flex-col items-center group relative h-full">
+            <div className="flex-1 w-full bg-neutral-50 rounded-lg relative flex items-end justify-center overflow-hidden">
+              {/* Target line if exists */}
+              {targetKey && (
+                <div
+                  className="absolute w-full border-t-2 border-dashed border-neutral-400 z-10"
+                  style={{ bottom: `${targetPct}%` }}
+                />
+              )}
+              {/* Main Bar */}
+              <div
+                className="w-4/5 bg-gradient-to-t from-orange-600 to-orange-400 rounded-t-md transition-all duration-500 relative group-hover:from-orange-700 group-hover:to-orange-500 shadow-sm"
+                style={{ height: `${Math.max(valPct, 2)}%` }}
+              >
+                <div className="opacity-0 group-hover:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-neutral-800 text-white text-[10px] py-1 px-2 rounded whitespace-nowrap z-20 transition-opacity">
+                  {format ? format(val) : val.toLocaleString()}
+                </div>
+              </div>
+            </div>
+            <div className="absolute -bottom-6 w-full text-center">
+              <span className="text-[10px] font-bold text-neutral-500 truncate block px-1">
+                {item[nameKey]}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
 export const BarChart: React.FC<{ data: any[]; dataKey: string; nameKey: string; format?: (val: number) => string }> = ({
   data,

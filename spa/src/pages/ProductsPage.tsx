@@ -157,12 +157,14 @@ export default function ProductsPage() {
     const storeMeta: Record<string, any> = mgmt.store_meta || {};
     const storesMap: Record<string, string> = mgmt.stores || {};
 
-    const pData = raw.periods?.[mode] || null;
+    const normalizedMode = mode.toLowerCase();
+    const pData = raw.periods?.[normalizedMode] || raw.periods?.['mtd'] || raw.periods?.['MTD'] || null;
     const analysis: Record<string, any> = (pData?.analysis || {}) as any;
     const catalog: Record<string, any[]> = (pData?.catalog || {}) as any;
     const missedByStore: Record<string, any[]> = (pData?.missed_opportunities || {}) as any;
     const marketBasketAll: Record<string, any[]> = raw.market_basket || {};
     const dailyHistory: Record<string, any[]> = raw.product_daily_history || {};
+    const stagnantData: any[] = raw.stagnant_items || [];
 
     const isStoreAccessible = (sid: string) => {
       if (isAdminOrAuditor(user?.role)) return true;
@@ -252,16 +254,19 @@ export default function ProductsPage() {
 
     const denom = metric === 'qty' ? Math.max(1, totalQty) : Math.max(1, totalAmt);
     const categoriesAgg: CategoryRow[] = Array.from(catMap.entries()).map(([category, data]) => {
-      const sharePercent = ((metric === 'qty' ? data.qty : data.amount) / denom) * 100;
+      const shareFromData = (data as any).share_percent || (data as any).sharePercent;
+      const calculatedShare = ((metric === 'qty' ? data.qty : data.amount) / denom) * 100;
+      const sharePercent = shareFromData != null ? safeNum(shareFromData) : calculatedShare;
+
       return {
         category,
         qty: data.qty,
         amount: data.amount,
         sharePercent,
-        topItemId: data.top?.top_item_id || '',
-        topItemName: data.top?.top_item_name || '',
-        topItemQty: safeNum(data.top?.top_item_qty),
-        topItemAmount: safeNum(data.top?.top_item_amount),
+        topItemId: data.top?.top_item_id || data.top?.topItemId || '',
+        topItemName: data.top?.top_item_name || data.top?.topItemName || '',
+        topItemQty: safeNum(data.top?.top_item_qty || data.top?.topItemQty),
+        topItemAmount: safeNum(data.top?.top_item_amount || data.top?.topItemAmount),
       };
     });
 

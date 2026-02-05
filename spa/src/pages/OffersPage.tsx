@@ -1,6 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { loadOffersData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
+import { DownloadIcon } from '../components/Icons';
+import * as XLSX from 'xlsx';
+
+function safeNum(x: unknown) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : 0;
+}
 
 function formatSAR(val: number) {
   return val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
@@ -11,6 +18,20 @@ function isAdminOrAuditor(role?: string) {
 }
 
 type PeriodKey = 'mtd' | '7d' | '14d' | '30d' | 'yest';
+
+// Helper component for period buttons
+const PeriodButton = ({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${active
+      ? 'bg-orange-500 text-white border-orange-500 shadow-md'
+      : 'bg-white text-neutral-700 border-neutral-200 hover:bg-orange-50 hover:border-orange-200'
+      }`}
+  >
+    {label}
+  </button>
+);
 
 export default function OffersPage() {
   const user = getCurrentUser();
@@ -72,40 +93,72 @@ export default function OffersPage() {
 
   const rawOffers = useMemo(() => {
     if (!data) return [];
-    return Array.isArray(data) ? data : (Array.isArray(data?.offers) ? data.offers : []);
+    const base = Array.isArray(data) ? data : (data.offers || data.data || []);
+    return Array.isArray(base) ? base : [];
   }, [data]);
 
+  const today = useMemo(() => new Date('2026-02-04'), []); // Using metadata time
+
+  const dateRange = useMemo(() => {
+    const end = new Date(today);
+    const start = new Date(today);
+    if (period === 'mtd') start.setDate(1);
+    else if (period === '7d') start.setDate(end.getDate() - 6);
+    else if (period === '14d') start.setDate(end.getDate() - 13);
+    else if (period === '30d') start.setDate(end.getDate() - 29);
+    else if (period === 'yest') { start.setDate(end.getDate() - 1); end.setDate(end.getDate() - 1); }
+
+    const toYMD = (d: Date) => d.toISOString().split('T')[0];
+    return { start: toYMD(start), end: toYMD(end) };
+  }, [period, today]);
+
   const periodSuf = useMemo(() => {
-    if (period === 'mtd') return 'mtd';
+    if (period === 'mtd') return 'm';
     if (period === '7d') return '7d';
     if (period === '14d') return '14d';
     if (period === '30d') return '30d';
-    if (period === 'yest') return 'yest';
-    return 'mtd';
+    if (period === 'yest') return 'y';
+    return 'm'; // Default
   }, [period]);
 
   const offers = useMemo(() => {
-    const suf = periodSuf;
+    const { start: startYMD, end: endYMD } = dateRange;
+
     let list = rawOffers.map((o: any) => {
       let sales = 0;
       let discount = 0;
       let ops = 0;
 
-      const storeData = o.stores || {};
-      Object.keys(storeData).forEach(sid => {
-        if (allowedStoreIds.has(String(sid))) {
-          const sObj = storeData[sid] || {};
-          sales += Number(sObj[`s_${suf}`] ?? 0);
-          discount += Number(sObj[`d_${suf}`] ?? 0);
-          ops += Number(sObj[`t_${suf}`] ?? 0);
+      const statsArray = o.stats || [];
+      statsArray.forEach((s: any) => {
+        const d = s.d;
+        const sid = String(s.s);
+        if (d >= startYMD && d <= endYMD && allowedStoreIds.has(sid)) {
+          sales += Number(s.bill ?? s.sale ?? 0);
+          discount += Number(s.disc ?? 0);
+          ops += Number(s.cnt ?? 0);
         }
       });
 
-      // Fallback for global totals if no store breakdown exists (legacy structure)
+      // Legacy support check if stats were empty but stores existed
+      if (sales === 0 && ops === 0 && o.stores) {
+        const suf = periodSuf;
+        const storeData = o.stores || {};
+        Object.keys(storeData).forEach(sid => {
+          if (allowedStoreIds.has(String(sid))) {
+            const sObj = storeData[sid] || {};
+            sales += Number(sObj[`s_${suf}`] ?? 0);
+            discount += Number(sObj[`d_${suf}`] ?? 0);
+            ops += Number(sObj[`t_${suf}`] ?? 0);
+          }
+        });
+      }
+
+      // Final fallbacks for variety of field names
       if (sales === 0 && ops === 0) {
-        sales = Number(o[`s_${suf}`] ?? o.filteredSales ?? o.sales ?? o.total_sales ?? 0) || 0;
-        discount = Number(o[`d_${suf}`] ?? o.discount ?? o.total_discount ?? 0) || 0;
-        ops = Number(o[`t_${suf}`] ?? o.operations ?? o.transactions ?? o.count ?? 0) || 0;
+        sales = safeNum(o[`s_${periodSuf}`] || o.filteredSales || o.sales || o.amount || o.totalSales || o.bill_total || 0);
+        discount = safeNum(o[`d_${periodSuf}`] || o.discount || o.totalDiscount || o.disc_total || 0);
+        ops = safeNum(o[`t_${periodSuf}`] || o.operations || o.transactions || o.ops || o.cnt || 0);
       }
 
       const eff = sales > 0 ? (sales / (sales + discount)) * 100 : 100;
@@ -123,7 +176,7 @@ export default function OffersPage() {
       return o.dispSales > 0 || o.dispOps > 0;
     });
     return list;
-  }, [rawOffers, allowedStoreIds, statusFilter, periodSuf]);
+  }, [rawOffers, dateRange, allowedStoreIds, periodSuf, statusFilter]);
 
   const stats = useMemo(() => {
     const totalSales = offers.reduce((s: number, o: any) => s + o.dispSales, 0);
@@ -134,18 +187,39 @@ export default function OffersPage() {
     return { totalOffers: offers.length, totalSales, totalDiscount, totalOps, avgBasket, efficiency };
   }, [offers]);
 
+  const exportToExcel = () => {
+    const rows = offers.map(o => ({
+      'اسم العرض': o.name,
+      'النوع': o.type || 'خصم مباشر',
+      'الحالة': o.status === 'Disabled' ? 'معطل' : 'نشط',
+      'فترة العرض': `${o.start} إلى ${o.end}`,
+      'المبيعات': o.dispSales,
+      'الخصم': o.dispDiscount,
+      'عدد العمليات': o.dispOps,
+      'الفعالية %': o.dispEff.toFixed(1) + '%'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Offers Report');
+    XLSX.writeFile(wb, `Offers_Report_${dateRange.start}_${dateRange.end}.xlsx`);
+  };
+
   const top5 = useMemo(() => {
     return [...offers]
       .sort((a: any, b: any) => b.dispSales - a.dispSales)
       .slice(0, 5);
   }, [offers]);
 
+  const filteredOffers = useMemo(() => {
+    return offers.filter((o: any) => o.dispEff > 0 && o.dispEff < 50);
+  }, [offers]);
+
   const weakOffers = useMemo(() => {
-    return [...offers]
-      .filter((o: any) => o.dispEff > 0 && o.dispEff < 50)
+    return [...filteredOffers]
       .sort((a: any, b: any) => a.dispEff - b.dispEff)
       .slice(0, 5);
-  }, [offers]);
+  }, [filteredOffers]);
 
   if (err) return <div className="p-6 bg-white rounded-2xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
   if (!data) {
@@ -155,8 +229,6 @@ export default function OffersPage() {
       </div>
     );
   }
-
-  const periodLabels: Record<PeriodKey, string> = { mtd: 'الشهر الحالي', '7d': '7 أيام', '14d': '14 يوم', '30d': '30 يوم', yest: 'أمس' };
 
   return (
     <div className="space-y-6">
@@ -170,21 +242,11 @@ export default function OffersPage() {
         <div className="flex flex-wrap items-center gap-3 mb-3">
           <span className="text-sm font-semibold text-neutral-600">الفترة:</span>
           <div className="flex flex-wrap gap-2">
-            {(['mtd', '7d', '14d', '30d', 'yest'] as PeriodKey[]).map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setPeriod(key)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${period === key
-                  ? 'bg-orange-500 text-white border-orange-500 shadow-md'
-                  : 'bg-white text-neutral-700 border-neutral-200 hover:bg-orange-50 hover:border-orange-200'
-                  }`}
-              >
-                {key === 'mtd' && '📅 '}
-                {key === 'yest' && '⏳ '}
-                {periodLabels[key]}
-              </button>
-            ))}
+            <PeriodButton active={period === 'yest'} label="أمس" onClick={() => setPeriod('yest')} />
+            <PeriodButton active={period === 'mtd'} label="الشهر الحالي" onClick={() => setPeriod('mtd')} />
+            <PeriodButton active={period === '7d'} label="آخر 7 أيام" onClick={() => setPeriod('7d')} />
+            <PeriodButton active={period === '14d'} label="آخر 14 يوم" onClick={() => setPeriod('14d')} />
+            <PeriodButton active={period === '30d'} label="آخر 30 يوم" onClick={() => setPeriod('30d')} />
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -215,13 +277,20 @@ export default function OffersPage() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-neutral-500 mb-1">الحالة</label>
-            <select className="input w-full" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="all">الكل</option>
-              <option value="Enabled">فعال (Enabled)</option>
-              <option value="Disabled">معطل (Disabled)</option>
-            </select>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* These period buttons are redundant with the ones above, removing them to avoid duplication */}
+            </div>
+            <div className="flex items-center gap-3">
+              <select className="input text-xs" value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
+                <option value="all">جميع الحالات</option>
+                <option value="Enabled">النشطة فقط</option>
+                <option value="Disabled">المعطلة فقط</option>
+              </select>
+              <button className="btn-secondary py-2 px-4 flex items-center gap-2 bg-green-600 text-white border-green-600 hover:bg-green-700 hover:border-green-700" onClick={exportToExcel}>
+                <DownloadIcon /> تصدير Excel
+              </button>
+            </div>
           </div>
         </div>
       </div>
