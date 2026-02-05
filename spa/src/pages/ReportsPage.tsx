@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { loadEmployeesData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { XIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
+
+type FilterMode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
 
 function formatSAR(val: number) {
   return val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 }
-
-type FilterMode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
@@ -32,7 +31,7 @@ function getRange(
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
   if (mode === 'mtd') {
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
-    return { start: toYMD(start), end: toYMD(yesterday) };
+    return { start: toYMD(start), end: toYMD(today) };
   }
   if (mode === 'custom') {
     const start = customStart || toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -70,33 +69,9 @@ export default function ReportsPage() {
   const [showExcelModal, setShowExcelModal] = useState(false);
   const [showReportChoiceModal, setShowReportChoiceModal] = useState(false);
   const [reportChoiceType, setReportChoiceType] = useState<'pdf' | 'excel' | null>(null);
-
-  // New States for Employee Selection (Image 3)
-  const [showEmpSelectModal, setShowEmpSelectModal] = useState(false);
-  const [empSelectionSearch, setEmpSelectionSearch] = useState('');
-  const [empStatusFilter, setEmpStatusFilter] = useState<string[]>(['active']); // active, review, resigned
+  const [previewReport, setPreviewReport] = useState<{ type: string; data: any } | null>(null);
+  const [printData, setPrintData] = useState<any>(null);
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
-
-  const range = useMemo(
-    () => getRange(filterMode, standardYear, standardMonth, customStart, customEnd),
-    [filterMode, standardYear, standardMonth, customStart, customEnd]
-  );
-
-  const [excelRangeStart, setExcelRangeStart] = useState('');
-  const [excelRangeEnd, setExcelRangeEnd] = useState('');
-
-  // Print States
-  const [printData, setPrintData] = useState<{ type: 'stores' | 'employees'; title: string; rows: any[]; range: string } | null>(null);
-
-  const originalReports = [
-    { id: 'yesterday_store', name: 'تقرير مبيعات الأمس (المعارض)', type: 'pdf', icon: '🏪', desc: 'مقارنة مبيعات الأمس بالسنة الماضية والأهداف' },
-    { id: 'yesterday_employee', name: 'أداء الموظفين (الأمس)', type: 'pdf', icon: '👤', desc: 'مبيعات الموظفين يوم أمس وتغطية الأهداف' },
-    { id: 'monthly_summary', name: 'الملخص الشهري العام', type: 'pdf', icon: '📅', desc: 'تراكمي الشهر الحالي مقارنة بالفترات السابقة' },
-    { id: 'offers_analysis', name: 'تحليل العروض والخصومات', type: 'link', icon: '🏷️', desc: 'تحليل أداء العروض الترويجية والفعالية' },
-    { id: 'products_analysis', name: 'تحليل المنتجات والأصناف', type: 'link', icon: '📦', desc: 'تحليل مبيعات الأصناف وتوزيعها وتحليل القيمة' },
-    { id: 'stagnant_items', name: 'تقرير المنتجات الراكدة', type: 'excel', icon: '📉', desc: 'تحليل المخزون الذي لم يتحرك لفترة طويلة' },
-    { id: 'market_basket', name: 'تحليل الأنماط الشرائية', type: 'excel', icon: '🧺', desc: 'المنتجات التي تباع سوياً بشكل متكرر' },
-  ];
 
   useEffect(() => {
     loadManagementData()
@@ -108,10 +83,10 @@ export default function ReportsPage() {
     loadEmployeesData().then(setRawEmp).catch(() => { });
   }, []);
 
-  useEffect(() => {
-    if (range.start) setExcelRangeStart(range.start);
-    if (range.end) setExcelRangeEnd(range.end);
-  }, [range]);
+  const range = useMemo(
+    () => getRange(filterMode, standardYear, standardMonth, customStart, customEnd),
+    [filterMode, standardYear, standardMonth, customStart, customEnd]
+  );
 
   const managers = useMemo(() => {
     if (!rawMgmt?.store_meta) return [];
@@ -210,6 +185,110 @@ export default function ReportsPage() {
     XLSX.writeFile(wb, `Store_Sales_${range.start}_${range.end}.xlsx`);
   };
 
+  const generateGlobalSummary = () => {
+    if (!rawMgmt) return;
+    const days: string[] = [];
+    let curr = new Date(range.start);
+    const end = new Date(range.end);
+    while (curr <= end) {
+      days.push(toYMD(curr));
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    const reportData = days.map(d => {
+      const prevD = new Date(d);
+      prevD.setFullYear(prevD.getFullYear() - 1);
+      const dPrev = toYMD(prevD);
+
+      let s = 0, sPrev = 0, t = 0, v = 0, vPrev = 0;
+      (rawMgmt.sales || []).forEach(([dt, sid, val]: any[]) => {
+        if (passFilter(sid)) {
+          if (dt === d) s += val || 0;
+          if (dt === dPrev) sPrev += val || 0;
+        }
+      });
+      (rawMgmt.transactions || []).forEach(([dt, sid, val]: any[]) => {
+        if (passFilter(sid) && dt === d) t += val || 0;
+      });
+      (rawMgmt.visitors || []).forEach(([dt, sid, val]: any[]) => {
+        if (passFilter(sid)) {
+          if (dt === d) v += val || 0;
+          if (dt === dPrev) vPrev += val || 0;
+        }
+      });
+
+      return {
+        date: d,
+        sales: s,
+        salesPrev: sPrev,
+        growth: sPrev > 0 ? ((s - sPrev) / sPrev) * 100 : 0,
+        trans: t,
+        avgInv: t > 0 ? s / t : 0,
+        customerValue: t > 0 ? s / t : 0,
+        visitors: v,
+        visitorsPrev: vPrev,
+        conversion: v > 0 ? (t / v) * 100 : 0
+      };
+    });
+
+    setPreviewReport({ type: 'global', data: reportData });
+    setShowReportChoiceModal(false);
+  };
+
+  const generateEmployeePerformance = () => {
+    if (!rawMgmt || !rawEmp) return;
+    const history = rawEmp.history || {};
+    const names = rawEmp.employee_names || {};
+    const targets = rawEmp.targets || {};
+
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const yStr = toYMD(yesterday);
+
+    const empData: Record<string, any> = {};
+
+    Object.entries(history).forEach(([sid, recs]: [string, any]) => {
+      if (!passFilter(sid)) return;
+      (recs || []).forEach(([dt, eid, s, t]: any[]) => {
+        if (!empData[eid]) {
+          empData[eid] = {
+            id: eid,
+            name: names[eid] || eid,
+            ySales: 0, yTrans: 0,
+            mSales: 0, mTrans: 0,
+            target: targets[eid] || 0
+          };
+        }
+        if (dt === yStr) {
+          empData[eid].ySales += s || 0;
+          empData[eid].yTrans += t || 0;
+        }
+        if (dt >= range.start && dt <= range.end) {
+          empData[eid].mSales += s || 0;
+          empData[eid].mTrans += t || 0;
+        }
+      });
+    });
+
+    const totalYSales = Object.values(empData).reduce((sum, e) => sum + e.ySales, 0);
+    const totalMSales = Object.values(empData).reduce((sum, e) => sum + e.mSales, 0);
+
+    const list = Object.values(empData).map(e => ({
+      ...e,
+      yShare: totalYSales > 0 ? (e.ySales / totalYSales) * 100 : 0,
+      mShare: totalMSales > 0 ? (e.mSales / totalMSales) * 100 : 0,
+      yAvgInv: e.yTrans > 0 ? e.ySales / e.yTrans : 0,
+      mAvgInv: e.mTrans > 0 ? e.mSales / e.mTrans : 0,
+      achievement: e.target > 0 ? (e.mSales / e.target) * 100 : 0,
+      remaining: Math.max(0, e.target - e.mSales),
+      dailyReq: 0 // Will calculate based on remaining days in month
+    }));
+
+    setPreviewReport({ type: 'employee', data: list });
+    setShowReportChoiceModal(false);
+  };
+
   const exportEmployeeExcel = () => {
     if (!rawMgmt || !rawEmp) return;
     const history = rawEmp.history || {};
@@ -250,7 +329,7 @@ export default function ReportsPage() {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Employee Sales');
-    XLSX.writeFile(wb, `Employee_Sales_${excelRangeStart}_${excelRangeEnd}.xlsx`);
+    XLSX.writeFile(wb, `Employee_Sales_${range.start}_${range.end}.xlsx`);
   };
 
   const runExcelExport = () => {
@@ -259,10 +338,10 @@ export default function ReportsPage() {
       if (excelType === 'store') exportStoreExcel();
       else exportEmployeeExcel();
       setShowExcelModal(false);
+      setShowReportChoiceModal(false);
+      setReportChoiceType(null);
     } finally {
-      setTimeout(() => { // Added setTimeout here
-        setExcelExporting(false);
-      }, 1000);
+      setExcelExporting(false);
     }
   };
 
@@ -354,86 +433,24 @@ export default function ReportsPage() {
       setPrintData(null);
     }, 500);
   };
-
   const openReportChoice = (type: 'pdf' | 'excel') => {
     setReportChoiceType(type);
     setShowReportChoiceModal(true);
   };
 
-  const openPdfLegacy = (reportId: string = 'dashboard') => {
-    if (reportId === 'yesterday_employee') {
-      setShowEmpSelectModal(true);
-      return;
-    }
-
-    // Directly call handlePdfGeneration for other PDF reports
-    const reportType = reportId === 'dashboard' ? 'monthly_summary' : reportId as 'yesterday_store' | 'monthly_summary';
-    handlePdfGeneration(reportType);
-  };
-
-  const allEmployees = useMemo(() => {
-    if (!rawEmp?.employee_names || !rawEmp?.history) return [];
-    const history = rawEmp.history;
-    const names = rawEmp.employee_names;
-    // Removed unused 'meta' variable
-    const emps: any[] = [];
-    const processed = new Set();
-
-    Object.entries(history).forEach(([sid, recs]: [string, any]) => {
-      recs.forEach((r: any) => {
-        const eid = String(r[1]);
-        if (processed.has(eid)) return;
-        processed.add(eid);
-
-        let name = names[eid] || eid;
-        if (eid.includes('-')) name = eid.split('-').slice(1).join('-').trim();
-
-        // In a real app, status would come from meta, here we mock it or use name heuristics
-        const status = name.includes('(مستقيل)') ? 'resigned' : name.includes('(مراجعة)') ? 'review' : 'active';
-
-        // Calculate recent sales for sorting
-        let recentSales = 0;
-        if (r[0] >= range.start) recentSales = r[2];
-
-        emps.push({
-          id: eid,
-          name,
-          store: rawMgmt?.stores?.[sid] || sid,
-          status,
-          sales: recentSales
-        });
-      });
-    });
-    return emps.sort((a, b) => b.sales - a.sales);
-  }, [rawEmp, rawMgmt, range.start]);
-
-  const filteredEmployees = useMemo(() => {
-    return allEmployees.filter(e => {
-      const matchesSearch = e.name.toLowerCase().includes(empSelectionSearch.toLowerCase()) || e.id.includes(empSelectionSearch);
-      const matchesStatus = empStatusFilter.includes(e.status);
-      return matchesSearch && matchesStatus;
-    });
-  }, [allEmployees, empSelectionSearch, empStatusFilter]);
-
-  const toggleEmpSelection = (id: string) => {
-    setSelectedEmpIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleSelectAllEmps = () => {
-    if (selectedEmpIds.size === filteredEmployees.length) {
-      setSelectedEmpIds(new Set());
+  const handleChoiceConfirm = () => {
+    if (reportChoiceType === 'pdf') {
+      handlePdfGeneration('yesterday_store');
     } else {
-      setSelectedEmpIds(new Set(filteredEmployees.map(e => e.id)));
+      runExcelExport(); // Assuming runExcelExport is the equivalent for Excel confirmation
     }
+    setShowReportChoiceModal(false);
   };
 
-  const handleSelectActiveOnly = () => {
-    setSelectedEmpIds(new Set(filteredEmployees.filter(e => e.status === 'active').map(e => e.id)));
+  const openPdfLegacy = () => {
+    setShowReportChoiceModal(false);
+    setReportChoiceType(null);
+    generateGlobalSummary();
   };
 
   const canExportEmployee = user?.role === 'Admin' || user?.name === 'Sales Manager';
@@ -560,9 +577,9 @@ export default function ReportsPage() {
           className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6 text-center hover:shadow-xl hover:border-primary-200 transition-all cursor-pointer group"
         >
           <div className="text-red-500 text-4xl mb-3">📄</div>
-          <h5 className="font-bold text-neutral-900">تقارير PDF المخصصة</h5>
-          <p className="text-sm text-neutral-500 mt-1">لوحة التحكم، تقرير أمس للمعارض، تقرير أمس للموظفين</p>
-          <span className="inline-block mt-3 px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-lg group-hover:bg-amber-600">اختر وتصدير PDF</span>
+          <h5 className="font-bold text-neutral-900">تقارير PDF</h5>
+          <p className="text-sm text-neutral-500 mt-1">لوحة التحكم، ملخص عام، أداء الموظفين</p>
+          <span className="inline-block mt-3 px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-lg group-hover:bg-amber-600">اختر وتنسيق التقرير</span>
         </button>
         <button
           type="button"
@@ -570,77 +587,38 @@ export default function ReportsPage() {
           className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6 text-center hover:shadow-xl hover:border-primary-200 transition-all cursor-pointer group"
         >
           <div className="text-green-600 text-4xl mb-3">📊</div>
-          <h5 className="font-bold text-neutral-900">تقارير Excel المخصصة</h5>
+          <h5 className="font-bold text-neutral-900">تقارير Excel</h5>
           <p className="text-sm text-neutral-500 mt-1">مبيعات المعارض، مبيعات الموظفين</p>
           <span className="inline-block mt-3 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg group-hover:bg-green-700">اختر وتصدير Excel</span>
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
-        <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white">
-          <h3 className="text-lg font-bold text-neutral-900">📚 مكتبة التقارير القياسية</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
-          {originalReports.map((repo) => (
-            <div key={repo.id} className="p-4 rounded-xl border border-neutral-100 bg-neutral-50 hover:bg-white hover:shadow-md transition-all cursor-pointer group"
-              onClick={() => {
-                if (repo.type === 'excel') {
-                  setExcelType(repo.id.includes('employee') ? 'employee' : 'store');
-                  setShowExcelModal(true);
-                } else if (repo.type === 'link') {
-                  // Navigate to the respective page
-                  const path = repo.id === 'offers_analysis' ? '/offers' : '/products';
-                  window.location.hash = path; // Simple hash navigation if using HashRouter, otherwise use navigate
-                } else { // PDF reports
-                  openPdfLegacy(repo.id);
-                }
-              }}>
-              <div className="flex items-start gap-3">
-                <div className="text-3xl">{repo.icon}</div>
-                <div className="flex-1">
-                  <h6 className="font-bold text-neutral-900 group-hover:text-primary-600">{repo.name}</h6>
-                  <p className="text-xs text-neutral-500 mt-1">{repo.desc}</p>
-                  <div className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${repo.type === 'pdf' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                    {repo.type}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Report type choice modal - داخل حدود الصفحة */}
+      {/* Report type choice modal */}
       {showReportChoiceModal && reportChoiceType && (
         <div className="modal-center-screen" onClick={() => setShowReportChoiceModal(false)}>
           <div className="modal-content max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <h5 className="font-bold text-lg text-neutral-900 mb-4">
-              {reportChoiceType === 'pdf' ? 'اختر تقرير PDF' : 'اختر تقرير Excel'}
+              {reportChoiceType === 'pdf' ? 'اختر التقرير للمعاينة' : 'اختر تقرير Excel'}
             </h5>
             {reportChoiceType === 'pdf' ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <button
                   type="button"
-                  onClick={() => { setShowReportChoiceModal(false); handlePdfGeneration('monthly_summary'); }} // Dashboard
+                  onClick={openPdfLegacy}
                   className="w-full py-3 px-4 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600"
                 >
-                  لوحة التحكم (PDF)
+                  فتح تقرير ملخص عام (Global Summary)
                 </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowReportChoiceModal(false); handlePdfGeneration('yesterday_store'); }} // Yesterday Store
-                  className="w-full py-3 px-4 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600"
-                >
-                  مبيعات الأمس للمعارض (PDF)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowReportChoiceModal(false); setShowEmpSelectModal(true); }} // Yesterday Employee
-                  className="w-full py-3 px-4 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600"
-                >
-                  أداء الموظفين (PDF)
-                </button>
-                <p className="text-sm text-neutral-500">سيتم إنشاء تقرير PDF باستخدام الفلاتر الحالية.</p>
+                {canExportEmployee && (
+                  <button
+                    type="button"
+                    onClick={() => { generateEmployeePerformance(); setShowReportChoiceModal(false); }}
+                    className="w-full py-3 px-4 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700"
+                  >
+                    فتح تقرير أداء الموظفين (Employee Performance)
+                  </button>
+                )}
+                <p className="text-sm text-neutral-500">سيتم فتح التقرير للمراجعة أولاً، ثم يمكنك اختيار الطباعة.</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -667,198 +645,189 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Employee Selection Modal (Image 3) */}
-      {showEmpSelectModal && (
-        <div className="modal-center-screen" onClick={() => setShowEmpSelectModal(false)}>
-          <div className="modal-content max-w-4xl w-full p-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6 border-b border-neutral-100 flex items-center justify-between bg-neutral-50">
-              <div>
-                <h4 className="text-xl font-bold text-neutral-900 flex items-center gap-2">
-                  <span>📄</span> اختيار الموظفين (PDF)
-                </h4>
-                <p className="text-sm text-neutral-500 mt-1 font-medium">اختر الموظفين للتقرير وأزل المستقيلين</p>
-              </div>
-              <button type="button" onClick={() => setShowEmpSelectModal(false)} className="p-2 hover:bg-neutral-200 rounded-full transition-colors">
-                <XIcon />
-              </button>
-            </div>
-
-            <div className="p-4 bg-white border-b border-neutral-100">
-              <div className="flex flex-wrap items-center gap-4 mb-4">
-                <div className="flex items-center gap-4 bg-neutral-50 px-4 py-2 rounded-lg border border-neutral-100">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={empStatusFilter.includes('active')} onChange={e => {
-                      if (e.target.checked) setEmpStatusFilter(p => [...p, 'active']);
-                      else setEmpStatusFilter(p => p.filter(s => s !== 'active'));
-                    }} className="rounded text-green-600 focus:ring-green-500" />
-                    <span className="text-xs font-bold text-neutral-700">موظف نشط</span>
-                    <div className="w-4 h-4 rounded bg-green-100 border border-green-200"></div>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={empStatusFilter.includes('review')} onChange={e => {
-                      if (e.target.checked) setEmpStatusFilter(p => [...p, 'review']);
-                      else setEmpStatusFilter(p => p.filter(s => s !== 'review'));
-                    }} className="rounded text-amber-500 focus:ring-amber-500" />
-                    <span className="text-xs font-bold text-neutral-700">مراجعة (معيار واحد)</span>
-                    <div className="w-4 h-4 rounded bg-amber-100 border border-amber-200"></div>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={empStatusFilter.includes('resigned')} onChange={e => {
-                      if (e.target.checked) setEmpStatusFilter(p => [...p, 'resigned']);
-                      else setEmpStatusFilter(p => p.filter(s => s !== 'resigned'));
-                    }} className="rounded text-red-500 focus:ring-red-500" />
-                    <span className="text-xs font-bold text-neutral-700">مستقيل (معياران)</span>
-                    <div className="w-4 h-4 rounded bg-red-100 border border-red-200"></div>
-                  </label>
-                </div>
-                <div className="flex-grow">
-                  <input
-                    type="text"
-                    placeholder="ابحث عن موظف..."
-                    className="input w-full h-10 text-sm"
-                    value={empSelectionSearch}
-                    onChange={e => setEmpSelectionSearch(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-sm">
-                <div className="text-neutral-500 font-medium">المحددين: <span className="text-neutral-900 font-bold">{selectedEmpIds.size} من {filteredEmployees.length}</span></div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={handleSelectAllEmps} className="btn-secondary px-3 py-1.5 text-xs font-bold flex items-center gap-1 border-blue-200 text-blue-700">
-                    {selectedEmpIds.size === filteredEmployees.length ? 'إلغاء الكل' : 'تحديد الكل'}
-                  </button>
-                  <button type="button" onClick={handleSelectActiveOnly} className="btn-secondary px-3 py-1.5 text-xs font-bold flex items-center gap-1">
-                    👤 النشطين فقط
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="overflow-y-auto max-h-[50vh]">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-neutral-800 text-white z-10">
-                  <tr>
-                    <th className="th text-right">الموظف</th>
-                    <th className="th text-right">الفرع</th>
-                    <th className="th text-center">المبيعات</th>
-                    <th className="th text-center">الحالة</th>
-                    <th className="th text-center w-12 text-black">
-                      <input type="checkbox" checked={selectedEmpIds.size === filteredEmployees.length && filteredEmployees.length > 0} onChange={handleSelectAllEmps} />
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  {filteredEmployees.map(emp => (
-                    <tr key={emp.id} className="hover:bg-neutral-50 transition-colors cursor-pointer" onClick={() => toggleEmpSelection(emp.id)}>
-                      <td className="td py-3">
-                        <div className="font-bold text-neutral-900">{emp.name}</div>
-                        <div className="text-[10px] text-neutral-400 font-mono">{emp.id}</div>
-                      </td>
-                      <td className="td text-neutral-600 font-medium">{emp.store}</td>
-                      <td className="td text-center font-bold text-neutral-900">{formatSAR(emp.sales)}</td>
-                      <td className="td text-center">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${emp.status === 'active' ? 'bg-green-100 text-green-700' :
-                          emp.status === 'review' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                          }`}>
-                          {emp.status === 'active' ? 'نشط' : emp.status === 'review' ? 'مراجعة' : 'مستقيل'}
-                        </span>
-                      </td>
-                      <td className="td text-center" onClick={e => e.stopPropagation()}>
-                        <input type="checkbox" checked={selectedEmpIds.has(emp.id)} onChange={() => toggleEmpSelection(emp.id)} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="p-4 bg-neutral-50 border-t border-neutral-200 flex justify-end gap-3">
-              <button type="button" onClick={() => setShowEmpSelectModal(false)} className="btn-secondary px-6 font-bold">إلغاء</button>
-              <button type="button" className="btn-primary px-8 font-bold flex items-center gap-2 bg-green-600 hover:bg-green-700" onClick={() => {
-                if (selectedEmpIds.size === 0) {
-                  alert('الرجاء اختيار موظف واحد على الأقل.');
-                  return;
-                }
-                setShowEmpSelectModal(false);
-                handlePdfGeneration('yesterday_employee');
-              }}>
-                📊 إنشاء التقرير
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Excel Export Modal (Image 5) */}
+      {/* Excel confirm modal */}
       {showExcelModal && (
         <div className="modal-center-screen" onClick={() => setShowExcelModal(false)}>
-          <div className="modal-content max-w-lg w-full p-0 overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-green-700 p-4 flex items-center justify-between text-white">
-              <h4 className="text-lg font-bold">تصدير Excel</h4>
-              <button type="button" onClick={() => setShowExcelModal(false)} className="hover:bg-green-600 p-1 rounded-full"><XIcon /></button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              <div>
-                <label className="block text-sm font-bold text-neutral-700 mb-2">اختر الفترة:</label>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-neutral-400 w-8">من</span>
-                    <input type="date" className="input flex-1 h-10" value={excelRangeStart} onChange={e => setExcelRangeStart(e.target.value)} />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-neutral-400 w-8">إلى</span>
-                    <input type="date" className="input flex-1 h-10" value={excelRangeEnd} onChange={e => setExcelRangeEnd(e.target.value)} />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-red-600 mb-3 border-b border-red-50 pb-1">نوع التقرير (Sales Manager Only):</label>
-                <div className="space-y-3">
-                  <label className="flex items-center justify-between p-3 rounded-xl border border-neutral-100 hover:border-green-200 hover:bg-green-50/30 cursor-pointer group transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-lg">🏪</div>
-                      <span className="text-sm font-bold text-neutral-700">مبيعات المعارض (Store Sales)</span>
-                    </div>
-                    <input type="radio" name="excelType" checked={excelType === 'store'} onChange={() => setExcelType('store')} className="w-5 h-5 text-green-600" />
-                  </label>
-                  <label className="flex items-center justify-between p-3 rounded-xl border border-neutral-100 hover:border-green-200 hover:bg-green-50/30 cursor-pointer group transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-lg">👤</div>
-                      <span className="text-sm font-bold text-neutral-700">مبيعات الموظفين (Employee Sales)</span>
-                    </div>
-                    <input type="radio" name="excelType" checked={excelType === 'employee'} onChange={() => setExcelType('employee')} className="w-5 h-5 text-green-600" />
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 bg-neutral-50 flex gap-3 border-t border-neutral-100">
-              <button type="button" className="flex-1 btn-secondary py-2.5 font-bold" onClick={() => setShowExcelModal(false)}>إلغاء</button>
-              <button type="button" className="flex-1 bg-green-700 text-white font-bold rounded-xl py-2.5 hover:bg-green-800 disabled:opacity-50 shadow-md" onClick={runExcelExport} disabled={excelExporting}>
-                {excelExporting ? 'جاري التصدير...' : 'تصدير (Export)'}
+          <div className="modal-content max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <h5 className="font-bold text-lg text-neutral-900 mb-4">تصدير Excel</h5>
+            <p className="text-sm text-neutral-600 mb-2">الفترة: {range.start} → {range.end}</p>
+            <p className="text-sm text-neutral-500 mb-4">{excelType === 'store' ? 'مبيعات المعارض' : 'مبيعات الموظفين'}</p>
+            <div className="flex gap-3">
+              <button type="button" className="flex-1 btn-secondary py-2" onClick={() => setShowExcelModal(false)}>إلغاء</button>
+              <button type="button" className="flex-1 bg-green-600 text-white font-bold py-2 rounded-xl hover:bg-green-700 disabled:opacity-50" onClick={runExcelExport} disabled={excelExporting}>
+                {excelExporting ? 'جاري التصدير...' : 'تصدير'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Print-only View */}
-      {printData && (
-        <div className="fixed inset-0 bg-white z-[9999] p-8 overflow-y-auto print-view" dir="rtl">
-          <div className="flex justify-between items-center border-b-4 border-orange-600 pb-4 mb-6">
-            <div>
-              <h1 className="text-3xl font-black text-neutral-900">{printData.title}</h1>
-              <p className="text-neutral-500 font-bold mt-1">الفترة: {printData.range} | استخرج بواسطة: {user?.name}</p>
+      {/* Report View Modal */}
+      {previewReport && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+            <div className="p-4 border-b border-neutral-100 flex items-center justify-between bg-neutral-50">
+              <h3 className="font-bold text-neutral-900">
+                {previewReport.type === 'global' ? 'Global Summary - ملخص عام' : 'Employee Performance - أداء الموظفين'}
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg font-bold text-sm hover:bg-primary-700 transition-colors flex items-center gap-2"
+                >
+                  <span>🖨️</span> طباعة
+                </button>
+                <button
+                  onClick={() => setPreviewReport(null)}
+                  className="px-4 py-2 bg-neutral-200 text-neutral-700 rounded-lg font-bold text-sm hover:bg-neutral-300 transition-colors"
+                >
+                  إغلاق
+                </button>
+              </div>
             </div>
-            <div className="text-left">
-              <div className="text-2xl font-black text-orange-600 italic">ORA COCKPIT</div>
-              <div className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">Business Intelligence Report</div>
+
+            <div className="p-8 overflow-y-auto flex-1 print:p-0" id="printable-report">
+              <style>{`
+                @media print {
+                  body * { visibility: hidden; }
+                  #printable-report, #printable-report * { visibility: visible; }
+                  #printable-report { position: absolute; left: 0; top: 0; width: 100%; }
+                  .no-print { display: none !important; }
+                }
+                .report-table th { background: #f97316; color: white; text-align: center; padding: 8px; font-size: 11px; border: 1px solid #ddd; }
+                .report-table td { padding: 6px 8px; border: 1px solid #eee; text-align: center; font-size: 12px; }
+                .report-header { margin-bottom: 20px; border-bottom: 2px solid #f97316; padding-bottom: 10px; }
+              `}</style>
+
+              <div className="report-header flex justify-between items-end">
+                <div>
+                  <h1 className="text-2xl font-bold text-neutral-900">Ora Cockpit</h1>
+                  <p className="text-sm text-neutral-500">{previewReport.type === 'global' ? 'Global Summary - ملخص عام' : 'Employee Performance - أداء الموظفين'}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold">التاريخ: {range.start} إلى {range.end}</p>
+                  <p className="text-xs text-neutral-400">تم الاستخراج في: {new Date().toLocaleString('ar-SA')}</p>
+                </div>
+              </div>
+
+              {previewReport.type === 'global' && (
+                <table className="w-full report-table border-collapse">
+                  <thead>
+                    <tr>
+                      <th>التاريخ</th>
+                      <th>مبيعات 2026</th>
+                      <th>مبيعات 2025</th>
+                      <th>% النمو</th>
+                      <th>عدد الفواتير</th>
+                      <th>م. الفاتورة</th>
+                      <th>قيمة العميل</th>
+                      <th>زوار 2026</th>
+                      <th>زوار 2025</th>
+                      <th>% التحويل</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewReport.data.map((r: any) => (
+                      <tr key={r.date}>
+                        <td className="font-mono">{r.date}</td>
+                        <td className="font-bold">{Math.round(r.sales).toLocaleString()}</td>
+                        <td className="text-neutral-500">{Math.round(r.salesPrev).toLocaleString()}</td>
+                        <td className={`font-bold ${r.growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {r.growth >= 0 ? '+' : ''}{r.growth.toFixed(1)}%
+                        </td>
+                        <td>{r.trans.toLocaleString()}</td>
+                        <td>{Math.round(r.avgInv).toLocaleString()}</td>
+                        <td className="font-bold">{Math.round(r.customerValue).toLocaleString()}</td>
+                        <td>{r.visitors.toLocaleString()}</td>
+                        <td className="text-neutral-400">{r.visitorsPrev.toLocaleString()}</td>
+                        <td className="text-orange-600 font-bold">{r.conversion.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-neutral-100 font-bold">
+                      <td>الإجمالي</td>
+                      <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.sales, 0)).toLocaleString()}</td>
+                      <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.salesPrev, 0)).toLocaleString()}</td>
+                      <td>{((previewReport.data.reduce((s: any, x: any) => s + x.sales, 0) - previewReport.data.reduce((s: any, x: any) => s + x.salesPrev, 0)) / (previewReport.data.reduce((s: any, x: any) => s + x.salesPrev, 0) || 1) * 100).toFixed(1)}%</td>
+                      <td>{previewReport.data.reduce((s: any, x: any) => s + x.trans, 0).toLocaleString()}</td>
+                      <td>-</td>
+                      <td>-</td>
+                      <td>{previewReport.data.reduce((s: any, x: any) => s + x.visitors, 0).toLocaleString()}</td>
+                      <td>{previewReport.data.reduce((s: any, x: any) => s + x.visitorsPrev, 0).toLocaleString()}</td>
+                      <td>{(previewReport.data.reduce((s: any, x: any) => s + x.trans, 0) / (previewReport.data.reduce((s: any, x: any) => s + x.visitors, 0) || 1) * 100).toFixed(1)}%</td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+
+              {previewReport.type === 'employee' && (
+                <div className="space-y-8">
+                  <table className="w-full report-table border-collapse">
+                    <thead>
+                      <tr>
+                        <th rowSpan={2}>الموظف</th>
+                        <th colSpan={4} className="bg-neutral-600">الأمس (Yesterday)</th>
+                        <th colSpan={8} className="bg-primary-600">الشهر الحالي (MTD)</th>
+                      </tr>
+                      <tr>
+                        <th>المبيعات</th>
+                        <th>مساهمة %</th>
+                        <th>العدد</th>
+                        <th>م. فاتورة</th>
+                        <th>المبيعات</th>
+                        <th>مساهمة %</th>
+                        <th>العدد</th>
+                        <th>م. فاتورة</th>
+                        <th>الهدف</th>
+                        <th>% تحقيق</th>
+                        <th>المتبقي</th>
+                        <th>يومية متبقية</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewReport.data.map((e: any) => {
+                        const now = new Date();
+                        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                        const remainingDays = daysInMonth - now.getDate() + 1;
+                        const dailyReq = remainingDays > 0 ? e.remaining / remainingDays : 0;
+                        return (
+                          <tr key={e.id}>
+                            <td className="text-right font-bold">{e.name}</td>
+                            <td>{Math.round(e.ySales).toLocaleString()}</td>
+                            <td>{e.yShare.toFixed(0)}%</td>
+                            <td>{e.yTrans}</td>
+                            <td>{Math.round(e.yAvgInv).toLocaleString()}</td>
+                            <td className="font-bold text-primary-700">{Math.round(e.mSales).toLocaleString()}</td>
+                            <td>{e.mShare.toFixed(0)}%</td>
+                            <td>{e.mTrans}</td>
+                            <td>{Math.round(e.mAvgInv).toLocaleString()}</td>
+                            <td className="text-neutral-500">{Math.round(e.target).toLocaleString()}</td>
+                            <td className="font-bold">{e.achievement.toFixed(1)}%</td>
+                            <td className="text-red-500">{Math.round(e.remaining).toLocaleString()}</td>
+                            <td className="font-bold">{Math.round(dailyReq).toLocaleString()}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="bg-neutral-100 font-bold">
+                        <td>الإجمالي</td>
+                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.ySales, 0)).toLocaleString()}</td>
+                        <td>100%</td>
+                        <td>{previewReport.data.reduce((s: any, x: any) => s + x.yTrans, 0)}</td>
+                        <td>-</td>
+                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.mSales, 0)).toLocaleString()}</td>
+                        <td>100%</td>
+                        <td>{previewReport.data.reduce((s: any, x: any) => s + x.mTrans, 0)}</td>
+                        <td>-</td>
+                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.target, 0)).toLocaleString()}</td>
+                        <td>{(previewReport.data.reduce((s: any, x: any) => s + x.mSales, 0) / (previewReport.data.reduce((s: any, x: any) => s + x.target, 0) || 1) * 100).toFixed(1)}%</td>
+                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.remaining, 0)).toLocaleString()}</td>
+                        <td>-</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
-
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-neutral-900 text-white print:bg-neutral-900 border-b-2 border-orange-600">
@@ -882,7 +851,7 @@ export default function ReportsPage() {
               </tr>
             </thead>
             <tbody>
-              {printData.rows.map((row, idx) => (
+              {printData.rows.map((row: any, idx: number) => (
                 <tr key={idx} className="border-b border-neutral-200 hover:bg-neutral-50 even:bg-neutral-50">
                   <td className="p-2 text-neutral-500 font-bold text-xs">{idx + 1}</td>
                   <td className="p-2 font-black text-neutral-900 text-xs">{row.name}</td>

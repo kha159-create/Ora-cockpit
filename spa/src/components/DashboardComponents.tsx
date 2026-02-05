@@ -188,17 +188,14 @@ export const KPICard: React.FC<{
             )}
 
             {showProgress && compactTarget && (
-              <div className="flex flex-col items-center justify-center p-3 bg-neutral-900 rounded-2xl border border-neutral-800 shadow-xl overflow-hidden relative">
-                <div className="absolute top-0 right-0 p-1 opacity-20">
-                  <div className="w-16 h-16 rounded-full border-4 border-orange-600 border-t-transparent animate-spin-slow"></div>
-                </div>
+              <div className="flex flex-col items-center justify-center p-3 bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden relative group-hover:border-orange-200 transition-colors">
                 <div className="flex items-center gap-4 relative z-10 w-full justify-center">
                   <div className="relative flex-shrink-0">
                     <CircularProgress percentage={progressValue} size={64} />
                   </div>
                   <div className="flex flex-col">
-                    <div className="text-[10px] font-black text-orange-500 uppercase tracking-tighter mb-1">Target / الهدف</div>
-                    <div className="text-3xl font-black text-white tabular-nums leading-none flex items-baseline gap-1">
+                    <div className="text-[10px] font-black text-neutral-400 uppercase tracking-tighter mb-1">Target / الهدف</div>
+                    <div className="text-3xl font-black text-neutral-900 tabular-nums leading-none flex items-baseline gap-1">
                       {trendValue}
                     </div>
                   </div>

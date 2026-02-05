@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
+import { loadEmployeesData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { AchievementBar, ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UserGroupIcon } from '../components/Icons';
@@ -258,7 +258,6 @@ export default function EmployeesPage() {
   const user = getCurrentUser();
   const [empRaw, setEmpRaw] = useState<any>(null);
   const [mgmtRaw, setMgmtRaw] = useState<any>(null);
-  const [prodRaw, setProdRaw] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const [manager, setManager] = useState<string>('all');
@@ -280,11 +279,10 @@ export default function EmployeesPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([loadEmployeesData(), loadManagementData(), loadProductAnalysisData()])
-      .then(([e, m, p]) => {
+    Promise.all([loadEmployeesData(), loadManagementData()])
+      .then(([e, m]) => {
         setEmpRaw(e);
         setMgmtRaw(m);
-        setProdRaw(p);
       })
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
@@ -651,14 +649,6 @@ export default function EmployeesPage() {
       byManager[m].push(e);
     }
 
-    // Missed opportunities logic
-    const analysisMode = period === 'yesterday' ? 'yest' : 'mtd';
-    const missedByStoreMap = prodRaw?.periods?.[analysisMode]?.missed_opportunities || prodRaw?.periods?.mtd?.missed_opportunities || {};
-    const missedCounts = Object.entries(missedByStoreMap).reduce((acc, [sid, items]) => {
-      acc[sid] = Array.isArray(items) ? items.length : 0;
-      return acc;
-    }, {} as Record<string, number>);
-
     return {
       managers,
       branches,
@@ -670,7 +660,6 @@ export default function EmployeesPage() {
       totals: { totalSales, totalTarget, totalEmployees, topEmployee },
       top10,
       labels: { todayStr, yesterdayStr },
-      missedCounts,
     };
   }, [
     branch,
@@ -690,7 +679,6 @@ export default function EmployeesPage() {
     sortDir,
     sortKey,
     user?.role,
-    prodRaw,
   ]);
 
   const selectedEmployee = useMemo(() => {
@@ -996,14 +984,7 @@ export default function EmployeesPage() {
                               <span className={`rank-badge ${rankClass}`}>{rank}</span>
                             </td>
                             <td className="td">
-                              <div className="flex items-center gap-2">
-                                <div className="font-semibold text-orange-700 underline">{e.name}</div>
-                                {derived.missedCounts[e.storeCode] > 0 && (
-                                  <div className="bg-red-50 text-red-600 text-[10px] px-1.5 py-0.5 rounded border border-red-100 font-bold whitespace-nowrap" title="الأصناف المفقودة">
-                                    Missed: {derived.missedCounts[e.storeCode]}
-                                  </div>
-                                )}
-                              </div>
+                              <div className="font-semibold text-orange-700 underline">{e.name}</div>
                               <div className="text-xs text-neutral-500 md:hidden">{e.storeName}</div>
                             </td>
                             <td className="td hidden md:table-cell text-neutral-600">{e.storeName}</td>

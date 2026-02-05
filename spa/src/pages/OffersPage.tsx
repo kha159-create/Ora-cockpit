@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { loadOffersData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { DownloadIcon } from '../components/Icons';
@@ -13,20 +13,6 @@ function isAdminOrAuditor(role?: string) {
 }
 
 type PeriodKey = 'mtd' | '7d' | '14d' | '30d' | 'yest';
-
-// Helper component for period buttons
-const PeriodButton = ({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${active
-      ? 'bg-orange-500 text-white border-orange-500 shadow-md'
-      : 'bg-white text-neutral-700 border-neutral-200 hover:bg-orange-50 hover:border-orange-200'
-      }`}
-  >
-    {label}
-  </button>
-);
 
 export default function OffersPage() {
   const user = getCurrentUser();
@@ -88,8 +74,7 @@ export default function OffersPage() {
 
   const rawOffers = useMemo(() => {
     if (!data) return [];
-    const base = Array.isArray(data) ? data : (data.offers || data.data || []);
-    return Array.isArray(base) ? base : [];
+    return Array.isArray(data) ? data : (Array.isArray(data?.offers) ? data.offers : []);
   }, [data]);
 
   const today = useMemo(() => new Date('2026-02-04'), []); // Using metadata time
@@ -160,28 +145,31 @@ export default function OffersPage() {
   }, [rawOffers, allowedStoreIds, today, statusFilter]);
 
   const stats = useMemo(() => {
-    const totalYest = offers.reduce((acc, o) => acc + o.yestSales, 0);
-    const totalMTD = offers.reduce((acc, o) => acc + o.mtdSales, 0);
-    const totalYestOps = offers.reduce((acc, o) => acc + o.yestOps, 0);
-    const totalMTDOps = offers.reduce((acc, o) => acc + o.mtdOps, 0);
+    const res = offers.reduce((acc: any, o: any) => {
+      acc.totalYest += o.yestSales;
+      acc.totalMTD += o.mtdSales;
+      acc.totalYestOps += o.yestOps;
+      acc.totalMTDOps += o.mtdOps;
+      acc.totalMTDDisc += o.mtdDisc;
+      return acc;
+    }, { totalYest: 0, totalMTD: 0, totalYestOps: 0, totalMTDOps: 0, totalMTDDisc: 0 });
+
     return {
+      ...res,
       totalOffers: offers.length,
-      totalYest,
-      totalMTD,
-      totalYestOps,
-      totalMTDOps,
-      mtdEff: totalMTD > 0 ? (totalMTD / (totalMTD + offers.reduce((acc, o) => acc + o.mtdDisc, 0))) * 100 : 0
+      mtdEff: res.totalMTD > 0 ? (res.totalMTD / (res.totalMTD + res.totalMTDDisc)) * 100 : 0
     };
   }, [offers]);
 
   const exportToExcel = () => {
-    const rows = offers.map(o => ({
+    const rows = offers.map((o: any) => ({
+      'كود العرض': o.code,
       'اسم العرض': o.name,
-      'الحالة': o.status === 'Disabled' ? 'معطل' : 'نشط',
+      'الحالة': o.status === 'Enabled' ? 'مفعل' : 'معطل',
       'مبيعات أمس': o.yestSales,
-      'فواتير أمس': o.yestOps,
       'مبيعات MTD': o.mtdSales,
-      'فواتير MTD': o.mtdOps,
+      'عمليات أمس': o.yestOps,
+      'عمليات MTD': o.mtdOps,
       'خصم MTD': o.mtdDisc,
       'كفاءة MTD %': o.mtdEff.toFixed(1) + '%'
     }));
@@ -208,7 +196,7 @@ export default function OffersPage() {
     return [...filteredOffers]
       .sort((a: any, b: any) => a.mtdEff - b.mtdEff)
       .slice(0, 5);
-  }, [filteredOffers]);
+  }, [offers]);
 
   if (err) return <div className="p-6 bg-white rounded-2xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
   if (!data) {
@@ -219,11 +207,22 @@ export default function OffersPage() {
     );
   }
 
+  const periodLabels: Record<PeriodKey, string> = { mtd: 'الشهر الحالي', '7d': '7 أيام', '14d': '14 يوم', '30d': '30 يوم', yest: 'أمس' };
+
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-neutral-900">تحليل العروض</h1>
-        <p className="text-neutral-500 mt-1">أداء العروض والخصومات حسب الفترة والمعرض</p>
+      <header className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-neutral-900">تحليل العروض</h1>
+          <p className="text-neutral-500 mt-1">أداء العروض والخصومات حسب الفترة والمعرض</p>
+        </div>
+        <button
+          onClick={exportToExcel}
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all font-bold shadow-md"
+        >
+          <DownloadIcon />
+          تصدير Excel
+        </button>
       </header>
 
       {/* شريط الفلاتر — هوية التطبيق */}
@@ -264,20 +263,13 @@ export default function OffersPage() {
               ))}
             </select>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-2">
-              {/* These period buttons are redundant with the ones above, removing them to avoid duplication */}
-            </div>
-            <div className="flex items-center gap-3">
-              <select className="input text-xs" value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
-                <option value="all">جميع الحالات</option>
-                <option value="Enabled">النشطة فقط</option>
-                <option value="Disabled">المعطلة فقط</option>
-              </select>
-              <button className="btn-secondary py-2 px-4 flex items-center gap-2 bg-green-600 text-white border-green-600 hover:bg-green-700 hover:border-green-700" onClick={exportToExcel}>
-                <DownloadIcon /> تصدير Excel
-              </button>
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-neutral-500 mb-1">الحالة</label>
+            <select className="input w-full" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="all">الكل</option>
+              <option value="Enabled">فعال (Enabled)</option>
+              <option value="Disabled">معطل (Disabled)</option>
+            </select>
           </div>
         </div>
       </div>
@@ -345,10 +337,10 @@ export default function OffersPage() {
             <p className="text-neutral-500 col-span-full">لا توجد عروض ضعيفة الأداء حسب معيار الكفاءة.</p>
           ) : (
             weakOffers.map((o: any, i: number) => {
-              const sales = o.dispSales;
-              const discount = o.dispDiscount;
-              const ops = o.dispOps;
-              const eff = o.dispEff;
+              const sales = Number(o.filteredSales ?? o.sales ?? 0) || 0;
+              const discount = Number(o.discount ?? 0) || 0;
+              const ops = Number(o.operations ?? 0) || 0;
+              const eff = Number(o.efficiency ?? 0) || 0;
               return (
                 <div key={i} className="rounded-xl border border-red-200 p-4 bg-red-50/50 hover:shadow-md transition-shadow">
                   <div className="flex justify-between items-start mb-2">
@@ -409,5 +401,17 @@ export default function OffersPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function PeriodButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${active ? 'bg-orange-600 text-white shadow-md' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+        }`}
+    >
+      {label}
+    </button>
   );
 }
