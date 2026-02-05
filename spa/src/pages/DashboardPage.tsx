@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { KPICard, RankCard, GrowthTrajectoryChart } from '../components/DashboardComponents';
-import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon, XIcon } from '../components/Icons';
+import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon, XIcon, ChevronDownIcon, PrinterIcon } from '../components/Icons';
+import { generateDailyReportPDF } from '../services/pdf/pdfService';
 
 function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
@@ -25,7 +26,7 @@ function getDefaultRange(mode: Mode, selYear?: number, selMonth?: number) {
   const startOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   if (mode === 'today') return { start: toYMD(today), end: toYMD(today) };
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
-  if (mode === 'mtd') return { start: toYMD(startOfCurrentMonth), end: toYMD(today) };
+  if (mode === 'mtd') return { start: toYMD(startOfCurrentMonth), end: toYMD(yesterday) };
   if (mode === 'month' && selYear != null && selMonth != null) {
     const start = new Date(selYear, selMonth - 1, 1);
     let end = new Date(selYear, selMonth, 0);
@@ -54,7 +55,6 @@ export default function DashboardPage() {
   const [liveModalOpen, setLiveModalOpen] = useState(false);
   const [dailyReportModalOpen, setDailyReportModalOpen] = useState(false);
   const [expandedEmp, setExpandedEmp] = useState<string | null>(null);
-  const [selectedEmps, setSelectedEmps] = useState<Record<string, string>>({});
   const [chartMode, setChartMode] = useState<'SALES' | 'VISITORS' | 'TARGET'>('SALES');
   const user = getCurrentUser();
   const effectiveManager = useMemo(() => {
@@ -101,6 +101,10 @@ export default function DashboardPage() {
     if (mode === 'custom') return { start: customStart, end: customEnd };
     return getDefaultRange(mode, selYear, selMonth);
   }, [mode, customStart, customEnd, selYear, selMonth]);
+
+  const handlePrintDailyReport = () => {
+    generateDailyReportPDF(dailyReportData, { yesterday: yesterdayStr, lastYear: lastYearYesterdayStr });
+  };
 
   const { allowedStoreIds, managers, branches, cities } = useMemo(() => {
     const meta: Record<string, { manager?: string; city?: string }> = raw?.store_meta || {};
@@ -226,6 +230,7 @@ export default function DashboardPage() {
       if (inRange(d)) byStore[s].target += v || 0;
     });
     return Object.entries(byStore).map(([sid, v]) => {
+      // Growth: Current Period vs Same Period Previous Year (as requested)
       const growth = v.prevSales > 0 ? ((v.sales - v.prevSales) / v.prevSales) * 100 : 0;
       const achievement = v.target > 0 ? (v.sales / v.target) * 100 : 0;
       const avgInv = v.trans > 0 ? v.sales / v.trans : 0;
@@ -415,7 +420,6 @@ export default function DashboardPage() {
         v.avgInv = v.trans > 0 ? v.sales / v.trans : 0;
         const growth = v.prevSales > 0 ? ((v.sales - v.prevSales) / v.prevSales) * 100 : 0;
         const conversion = v.visitors > 0 ? (v.trans / v.visitors) * 100 : 0;
-        const customerValue = v.trans > 0 ? v.sales / v.trans : 0;
         return {
           sid,
           name: storesMap[sid] || sid,
@@ -428,7 +432,7 @@ export default function DashboardPage() {
           prevVisitors: v.prevVisitors,
           dailyReq: v.dailyReq,
           conversion,
-          customerValue,
+          customerValue: v.visitors > 0 ? v.sales / v.visitors : 0, // Fix: Sales / Visitors
         };
       })
       .sort((a, b) => b.sales - a.sales);
@@ -626,6 +630,14 @@ export default function DashboardPage() {
           comparisonLabel="السنة الماضية"
         />
         <KPICard
+          title="قيمة العميل"
+          value={totals.visitors > 0 ? totals.sales / totals.visitors : 0}
+          format={formatSAR}
+          icon={<UsersIcon />}
+          comparisonValue={prevYearTotals.visitors > 0 ? prevYearTotals.sales / prevYearTotals.visitors : 0}
+          comparisonLabel="السنة الماضية"
+        />
+        <KPICard
           title="تحقيق الهدف"
           value={ach}
           format={(v) => `${v.toFixed(1)}%`}
@@ -813,13 +825,22 @@ export default function DashboardPage() {
                   <span>التقرير اليومي: تقرير الأمس ({yesterdayStr}) مقارنة بـ ({lastYearYesterdayStr})</span>
                 </div>
               </div>
-              <button
-                type="button"
-                className="btn-secondary py-1.5 px-3 text-sm flex items-center gap-2"
-                onClick={() => setDailyReportModalOpen(false)}
-              >
-                <XIcon /> إغلاق
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-primary py-1.5 px-3 text-sm flex items-center gap-2"
+                  onClick={handlePrintDailyReport}
+                >
+                  <PrinterIcon className="w-4 h-4" /> طباعة التقرير
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary py-1.5 px-3 text-sm flex items-center gap-2"
+                  onClick={() => setDailyReportModalOpen(false)}
+                >
+                  <XIcon /> إغلاق
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

@@ -35,19 +35,21 @@ function NavItem({ to, label, icon, onClick }: { to: string; label: string; icon
         to={to}
         onClick={onClick}
         className={({ isActive }) =>
-          `group relative flex items-center p-3 rounded-xl cursor-pointer transition-all duration-300 ${isActive ? 'active' : ''} ${
-            isActive
-              ? 'bg-orange-500 text-white font-semibold shadow-lg'
-              : 'text-neutral-300 hover:bg-neutral-800 hover:text-orange-400'
+          `group relative flex items-center p-3 rounded-xl cursor-pointer transition-all duration-300 ${isActive ? 'active' : ''} ${isActive
+            ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white font-semibold shadow-lg'
+            : 'text-neutral-600 hover:bg-orange-50 hover:text-orange-600 hover:shadow-md'
           }`
         }
       >
         <div className="relative z-10 flex items-center w-full">
-          <div className="p-2 rounded-lg transition-all duration-200 flex-shrink-0 bg-neutral-800 group-hover:bg-neutral-700 group-[.active]:bg-white/20">
+          <div className="p-2 rounded-lg transition-all duration-200 flex-shrink-0 bg-neutral-100 group-hover:bg-orange-100 group-[.active]:bg-white/20">
             {icon}
           </div>
           <span className="ms-3 font-medium text-sm whitespace-nowrap">{label}</span>
         </div>
+
+        {/* Active Indicator */}
+        <div className="absolute right-3 w-2 h-2 bg-white rounded-full shadow-sm opacity-0 group-[.active]:opacity-100 transition-opacity" />
       </NavLink>
     </li>
   );
@@ -78,18 +80,18 @@ export default function MainLayout() {
 
       {/* القائمة الجانبية - هوية أسود وبرتقالي */}
       <aside
-        className={`main-layout-sidebar w-64 sm:w-72 bg-neutral-900 border-neutral-700 h-screen flex flex-col fixed top-0 bottom-0 z-30 shadow-2xl transition-transform duration-300 ease-in-out
+        className={`main-layout-sidebar w-64 sm:w-72 bg-white border-neutral-200 h-screen flex flex-col fixed top-0 bottom-0 z-30 shadow-2xl transition-transform duration-300 ease-in-out
           ${sidebarHidden ? 'main-layout-sidebar--closed' : ''}
         `}
       >
-        <div className="p-4 sm:p-6 border-b border-neutral-700">
+        <div className="p-4 sm:p-6 border-b border-neutral-200">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg">
               <span className="text-white font-bold text-lg">O</span>
             </div>
             <div>
-              <div className="text-xl font-bold text-white">COCKPIT</div>
-              <div className="text-sm text-orange-400">Orange Dashboard</div>
+              <div className="text-xl font-bold text-neutral-900">COCKPIT</div>
+              <div className="text-sm text-orange-600">Orange Dashboard</div>
             </div>
           </div>
         </div>
@@ -102,18 +104,18 @@ export default function MainLayout() {
           </ul>
         </nav>
 
-        <div className="p-3 sm:p-4 border-t border-neutral-700">
+        <div className="p-3 sm:p-4 border-t border-neutral-200">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center">
-              <span className="text-white text-sm font-bold">{(user?.name?.[0] || 'U').toUpperCase()}</span>
+            <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
+              <span className="text-sm font-bold">{(user?.name?.[0] || 'U').toUpperCase()}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white truncate">{user?.name ?? 'User'}</p>
-              <p className="text-xs text-neutral-400">{user?.role ?? '-'}</p>
+              <p className="text-sm font-semibold text-neutral-900 truncate">{user?.name ?? 'User'}</p>
+              <p className="text-xs text-neutral-500">{user?.role ?? '-'}</p>
             </div>
           </div>
           <button
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold text-sm bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-600 transition-colors"
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold text-sm bg-neutral-100 hover:bg-red-50 text-neutral-600 hover:text-red-600 border border-neutral-200 transition-colors"
             onClick={() => {
               clearCurrentUser();
               nav('/login');

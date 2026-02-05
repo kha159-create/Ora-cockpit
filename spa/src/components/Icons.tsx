@@ -19,8 +19,8 @@ export const HomeIcon = () => (
     />
   </IconWrapper>
 );
-export const OfficeBuildingIcon = () => (
-  <IconWrapper>
+export const OfficeBuildingIcon = ({ className }: { className?: string }) => (
+  <IconWrapper className={className}>
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -217,8 +217,8 @@ export const ScaleIcon = () => (
     ></path>
   </IconWrapper>
 );
-export const UsersIcon = () => (
-  <IconWrapper>
+export const UsersIcon = ({ className }: { className?: string }) => (
+  <IconWrapper className={className}>
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -279,5 +279,10 @@ export const FireIcon = () => (
 export const TargetIcon = () => (
   <IconWrapper>
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </IconWrapper>
+);
+export const PrinterIcon = (props: any) => (
+  <IconWrapper {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
   </IconWrapper>
 );

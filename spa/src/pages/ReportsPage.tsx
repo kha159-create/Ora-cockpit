@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { loadEmployeesData, loadManagementData } from '../services/upstreamData';
+import { generateGlobalSalesPDF, generateEmployeePerformancePDF, generateDailyReportPDF } from '../services/pdf/pdfService';
+import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
+
 import { getCurrentUser } from '../auth/storage';
 import * as XLSX from 'xlsx';
 
@@ -70,7 +72,7 @@ export default function ReportsPage() {
   const [showReportChoiceModal, setShowReportChoiceModal] = useState(false);
   const [reportChoiceType, setReportChoiceType] = useState<'pdf' | 'excel' | null>(null);
   const [previewReport, setPreviewReport] = useState<{ type: string; data: any } | null>(null);
-  const [printData, setPrintData] = useState<any>(null);
+
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -282,7 +284,10 @@ export default function ReportsPage() {
       mAvgInv: e.mTrans > 0 ? e.mSales / e.mTrans : 0,
       achievement: e.target > 0 ? (e.mSales / e.target) * 100 : 0,
       remaining: Math.max(0, e.target - e.mSales),
-      dailyReq: 0 // Will calculate based on remaining days in month
+
+      dailyReq: (new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate() + 1) > 0
+        ? Math.max(0, e.target - e.mSales) / (new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate() + 1)
+        : 0
     }));
 
     setPreviewReport({ type: 'employee', data: list });
@@ -351,14 +356,61 @@ export default function ReportsPage() {
     let title = '';
     let rows: any[] = [];
 
-    if (type === 'yesterday_store' || type === 'monthly_summary') {
-      title = type === 'yesterday_store' ? `تقرير المعارض - أمس (${range.start})` : `الملخص الشهري للمعارض (${range.start} إلى ${range.end})`;
-      const dataMap: Record<string, any> = {};
-      const prevRange = {
-        start: range.start.replace(/^\d{4}/, (y) => String(Number(y) - 1)),
-        end: range.end.replace(/^\d{4}/, (y) => String(Number(y) - 1))
+    // Helper for date ranges
+    const prevRange = {
+      start: range.start.replace(/^\d{4}/, (y) => String(Number(y) - 1)),
+      end: range.end.replace(/^\d{4}/, (y) => String(Number(y) - 1))
+    };
+    const inRange = (d: string) => d >= range.start && d <= range.end;
+    const inPrevRange = (d: string) => d >= prevRange.start && d <= prevRange.end;
+
+    if (type === 'monthly_summary') {
+      // Global Summary (Time Series)
+      title = `الملخص العام (${start} إلى ${end})`;
+      const dateMap: Record<string, any> = {};
+
+      // Initialize dates in range
+      let curr = new Date(start);
+      const last = new Date(end);
+      while (curr <= last) {
+        const d = toYMD(curr);
+        dateMap[d] = { date: d, sales: 0, salesPrev: 0, trans: 0, visitors: 0, visitorsPrev: 0, avgInv: 0, customerValue: 0, conversion: 0 };
+        curr.setDate(curr.getDate() + 1);
+      }
+
+      // Aggregate functionality
+      const processMetric = (source: any[], field: string, isPrevField?: string) => {
+        (source || []).forEach(([d, _, v]: any[]) => {
+          if (dateMap[d] && !isPrevField) dateMap[d][field] += v || 0;
+
+          // For prev year mapping, we need to map prev date to current date?
+          // Or just check if d is in PrevRange and map it to corresponding current date?
+          // Simplest: map previous year date to current year date for alignment
+          if (isPrevField && inPrevRange(d)) {
+            const currDate = d.replace(/^\d{4}/, (y: string) => String(Number(y) + 1));
+            if (dateMap[currDate]) dateMap[currDate][isPrevField] += v || 0;
+          }
+        });
       };
-      const inPrevRange = (d: string) => d >= prevRange.start && d <= prevRange.end;
+
+      processMetric(rawMgmt.sales, 'sales', 'salesPrev');
+      processMetric(rawMgmt.visitors, 'visitors', 'visitorsPrev');
+      processMetric(rawMgmt.transactions, 'trans');
+
+      rows = Object.values(dateMap).map(r => ({
+        ...r,
+        avgInv: r.trans > 0 ? r.sales / r.trans : 0,
+        customerValue: r.visitors > 0 ? r.sales / r.visitors : 0,
+        conversion: r.visitors > 0 ? (r.trans / r.visitors) * 100 : 0,
+        growth: r.salesPrev > 0 ? ((r.sales - r.salesPrev) / r.salesPrev) * 100 : 0
+      })).sort((a, b) => a.date.localeCompare(b.date));
+
+      setPreviewReport({ type: 'global', data: rows });
+
+    } else if (type === 'yesterday_store') {
+      // Store List Report
+      title = `تقرير المعارض (${start})`;
+      const dataMap: Record<string, any> = {};
 
       (rawMgmt.sales || []).forEach(([d, s, v]: any[]) => {
         if (!passFilter(s)) return;
@@ -384,6 +436,7 @@ export default function ReportsPage() {
           dataMap[s].target += v || 0;
         }
       });
+
       rows = Object.values(dataMap).map(r => ({
         ...r,
         avgInv: r.trans > 0 ? r.sales / r.trans : 0,
@@ -393,11 +446,12 @@ export default function ReportsPage() {
         customerValue: r.visitors > 0 ? r.sales / r.visitors : 0
       })).sort((a, b) => b.sales - a.sales);
 
-      setPrintData({ type: 'stores', title, rows, range: `${start} إلى ${end}` }); // Updated range format
+      setPreviewReport({ type: 'stores', data: rows });
+
     } else if (type === 'yesterday_employee') {
       const today = new Date();
-      const yesterdayDate = new Date(today);
-      yesterdayDate.setDate(today.getDate() - 1);
+      // Ensure we use the correct yesterday date logic
+      const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
       const yesterdayYMD = toYMD(yesterdayDate);
       const mtdStartYMD = toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
 
@@ -418,40 +472,53 @@ export default function ReportsPage() {
 
           if (!empData[id]) {
             const entTarget = rawEmp.targets?.[id] || rawEmp.targets?.[id.padStart(4, '0')] || 0;
-            empData[id] = { id, name: names[id] || rawId, yestSales: 0, mtdSales: 0, target: entTarget, store: rawMgmt.stores?.[sid] || sid };
+            empData[id] = { id, name: names[id] || rawId, yestSales: 0, mtdSales: 0, target: entTarget, store: rawMgmt.stores?.[sid] || sid, yTrans: 0, mTrans: 0 };
           }
-          if (d === yesterdayYMD) empData[id].yestSales += Number(rec[2]) || 0;
-          if (d >= mtdStartYMD && d <= yesterdayYMD) empData[id].mtdSales += Number(rec[2]) || 0;
+          // Assuming rec[2] is sales, rec[3] might be trans? Original code didn't use trans for Emp?
+          // Looking at line 304 in view 3002: const [date, empId, sales, trans] = rec;
+          // So rec[3] IS transactions.
+          const sales = Number(rec[2]) || 0;
+          const trans = Number(rec[3]) || 0;
+
+          if (d === yesterdayYMD) {
+            empData[id].yestSales += sales;
+            empData[id].yTrans += trans;
+          }
+          if (d >= mtdStartYMD && d <= yesterdayYMD) {
+            empData[id].mtdSales += sales;
+            empData[id].mTrans += trans;
+          }
         });
       });
-      rows = Object.values(empData).sort((a, b) => b.mtdSales - a.mtdSales);
-      setPrintData({ type: 'employees', title, rows, range: `أمس: ${yesterdayYMD} | MTD: ${mtdStartYMD} -> ${yesterdayYMD}` });
-    }
+      rows = Object.values(empData).map(e => ({
+        ...e,
+        yAvgInv: e.yTrans > 0 ? e.yestSales / e.yTrans : 0,
+        mAvgInv: e.mTrans > 0 ? e.mtdSales / e.mTrans : 0,
+        yShare: 0, // Calculated below
+        mShare: 0, // Calculated below
+        achievement: e.target > 0 ? (e.mtdSales / e.target) * 100 : 0,
+        remaining: e.target > e.mtdSales ? e.target - e.mtdSales : 0
+      })).sort((a, b) => b.mtdSales - a.mtdSales);
 
-    setTimeout(() => {
-      window.print();
-      setPrintData(null);
-    }, 500);
+      // Calculate Shares
+      const totalYEst = rows.reduce((acc, r) => acc + r.yestSales, 0);
+      const totalMTD = rows.reduce((acc, r) => acc + r.mtdSales, 0);
+      rows.forEach(r => {
+        r.yShare = totalYEst > 0 ? (r.yestSales / totalYEst) * 100 : 0;
+        r.mShare = totalMTD > 0 ? (r.mtdSales / totalMTD) * 100 : 0;
+      });
+
+      setPreviewReport({ type: 'employee', data: rows });
+    }
   };
   const openReportChoice = (type: 'pdf' | 'excel') => {
     setReportChoiceType(type);
     setShowReportChoiceModal(true);
   };
 
-  const handleChoiceConfirm = () => {
-    if (reportChoiceType === 'pdf') {
-      handlePdfGeneration('yesterday_store');
-    } else {
-      runExcelExport(); // Assuming runExcelExport is the equivalent for Excel confirmation
-    }
-    setShowReportChoiceModal(false);
-  };
 
-  const openPdfLegacy = () => {
-    setShowReportChoiceModal(false);
-    setReportChoiceType(null);
-    generateGlobalSummary();
-  };
+
+
 
   const canExportEmployee = user?.role === 'Admin' || user?.name === 'Sales Manager';
 
@@ -604,7 +671,7 @@ export default function ReportsPage() {
               <div className="space-y-3">
                 <button
                   type="button"
-                  onClick={openPdfLegacy}
+                  onClick={generateGlobalSummary}
                   className="w-full py-3 px-4 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600"
                 >
                   فتح تقرير ملخص عام (Global Summary)
@@ -672,10 +739,32 @@ export default function ReportsPage() {
               </h3>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-lg font-bold text-sm hover:bg-primary-700 transition-colors flex items-center gap-2"
+                  type="button"
+                  className="bg-primary-600 text-white font-bold py-2 px-4 rounded-xl hover:bg-primary-700 transition delay-100 flex items-center gap-2"
+                  onClick={async () => {
+                    if (previewReport.type === 'global') {
+                      await generateGlobalSalesPDF(previewReport.data, { start: range.start, end: range.end });
+                    } else if (previewReport.type === 'stores') {
+                      const today = new Date(); // Or parse from range
+                      // For daily report, we usually want Yesterday vs Last Year
+                      // We can infer dates from the preview data or passed range.
+                      // generateDailyReportPDF(data, { yesterday: 'YYYY-MM-DD', lastYear: 'YYYY-MM-DD' })
+                      // We'll use range.start as the 'yesterday' date since that's what we built the report for.
+                      const yDate = range.start;
+                      const lyDate = range.start.replace(/^\d{4}/, (y) => String(Number(y) - 1));
+                      await generateDailyReportPDF(previewReport.data, { yesterday: yDate, lastYear: lyDate });
+                    } else if (previewReport.type === 'employee') {
+                      const today = new Date();
+                      const yest = new Date(today); yest.setDate(today.getDate() - 1);
+                      const mStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                      await generateEmployeePerformancePDF(previewReport.data, {
+                        yesterday: yest.toISOString().split('T')[0],
+                        monthStart: mStart.toISOString().split('T')[0]
+                      });
+                    }
+                  }}
                 >
-                  <span>🖨️</span> طباعة
+                  <span>🖨️</span> طباعة PDF
                 </button>
                 <button
                   onClick={() => setPreviewReport(null)}
@@ -686,18 +775,7 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            <div className="p-8 overflow-y-auto flex-1 print:p-0" id="printable-report">
-              <style>{`
-                @media print {
-                  body * { visibility: hidden; }
-                  #printable-report, #printable-report * { visibility: visible; }
-                  #printable-report { position: absolute; left: 0; top: 0; width: 100%; }
-                  .no-print { display: none !important; }
-                }
-                .report-table th { background: #f97316; color: white; text-align: center; padding: 8px; font-size: 11px; border: 1px solid #ddd; }
-                .report-table td { padding: 6px 8px; border: 1px solid #eee; text-align: center; font-size: 12px; }
-                .report-header { margin-bottom: 20px; border-bottom: 2px solid #f97316; padding-bottom: 10px; }
-              `}</style>
+            <div className="p-8 overflow-y-auto flex-1">
 
               <div className="report-header flex justify-between items-end">
                 <div>
@@ -754,6 +832,58 @@ export default function ReportsPage() {
                       <td>{previewReport.data.reduce((s: any, x: any) => s + x.visitors, 0).toLocaleString()}</td>
                       <td>{previewReport.data.reduce((s: any, x: any) => s + x.visitorsPrev, 0).toLocaleString()}</td>
                       <td>{(previewReport.data.reduce((s: any, x: any) => s + x.trans, 0) / (previewReport.data.reduce((s: any, x: any) => s + x.visitors, 0) || 1) * 100).toFixed(1)}%</td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+
+              {previewReport.type === 'stores' && (
+                <table className="w-full report-table border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-orange-500 text-white">
+                      <th className="p-2 border border-orange-600">المعرض</th>
+                      <th className="p-2 border border-orange-600">المبيعات</th>
+                      <th className="p-2 border border-orange-600">العام الماضي</th>
+                      <th className="p-2 border border-orange-600">% النمو</th>
+                      <th className="p-2 border border-orange-600">المطلوب يومياً</th>
+                      <th className="p-2 border border-orange-600">الفواتير</th>
+                      <th className="p-2 border border-orange-600">م. الفاتورة</th>
+                      <th className="p-2 border border-orange-600">الزوار</th>
+                      <th className="p-2 border border-orange-600">زوار LY</th>
+                      <th className="p-2 border border-orange-600">% التحويل</th>
+                      <th className="p-2 border border-orange-600">قيمة العميل</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewReport.data.map((r: any) => (
+                      <tr key={r.name} className="hover:bg-neutral-50 odd:bg-white even:bg-neutral-50">
+                        <td className="p-2 border border-neutral-200 font-bold">{r.name}</td>
+                        <td className="p-2 border border-neutral-200">{Math.round(r.sales).toLocaleString()}</td>
+                        <td className="p-2 border border-neutral-200 text-neutral-500">{Math.round(r.prevSales).toLocaleString()}</td>
+                        <td className={`p-2 border border-neutral-200 font-bold ${r.growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {r.growth >= 0 ? '+' : ''}{r.growth.toFixed(1)}%
+                        </td>
+                        <td className="p-2 border border-neutral-200 text-red-600 font-bold">{Math.round(r.dailyReq || 0).toLocaleString()}</td>
+                        <td className="p-2 border border-neutral-200">{r.trans.toLocaleString()}</td>
+                        <td className="p-2 border border-neutral-200">{Math.round(r.avgInv).toLocaleString()}</td>
+                        <td className="p-2 border border-neutral-200">{r.visitors.toLocaleString()}</td>
+                        <td className="p-2 border border-neutral-200 text-neutral-400">{r.prevVisitors.toLocaleString()}</td>
+                        <td className="p-2 border border-neutral-200 text-orange-600 font-bold">{r.conversion.toFixed(1)}%</td>
+                        <td className="p-2 border border-neutral-200 font-bold">{Math.round(r.customerValue).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-neutral-200 font-bold">
+                      <td className="p-2 border border-neutral-300">الإجمالي</td>
+                      <td className="p-2 border border-neutral-300">{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.sales, 0)).toLocaleString()}</td>
+                      <td className="p-2 border border-neutral-300">{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.prevSales, 0)).toLocaleString()}</td>
+                      <td className="p-2 border border-neutral-300 text-center">-</td>
+                      <td className="p-2 border border-neutral-300">{Math.round(previewReport.data.reduce((s: any, x: any) => s + (x.dailyReq || 0), 0)).toLocaleString()}</td>
+                      <td className="p-2 border border-neutral-300">{previewReport.data.reduce((s: any, x: any) => s + x.trans, 0).toLocaleString()}</td>
+                      <td className="p-2 border border-neutral-300">-</td>
+                      <td className="p-2 border border-neutral-300">{previewReport.data.reduce((s: any, x: any) => s + x.visitors, 0).toLocaleString()}</td>
+                      <td className="p-2 border border-neutral-300">{previewReport.data.reduce((s: any, x: any) => s + x.prevVisitors, 0).toLocaleString()}</td>
+                      <td className="p-2 border border-neutral-300">-</td>
+                      <td className="p-2 border border-neutral-300">-</td>
                     </tr>
                   </tbody>
                 </table>
@@ -828,92 +958,6 @@ export default function ReportsPage() {
               )}
             </div>
           </div>
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-neutral-900 text-white print:bg-neutral-900 border-b-2 border-orange-600">
-                <th className="p-3 text-right">#</th>
-                <th className="p-3 text-right">{printData.type === 'stores' ? 'المعرض' : 'الموظف'}</th>
-                {printData.type === 'stores' && <th className="p-3 text-center">المبيعات</th>}
-                {printData.type === 'stores' && <th className="p-3 text-center">العام الماضي</th>}
-                {printData.type === 'stores' && <th className="p-3 text-center">النمو %</th>}
-                {printData.type === 'stores' && <th className="p-3 text-center">الهدف</th>}
-                {printData.type === 'stores' && <th className="p-3 text-center">التحقيق %</th>}
-                {printData.type === 'stores' && <th className="p-3 text-center">الفواتير</th>}
-                {printData.type === 'stores' && <th className="p-3 text-center">الزوار</th>}
-                {printData.type === 'stores' && <th className="p-3 text-center">زوار LY</th>}
-                {printData.type === 'stores' && <th className="p-3 text-center">التحويل %</th>}
-                {printData.type === 'stores' && <th className="p-3 text-center">قيمة العميل</th>}
-                {printData.type === 'employees' && <th className="p-3 text-center">المعرض</th>}
-                {printData.type === 'employees' && <th className="p-3 text-center">مبيعات أمس</th>}
-                {printData.type === 'employees' && <th className="p-3 text-center">مبيعات MTD</th>}
-                {printData.type === 'employees' && <th className="p-3 text-center">الهدف</th>}
-                {printData.type === 'employees' && <th className="p-3 text-center">تحقيق %</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {printData.rows.map((row: any, idx: number) => (
-                <tr key={idx} className="border-b border-neutral-200 hover:bg-neutral-50 even:bg-neutral-50">
-                  <td className="p-2 text-neutral-500 font-bold text-xs">{idx + 1}</td>
-                  <td className="p-2 font-black text-neutral-900 text-xs">{row.name}</td>
-
-                  {printData.type === 'stores' && (
-                    <>
-                      <td className="p-2 text-center font-black text-green-700 font-mono text-xs">{formatSAR(row.sales)}</td>
-                      <td className="p-2 text-center text-neutral-400 font-mono text-xs">{formatSAR(row.prevSales)}</td>
-                      <td className={`p-2 text-center font-bold text-xs ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                        {row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%
-                      </td>
-                      <td className="p-2 text-center font-mono text-xs">{formatSAR(row.target)}</td>
-                      <td className="p-2 text-center">
-                        <span className={`font-black text-xs ${row.ach >= 100 ? 'text-green-600' : 'text-orange-600'}`}>
-                          {(row.ach || 0).toFixed(1)}%
-                        </span>
-                      </td>
-                      <td className="p-2 text-center font-bold text-neutral-700 text-xs">{Math.round(row.trans)}</td>
-                      <td className="p-2 text-center font-bold text-neutral-700 text-xs">{Math.round(row.visitors)}</td>
-                      <td className="p-2 text-center text-neutral-400 text-xs">{Math.round(row.prevVisitors)}</td>
-                      <td className="p-2 text-center font-black text-orange-600 text-xs">{(row.conversion || 0).toFixed(1)}%</td>
-                      <td className="p-2 text-center font-black text-blue-600 text-xs">{formatSAR(row.customerValue)}</td>
-                    </>
-                  )}
-
-                  {printData.type === 'employees' && (
-                    <>
-                      <td className="p-2 text-center text-neutral-600 font-medium text-xs">{row.store}</td>
-                      <td className="p-2 text-center font-black text-green-700 font-mono text-xs">{formatSAR(row.yestSales)}</td>
-                      <td className="p-2 text-center font-black text-blue-700 font-mono text-xs">{formatSAR(row.mtdSales)}</td>
-                      <td className="p-2 text-center font-bold text-neutral-400 font-mono text-xs">{formatSAR(row.target || 0)}</td>
-                      <td className="p-2 text-center">
-                        <span className={`font-black text-xs ${(row.mtdSales / (row.target || 1)) * 100 >= 100 ? 'text-green-600' : 'text-orange-600'}`}>
-                          {row.target > 0 ? ((row.mtdSales / row.target) * 100).toFixed(1) + '%' : '-'}
-                        </span>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="mt-8 pt-6 border-t border-neutral-100 flex justify-between items-center text-[10px] text-neutral-400 font-bold uppercase">
-            <div>Generated on {new Date().toLocaleString()}</div>
-            <div>Copyright &copy; {new Date().getFullYear()} ORA Cockpit</div>
-          </div>
-
-          <style dangerouslySetInnerHTML={{
-            __html: `
-            @media print {
-              @page { size: A4; margin: 1cm; }
-              body * { visibility: hidden; }
-              .print-view, .print-view * { visibility: visible; }
-              .print-view { position: absolute; left: 0; top: 0; width: 100%; border: none; padding: 0; }
-              .bg-neutral-900 { background-color: #171717 !important; -webkit-print-color-adjust: exact; }
-              .text-white { color: white !important; }
-              .text-green-700 { color: #15803d !important; }
-              .text-orange-600 { color: #ea580c !important; }
-              .bg-neutral-50 { background-color: #fafafa !important; }
-            }
-          ` }} />
         </div>
       )}
     </div>
