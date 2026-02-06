@@ -48,26 +48,29 @@ const setupDoc = (title: string, subtitle?: string) => {
  * Generates a PDF report for Stores (Sales, Visitors, Targets, etc.)
  */
 export const generateStoreReport = async (data: any[], dateRange: { from: string, to: string }) => {
-    const doc = setupDoc('Stores Performance Report', `Period: ${dateRange.from} to ${dateRange.to}`);
+    const doc = setupDoc('تقرير أداء المعارض - Stores Performance', `الفترة: ${dateRange.from} إلى ${dateRange.to}`);
 
     const tableRows = data.map((item: any) => [
         item.name || item.id,
-        item.sales?.toLocaleString() || '0',
-        item.visitors?.toLocaleString() || '0',
-        item.avgBasket?.toLocaleString() || '0',
-        item.customerValue?.toLocaleString() || '0',
-        item.target?.toLocaleString() || '0',
-        `${item.achievement || 0}%`,
-        item.growth >= 0 ? `+${item.growth}%` : `${item.growth}%`
+        Math.round(item.sales || 0).toLocaleString(),
+        (item.visitors || 0).toLocaleString(),
+        Math.round(item.avgBasket || 0).toLocaleString(),
+        Math.round(item.customerValue || 0).toLocaleString(),
+        Math.round(item.target || 0).toLocaleString(),
+        `${(item.achievement || 0).toFixed(1)}%`,
+        `${item.growth >= 0 ? '+' : ''}${(item.growth || 0).toFixed(1)}%`
     ]);
 
     (doc as any).autoTable({
         startY: 25,
-        head: [['Store Name', 'Sales', 'Visitors', 'Avg Basket', 'Cust Value', 'Target', 'Achieve', 'Growth']],
+        head: [['المعرض', 'المبيعات', 'الزوار', 'متوسط الفاتورة', 'قيمة العميل', 'الهدف', 'التحقيق %', 'النمو %']],
         body: tableRows,
-        styles: { font: 'Amiri', halign: 'center' },
-        headStyles: { fillStyle: [20, 20, 20] },
-        alternateRowStyles: { fillColor: [245, 245, 245] }
+        styles: { font: 'Amiri', halign: 'center', fontSize: 9 },
+        headStyles: { fillColor: [254, 121, 0], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        columnStyles: {
+            0: { fontStyle: 'bold', halign: 'right' }
+        }
     });
 
     doc.save(`Stores_Report_${dateRange.to}.pdf`);
@@ -77,25 +80,28 @@ export const generateStoreReport = async (data: any[], dateRange: { from: string
  * Generates a PDF report for Employees (Performance, Targets, etc.)
  */
 export const generateEmployeeReport = async (data: any[], dateRange: { from: string, to: string }) => {
-    const doc = setupDoc('Employees Performance Report', `Period: ${dateRange.from} to ${dateRange.to}`);
+    const doc = setupDoc('تقرير أداء الموظفين - Employee Performance', `الفترة: ${dateRange.from} إلى ${dateRange.to}`);
 
     const tableRows = data.map((item: any) => [
         item.name,
-        item.store,
-        item.sales?.toLocaleString() || '0',
-        item.target?.toLocaleString() || '0',
-        `${item.achievement || 0}%`,
-        item.contribution?.toLocaleString() || '0',
+        item.store || '-',
+        Math.round(item.sales || 0).toLocaleString(),
+        Math.round(item.target || 0).toLocaleString(),
+        `${(item.achievement || 0).toFixed(1)}%`,
+        `${(item.contribution || 0).toFixed(1)}%`,
         item.rank || '-'
     ]);
 
     (doc as any).autoTable({
         startY: 25,
-        head: [['Employee Name', 'Store', 'Sales', 'Target', 'Achieve', 'Contribution', 'Rank']],
+        head: [['الموظف', 'المعرض', 'المبيعات', 'الهدف', 'التحقيق %', 'المساهمة %', 'الترتيب']],
         body: tableRows,
-        styles: { font: 'Amiri', halign: 'center' },
-        headStyles: { fillStyle: [20, 20, 20] },
-        alternateRowStyles: { fillColor: [245, 245, 245] }
+        styles: { font: 'Amiri', halign: 'center', fontSize: 9 },
+        headStyles: { fillColor: [254, 121, 0], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        columnStyles: {
+            0: { fontStyle: 'bold', halign: 'right' }
+        }
     });
 
     doc.save(`Employees_Report_${dateRange.to}.pdf`);
@@ -106,20 +112,22 @@ export const generateEmployeeReport = async (data: any[], dateRange: { from: str
  * Matches layout from DashboardPage.tsx modal and styling from original pdf_export.js
  */
 export const generateDailyReportPDF = async (data: any[], dates: { yesterday: string, lastYear: string }) => {
-    const doc = setupDoc('Daily Sales Report - التقرير اليومي', `Date: ${dates.yesterday} vs ${dates.lastYear}`);
+    const currentYear = new Date(dates.yesterday).getFullYear();
+    const prevYear = currentYear - 1;
+    const doc = setupDoc('التقرير اليومي - Daily Sales Report', `التاريخ: ${dates.yesterday} مقارنة بـ ${dates.lastYear}`);
 
     const tableRows = data.map((item: any) => [
         item.name,
-        item.sales?.toLocaleString() || '0',
-        item.prevSales?.toLocaleString() || '0',
+        Math.round(item.sales || 0).toLocaleString(),
+        Math.round(item.prevSales || 0).toLocaleString(),
         `${item.growth >= 0 ? '+' : ''}${item.growth?.toFixed(1) || '0.0'}%`,
-        item.dailyReq?.toLocaleString() || '0',
-        item.trans?.toLocaleString() || '0',
+        Math.round(item.dailyReq || 0).toLocaleString(),
+        (item.trans || 0).toLocaleString(),
         Math.round(item.avgInv || 0).toLocaleString(),
-        item.visitors?.toLocaleString() || '0',
-        item.prevVisitors?.toLocaleString() || '0',
-        `${item.conversion?.toFixed(1) || '0.0'}%`,
-        Math.round(item.customerValue || 0).toLocaleString()
+        Math.round(item.customerValue || 0).toLocaleString(),
+        (item.visitors || 0).toLocaleString(),
+        (item.prevVisitors || 0).toLocaleString(),
+        `${item.conversion?.toFixed(1) || '0.0'}%`
     ]);
 
     // Calculate totals for footer
@@ -138,30 +146,30 @@ export const generateDailyReportPDF = async (data: any[], dates: { yesterday: st
     const totalCustValue = totals.visitors > 0 ? totals.sales / totals.visitors : 0;
 
     tableRows.push([
-        'الإجمالي / Total',
-        totals.sales.toLocaleString(),
-        totals.prevSales.toLocaleString(),
+        'الإجمالي',
+        Math.round(totals.sales).toLocaleString(),
+        Math.round(totals.prevSales).toLocaleString(),
         `${totalGrowth >= 0 ? '+' : ''}${totalGrowth.toFixed(1)}%`,
-        totals.dailyReq.toLocaleString(),
+        Math.round(totals.dailyReq).toLocaleString(),
         totals.trans.toLocaleString(),
         Math.round(totalAvgInv).toLocaleString(),
+        Math.round(totalCustValue).toLocaleString(),
         totals.visitors.toLocaleString(),
         totals.prevVisitors.toLocaleString(),
-        `${totalConversion.toFixed(1)}%`,
-        Math.round(totalCustValue).toLocaleString()
+        `${totalConversion.toFixed(1)}%`
     ]);
 
     (doc as any).autoTable({
         startY: 25,
-        head: [['Store', 'Sales (Yst)', 'Sales (LY)', 'Growth', 'Daily Req', 'Bills', 'Avg Bill', 'Visitors', 'Vis (LY)', 'Conv %', 'Cust Val']],
+        head: [['المعرض', `مبيعات ${currentYear}`, `مبيعات ${prevYear}`, 'النمو %', 'اليومية المتبقية', 'عدد الفواتير', 'متوسط الفاتورة', 'قيمة العميل', `زوار ${currentYear}`, `زوار ${prevYear}`, 'التحويل %']],
         body: tableRows,
-        styles: { font: 'Amiri', halign: 'center', fontSize: 9 },
-        headStyles: { fillStyle: [254, 121, 0], textColor: 255, halign: 'center' }, // Orange header like original
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8 },
+        headStyles: { fillColor: [254, 121, 0], textColor: 255, halign: 'center' },
         alternateRowStyles: { fillColor: [245, 245, 245] },
         columnStyles: {
-            0: { fontStyle: 'bold', halign: 'right' }, // Store Name
-            3: { textColor: (data: any) => data.cell.raw.includes('-') ? [220, 50, 50] : [0, 150, 0] }, // Growth Color
-            4: { textColor: [220, 50, 50] }, // Daily Req Red
+            0: { fontStyle: 'bold', halign: 'right' },
+            3: { textColor: (data: any) => data.cell.raw.includes('-') ? [220, 50, 50] : [0, 150, 0] },
+            4: { textColor: [220, 50, 50] },
         },
         didParseCell: (data: any) => {
             if (data.row.index === tableRows.length - 1) {
@@ -179,18 +187,20 @@ export const generateDailyReportPDF = async (data: any[], dates: { yesterday: st
  * Matches 'Sales_Report_all' logic from original repo.
  */
 export const generateGlobalSalesPDF = async (data: any[], dateRange: { start: string, end: string }) => {
-    const doc = setupDoc('Global Summary - ملخص عام', `Period: ${dateRange.start} to ${dateRange.end}`);
+    const currentYear = new Date(dateRange.start).getFullYear();
+    const prevYear = currentYear - 1;
+    const doc = setupDoc('ملخص عام - Global Summary', `الفترة: ${dateRange.start} إلى ${dateRange.end}`);
 
     const tableRows = data.map((item: any) => [
         item.date,
         Math.round(item.sales).toLocaleString(),
         Math.round(item.salesPrev).toLocaleString(),
         `${item.growth >= 0 ? '+' : ''}${item.growth?.toFixed(1) || '0.0'}%`,
-        item.trans?.toLocaleString() || '0',
+        (item.trans || 0).toLocaleString(),
         item.avgInv ? Math.round(item.avgInv).toLocaleString() : '0',
         item.customerValue ? Math.round(item.customerValue).toLocaleString() : '0',
-        item.visitors?.toLocaleString() || '0',
-        item.visitorsPrev?.toLocaleString() || '0',
+        (item.visitors || 0).toLocaleString(),
+        (item.visitorsPrev || 0).toLocaleString(),
         `${item.conversion?.toFixed(1) || '0.0'}%`
     ]);
 
@@ -209,7 +219,7 @@ export const generateGlobalSalesPDF = async (data: any[], dateRange: { start: st
     const totalConv = totals.visitors > 0 ? (totals.trans / totals.visitors) * 100 : 0;
 
     tableRows.push([
-        'الإجمالي / Total',
+        'الإجمالي',
         Math.round(totals.sales).toLocaleString(),
         Math.round(totals.salesPrev).toLocaleString(),
         `${totalGrowth >= 0 ? '+' : ''}${totalGrowth.toFixed(1)}%`,
@@ -222,15 +232,15 @@ export const generateGlobalSalesPDF = async (data: any[], dateRange: { start: st
     ]);
 
     (doc as any).autoTable({
-        startY: 35,
-        head: [['Date', 'Sales (Curr)', 'Sales (Prev)', 'Growth', 'Bills', 'Avg Bill', 'Cust Val', 'Visitors', 'Vis (Prev)', 'Conv %']],
+        startY: 25,
+        head: [['التاريخ', `مبيعات ${currentYear}`, `مبيعات ${prevYear}`, 'النمو %', 'عدد الفواتير', 'متوسط الفاتورة', 'قيمة العميل', `زوار ${currentYear}`, `زوار ${prevYear}`, 'التحويل %']],
         body: tableRows,
         styles: { font: 'Amiri', halign: 'center', fontSize: 8 },
-        headStyles: { fillStyle: [254, 121, 0], textColor: 255, halign: 'center' },
+        headStyles: { fillColor: [254, 121, 0], textColor: 255, halign: 'center' },
         alternateRowStyles: { fillColor: [245, 245, 245] },
         columnStyles: {
-            0: { cellWidth: 25 }, // Date
-            3: { textColor: (data: any) => data.cell.raw.includes('-') ? [220, 50, 50] : [0, 150, 0] }, // Growth
+            0: { cellWidth: 25, halign: 'center' },
+            3: { textColor: (data: any) => data.cell.raw.includes('-') ? [220, 50, 50] : [0, 150, 0] },
         },
         didParseCell: (data: any) => {
             if (data.row.index === tableRows.length - 1) {
@@ -240,7 +250,7 @@ export const generateGlobalSalesPDF = async (data: any[], dateRange: { start: st
         }
     });
 
-    doc.save(`Sales_Report_all_${new Date().toLocaleDateString('en-CA')}.pdf`);
+    doc.save(`Sales_Report_${dateRange.start}_${dateRange.end}.pdf`);
 };
 
 /**
@@ -248,50 +258,81 @@ export const generateGlobalSalesPDF = async (data: any[], dateRange: { start: st
  * Matches 'Employees_Report' logic from original repo.
  */
 export const generateEmployeePerformancePDF = async (data: any[], dateRange: { yesterday: string, monthStart: string }) => {
-    const doc = setupDoc('Employees Performance - أداء الموظفين', `Ref: ${dateRange.monthStart} to ${dateRange.yesterday}`);
+    const doc = setupDoc('أداء الموظفين - Employee Performance', `الفترة: ${dateRange.monthStart} إلى ${dateRange.yesterday}`);
+
+    // Calculate totals for footer
+    const totals = data.reduce((acc, curr) => ({
+        ySales: acc.ySales + (curr.ySales || 0),
+        yTrans: acc.yTrans + (curr.yTrans || 0),
+        mSales: acc.mSales + (curr.mSales || 0),
+        mTrans: acc.mTrans + (curr.mTrans || 0),
+        target: acc.target + (curr.target || 0),
+        remaining: acc.remaining + (curr.remaining || 0),
+    }), { ySales: 0, yTrans: 0, mSales: 0, mTrans: 0, target: 0, remaining: 0 });
 
     const tableRows = data.map((item: any) => [
         item.name,
         // Yesterday
-        Math.round(item.ySales).toLocaleString(),
-        `${Math.round(item.yShare)}%`,
-        item.yTrans,
-        Math.round(item.yAvgInv).toLocaleString(),
+        Math.round(item.ySales || 0).toLocaleString(),
+        `${Math.round(item.yShare || 0)}%`,
+        item.yTrans || 0,
+        Math.round(item.yAvgInv || 0).toLocaleString(),
         // MTD
-        Math.round(item.mSales).toLocaleString(),
-        `${Math.round(item.mShare)}%`,
-        item.mTrans,
-        Math.round(item.mAvgInv).toLocaleString(),
-        Math.round(item.target).toLocaleString(),
-        `${item.achievement?.toFixed(1)}%`,
-        Math.round(item.remaining).toLocaleString(),
-        Math.round(item.dailyReq).toLocaleString()
+        Math.round(item.mSales || 0).toLocaleString(),
+        `${Math.round(item.mShare || 0)}%`,
+        item.mTrans || 0,
+        Math.round(item.mAvgInv || 0).toLocaleString(),
+        Math.round(item.target || 0).toLocaleString(),
+        `${(item.achievement || 0).toFixed(1)}%`,
+        Math.round(item.remaining || 0).toLocaleString(),
+        Math.round(item.dailyReq || 0).toLocaleString()
     ]);
 
-    // Header with ColSpans requires generic 'head' manipulation usually, but autoTable supports complex headers.
-    // We will use a simplified robust approach matching the visual structure.
+    // Add totals row
+    const totalAch = totals.target > 0 ? (totals.mSales / totals.target * 100).toFixed(1) : '0.0';
+    tableRows.push([
+        'الإجمالي (Total)',
+        Math.round(totals.ySales).toLocaleString(),
+        '100%',
+        totals.yTrans,
+        totals.yTrans > 0 ? Math.round(totals.ySales / totals.yTrans).toLocaleString() : '0',
+        Math.round(totals.mSales).toLocaleString(),
+        '100%',
+        totals.mTrans,
+        totals.mTrans > 0 ? Math.round(totals.mSales / totals.mTrans).toLocaleString() : '0',
+        Math.round(totals.target).toLocaleString(),
+        `${totalAch}%`,
+        Math.round(totals.remaining).toLocaleString(),
+        '-'
+    ]);
 
     (doc as any).autoTable({
-        startY: 30,
+        startY: 25,
         head: [
             [
-                { content: 'Employee', rowSpan: 2, styles: { valign: 'middle' } },
-                { content: `Yesterday (${dateRange.yesterday})`, colSpan: 4, styles: { halign: 'center', fillColor: [220, 220, 220], textColor: 0 } },
-                { content: `Month to Date (${dateRange.monthStart} - ${dateRange.yesterday})`, colSpan: 8, styles: { halign: 'center', fillColor: [200, 200, 200], textColor: 0 } }
+                { content: 'الموظف', rowSpan: 2, styles: { valign: 'middle', fillColor: [255, 255, 255], textColor: 0, halign: 'center' } },
+                { content: `نهاية الفترة - ${dateRange.yesterday}`, colSpan: 4, styles: { halign: 'center', fillColor: [220, 220, 220], textColor: 0 } },
+                { content: `الفترة المحددة - ${dateRange.monthStart} إلى ${dateRange.yesterday}`, colSpan: 8, styles: { halign: 'center', fillColor: [200, 200, 200], textColor: 0 } }
             ],
             [
-                'Sales', 'Share %', 'Bills', 'Avg Bill',
-                'Sales', 'Share %', 'Bills', 'Avg Bill', 'Target', 'Ach %', 'Rem', 'Daily Req'
+                'المبيعات', 'المساهمة %', 'العدد', 'متوسط الفاتورة',
+                'المبيعات', 'المساهمة %', 'العدد', 'متوسط الفاتورة', 'الهدف', 'التحقيق %', 'المتبقي', 'اليومية المتبقية'
             ]
         ],
         body: tableRows,
-        styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 2 },
-        headStyles: { fillStyle: [254, 121, 0], textColor: 255 },
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1 },
+        headStyles: { fillColor: [254, 121, 0], textColor: 255 },
         columnStyles: {
-            0: { fontStyle: 'bold', halign: 'right', minCellWidth: 30 }, // Name
-            9: { textColor: [0, 128, 0], fontStyle: 'bold' } // Achievement
+            0: { fontStyle: 'bold', halign: 'right', minCellWidth: 30 },
+            10: { textColor: [0, 128, 0], fontStyle: 'bold' }
         },
-        alternateRowStyles: { fillColor: [245, 245, 245] }
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        didParseCell: (data: any) => {
+            if (data.row.index === tableRows.length - 1) {
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.fillColor = [240, 240, 240];
+            }
+        }
     });
 
     doc.save(`Employees_Report_${new Date().toLocaleDateString('en-CA')}.pdf`);

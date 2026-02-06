@@ -376,7 +376,7 @@ export const GrowthTrajectoryChart: React.FC<{
   const ySteps = [0, 0.25, 0.5, 0.75, 1];
 
   return (
-    <div className="growth-chart-container bg-white rounded-[2.5rem] shadow-2xl border border-neutral-100 p-8 w-full relative overflow-hidden group/chart mt-6">
+    <div className="growth-chart-container bg-white rounded-[2.5rem] shadow-2xl border border-neutral-100 p-8 w-full relative group/chart mt-6">
       <div className="absolute top-0 right-0 w-64 h-64 bg-orange-50 rounded-full -mr-32 -mt-32 blur-3xl opacity-50 pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-64 h-64 bg-slate-50 rounded-full -ml-32 -mb-32 blur-3xl opacity-50 pointer-events-none" />
 
@@ -458,13 +458,17 @@ export const GrowthTrajectoryChart: React.FC<{
                       style={{ height: `${Math.max(curPct, 2)}%` }}
                     >
                       <div className="absolute inset-0 bg-white/20 opacity-0 hover:opacity-100 transition-opacity rounded-t-lg" />
-                      <div className="absolute -top-24 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl opacity-0 group-hover/bar:opacity-100 transition-all duration-300 pointer-events-none z-30 whitespace-nowrap shadow-2xl border border-white/10 translate-y-2 group-hover/bar:translate-y-0 min-w-[140px] text-right">
-                        <div className="text-[10px] font-black text-orange-400 mb-1.5 tracking-widest uppercase border-b border-white/10 pb-1">{d.name} 2025</div>
-                        <div className="text-lg font-black tracking-tight">{format ? format(d.Current) : d.Current.toLocaleString()}</div>
-                        <div className={`text-[10px] font-bold mt-1 flex items-center justify-end gap-1 ${growth >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          <span className="text-neutral-400 font-normal">v 2024</span> {growth.toFixed(1)}% {growth >= 0 ? '↗' : '↘'}
-                        </div>
+                    </div>
+
+                    {/* Tooltip - positioned at the top of the chart */}
+                    <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl opacity-0 group-hover/bar:opacity-100 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap shadow-2xl border border-white/10 min-w-[140px] text-right">
+                      <div className="text-[10px] font-black text-orange-400 mb-1.5 tracking-widest uppercase border-b border-white/10 pb-1">{d.name} 2025</div>
+                      <div className="text-lg font-black tracking-tight">{format ? format(d.Current) : d.Current.toLocaleString()}</div>
+                      <div className={`text-[10px] font-bold mt-1 flex items-center justify-end gap-1 ${growth >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        <span className="text-neutral-400 font-normal">v 2024</span> {growth.toFixed(1)}% {growth >= 0 ? '↗' : '↘'}
                       </div>
+                      {/* Arrow pointer */}
+                      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-slate-900/95"></div>
                     </div>
 
                     <div

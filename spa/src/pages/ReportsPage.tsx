@@ -162,9 +162,12 @@ export default function ReportsPage() {
       const growth = prevSales > 0 ? ((r.sales - prevSales) / prevSales) * 100 : 0;
       const customerValue = r.visitors > 0 ? r.sales / r.visitors : 0;
 
+      const meta = rawMgmt.store_meta?.[r.storeId] || {};
       return {
         'التاريخ': r.date,
         'المعرض': rawMgmt.stores?.[r.storeId] || r.storeId,
+        'المدينة': meta.city || '-',
+        'مدير المنطقة': meta.manager || '-',
         'المبيعات الحالية': r.sales,
         'مبيعات العام الماضي': prevSales,
         'النمو %': growth.toFixed(1) + '%',
