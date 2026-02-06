@@ -1138,54 +1138,72 @@ export default function DashboardPage() {
                     const isExpanded = expandedStoreId === store.sid;
                     const storeName = store.name || raw?.stores?.[store.sid] || store.sid;
                     return (
-                      <div key={store.sid} className="border rounded-xl overflow-hidden bg-white">
+                      <div key={store.sid} className="border rounded-xl overflow-hidden bg-white shadow-sm">
                         {/* Store Row */}
                         <div 
-                          className="flex items-center gap-3 p-3 cursor-pointer hover:bg-orange-50 transition-colors"
+                          className="flex items-center gap-3 p-4 cursor-pointer hover:bg-orange-50 transition-colors border-b border-gray-100"
                           onClick={() => setExpandedStoreId(isExpanded ? null : store.sid)}
                         >
-                          <div className="w-8 h-8 bg-orange-500 text-white rounded-lg flex items-center justify-center font-bold text-sm">
+                          <div className="w-10 h-10 bg-orange-500 text-white rounded-lg flex items-center justify-center font-bold text-base flex-shrink-0">
                             {idx + 1}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="font-bold text-gray-800 text-base">{storeName}</div>
-                            <div className="text-xs text-gray-500">
-                              👥 {store.employees?.length || 0} موظفين • 🧾 {store.trans || 0} فاتورة
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="font-bold text-gray-900 text-lg">{storeName}</div>
+                              <div className="font-bold text-orange-600 text-xl" dir="ltr">{formatSAR(store.sales)}</div>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-gray-600">
+                              <span className="flex items-center gap-1">
+                                <span>👥</span>
+                                <span className="font-medium">{store.employees?.length || 0} موظفين</span>
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span>🧾</span>
+                                <span className="font-medium">{store.trans || 0} فاتورة</span>
+                              </span>
+                              {store.trans > 0 && (
+                                <span className="flex items-center gap-1 text-orange-600">
+                                  <span className="font-semibold">معدل:</span>
+                                  <span className="font-bold" dir="ltr">{formatSAR(store.sales / store.trans)}</span>
+                                </span>
+                              )}
                             </div>
                           </div>
-                          <div className="text-left">
-                            <div className="font-bold text-orange-600 text-lg" dir="ltr">{formatSAR(store.sales)}</div>
-                          </div>
-                          <div className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</div>
+                          <div className={`text-gray-400 transition-transform text-xl ${isExpanded ? 'rotate-90' : ''} flex-shrink-0`}>▶</div>
                         </div>
                         
                         {/* Employees Dropdown */}
                         {isExpanded && store.employees && store.employees.length > 0 && (
-                          <div className="bg-gray-50 border-t p-3">
+                          <div className="bg-gray-50 p-4">
                             <table className="w-full text-sm">
                               <thead>
-                                <tr className="text-gray-500 text-xs">
-                                  <th className="text-right pb-2">#</th>
-                                  <th className="text-right pb-2">الموظف</th>
-                                  <th className="text-left pb-2">المبيعات</th>
-                                  <th className="text-left pb-2">الفواتير</th>
-                                  <th className="text-left pb-2">%</th>
+                                <tr className="bg-white border-b-2 border-gray-200">
+                                  <th className="text-right py-3 px-2 font-bold text-gray-700">#</th>
+                                  <th className="text-right py-3 px-2 font-bold text-gray-700">الموظف</th>
+                                  <th className="text-left py-3 px-2 font-bold text-gray-700">المبيعات</th>
+                                  <th className="text-left py-3 px-2 font-bold text-gray-700">الفواتير</th>
+                                  <th className="text-left py-3 px-2 font-bold text-gray-700">معدل الفاتورة</th>
+                                  <th className="text-left py-3 px-2 font-bold text-gray-700">%</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {store.employees.sort((a, b) => b.sales - a.sales).map((emp, empIdx) => (
-                                  <tr key={emp.id} className="border-t border-gray-100">
-                                    <td className="py-2 text-gray-400">{empIdx + 1}</td>
-                                    <td className="py-2 font-medium text-gray-800">{emp.name || emp.id}</td>
-                                    <td className="py-2 font-bold text-orange-600" dir="ltr">{formatSAR(emp.sales)}</td>
-                                    <td className="py-2 text-gray-600">{emp.trans}</td>
-                                    <td className="py-2">
-                                      <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-xs font-bold">
-                                        {store.sales > 0 ? ((emp.sales / store.sales) * 100).toFixed(0) : 0}%
-                                      </span>
-                                    </td>
-                                  </tr>
-                                ))}
+                                {store.employees.sort((a, b) => b.sales - a.sales).map((emp, empIdx) => {
+                                  const avgInv = emp.avgInv || (emp.trans > 0 ? emp.sales / emp.trans : 0);
+                                  return (
+                                    <tr key={emp.id} className={`border-b border-gray-100 hover:bg-white transition-colors ${empIdx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}`}>
+                                      <td className="py-3 px-2 text-gray-500 font-medium text-center">{empIdx + 1}</td>
+                                      <td className="py-3 px-2 font-semibold text-gray-900">{emp.name || emp.id}</td>
+                                      <td className="py-3 px-2 font-bold text-orange-600" dir="ltr">{formatSAR(emp.sales)}</td>
+                                      <td className="py-3 px-2 text-gray-700 font-medium">{emp.trans}</td>
+                                      <td className="py-3 px-2 font-bold text-blue-600" dir="ltr">{formatSAR(avgInv)}</td>
+                                      <td className="py-3 px-2">
+                                        <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded-md text-xs font-bold">
+                                          {store.sales > 0 ? ((emp.sales / store.sales) * 100).toFixed(0) : 0}%
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>
