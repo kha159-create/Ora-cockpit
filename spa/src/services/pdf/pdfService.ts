@@ -19,36 +19,401 @@ const getJsPDF = () => {
     return window.jspdf.jsPDF;
 };
 
-const setupDoc = (title: string, subtitle?: string) => {
+const setupDoc = (orientation: 'l' | 'p' = 'l') => {
     const jsPDF = getJsPDF();
-    const doc = new jsPDF('l', 'mm', 'a4');
+    const doc = new jsPDF(orientation, 'mm', 'a4');
 
     // Register Arabic Font
     doc.addFileToVFS('Amiri-Regular.ttf', amiriFontBase64);
     doc.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
     doc.setFont('Amiri');
 
+    return doc;
+};
+
+const addPageHeader = (doc: any, title: string, subtitle?: string) => {
     // Add Logo or Header Branding
     doc.setFillColor(20, 20, 20); // Dark theme
     doc.rect(0, 0, 297, 20, 'F');
 
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(18);
+    doc.setFontSize(16);
     doc.text(title, 15, 13);
 
     if (subtitle) {
-        doc.setFontSize(10);
-        doc.text(subtitle, 280, 13, { align: 'right' });
+        doc.setFontSize(9);
+        doc.text(subtitle, 282, 13, { align: 'right' });
     }
-
-    return doc;
 };
+
+interface StoreData {
+    id: string;
+    name: string;
+    manager?: string;
+    target?: number;
+    dailyData: {
+        date: string;
+        sales: number;
+        salesPrev: number;
+        growth: number;
+        trans: number;
+        avgInv: number;
+        customerValue: number;
+        visitors: number;
+        visitorsPrev: number;
+        conversion: number;
+    }[];
+}
+
+/**
+ * Generates a multi-page PDF report for Stores with daily breakdown
+ * Page 1: Global Summary
+ * Pages 2-N: One page per store
+ */
+export const generateStoreReportWithDaily = async (
+    globalData: StoreData['dailyData'],
+    storesData: StoreData[],
+    dateRange: { start: string, end: string },
+    storeCount: number
+) => {
+    const doc = setupDoc('l');
+    const currentYear = new Date(dateRange.start).getFullYear();
+    const prevYear = currentYear - 1;
+    const pageWidth = 297;
+
+    // Calculate global totals
+    const globalTotals = globalData.reduce((acc, d) => ({
+        sales: acc.sales + d.sales,
+        salesPrev: acc.salesPrev + d.salesPrev,
+        trans: acc.trans + d.trans,
+        visitors: acc.visitors + d.visitors,
+        visitorsPrev: acc.visitorsPrev + d.visitorsPrev,
+    }), { sales: 0, salesPrev: 0, trans: 0, visitors: 0, visitorsPrev: 0 });
+
+    const globalGrowth = globalTotals.salesPrev > 0 ? ((globalTotals.sales - globalTotals.salesPrev) / globalTotals.salesPrev * 100) : 0;
+    const globalAvgInv = globalTotals.trans > 0 ? globalTotals.sales / globalTotals.trans : 0;
+    const globalConv = globalTotals.visitors > 0 ? (globalTotals.trans / globalTotals.visitors * 100) : 0;
+    const globalCustVal = globalTotals.visitors > 0 ? globalTotals.sales / globalTotals.visitors : 0;
+
+    // ===== PAGE 1: Global Summary =====
+    addPageHeader(doc, 'Global Summary - ملخص عام', `Report Type: Global Summary (${storeCount} Stores)`);
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.text(`Date: ${dateRange.start} to ${dateRange.end}`, 15, 28);
+
+    // Prepare table rows
+    const tableRows = globalData.map(d => [
+        d.date,
+        Math.round(d.sales).toLocaleString(),
+        Math.round(d.salesPrev).toLocaleString(),
+        `${d.growth >= 0 ? '' : ''}${d.growth.toFixed(1)}%`,
+        d.trans.toLocaleString(),
+        Math.round(d.avgInv).toLocaleString(),
+        Math.round(d.customerValue).toLocaleString(),
+        d.visitors.toLocaleString(),
+        d.visitorsPrev.toLocaleString(),
+        `${d.conversion.toFixed(1)}%`
+    ]);
+
+    // Add totals row
+    tableRows.push([
+        'الإجمالي',
+        Math.round(globalTotals.sales).toLocaleString(),
+        Math.round(globalTotals.salesPrev).toLocaleString(),
+        `${globalGrowth >= 0 ? '' : ''}${globalGrowth.toFixed(1)}%`,
+        globalTotals.trans.toLocaleString(),
+        Math.round(globalAvgInv).toLocaleString(),
+        Math.round(globalCustVal).toLocaleString(),
+        globalTotals.visitors.toLocaleString(),
+        globalTotals.visitorsPrev.toLocaleString(),
+        `${globalConv.toFixed(1)}%`
+    ]);
+
+    (doc as any).autoTable({
+        startY: 33,
+        head: [[
+            'التاريخ',
+            `مبيعات ${currentYear}`,
+            `مبيعات ${prevYear}`,
+            '% النمو',
+            'عدد الفواتير',
+            'متوسط الفاتورة',
+            'قيمة العميل',
+            `زوار ${currentYear}`,
+            `زوار ${prevYear}`,
+            '% التحويل'
+        ]],
+        body: tableRows,
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.5 },
+        headStyles: { fillColor: [254, 121, 0], textColor: 255 },
+        alternateRowStyles: { fillColor: [250, 250, 250] },
+        columnStyles: {
+            0: { halign: 'center', cellWidth: 22 },
+            3: { textColor: [0, 0, 0] }
+        },
+        didParseCell: (data: any) => {
+            // Style totals row
+            if (data.row.index === tableRows.length - 1) {
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.fillColor = [230, 230, 230];
+            }
+            // Color growth column
+            if (data.column.index === 3 && data.row.index < tableRows.length - 1) {
+                const val = parseFloat(data.cell.raw);
+                data.cell.styles.textColor = val >= 0 ? [0, 128, 0] : [200, 50, 50];
+            }
+        }
+    });
+
+    // Add page number
+    const totalPages = storesData.length + 1;
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`-- 1 of ${totalPages} --`, pageWidth / 2, 200, { align: 'center' });
+
+    // ===== PAGES 2-N: Individual Store Pages =====
+    storesData.forEach((store, idx) => {
+        doc.addPage();
+        addPageHeader(doc, `${store.id} - ${store.name}`, store.manager ? `Manager: ${store.manager}` : '');
+
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(10);
+        doc.text(`Date: ${dateRange.start} to ${dateRange.end}`, 15, 28);
+
+        // Calculate store totals
+        const storeTotals = store.dailyData.reduce((acc, d) => ({
+            sales: acc.sales + d.sales,
+            salesPrev: acc.salesPrev + d.salesPrev,
+            trans: acc.trans + d.trans,
+            visitors: acc.visitors + d.visitors,
+            visitorsPrev: acc.visitorsPrev + d.visitorsPrev,
+        }), { sales: 0, salesPrev: 0, trans: 0, visitors: 0, visitorsPrev: 0 });
+
+        const storeGrowth = storeTotals.salesPrev > 0 ? ((storeTotals.sales - storeTotals.salesPrev) / storeTotals.salesPrev * 100) : 0;
+        const storeAvgInv = storeTotals.trans > 0 ? storeTotals.sales / storeTotals.trans : 0;
+        const storeConv = storeTotals.visitors > 0 ? (storeTotals.trans / storeTotals.visitors * 100) : 0;
+        const storeCustVal = storeTotals.visitors > 0 ? storeTotals.sales / storeTotals.visitors : 0;
+
+        // Target info if available
+        if (store.target && store.target > 0) {
+            const achievement = (storeTotals.sales / store.target * 100);
+            const daysInMonth = new Date(new Date(dateRange.end).getFullYear(), new Date(dateRange.end).getMonth() + 1, 0).getDate();
+            const daysPassed = new Date(dateRange.end).getDate();
+            const remainingDays = daysInMonth - daysPassed;
+            const dailyReq = remainingDays > 0 ? (store.target - storeTotals.sales) / remainingDays : 0;
+
+            doc.setFontSize(9);
+            doc.text(`الهدف: ${Math.round(store.target).toLocaleString()} | التحقيق: %${achievement.toFixed(1)} | اليومية المتبقية: ${Math.round(Math.max(0, dailyReq)).toLocaleString()}`, pageWidth - 15, 28, { align: 'right' });
+        }
+
+        // Prepare store table rows
+        const storeRows = store.dailyData.map(d => [
+            d.date,
+            Math.round(d.sales).toLocaleString(),
+            Math.round(d.salesPrev).toLocaleString(),
+            `${d.growth >= 0 ? '' : ''}${d.growth.toFixed(1)}%`,
+            d.trans.toLocaleString(),
+            Math.round(d.avgInv).toLocaleString(),
+            Math.round(d.customerValue).toLocaleString(),
+            d.visitors.toLocaleString(),
+            d.visitorsPrev.toLocaleString(),
+            `${d.conversion.toFixed(1)}%`
+        ]);
+
+        // Add store totals row
+        storeRows.push([
+            'الإجمالي',
+            Math.round(storeTotals.sales).toLocaleString(),
+            Math.round(storeTotals.salesPrev).toLocaleString(),
+            `${storeGrowth >= 0 ? '' : ''}${storeGrowth.toFixed(1)}%`,
+            storeTotals.trans.toLocaleString(),
+            Math.round(storeAvgInv).toLocaleString(),
+            Math.round(storeCustVal).toLocaleString(),
+            storeTotals.visitors.toLocaleString(),
+            storeTotals.visitorsPrev.toLocaleString(),
+            `${storeConv.toFixed(1)}%`
+        ]);
+
+        (doc as any).autoTable({
+            startY: 33,
+            head: [[
+                'التاريخ',
+                `مبيعات ${currentYear}`,
+                `مبيعات ${prevYear}`,
+                '% النمو',
+                'عدد الفواتير',
+                'متوسط الفاتورة',
+                'قيمة العميل',
+                `زوار ${currentYear}`,
+                `زوار ${prevYear}`,
+                '% التحويل'
+            ]],
+            body: storeRows,
+            styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.5 },
+            headStyles: { fillColor: [254, 121, 0], textColor: 255 },
+            alternateRowStyles: { fillColor: [250, 250, 250] },
+            columnStyles: {
+                0: { halign: 'center', cellWidth: 22 },
+            },
+            didParseCell: (data: any) => {
+                if (data.row.index === storeRows.length - 1) {
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fillColor = [230, 230, 230];
+                }
+                if (data.column.index === 3 && data.row.index < storeRows.length - 1) {
+                    const val = parseFloat(data.cell.raw);
+                    data.cell.styles.textColor = val >= 0 ? [0, 128, 0] : [200, 50, 50];
+                }
+            }
+        });
+
+        // Page number
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`-- ${idx + 2} of ${totalPages} --`, pageWidth / 2, 200, { align: 'center' });
+    });
+
+    doc.save(`Sales_Report_all_${dateRange.end}.pdf`);
+};
+
+interface EmployeeData {
+    name: string;
+    ySales: number;
+    yShare: number;
+    yTrans: number;
+    yAvgInv: number;
+    mSales: number;
+    mShare: number;
+    mTrans: number;
+    mAvgInv: number;
+    target: number;
+    achievement: number;
+    remaining: number;
+    dailyReq: number;
+}
+
+interface StoreEmployeeData {
+    storeId: string;
+    storeName: string;
+    employees: EmployeeData[];
+}
+
+/**
+ * Generates a multi-page PDF report for Employees grouped by store
+ * One page per store with employee breakdown
+ */
+export const generateEmployeeReportByStore = async (
+    storesData: StoreEmployeeData[],
+    dateRange: { yesterday: string, monthStart: string }
+) => {
+    const doc = setupDoc('l');
+    const pageWidth = 297;
+
+    storesData.forEach((store, storeIdx) => {
+        if (storeIdx > 0) doc.addPage();
+
+        // Page header with store name
+        addPageHeader(doc, `${store.storeId} - ${store.storeName}`, '');
+
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(9);
+
+        // Sub-header showing date ranges
+        const headerText = `(Employee) بيانات الموظف      الأمس (Yesterday) - ${dateRange.yesterday}      إلى      (MTD) الشهر الحالي - ${dateRange.monthStart} إلى ${dateRange.yesterday}`;
+        doc.text(headerText, pageWidth / 2, 28, { align: 'center' });
+
+        // Calculate store totals
+        const storeTotals = store.employees.reduce((acc, e) => ({
+            ySales: acc.ySales + e.ySales,
+            yTrans: acc.yTrans + e.yTrans,
+            mSales: acc.mSales + e.mSales,
+            mTrans: acc.mTrans + e.mTrans,
+            target: acc.target + e.target,
+            remaining: acc.remaining + e.remaining,
+        }), { ySales: 0, yTrans: 0, mSales: 0, mTrans: 0, target: 0, remaining: 0 });
+
+        // Prepare employee rows
+        const empRows = store.employees.map(e => [
+            e.name,
+            Math.round(e.ySales).toLocaleString(),
+            `${Math.round(e.yShare)}%`,
+            e.yTrans,
+            Math.round(e.yAvgInv).toLocaleString(),
+            Math.round(e.mSales).toLocaleString(),
+            `${Math.round(e.mShare)}%`,
+            e.mTrans,
+            Math.round(e.mAvgInv).toLocaleString(),
+            Math.round(e.target).toLocaleString(),
+            `${e.achievement.toFixed(1)}%`,
+            Math.round(e.remaining).toLocaleString(),
+            Math.round(e.dailyReq).toLocaleString()
+        ]);
+
+        // Add totals row
+        const totalAch = storeTotals.target > 0 ? (storeTotals.mSales / storeTotals.target * 100) : 0;
+        empRows.push([
+            'الإجمالي',
+            Math.round(storeTotals.ySales).toLocaleString(),
+            '100%',
+            storeTotals.yTrans,
+            storeTotals.yTrans > 0 ? Math.round(storeTotals.ySales / storeTotals.yTrans).toLocaleString() : '0',
+            Math.round(storeTotals.mSales).toLocaleString(),
+            '100%',
+            storeTotals.mTrans,
+            storeTotals.mTrans > 0 ? Math.round(storeTotals.mSales / storeTotals.mTrans).toLocaleString() : '0',
+            Math.round(storeTotals.target).toLocaleString(),
+            storeTotals.target > 0 ? `${totalAch.toFixed(1)}%` : '-',
+            Math.round(storeTotals.remaining).toLocaleString(),
+            '0'
+        ]);
+
+        (doc as any).autoTable({
+            startY: 33,
+            head: [
+                [
+                    { content: 'الموظف', rowSpan: 2, styles: { valign: 'middle', fillColor: [255, 255, 255], textColor: 0 } },
+                    { content: `الأمس - ${dateRange.yesterday}`, colSpan: 4, styles: { halign: 'center', fillColor: [220, 220, 220], textColor: 0 } },
+                    { content: `الشهر الحالي - ${dateRange.monthStart} إلى ${dateRange.yesterday}`, colSpan: 8, styles: { halign: 'center', fillColor: [200, 200, 200], textColor: 0 } }
+                ],
+                [
+                    'المبيعات', '% مساهمة', 'العدد', 'م. فاتورة',
+                    'المبيعات', '% مساهمة', 'العدد', 'م. فاتورة', 'الهدف', '% تحقيق', 'المتبقي', 'يومية متبقية'
+                ]
+            ],
+            body: empRows,
+            styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.5 },
+            headStyles: { fillColor: [254, 121, 0], textColor: 255 },
+            columnStyles: {
+                0: { halign: 'right', fontStyle: 'bold', cellWidth: 35 },
+                10: { textColor: [0, 128, 0] }
+            },
+            alternateRowStyles: { fillColor: [250, 250, 250] },
+            didParseCell: (data: any) => {
+                if (data.row.index === empRows.length - 1) {
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fillColor = [240, 240, 240];
+                }
+            }
+        });
+
+        // Page number
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`-- ${storeIdx + 1} of ${storesData.length} --`, pageWidth / 2, 200, { align: 'center' });
+    });
+
+    doc.save(`Employees_Report_${dateRange.yesterday}.pdf`);
+};
+
+// ========== LEGACY FUNCTIONS (kept for backward compatibility) ==========
 
 /**
  * Generates a PDF report for Stores (Sales, Visitors, Targets, etc.)
  */
 export const generateStoreReport = async (data: any[], dateRange: { from: string, to: string }) => {
-    const doc = setupDoc('تقرير أداء المعارض - Stores Performance', `الفترة: ${dateRange.from} إلى ${dateRange.to}`);
+    const doc = setupDoc('l');
+    addPageHeader(doc, 'تقرير أداء المعارض - Stores Performance', `الفترة: ${dateRange.from} إلى ${dateRange.to}`);
 
     const tableRows = data.map((item: any) => [
         item.name || item.id,
@@ -80,7 +445,8 @@ export const generateStoreReport = async (data: any[], dateRange: { from: string
  * Generates a PDF report for Employees (Performance, Targets, etc.)
  */
 export const generateEmployeeReport = async (data: any[], dateRange: { from: string, to: string }) => {
-    const doc = setupDoc('تقرير أداء الموظفين - Employee Performance', `الفترة: ${dateRange.from} إلى ${dateRange.to}`);
+    const doc = setupDoc('l');
+    addPageHeader(doc, 'تقرير أداء الموظفين - Employee Performance', `الفترة: ${dateRange.from} إلى ${dateRange.to}`);
 
     const tableRows = data.map((item: any) => [
         item.name,
@@ -109,12 +475,12 @@ export const generateEmployeeReport = async (data: any[], dateRange: { from: str
 
 /**
  * Generates the Daily Report PDF (Yesterday vs Last Year)
- * Matches layout from DashboardPage.tsx modal and styling from original pdf_export.js
  */
 export const generateDailyReportPDF = async (data: any[], dates: { yesterday: string, lastYear: string }) => {
     const currentYear = new Date(dates.yesterday).getFullYear();
     const prevYear = currentYear - 1;
-    const doc = setupDoc('التقرير اليومي - Daily Sales Report', `التاريخ: ${dates.yesterday} مقارنة بـ ${dates.lastYear}`);
+    const doc = setupDoc('l');
+    addPageHeader(doc, 'التقرير اليومي - Daily Sales Report', `التاريخ: ${dates.yesterday} مقارنة بـ ${dates.lastYear}`);
 
     const tableRows = data.map((item: any) => [
         item.name,
@@ -168,13 +534,19 @@ export const generateDailyReportPDF = async (data: any[], dates: { yesterday: st
         alternateRowStyles: { fillColor: [245, 245, 245] },
         columnStyles: {
             0: { fontStyle: 'bold', halign: 'right' },
-            3: { textColor: (data: any) => data.cell.raw.includes('-') ? [220, 50, 50] : [0, 150, 0] },
+            3: { textColor: [0, 0, 0] },
             4: { textColor: [220, 50, 50] },
         },
         didParseCell: (data: any) => {
             if (data.row.index === tableRows.length - 1) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.fillColor = [230, 230, 230];
+            }
+            if (data.column.index === 3) {
+                const val = parseFloat(data.cell.raw);
+                if (!isNaN(val)) {
+                    data.cell.styles.textColor = val >= 0 ? [0, 128, 0] : [200, 50, 50];
+                }
             }
         }
     });
@@ -183,13 +555,13 @@ export const generateDailyReportPDF = async (data: any[], dates: { yesterday: st
 };
 
 /**
- * Generates the Global Sales Summary PDF (Time Series: Sales, Growth, Visitors, etc.)
- * Matches 'Sales_Report_all' logic from original repo.
+ * Generates the Global Sales Summary PDF
  */
 export const generateGlobalSalesPDF = async (data: any[], dateRange: { start: string, end: string }) => {
     const currentYear = new Date(dateRange.start).getFullYear();
     const prevYear = currentYear - 1;
-    const doc = setupDoc('ملخص عام - Global Summary', `الفترة: ${dateRange.start} إلى ${dateRange.end}`);
+    const doc = setupDoc('l');
+    addPageHeader(doc, 'ملخص عام - Global Summary', `الفترة: ${dateRange.start} إلى ${dateRange.end}`);
 
     const tableRows = data.map((item: any) => [
         item.date,
@@ -240,12 +612,17 @@ export const generateGlobalSalesPDF = async (data: any[], dateRange: { start: st
         alternateRowStyles: { fillColor: [245, 245, 245] },
         columnStyles: {
             0: { cellWidth: 25, halign: 'center' },
-            3: { textColor: (data: any) => data.cell.raw.includes('-') ? [220, 50, 50] : [0, 150, 0] },
         },
         didParseCell: (data: any) => {
             if (data.row.index === tableRows.length - 1) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.fillColor = [230, 230, 230];
+            }
+            if (data.column.index === 3) {
+                const val = parseFloat(data.cell.raw);
+                if (!isNaN(val)) {
+                    data.cell.styles.textColor = val >= 0 ? [0, 128, 0] : [200, 50, 50];
+                }
             }
         }
     });
@@ -255,10 +632,10 @@ export const generateGlobalSalesPDF = async (data: any[], dateRange: { start: st
 
 /**
  * Generates the Employee Performance PDF (Yesterday vs MTD)
- * Matches 'Employees_Report' logic from original repo.
  */
 export const generateEmployeePerformancePDF = async (data: any[], dateRange: { yesterday: string, monthStart: string }) => {
-    const doc = setupDoc('أداء الموظفين - Employee Performance', `الفترة: ${dateRange.monthStart} إلى ${dateRange.yesterday}`);
+    const doc = setupDoc('l');
+    addPageHeader(doc, 'أداء الموظفين - Employee Performance', `الفترة: ${dateRange.monthStart} إلى ${dateRange.yesterday}`);
 
     // Calculate totals for footer
     const totals = data.reduce((acc, curr) => ({

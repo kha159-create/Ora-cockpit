@@ -4,7 +4,7 @@ import { loadManagementData, loadEmployeesData } from '../services/upstreamData'
 import { getCurrentUser } from '../auth/storage';
 import { KPICard, RankCard, GrowthTrajectoryChart } from '../components/DashboardComponents';
 import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon, XIcon, PrinterIcon } from '../components/Icons';
-import { generateDailyReportPDF } from '../services/pdf/pdfService';
+import { generateDailyReportPDF, generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
 
 function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
@@ -56,6 +56,12 @@ export default function DashboardPage() {
   const [dailyReportModalOpen, setDailyReportModalOpen] = useState(false);
   const [chartMode, setChartMode] = useState<'SALES' | 'VISITORS' | 'TARGET'>('SALES');
   const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
+  // Report modals state
+  const [storeReportModalOpen, setStoreReportModalOpen] = useState(false);
+  const [employeeReportModalOpen, setEmployeeReportModalOpen] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  const [includeAllPages, setIncludeAllPages] = useState(true);
+  const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const user = getCurrentUser();
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -103,101 +109,237 @@ export default function DashboardPage() {
   }, [mode, customStart, customEnd, selYear, selMonth]);
 
   const handlePrintDailyReport = () => {
-    generateDailyReportPDF(dailyReportData, { yesterday: yesterdayStr, lastYear: lastYearYesterdayStr });
+    // Open store report modal
+    setSelectedBranch('all');
+    setIncludeAllPages(true);
+    setStoreReportModalOpen(true);
   };
 
-  const handlePrintEmployeeReport = async () => {
-    // Reuse logic from generateEmployeePerformancePDF but for yesterday/MTD
-    // We can use topEmployeesRank data which is MTD based?
-    // Or we need to construct it similar to ReportsPage.
-    // For simplicity and speed, let's use topEmployeesRank as base, but we need 'Yesterday' data too.
-    // topEmployeesRank only has MTD aggregates.
+  const handleGenerateStoreReport = async () => {
+    if (!raw?.sales || !raw?.stores) return;
 
-    // Let's re-calculate efficiently to match PDF requirements:
-    // We need for each employee: ySales, yShare, mSales, mShare, ...
-    if (!empRaw?.history || !empRaw?.employee_names) return;
+    const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
+    const dateRange = { start: startOfMonth, end: yesterdayStr };
+    const meta = raw.store_meta || {};
+    const storesMap = raw.stores || {};
+    const currentYear = new Date(yesterdayStr).getFullYear();
+    const prevYear = currentYear - 1;
+
+    // Get all dates from start of month to yesterday
+    const dates: string[] = [];
+    const startDate = new Date(startOfMonth);
+    const endDate = new Date(yesterdayStr);
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      dates.push(d.toISOString().substring(0, 10));
+    }
+
+    // Build daily data for all stores
+    const byStore: Record<string, Record<string, { sales: number; trans: number; visitors: number }>> = {};
+    const byStorePrev: Record<string, Record<string, { sales: number; trans: number; visitors: number }>> = {};
+
+    // Initialize all stores and dates
+    const storeIds = selectedBranch === 'all' 
+      ? Object.keys(storesMap).filter(sid => allowedStoreIds.has(sid))
+      : [selectedBranch];
+
+    storeIds.forEach(sid => {
+      byStore[sid] = {};
+      byStorePrev[sid] = {};
+      dates.forEach(dt => {
+        byStore[sid][dt] = { sales: 0, trans: 0, visitors: 0 };
+        const prevYearDate = `${prevYear}-${dt.substring(5)}`;
+        byStorePrev[sid][prevYearDate] = { sales: 0, trans: 0, visitors: 0 };
+      });
+    });
+
+    // Fill in the data
+    (raw.sales || []).forEach(([d, sid, v]: any[]) => {
+      const dateStr = String(d).substring(0, 10);
+      if (!storeIds.includes(sid)) return;
+      if (byStore[sid]?.[dateStr]) byStore[sid][dateStr].sales += v || 0;
+      const prevYearDate = `${prevYear}-${dateStr.substring(5)}`;
+      if (dateStr.startsWith(String(prevYear)) && byStorePrev[sid]?.[dateStr]) {
+        byStorePrev[sid][dateStr].sales += v || 0;
+      }
+    });
+
+    (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
+      const dateStr = String(d).substring(0, 10);
+      if (!storeIds.includes(sid)) return;
+      if (byStore[sid]?.[dateStr]) byStore[sid][dateStr].trans += v || 0;
+    });
+
+    (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
+      const dateStr = String(d).substring(0, 10);
+      if (!storeIds.includes(sid)) return;
+      if (byStore[sid]?.[dateStr]) byStore[sid][dateStr].visitors += v || 0;
+      if (dateStr.startsWith(String(prevYear)) && byStorePrev[sid]?.[dateStr]) {
+        byStorePrev[sid][dateStr].visitors += v || 0;
+      }
+    });
+
+    // Build global daily data
+    const globalData = dates.map(dt => {
+      const prevYearDate = `${prevYear}-${dt.substring(5)}`;
+      let sales = 0, salesPrev = 0, trans = 0, visitors = 0, visitorsPrev = 0;
+      storeIds.forEach(sid => {
+        sales += byStore[sid]?.[dt]?.sales || 0;
+        trans += byStore[sid]?.[dt]?.trans || 0;
+        visitors += byStore[sid]?.[dt]?.visitors || 0;
+        salesPrev += byStorePrev[sid]?.[prevYearDate]?.sales || 0;
+        visitorsPrev += byStorePrev[sid]?.[prevYearDate]?.visitors || 0;
+      });
+      const growth = salesPrev > 0 ? ((sales - salesPrev) / salesPrev * 100) : 0;
+      const avgInv = trans > 0 ? sales / trans : 0;
+      const customerValue = visitors > 0 ? sales / visitors : 0;
+      const conversion = visitors > 0 ? (trans / visitors * 100) : 0;
+      return { date: dt, sales, salesPrev, growth, trans, avgInv, customerValue, visitors, visitorsPrev, conversion };
+    });
+
+    // Build store data
+    const storesData = includeAllPages ? storeIds.map(sid => {
+      const storeName = storesMap[sid] || sid;
+      const storeMeta = meta[sid] || {};
+      const storeTarget = (raw.targets || []).filter(([d, s]: any[]) => s === sid && String(d).substring(0, 7) === startOfMonth.substring(0, 7)).reduce((acc: number, [, , v]: any[]) => acc + (v || 0), 0);
+
+      const dailyData = dates.map(dt => {
+        const prevYearDate = `${prevYear}-${dt.substring(5)}`;
+        const d = byStore[sid]?.[dt] || { sales: 0, trans: 0, visitors: 0 };
+        const dPrev = byStorePrev[sid]?.[prevYearDate] || { sales: 0, trans: 0, visitors: 0 };
+        const growth = dPrev.sales > 0 ? ((d.sales - dPrev.sales) / dPrev.sales * 100) : 0;
+        const avgInv = d.trans > 0 ? d.sales / d.trans : 0;
+        const customerValue = d.visitors > 0 ? d.sales / d.visitors : 0;
+        const conversion = d.visitors > 0 ? (d.trans / d.visitors * 100) : 0;
+        return {
+          date: dt,
+          sales: d.sales,
+          salesPrev: dPrev.sales,
+          growth,
+          trans: d.trans,
+          avgInv,
+          customerValue,
+          visitors: d.visitors,
+          visitorsPrev: dPrev.visitors,
+          conversion
+        };
+      });
+
+      return {
+        id: sid,
+        name: storeName,
+        manager: storeMeta.manager,
+        target: storeTarget,
+        dailyData
+      };
+    }) : [];
+
+    await generateStoreReportWithDaily(globalData, storesData, dateRange, storeIds.length);
+    setStoreReportModalOpen(false);
+  };
+
+  const handlePrintEmployeeReport = () => {
+    // Open employee report modal
+    setEmployeeReportModalOpen(true);
+  };
+
+  const handleGenerateEmployeeReport = async () => {
+    if (!empRaw?.history || !empRaw?.employee_names || !raw?.stores) return;
+
     const historyData: Record<string, any[]> = empRaw.history;
     const names: Record<string, string> = empRaw.employee_names;
     const targets: Record<string, number> = empRaw.targets || {};
+    const storesMap = raw.stores || {};
     const norm = (s: unknown) => String(s || '').substring(0, 10);
-
-    const agg: Record<string, any> = {};
     const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
 
-    // Helper to get total sales for share calculation
-    let totalYSales = 0;
-    let totalMSales = 0;
+    // Group employees by store
+    const byStore: Record<string, Record<string, any>> = {};
 
     Object.entries(historyData).forEach(([storeId, records]) => {
       if (!allowedStoreIds.has(storeId)) return;
+      if (!byStore[storeId]) byStore[storeId] = {};
+
       for (const rec of records || []) {
         const date = rec?.[0];
         const dateStr = norm(date);
         const sales = Number(rec?.[2]) || 0;
         const trans = Number(rec?.[3]) || 0;
 
-        // Filter Time Range
         if (dateStr < startOfMonth || dateStr > yesterdayStr) continue;
 
         const rawId = rec?.[1];
         let id = String(rawId || '').trim();
-        let name = id;
+        let empName = id;
         if (id.includes('-')) {
           const [a, b] = id.split('-');
           id = (a || '').trim();
-          name = (b || id).trim();
+          empName = (b || id).trim();
         }
-        if (!id || name === 'مرتجع') continue;
-        name = names[id] || names[id.padStart(4, '0')] || name;
+        if (!id || empName === 'مرتجع') continue;
+        empName = names[id] || names[id.padStart(4, '0')] || empName;
 
-        if (!agg[id]) agg[id] = {
-          name,
-          store: raw?.stores?.[storeId],
-          ySales: 0, yTrans: 0,
-          mSales: 0, mTrans: 0,
-          target: targets[id] ?? targets[id.padStart(4, '0')] ?? 0
-        };
+        if (!byStore[storeId][id]) {
+          byStore[storeId][id] = {
+            name: empName,
+            ySales: 0, yTrans: 0,
+            mSales: 0, mTrans: 0,
+            target: targets[id] ?? targets[id.padStart(4, '0')] ?? 0
+          };
+        }
 
         if (dateStr === yesterdayStr) {
-          agg[id].ySales += sales;
-          agg[id].yTrans += trans;
-          totalYSales += sales;
+          byStore[storeId][id].ySales += sales;
+          byStore[storeId][id].yTrans += trans;
         }
         if (dateStr >= startOfMonth && dateStr <= yesterdayStr) {
-          agg[id].mSales += sales;
-          agg[id].mTrans += trans;
-          totalMSales += sales;
+          byStore[storeId][id].mSales += sales;
+          byStore[storeId][id].mTrans += trans;
         }
       }
     });
 
-    const reportData = Object.values(agg).map((e: any) => {
-      const daysInMonth = new Date(yesterday.getFullYear(), yesterday.getMonth() + 1, 0).getDate();
-      const remainingDays = Math.max(0, daysInMonth - yesterday.getDate()); // From today onwards? Or including yesterday? Assume remaining from now.
-      const remaining = Math.max(0, e.target - e.mSales);
+    // Build store employee data for PDF
+    const storesData = Object.entries(byStore)
+      .filter(([, emps]) => Object.keys(emps).length > 0)
+      .map(([storeId, emps]) => {
+        const storeTotalYSales = Object.values(emps).reduce((s: number, e: any) => s + (e.ySales || 0), 0);
+        const storeTotalMSales = Object.values(emps).reduce((s: number, e: any) => s + (e.mSales || 0), 0);
+        const daysInMonth = new Date(yesterday.getFullYear(), yesterday.getMonth() + 1, 0).getDate();
+        const remainingDays = Math.max(0, daysInMonth - yesterday.getDate());
 
-      return {
-        ...e,
-        yShare: e.target > 0 ? (e.ySales / (e.target / daysInMonth)) * 100 : 0, // Approx daily share? Or share of store?
-        // The PDF service expects share of target usually or share of total.
-        // Let's use Achievement for MTD and Share of Total for Yesterday to match typical reports?
-        // Actually ReportsPage uses: yShare = ySales / (target.yestSales || 1) * 100;
-        // Here we don't have daily targets. Let's use Share of Total Sales for simplicity or just 0 if undefined.
-        yAvgInv: e.yTrans > 0 ? e.ySales / e.yTrans : 0,
-        mShare: e.target > 0 ? (e.mSales / e.target) * 100 : 0, // This is achievement actually?
-        mAvgInv: e.mTrans > 0 ? e.mSales / e.mTrans : 0,
-        achievement: e.target > 0 ? (e.mSales / e.target) * 100 : 0,
-        remaining,
-        dailyReq: remainingDays > 0 ? remaining / remainingDays : 0
-      };
-    }).sort((a: any, b: any) => b.mSales - a.mSales);
+        const employees = Object.values(emps).map((e: any) => {
+          const remaining = Math.max(0, e.target - e.mSales);
+          return {
+            name: e.name,
+            ySales: e.ySales,
+            yShare: storeTotalYSales > 0 ? (e.ySales / storeTotalYSales * 100) : 0,
+            yTrans: e.yTrans,
+            yAvgInv: e.yTrans > 0 ? e.ySales / e.yTrans : 0,
+            mSales: e.mSales,
+            mShare: storeTotalMSales > 0 ? (e.mSales / storeTotalMSales * 100) : 0,
+            mTrans: e.mTrans,
+            mAvgInv: e.mTrans > 0 ? e.mSales / e.mTrans : 0,
+            target: e.target,
+            achievement: e.target > 0 ? (e.mSales / e.target * 100) : 0,
+            remaining,
+            dailyReq: remainingDays > 0 ? remaining / remainingDays : 0
+          };
+        }).sort((a: any, b: any) => b.mSales - a.mSales);
 
-    // We need to import generateEmployeePerformancePDF from pdfService?
-    // It was named generateEmployeeReport in pdfService.ts. Let's check imports.
-    // Ah, dashboard page doesn't import it. I need to add import or just use what is available.
-    // The file pdfService.ts has `generateEmployeePerformancePDF`.
-    const { generateEmployeePerformancePDF } = await import('../services/pdf/pdfService');
-    generateEmployeePerformancePDF(reportData, { yesterday: yesterdayStr, monthStart: startOfMonth });
+        return {
+          storeId,
+          storeName: storesMap[storeId] || storeId,
+          employees
+        };
+      })
+      .sort((a, b) => {
+        const aSales = a.employees.reduce((s, e) => s + e.mSales, 0);
+        const bSales = b.employees.reduce((s, e) => s + e.mSales, 0);
+        return bSales - aSales;
+      });
+
+    await generateEmployeeReportByStore(storesData, { yesterday: yesterdayStr, monthStart: startOfMonth });
+    setEmployeeReportModalOpen(false);
   };
 
   const { allowedStoreIds, managers, branches, cities } = useMemo(() => {
@@ -920,69 +1062,80 @@ export default function DashboardPage() {
             </div>
 
             {/* Store List with Accordion */}
-            <div className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto">
-              {liveData.stores.map((store) => {
-                const isExpanded = expandedStoreId === store.sid;
-                return (
-                  <div
-                    key={store.sid}
-                    className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden identity-card transition-all"
-                  >
-                    {/* Store Header - clickable */}
+            <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-2">
+              {liveData.stores.length === 0 ? (
+                <div className="text-center py-8 text-neutral-500">لا توجد بيانات لهذا اليوم</div>
+              ) : (
+                liveData.stores.map((store, storeIdx) => {
+                  const isExpanded = expandedStoreId === store.sid;
+                  return (
                     <div
-                      onClick={() => setExpandedStoreId(isExpanded ? null : store.sid)}
-                      className="p-4 cursor-pointer hover:bg-neutral-50 transition-colors"
+                      key={store.sid}
+                      className="bg-white rounded-xl border border-neutral-200 overflow-hidden shadow-sm"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className={`transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
-                          <div>
-                            <div className="font-bold text-neutral-900">{store.name}</div>
-                            <div className="text-xs text-neutral-500 mt-1">
-                              {store.employees.length} موظفين • {store.trans} فاتورة
+                      {/* Store Header - clickable */}
+                      <div
+                        onClick={() => setExpandedStoreId(isExpanded ? null : store.sid)}
+                        className="p-3 cursor-pointer hover:bg-orange-50 transition-colors flex items-center justify-between gap-4"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="w-8 h-8 bg-orange-100 text-orange-600 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0">
+                            {storeIdx + 1}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-gray-900 text-sm truncate" style={{ color: '#111827' }}>
+                              {store.name || store.sid}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              👥 {store.employees?.length || 0} موظفين • 🧾 {store.trans || 0} فاتورة
                             </div>
                           </div>
                         </div>
-                        <div className="text-orange-600 font-bold text-xl" dir="ltr">{formatSAR(store.sales)}</div>
-                      </div>
-                    </div>
-
-                    {/* Employee List - Expandable */}
-                    {isExpanded && store.employees.length > 0 && (
-                      <div className="border-t border-neutral-200 bg-neutral-50">
-                        <div className="p-3 space-y-2">
-                          {store.employees.sort((a, b) => b.sales - a.sales).map((emp, idx) => (
-                            <div
-                              key={emp.id}
-                              className="flex items-center justify-between bg-white p-3 rounded-xl border border-neutral-100 hover:border-orange-200 transition-colors"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="w-6 h-6 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center text-xs font-bold">
-                                  {idx + 1}
-                                </span>
-                                <span className="font-medium text-neutral-900">{emp.name}</span>
-                              </div>
-                              <div className="flex items-center gap-4 text-sm">
-                                <div className="text-right">
-                                  <div className="font-bold text-primary-600" dir="ltr">{formatSAR(emp.sales)}</div>
-                                  <div className="text-xs text-neutral-500">{emp.trans} فاتورة</div>
-                                </div>
-                                <div className="text-right">
-                                  <div className="text-xs text-neutral-400">متوسط</div>
-                                  <div className="font-medium" dir="ltr">{formatSAR(emp.avgInv)}</div>
-                                </div>
-                                <div className="bg-orange-50 text-orange-700 px-2 py-1 rounded text-xs font-bold">
-                                  {store.sales > 0 ? ((emp.sales / store.sales) * 100).toFixed(1) : 0}%
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <div className="text-orange-600 font-bold text-lg" dir="ltr">{formatSAR(store.sales)}</div>
+                          <span className={`text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
                         </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+
+                      {/* Employee List - Expandable */}
+                      {isExpanded && (
+                        <div className="border-t border-neutral-200 bg-gray-50 p-3">
+                          {(!store.employees || store.employees.length === 0) ? (
+                            <div className="text-center text-sm text-gray-500 py-2">لا توجد بيانات موظفين</div>
+                          ) : (
+                            <div className="space-y-2">
+                              {store.employees.sort((a, b) => b.sales - a.sales).map((emp, idx) => (
+                                <div
+                                  key={emp.id}
+                                  className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-neutral-100"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <span className="w-5 h-5 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                      {idx + 1}
+                                    </span>
+                                    <span className="font-medium text-gray-900 text-sm truncate" style={{ color: '#111827' }}>
+                                      {emp.name || emp.id}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-xs flex-shrink-0">
+                                    <div className="text-left">
+                                      <div className="font-bold text-orange-600" dir="ltr">{formatSAR(emp.sales)}</div>
+                                      <div className="text-gray-400">{emp.trans} فاتورة</div>
+                                    </div>
+                                    <div className="bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded text-xs font-bold">
+                                      {store.sales > 0 ? ((emp.sales / store.sales) * 100).toFixed(0) : 0}%
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -1062,6 +1215,112 @@ export default function DashboardPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة اختيار الفرع للتقرير */}
+      {storeReportModalOpen && (
+        <div className="modal-center-screen" onClick={() => setStoreReportModalOpen(false)}>
+          <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">تصدير التقرير PDF</h3>
+              <button onClick={() => setStoreReportModalOpen(false)} className="text-neutral-500 hover:text-neutral-700">
+                <XIcon />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">اختر الفرع:</label>
+                <select
+                  className="input w-full"
+                  value={selectedBranch}
+                  onChange={(e) => setSelectedBranch(e.target.value)}
+                >
+                  <option value="all">الكل (ملخص عام)</option>
+                  {Array.from(allowedStoreIds).map(sid => (
+                    <option key={sid} value={sid}>{raw?.stores?.[sid] || sid}</option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedBranch === 'all' && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="includeAllPages"
+                    checked={includeAllPages}
+                    onChange={(e) => setIncludeAllPages(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <label htmlFor="includeAllPages" className="text-sm text-neutral-600">
+                    إنشاء صفحة تفصيلية لكل فرع (عند اختيار الكل)
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setStoreReportModalOpen(false)}
+                className="btn-secondary py-2 px-4"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleGenerateStoreReport}
+                className="btn-primary py-2 px-4"
+              >
+                تصدير
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تقرير الموظفين */}
+      {employeeReportModalOpen && (
+        <div className="modal-center-screen" onClick={() => setEmployeeReportModalOpen(false)}>
+          <div className="modal-content max-w-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-green-500">📄</span>
+                <h3 className="text-lg font-bold">اختيار الموظفين (PDF)</h3>
+              </div>
+              <button onClick={() => setEmployeeReportModalOpen(false)} className="text-neutral-500 hover:text-neutral-700">
+                <XIcon />
+              </button>
+            </div>
+            
+            <p className="text-sm text-neutral-600 mb-4">
+              سيتم إنشاء تقرير PDF يحتوي على صفحة لكل معرض مع بيانات الموظفين
+            </p>
+
+            <div className="bg-neutral-50 p-4 rounded-lg mb-4">
+              <div className="text-sm text-neutral-700">
+                <strong>الفترة:</strong> من {yesterdayStr.substring(0, 8)}01 إلى {yesterdayStr}
+              </div>
+              <div className="text-sm text-neutral-700 mt-1">
+                <strong>عدد المعارض:</strong> {allowedStoreIds.size}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setEmployeeReportModalOpen(false)}
+                className="btn-secondary py-2 px-4"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleGenerateEmployeeReport}
+                className="btn-primary py-2 px-4 flex items-center gap-2"
+              >
+                <PrinterIcon className="w-4 h-4" />
+                إنشاء التقرير
+              </button>
             </div>
           </div>
         </div>

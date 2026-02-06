@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { generateGlobalSalesPDF, generateEmployeePerformancePDF, generateDailyReportPDF } from '../services/pdf/pdfService';
+import { generateGlobalSalesPDF, generateEmployeePerformancePDF, generateDailyReportPDF, generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 
 import { getCurrentUser } from '../auth/storage';
@@ -245,55 +245,86 @@ export default function ReportsPage() {
     const history = rawEmp.history || {};
     const names = rawEmp.employee_names || {};
     const targets = rawEmp.targets || {};
+    const storesMap = rawMgmt.stores || {};
 
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
     const yStr = toYMD(yesterday);
+    const mtdStart = toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
 
-    const empData: Record<string, any> = {};
+    // Group employees by store
+    const byStore: Record<string, Record<string, any>> = {};
 
     Object.entries(history).forEach(([sid, recs]: [string, any]) => {
       if (!passFilter(sid)) return;
+      if (!byStore[sid]) byStore[sid] = {};
+
       (recs || []).forEach(([dt, eid, s, t]: any[]) => {
-        if (!empData[eid]) {
-          empData[eid] = {
-            id: eid,
-            name: names[eid] || eid,
+        const empId = String(eid || '').split('-')[0].trim();
+        if (!empId || empId === 'مرتجع') return;
+
+        if (!byStore[sid][empId]) {
+          byStore[sid][empId] = {
+            name: names[empId] || names[empId.padStart(4, '0')] || eid,
             ySales: 0, yTrans: 0,
             mSales: 0, mTrans: 0,
-            target: targets[eid] || 0
+            target: targets[empId] || targets[empId.padStart(4, '0')] || 0
           };
         }
         if (dt === yStr) {
-          empData[eid].ySales += s || 0;
-          empData[eid].yTrans += t || 0;
+          byStore[sid][empId].ySales += s || 0;
+          byStore[sid][empId].yTrans += t || 0;
         }
-        if (dt >= range.start && dt <= range.end) {
-          empData[eid].mSales += s || 0;
-          empData[eid].mTrans += t || 0;
+        if (dt >= mtdStart && dt <= yStr) {
+          byStore[sid][empId].mSales += s || 0;
+          byStore[sid][empId].mTrans += t || 0;
         }
       });
     });
 
-    const totalYSales = Object.values(empData).reduce((sum, e) => sum + e.ySales, 0);
-    const totalMSales = Object.values(empData).reduce((sum, e) => sum + e.mSales, 0);
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const remainingDays = Math.max(0, daysInMonth - yesterday.getDate());
 
-    const list = Object.values(empData).map(e => ({
-      ...e,
-      yShare: totalYSales > 0 ? (e.ySales / totalYSales) * 100 : 0,
-      mShare: totalMSales > 0 ? (e.mSales / totalMSales) * 100 : 0,
-      yAvgInv: e.yTrans > 0 ? e.ySales / e.yTrans : 0,
-      mAvgInv: e.mTrans > 0 ? e.mSales / e.mTrans : 0,
-      achievement: e.target > 0 ? (e.mSales / e.target) * 100 : 0,
-      remaining: Math.max(0, e.target - e.mSales),
+    // Build store employee data
+    const storesData = Object.entries(byStore)
+      .filter(([, emps]) => Object.keys(emps).length > 0)
+      .map(([storeId, emps]) => {
+        const storeTotalYSales = Object.values(emps).reduce((s: number, e: any) => s + (e.ySales || 0), 0);
+        const storeTotalMSales = Object.values(emps).reduce((s: number, e: any) => s + (e.mSales || 0), 0);
 
-      dailyReq: (new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate() + 1) > 0
-        ? Math.max(0, e.target - e.mSales) / (new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate() + 1)
-        : 0
-    }));
+        const employees = Object.values(emps).map((e: any) => {
+          const remaining = Math.max(0, e.target - e.mSales);
+          return {
+            name: e.name,
+            ySales: e.ySales,
+            yShare: storeTotalYSales > 0 ? (e.ySales / storeTotalYSales * 100) : 0,
+            yTrans: e.yTrans,
+            yAvgInv: e.yTrans > 0 ? e.ySales / e.yTrans : 0,
+            mSales: e.mSales,
+            mShare: storeTotalMSales > 0 ? (e.mSales / storeTotalMSales * 100) : 0,
+            mTrans: e.mTrans,
+            mAvgInv: e.mTrans > 0 ? e.mSales / e.mTrans : 0,
+            target: e.target,
+            achievement: e.target > 0 ? (e.mSales / e.target * 100) : 0,
+            remaining,
+            dailyReq: remainingDays > 0 ? remaining / remainingDays : 0
+          };
+        }).sort((a: any, b: any) => b.mSales - a.mSales);
 
-    setPreviewReport({ type: 'employee', data: list });
+        return {
+          storeId,
+          storeName: storesMap[storeId] || storeId,
+          employees
+        };
+      })
+      .sort((a, b) => {
+        const aSales = a.employees.reduce((s, e) => s + e.mSales, 0);
+        const bSales = b.employees.reduce((s, e) => s + e.mSales, 0);
+        return bSales - aSales;
+      });
+
+    setPreviewReport({ type: 'employee', data: storesData });
     setShowReportChoiceModal(false);
   };
 
@@ -760,10 +791,19 @@ export default function ReportsPage() {
                       const today = new Date();
                       const yest = new Date(today); yest.setDate(today.getDate() - 1);
                       const mStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                      await generateEmployeePerformancePDF(previewReport.data, {
-                        yesterday: yest.toISOString().split('T')[0],
-                        monthStart: mStart.toISOString().split('T')[0]
-                      });
+                      
+                      // Check if we have store-grouped data
+                      if (previewReport.data[0]?.storeId && previewReport.data[0]?.employees) {
+                        await generateEmployeeReportByStore(previewReport.data, {
+                          yesterday: yest.toISOString().split('T')[0],
+                          monthStart: mStart.toISOString().split('T')[0]
+                        });
+                      } else {
+                        await generateEmployeePerformancePDF(previewReport.data, {
+                          yesterday: yest.toISOString().split('T')[0],
+                          monthStart: mStart.toISOString().split('T')[0]
+                        });
+                      }
                     }
                   }}
                 >
@@ -894,69 +934,71 @@ export default function ReportsPage() {
 
               {previewReport.type === 'employee' && (
                 <div className="space-y-8">
-                  <table className="w-full report-table border-collapse">
-                    <thead>
-                      <tr>
-                        <th rowSpan={2}>الموظف</th>
-                        <th colSpan={4} className="bg-neutral-600">الأمس (Yesterday)</th>
-                        <th colSpan={8} className="bg-primary-600">الشهر الحالي (MTD)</th>
-                      </tr>
-                      <tr>
-                        <th>المبيعات</th>
-                        <th>مساهمة %</th>
-                        <th>العدد</th>
-                        <th>م. فاتورة</th>
-                        <th>المبيعات</th>
-                        <th>مساهمة %</th>
-                        <th>العدد</th>
-                        <th>م. فاتورة</th>
-                        <th>الهدف</th>
-                        <th>% تحقيق</th>
-                        <th>المتبقي</th>
-                        <th>يومية متبقية</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {previewReport.data.map((e: any) => {
-                        const now = new Date();
-                        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-                        const remainingDays = daysInMonth - now.getDate() + 1;
-                        const dailyReq = remainingDays > 0 ? e.remaining / remainingDays : 0;
-                        return (
-                          <tr key={e.id}>
-                            <td className="text-right font-bold">{e.name}</td>
-                            <td>{Math.round(e.ySales).toLocaleString()}</td>
-                            <td>{e.yShare.toFixed(0)}%</td>
-                            <td>{e.yTrans}</td>
-                            <td>{Math.round(e.yAvgInv).toLocaleString()}</td>
-                            <td className="font-bold text-primary-700">{Math.round(e.mSales).toLocaleString()}</td>
-                            <td>{e.mShare.toFixed(0)}%</td>
-                            <td>{e.mTrans}</td>
-                            <td>{Math.round(e.mAvgInv).toLocaleString()}</td>
-                            <td className="text-neutral-500">{Math.round(e.target).toLocaleString()}</td>
-                            <td className="font-bold">{e.achievement.toFixed(1)}%</td>
-                            <td className="text-red-500">{Math.round(e.remaining).toLocaleString()}</td>
-                            <td className="font-bold">{Math.round(dailyReq).toLocaleString()}</td>
+                  {/* Store-grouped employee data */}
+                  {previewReport.data.map((store: any) => (
+                    <div key={store.storeId} className="border border-neutral-200 rounded-xl overflow-hidden">
+                      <div className="bg-orange-500 text-white p-3 font-bold">
+                        {store.storeId} - {store.storeName}
+                      </div>
+                      <table className="w-full report-table border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-neutral-100">
+                            <th rowSpan={2} className="p-2 border">الموظف</th>
+                            <th colSpan={4} className="p-2 border bg-neutral-200">الأمس (Yesterday)</th>
+                            <th colSpan={8} className="p-2 border bg-neutral-300">الشهر الحالي (MTD)</th>
                           </tr>
-                        );
-                      })}
-                      <tr className="bg-neutral-100 font-bold">
-                        <td>الإجمالي</td>
-                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.ySales, 0)).toLocaleString()}</td>
-                        <td>100%</td>
-                        <td>{previewReport.data.reduce((s: any, x: any) => s + x.yTrans, 0)}</td>
-                        <td>-</td>
-                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.mSales, 0)).toLocaleString()}</td>
-                        <td>100%</td>
-                        <td>{previewReport.data.reduce((s: any, x: any) => s + x.mTrans, 0)}</td>
-                        <td>-</td>
-                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.target, 0)).toLocaleString()}</td>
-                        <td>{(previewReport.data.reduce((s: any, x: any) => s + x.mSales, 0) / (previewReport.data.reduce((s: any, x: any) => s + x.target, 0) || 1) * 100).toFixed(1)}%</td>
-                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.remaining, 0)).toLocaleString()}</td>
-                        <td>-</td>
-                      </tr>
-                    </tbody>
-                  </table>
+                          <tr className="bg-neutral-50 text-xs">
+                            <th className="p-2 border">المبيعات</th>
+                            <th className="p-2 border">مساهمة %</th>
+                            <th className="p-2 border">العدد</th>
+                            <th className="p-2 border">م. فاتورة</th>
+                            <th className="p-2 border">المبيعات</th>
+                            <th className="p-2 border">مساهمة %</th>
+                            <th className="p-2 border">العدد</th>
+                            <th className="p-2 border">م. فاتورة</th>
+                            <th className="p-2 border">الهدف</th>
+                            <th className="p-2 border">% تحقيق</th>
+                            <th className="p-2 border">المتبقي</th>
+                            <th className="p-2 border">يومية متبقية</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {store.employees.map((e: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-neutral-50">
+                              <td className="p-2 border text-right font-bold">{e.name}</td>
+                              <td className="p-2 border">{Math.round(e.ySales).toLocaleString()}</td>
+                              <td className="p-2 border">{e.yShare.toFixed(0)}%</td>
+                              <td className="p-2 border">{e.yTrans}</td>
+                              <td className="p-2 border">{Math.round(e.yAvgInv).toLocaleString()}</td>
+                              <td className="p-2 border font-bold text-primary-700">{Math.round(e.mSales).toLocaleString()}</td>
+                              <td className="p-2 border">{e.mShare.toFixed(0)}%</td>
+                              <td className="p-2 border">{e.mTrans}</td>
+                              <td className="p-2 border">{Math.round(e.mAvgInv).toLocaleString()}</td>
+                              <td className="p-2 border text-neutral-500">{Math.round(e.target).toLocaleString()}</td>
+                              <td className="p-2 border font-bold text-green-600">{e.achievement.toFixed(1)}%</td>
+                              <td className="p-2 border text-red-500">{Math.round(e.remaining).toLocaleString()}</td>
+                              <td className="p-2 border font-bold">{Math.round(e.dailyReq).toLocaleString()}</td>
+                            </tr>
+                          ))}
+                          <tr className="bg-neutral-100 font-bold">
+                            <td className="p-2 border">الإجمالي</td>
+                            <td className="p-2 border">{Math.round(store.employees.reduce((s: number, x: any) => s + x.ySales, 0)).toLocaleString()}</td>
+                            <td className="p-2 border">100%</td>
+                            <td className="p-2 border">{store.employees.reduce((s: number, x: any) => s + x.yTrans, 0)}</td>
+                            <td className="p-2 border">-</td>
+                            <td className="p-2 border">{Math.round(store.employees.reduce((s: number, x: any) => s + x.mSales, 0)).toLocaleString()}</td>
+                            <td className="p-2 border">100%</td>
+                            <td className="p-2 border">{store.employees.reduce((s: number, x: any) => s + x.mTrans, 0)}</td>
+                            <td className="p-2 border">-</td>
+                            <td className="p-2 border">{Math.round(store.employees.reduce((s: number, x: any) => s + x.target, 0)).toLocaleString()}</td>
+                            <td className="p-2 border">-</td>
+                            <td className="p-2 border">{Math.round(store.employees.reduce((s: number, x: any) => s + x.remaining, 0)).toLocaleString()}</td>
+                            <td className="p-2 border">-</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
