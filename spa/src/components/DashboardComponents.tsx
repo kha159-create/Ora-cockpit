@@ -479,9 +479,9 @@ export const GrowthTrajectoryChart: React.FC<{
           ))}
         </div>
 
-        {/* Scrollable Chart Area */}
-        <div className="flex-1 overflow-x-auto pb-2 scrollbar-hide touch-pan-x">
-          <div className="flex flex-col h-full min-w-[600px] md:min-w-0">
+        {/* Scrollable Chart Area - Added pt-14 for tooltip space */}
+        <div className="flex-1 overflow-x-auto pb-2 pt-14 scrollbar-hide touch-pan-x">
+          <div className="flex flex-col h-full min-w-[600px] md:min-w-0 relative">
             <div className="flex-1 relative border-b-2 border-slate-100">
               <div className="absolute inset-0 flex flex-col justify-between pointer-events-none py-2">
                 {ySteps.map(s => (
@@ -508,7 +508,7 @@ export const GrowthTrajectoryChart: React.FC<{
                       </div>
 
                       {/* Tooltip */}
-                      <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl opacity-0 hover:opacity-100 group-hover/bar:opacity-100 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap shadow-2xl border border-white/10 min-w-[160px] text-right hidden md:block">
+                      <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl opacity-0 hover:opacity-100 group-hover/bar:opacity-100 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap shadow-2xl border border-white/10 min-w-[160px] text-right">
                         <div className="text-[10px] font-black text-orange-400 mb-1.5 tracking-widest uppercase border-b border-white/10 pb-1">{d.name}</div>
                         {/* Tooltip content... (truncated for brevity in edit, preserving logic) */}
                         <div className="flex justify-between items-center mb-1">

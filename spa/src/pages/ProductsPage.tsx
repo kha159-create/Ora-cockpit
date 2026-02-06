@@ -539,13 +539,12 @@ export default function ProductsPage() {
 
 
       {/* Category performance */}
-      {/* Category performance */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
         {/* Bar Chart Card */}
-        <ChartCard title={`أداء الفئات (مرتبة حسب ${metricLabel})`}>
-          <div className="h-[400px]">
+        <ChartCard title={`أداء الفئات (مرتبة حسب ${metricLabel})`} className="h-[340px]">
+          <div className="h-full w-full">
             <BarChart
-              data={derived.categoriesAgg.slice(0, 12).map((c) => ({
+              data={derived.categoriesAgg.slice(0, 10).map((c) => ({
                 name: c.category,
                 value: metric === 'qty' ? c.qty : c.amount,
               }))}
@@ -556,26 +555,40 @@ export default function ProductsPage() {
           </div>
         </ChartCard>
 
-        {/* New Pie Chart Card with Stats */}
-        <ChartCard title="نسبة الفئات" icon={<ChartPieIcon className="w-5 h-5 text-orange-500" />}>
-          <div className="flex flex-col h-full justify-between">
-            <div className="h-[250px] relative">
-              <PieChart data={derived.categoriesAgg.slice(0, 8).map((c) => ({ name: c.category, value: metric === 'qty' ? c.qty : c.amount }))} vertical />
-            </div>
-            <div className="mt-4 space-y-3">
-              <div className="flex justify-between items-center p-3 bg-neutral-50 rounded-lg border border-neutral-100">
-                <span className="text-sm font-semibold text-neutral-600">إجمالي {metric === 'qty' ? 'الكمية' : 'القيمة'}</span>
-                <span className="text-lg font-bold text-neutral-900">
-                  {metric === 'qty' ? Math.round(derived.totals.totalQty).toLocaleString() : formatSAR(derived.totals.totalAmt)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center p-3 bg-orange-50 rounded-lg border border-orange-100">
-                <span className="text-sm font-semibold text-orange-700">أعلى فئة ({derived.categoriesAgg[0]?.category})</span>
-                <span className="text-lg font-bold text-orange-700 dir-ltr">
-                  {derived.categoriesAgg[0]?.sharePercent.toFixed(1)}%
-                </span>
-              </div>
-            </div>
+        {/* Categories Share List (Replaces Overlapping Pie/Stats) */}
+        <ChartCard title="نسبة الفئات (Category Share)" className="h-[340px] overflow-hidden">
+          <div className="h-full overflow-y-auto custom-scrollbar pr-1">
+            <table className="w-full">
+              <thead className="sticky top-0 bg-white z-10">
+                <tr className="text-xs text-neutral-500 border-b border-neutral-100">
+                  <th className="font-medium text-right pb-2">الفئة</th>
+                  <th className="font-medium text-center pb-2">النسبة</th>
+                  <th className="font-medium text-left pb-2 w-1/3">المساهمة</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-50">
+                {derived.categoriesAgg.map((c, idx) => (
+                  <tr key={c.category} className="group hover:bg-orange-50/50 transition-colors">
+                    <td className="py-2.5 text-xs sm:text-sm font-bold text-neutral-700">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${['bg-blue-500', 'bg-orange-500', 'bg-emerald-500', 'bg-purple-500'][idx % 4]}`} />
+                        <span className="truncate max-w-[150px]" title={c.category}>{c.category}</span>
+                      </div>
+                    </td>
+                    <td className="py-2.5 text-center">
+                      <span className="inline-block bg-neutral-100 text-neutral-700 text-[10px] font-bold px-1.5 py-0.5 rounded dir-ltr">
+                        {c.sharePercent.toFixed(1)}%
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-left dir-ltr">
+                      <div className="h-1.5 w-full bg-neutral-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-orange-500 rounded-full" style={{ width: `${c.sharePercent}%` }} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </ChartCard>
       </div>

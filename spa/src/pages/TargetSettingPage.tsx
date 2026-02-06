@@ -295,10 +295,8 @@ export default function TargetSettingPage() {
                 // Determine color based on strict achievement logic: <100 => Red, >=100 => Green
                 const achColor = r.prevAchievement >= 100 ? 'text-green-600' : 'text-red-600';
 
-                const targetDiff = r.newTarget - r.suggestedTarget;
-                const targetBg = targetDiff > 0 ? 'bg-green-50' : targetDiff < 0 ? 'bg-red-50' : '';
                 return (
-                  <tr key={r.id} className={`hover:bg-orange-50 border-b border-neutral-100 ${targetBg}`}>
+                  <tr key={r.id} className="hover:bg-orange-50 border-b border-neutral-100">
                     <td className="td text-center text-neutral-500">{i + 1}</td>
                     <td className="td font-semibold text-neutral-900">{r.name}</td>
                     <td className="td text-center">{formatSAR(r.prevSales)}</td>
