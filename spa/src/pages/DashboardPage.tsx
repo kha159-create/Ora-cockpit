@@ -988,7 +988,7 @@ export default function DashboardPage() {
 
   // Risk Analysis (Stores below expected achievement based on elapsed days)
   const riskAnalysis = useMemo(() => {
-    if (!raw?.sales || !raw?.targets) return { count: 0, expectedPct: 0, totalStores: 0 };
+    if (!raw?.sales || !raw?.targets) return { count: 0, expectedPct: 0, totalStores: 0, atRiskStores: [] };
 
     const now = new Date();
     // Format YYYY-MM for filtering
@@ -996,11 +996,11 @@ export default function DashboardPage() {
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const elapsedDays = now.getDate();
     // Formula: (100 / daysInMonth) * elapsedDays
-    // Example: 6th day of 28 => (100/28)*6 = 21.4%
     const expectedPct = (100 / daysInMonth) * elapsedDays;
 
     const storeStats: Record<string, { sales: number; target: number }> = {};
     const allow = (sid: string) => allowedStoreIds.has(sid);
+    const storeNames = raw.stores || {};
 
     (raw.sales || []).forEach(([d, s, v]: any[]) => {
       const dateStr = String(d);
@@ -1020,17 +1020,87 @@ export default function DashboardPage() {
 
     let count = 0;
     let total = 0;
-    Object.values(storeStats).forEach(st => {
+    const atRiskStores: any[] = [];
+
+    Object.entries(storeStats).forEach(([sid, st]) => {
       if (st.target > 0) {
         total++;
         const ach = (st.sales / st.target) * 100;
-        // User logic: If store is below the approx expected % (e.g. 21.4%), it is "At Risk"
-        if (ach < expectedPct) count++;
+        // User logic: If store is below the percentage... it is at risk
+        if (ach < expectedPct) {
+          count++;
+          atRiskStores.push({
+            sid,
+            name: storeNames[sid] || sid,
+            sales: st.sales,
+            target: st.target,
+            ach,
+            gap: expectedPct - ach,
+            status: (expectedPct - ach) > 10 ? 'Critical' : 'Medium'
+          });
+        }
       }
     });
 
-    return { count, expectedPct, totalStores: total };
+    return { count, expectedPct, totalStores: total, atRiskStores: atRiskStores.sort((a, b) => a.ach - b.ach) };
   }, [raw, allowedStoreIds]);
+
+  // Early Warning Widget Component (Internal)
+  const EarlyWarningWidget = () => {
+    if (riskAnalysis.atRiskStores.length === 0) return null;
+
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden animate-fade-in-up mt-6">
+        <div className="bg-orange-50/50 p-4 border-b border-orange-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-1 h-6 bg-orange-500 rounded-full" />
+            <h3 className="font-bold text-neutral-800 text-lg">التحليل المتقدم (Advanced Analysis)</h3>
+          </div>
+          <div className="flex items-center gap-2 text-sm font-medium text-orange-700 bg-orange-100/50 px-3 py-1 rounded-lg">
+            <ExclamationIcon className="w-4 h-4" />
+            الإنذار المبكر (Early Warning)
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-neutral-50/50 text-neutral-500 border-b border-neutral-100">
+                <th className="py-3 px-4 text-right font-semibold">الفرع</th>
+                <th className="py-3 px-4 text-right font-semibold">التحقيق (Achieved)</th>
+                <th className="py-3 px-4 text-center font-semibold">التقييم (Status)</th>
+                <th className="py-3 px-4 text-left font-semibold">المبيعات (Sales)</th>
+                <th className="py-3 px-4 text-left font-semibold">الهدف (Target)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-50">
+              {riskAnalysis.atRiskStores.slice(0, 10).map((st: any) => (
+                <tr key={st.sid} className="hover:bg-orange-50/10 transition-colors group">
+                  <td className="py-3 px-4 font-bold text-neutral-700">{st.name}</td>
+                  <td className="py-3 px-4 font-bold text-neutral-800 dir-ltr text-right">{st.ach.toFixed(1)}%</td>
+                  <td className="py-3 px-4 text-center">
+                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold border ${st.status === 'Critical'
+                      ? 'bg-red-100 text-red-700 border-red-200'
+                      : 'bg-yellow-100 text-yellow-700 border-yellow-200'
+                      }`}>
+                      {st.status}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-left font-medium text-neutral-600 dir-ltr">{formatSAR(st.sales)}</td>
+                  <td className="py-3 px-4 text-left font-medium text-neutral-500 dir-ltr">{formatSAR(st.target)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {riskAnalysis.atRiskStores.length > 10 && (
+            <div className="p-3 text-center text-xs text-neutral-400 bg-neutral-50/30 border-t border-neutral-100">
+              عرض 10 من {riskAnalysis.atRiskStores.length} معرض
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   if (!raw) {
     return (
@@ -1140,19 +1210,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3">
-        {/* New At Risk Card */}
-        <KPICard
-          title="معارض في خطر"
-          value={riskAnalysis.count}
-          subtitle={`أقل من ${riskAnalysis.expectedPct.toFixed(1)}%`}
-          icon={<ExclamationIcon className="w-6 h-6 text-red-500" />}
-          trend="down"
-          trendValue={`${riskAnalysis.totalStores > 0 ? ((riskAnalysis.count / riskAnalysis.totalStores) * 100).toFixed(0) : 0}% من المعارض`}
-          showProgress={false}
-          className="border-red-100 bg-red-50/30"
-        />
-
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2 sm:gap-3">
         <KPICard
           title="المبيعات"
           value={totals.sales}
@@ -1199,7 +1257,11 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Monthly Performance Chart */}
+
+
+
+      {/* Early Warning Widget (Advanced Analysis) */}
+      <EarlyWarningWidget />
       <GrowthTrajectoryChart
         data={monthlyChartData as any}
         mode={chartMode}
@@ -1276,167 +1338,169 @@ export default function DashboardPage() {
       </div>
 
       {/* نافذة مبيعات اليوم */}
-      {liveModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4" onClick={() => setLiveModalOpen(false)}>
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-3 sm:p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold">🛒 مبيعات اليوم — لايف</h2>
-                  <p className="text-orange-100 text-sm mt-1">
-                    📅 {toYMD(new Date())} • 🕒 {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-lg transition-colors"
-                  onClick={() => setLiveModalOpen(false)}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Manager Filter */}
-              {isAdminOrAuditor(user?.role) && (
-                <div className="mt-3 flex items-center gap-2">
-                  <span className="text-sm text-orange-100">مدير المنطقة:</span>
-                  <select
-                    className="bg-white/20 border border-white/30 text-white rounded-lg py-1 px-3 text-sm"
-                    value={manager}
-                    onChange={(e) => setManager(e.target.value)}
+      {
+        liveModalOpen && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4" onClick={() => setLiveModalOpen(false)}>
+            <div
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-3 sm:p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold">🛒 مبيعات اليوم — لايف</h2>
+                    <p className="text-orange-100 text-sm mt-1">
+                      📅 {toYMD(new Date())} • 🕒 {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-lg transition-colors"
+                    onClick={() => setLiveModalOpen(false)}
                   >
-                    <option value="all" className="text-black">الكل</option>
-                    {managers.map((m) => (
-                      <option key={m} value={m} className="text-black">{m}</option>
-                    ))}
-                  </select>
+                    ✕
+                  </button>
                 </div>
-              )}
-            </div>
 
-            {/* KPIs Summary */}
-            <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 border-b">
-              <div className="bg-white rounded-xl p-4 border shadow-sm">
-                <div className="text-sm text-gray-500">إجمالي المبيعات</div>
-                <div className="text-2xl font-bold text-orange-600" dir="ltr">{formatSAR(liveData.totals.sales)}</div>
+                {/* Manager Filter */}
+                {isAdminOrAuditor(user?.role) && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="text-sm text-orange-100">مدير المنطقة:</span>
+                    <select
+                      className="bg-white/20 border border-white/30 text-white rounded-lg py-1 px-3 text-sm"
+                      value={manager}
+                      onChange={(e) => setManager(e.target.value)}
+                    >
+                      <option value="all" className="text-black">الكل</option>
+                      {managers.map((m) => (
+                        <option key={m} value={m} className="text-black">{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
-              <div className="bg-white rounded-xl p-4 border shadow-sm">
-                <div className="text-sm text-gray-500">عدد الفواتير</div>
-                <div className="text-2xl font-bold text-blue-600">{liveData.totals.trans}</div>
-                <div className="text-xs text-gray-400">متوسط: {formatSAR(liveData.totals.trans > 0 ? liveData.totals.sales / liveData.totals.trans : 0)}</div>
-              </div>
-            </div>
 
-            {/* Store List */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <h3 className="text-sm font-bold text-gray-700 mb-3">المعارض ({liveData.stores.length})</h3>
-
-              {liveData.stores.length === 0 ? (
-                <div className="text-center py-12 text-gray-400">
-                  <div className="text-4xl mb-2">📊</div>
-                  <div>لا توجد بيانات مبيعات لهذا اليوم</div>
+              {/* KPIs Summary */}
+              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 border-b">
+                <div className="bg-white rounded-xl p-4 border shadow-sm">
+                  <div className="text-sm text-gray-500">إجمالي المبيعات</div>
+                  <div className="text-2xl font-bold text-orange-600" dir="ltr">{formatSAR(liveData.totals.sales)}</div>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {liveData.stores.map((store, idx) => {
-                    const isExpanded = expandedStoreId === store.sid;
-                    const storeName = store.name || raw?.stores?.[store.sid] || store.sid;
-                    return (
-                      <div key={store.sid} className="border rounded-xl overflow-hidden bg-white shadow-sm">
-                        {/* Store Row */}
-                        <div
-                          className="flex items-center gap-3 p-3 sm:p-4 cursor-pointer hover:bg-orange-50 transition-colors border-b border-gray-100"
-                          onClick={() => setExpandedStoreId(isExpanded ? null : store.sid)}
-                        >
-                          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-500 text-white rounded-lg flex items-center justify-center font-bold text-sm sm:text-base flex-shrink-0">
-                            {idx + 1}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="font-bold text-gray-900 text-base sm:text-lg truncate">{storeName}</div>
-                              <div className="font-bold text-orange-600 text-base sm:text-xl flex-shrink-0" dir="ltr">{formatSAR(store.sales)}</div>
+                <div className="bg-white rounded-xl p-4 border shadow-sm">
+                  <div className="text-sm text-gray-500">عدد الفواتير</div>
+                  <div className="text-2xl font-bold text-blue-600">{liveData.totals.trans}</div>
+                  <div className="text-xs text-gray-400">متوسط: {formatSAR(liveData.totals.trans > 0 ? liveData.totals.sales / liveData.totals.trans : 0)}</div>
+                </div>
+              </div>
+
+              {/* Store List */}
+              <div className="flex-1 overflow-y-auto p-4">
+                <h3 className="text-sm font-bold text-gray-700 mb-3">المعارض ({liveData.stores.length})</h3>
+
+                {liveData.stores.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400">
+                    <div className="text-4xl mb-2">📊</div>
+                    <div>لا توجد بيانات مبيعات لهذا اليوم</div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {liveData.stores.map((store, idx) => {
+                      const isExpanded = expandedStoreId === store.sid;
+                      const storeName = store.name || raw?.stores?.[store.sid] || store.sid;
+                      return (
+                        <div key={store.sid} className="border rounded-xl overflow-hidden bg-white shadow-sm">
+                          {/* Store Row */}
+                          <div
+                            className="flex items-center gap-3 p-3 sm:p-4 cursor-pointer hover:bg-orange-50 transition-colors border-b border-gray-100"
+                            onClick={() => setExpandedStoreId(isExpanded ? null : store.sid)}
+                          >
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-500 text-white rounded-lg flex items-center justify-center font-bold text-sm sm:text-base flex-shrink-0">
+                              {idx + 1}
                             </div>
-                            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600">
-                              <span className="flex items-center gap-1">
-                                <span>👥</span>
-                                <span className="font-medium">{store.employees?.length || 0} موظفين</span>
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <span>🧾</span>
-                                <span className="font-medium">{store.trans || 0} فاتورة</span>
-                              </span>
-                              {store.trans > 0 && (
-                                <span className="flex items-center gap-1 text-orange-600">
-                                  <span className="font-semibold">معدل:</span>
-                                  <span className="font-bold" dir="ltr">{formatSAR(store.sales / store.trans)}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="font-bold text-gray-900 text-base sm:text-lg truncate">{storeName}</div>
+                                <div className="font-bold text-orange-600 text-base sm:text-xl flex-shrink-0" dir="ltr">{formatSAR(store.sales)}</div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600">
+                                <span className="flex items-center gap-1">
+                                  <span>👥</span>
+                                  <span className="font-medium">{store.employees?.length || 0} موظفين</span>
                                 </span>
-                              )}
-                              {store.visitors > 0 && (
-                                <>
-                                  <span className="flex items-center gap-1 text-blue-600">
-                                    <span>👣</span>
-                                    <span className="font-medium">{store.visitors.toLocaleString()} زائر</span>
+                                <span className="flex items-center gap-1">
+                                  <span>🧾</span>
+                                  <span className="font-medium">{store.trans || 0} فاتورة</span>
+                                </span>
+                                {store.trans > 0 && (
+                                  <span className="flex items-center gap-1 text-orange-600">
+                                    <span className="font-semibold">معدل:</span>
+                                    <span className="font-bold" dir="ltr">{formatSAR(store.sales / store.trans)}</span>
                                   </span>
-                                  <span className="flex items-center gap-1 text-green-600">
-                                    <span className="font-semibold">تحويل:</span>
-                                    <span className="font-bold" dir="ltr">{((store.trans / store.visitors) * 100).toFixed(1)}%</span>
-                                  </span>
-                                </>
-                              )}
+                                )}
+                                {store.visitors > 0 && (
+                                  <>
+                                    <span className="flex items-center gap-1 text-blue-600">
+                                      <span>👣</span>
+                                      <span className="font-medium">{store.visitors.toLocaleString()} زائر</span>
+                                    </span>
+                                    <span className="flex items-center gap-1 text-green-600">
+                                      <span className="font-semibold">تحويل:</span>
+                                      <span className="font-bold" dir="ltr">{((store.trans / store.visitors) * 100).toFixed(1)}%</span>
+                                    </span>
+                                  </>
+                                )}
+                              </div>
                             </div>
+                            <div className={`text-gray-400 transition-transform text-xl ${isExpanded ? 'rotate-90' : ''} flex-shrink-0`}>▶</div>
                           </div>
-                          <div className={`text-gray-400 transition-transform text-xl ${isExpanded ? 'rotate-90' : ''} flex-shrink-0`}>▶</div>
-                        </div>
 
-                        {/* Employees Dropdown */}
-                        {isExpanded && store.employees && store.employees.length > 0 && (
-                          <div className="bg-gray-50 p-3 sm:p-4 overflow-x-auto">
-                            <table className="w-full text-xs sm:text-sm">
-                              <thead>
-                                <tr className="bg-white border-b-2 border-gray-200">
-                                  <th className="text-right py-2 px-2 font-bold text-gray-700">#</th>
-                                  <th className="text-right py-2 px-2 font-bold text-gray-700">الموظف</th>
-                                  <th className="text-left py-2 px-2 font-bold text-gray-700">المبيعات</th>
-                                  <th className="text-left py-2 px-2 font-bold text-gray-700">الفواتير</th>
-                                  <th className="text-left py-2 px-2 font-bold text-gray-700">معدل</th>
-                                  <th className="text-left py-2 px-2 font-bold text-gray-700">%</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {store.employees.sort((a, b) => b.sales - a.sales).map((emp, empIdx) => {
-                                  const avgInv = emp.avgInv || (emp.trans > 0 ? emp.sales / emp.trans : 0);
-                                  return (
-                                    <tr key={emp.id} className={`border-b border-gray-100 hover:bg-white transition-colors ${empIdx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}`}>
-                                      <td className="py-2 px-2 text-gray-500 font-medium text-center">{empIdx + 1}</td>
-                                      <td className="py-2 px-2 font-semibold text-gray-900">{emp.name || emp.id}</td>
-                                      <td className="py-2 px-2 font-bold text-orange-600" dir="ltr">{formatSAR(emp.sales)}</td>
-                                      <td className="py-2 px-2 text-gray-700 font-medium">{emp.trans}</td>
-                                      <td className="py-2 px-2 font-bold text-blue-600" dir="ltr">{formatSAR(avgInv)}</td>
-                                      <td className="py-2 px-2">
-                                        <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded-md text-xs font-bold">
-                                          {store.sales > 0 ? ((emp.sales / store.sales) * 100).toFixed(0) : 0}%
-                                        </span>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                          {/* Employees Dropdown */}
+                          {isExpanded && store.employees && store.employees.length > 0 && (
+                            <div className="bg-gray-50 p-3 sm:p-4 overflow-x-auto">
+                              <table className="w-full text-xs sm:text-sm">
+                                <thead>
+                                  <tr className="bg-white border-b-2 border-gray-200">
+                                    <th className="text-right py-2 px-2 font-bold text-gray-700">#</th>
+                                    <th className="text-right py-2 px-2 font-bold text-gray-700">الموظف</th>
+                                    <th className="text-left py-2 px-2 font-bold text-gray-700">المبيعات</th>
+                                    <th className="text-left py-2 px-2 font-bold text-gray-700">الفواتير</th>
+                                    <th className="text-left py-2 px-2 font-bold text-gray-700">معدل</th>
+                                    <th className="text-left py-2 px-2 font-bold text-gray-700">%</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {store.employees.sort((a, b) => b.sales - a.sales).map((emp, empIdx) => {
+                                    const avgInv = emp.avgInv || (emp.trans > 0 ? emp.sales / emp.trans : 0);
+                                    return (
+                                      <tr key={emp.id} className={`border-b border-gray-100 hover:bg-white transition-colors ${empIdx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}`}>
+                                        <td className="py-2 px-2 text-gray-500 font-medium text-center">{empIdx + 1}</td>
+                                        <td className="py-2 px-2 font-semibold text-gray-900">{emp.name || emp.id}</td>
+                                        <td className="py-2 px-2 font-bold text-orange-600" dir="ltr">{formatSAR(emp.sales)}</td>
+                                        <td className="py-2 px-2 text-gray-700 font-medium">{emp.trans}</td>
+                                        <td className="py-2 px-2 font-bold text-blue-600" dir="ltr">{formatSAR(avgInv)}</td>
+                                        <td className="py-2 px-2">
+                                          <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded-md text-xs font-bold">
+                                            {store.sales > 0 ? ((emp.sales / store.sales) * 100).toFixed(0) : 0}%
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div >
             </div >
           </div >
-        </div >
-      )}
+        )
+      }
 
       {/* نافذة التقرير اليومي */}
       {
@@ -1525,90 +1589,92 @@ export default function DashboardPage() {
       }
 
       {/* Top Selling & Category Performance */}
-      {prodDerived && (
-        <div className="grid grid-cols-1 gap-6 mt-6">
-          {/* Top Selling Products (Individual) - Full Width now */}
-          <ChartCard title="أكثر المنتجات مبيعاً (Top Selling Products)">
-            <div className="flex items-center justify-end mb-3 gap-2">
-              <div className="text-sm font-semibold text-neutral-500">الترتيب حسب:</div>
-              <div className="flex bg-neutral-100 rounded-lg p-1">
-                <button
-                  onClick={() => setTopSellingMetric('qty')}
-                  className={`px-3 py-1 rounded-md text-sm font-bold transition-all ${topSellingMetric === 'qty' ? 'bg-white text-orange-600 shadow' : 'text-neutral-500 hover:text-neutral-700'}`}
-                >
-                  📦 الكمية
-                </button>
-                <button
-                  onClick={() => setTopSellingMetric('val')}
-                  className={`px-3 py-1 rounded-md text-sm font-bold transition-all ${topSellingMetric === 'val' ? 'bg-white text-green-600 shadow' : 'text-neutral-500 hover:text-neutral-700'}`}
-                >
-                  💰 القيمة
-                </button>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="bg-orange-50/50">
-                    <th className="th w-[60px] text-center">#</th>
-                    <th className="th">المنتج</th>
-                    <th className="th text-center">الكمية</th>
-                    <th className="th text-center">سعر الوحدة</th>
-                    <th className="th text-center">القيمة</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const list = prodDerived.catalogRows;
-                    const totalPages = Math.ceil(list.length / TOP_SELLING_PER_PAGE);
-                    const safePage = Math.min(topSellingPage, totalPages);
-                    const start = (safePage - 1) * TOP_SELLING_PER_PAGE;
-                    const visible = list.slice(start, start + TOP_SELLING_PER_PAGE);
-
-                    return visible.map((p: any, idx: number) => {
-                      const unitPrice = p.qty > 0 ? p.amount / p.qty : 0;
-                      return (
-                        <tr key={p.id} className="hover:bg-orange-50 border-b border-neutral-100 last:border-0">
-                          <td className="td text-center text-neutral-500 font-mono">{start + idx + 1}</td>
-                          <td className="td">
-                            <div className="font-bold text-neutral-800">{p.name}</div>
-                            <div className="text-xs text-neutral-400 font-mono">{p.id}</div>
-                          </td>
-                          <td className={`td text-center font-semibold ${topSellingMetric === 'qty' ? 'text-orange-700 bg-orange-50/50' : 'text-neutral-600'}`}>
-                            {Math.round(p.qty).toLocaleString()}
-                          </td>
-                          <td className="td text-center text-neutral-600 font-mono">
-                            {formatSAR(unitPrice)}
-                          </td>
-                          <td className={`td text-center font-semibold ${topSellingMetric === 'val' ? 'text-green-700 bg-green-50/50' : 'text-neutral-600'}`} dir="ltr">
-                            {formatSAR(p.amount)}
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {prodDerived.catalogRows.length > TOP_SELLING_PER_PAGE && (() => {
-              const totalPages = Math.ceil(prodDerived.catalogRows.length / TOP_SELLING_PER_PAGE);
-              const safePage = Math.min(topSellingPage, totalPages);
-              return (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 mt-2">
-                  <div className="text-xs text-neutral-500">صفحة {safePage} من {totalPages}</div>
-                  <div className="flex gap-2">
-                    <button disabled={safePage <= 1} onClick={() => setTopSellingPage(safePage - 1)} className="px-2 py-1 border rounded disabled:opacity-50 text-xs">السابق</button>
-                    <button disabled={safePage >= totalPages} onClick={() => setTopSellingPage(safePage + 1)} className="px-2 py-1 border rounded disabled:opacity-50 text-xs">التالي</button>
-                  </div>
+      {
+        prodDerived && (
+          <div className="grid grid-cols-1 gap-6 mt-6">
+            {/* Top Selling Products (Individual) - Full Width now */}
+            <ChartCard title="أكثر المنتجات مبيعاً (Top Selling Products)">
+              <div className="flex items-center justify-end mb-3 gap-2">
+                <div className="text-sm font-semibold text-neutral-500">الترتيب حسب:</div>
+                <div className="flex bg-neutral-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setTopSellingMetric('qty')}
+                    className={`px-3 py-1 rounded-md text-sm font-bold transition-all ${topSellingMetric === 'qty' ? 'bg-white text-orange-600 shadow' : 'text-neutral-500 hover:text-neutral-700'}`}
+                  >
+                    📦 الكمية
+                  </button>
+                  <button
+                    onClick={() => setTopSellingMetric('val')}
+                    className={`px-3 py-1 rounded-md text-sm font-bold transition-all ${topSellingMetric === 'val' ? 'bg-white text-green-600 shadow' : 'text-neutral-500 hover:text-neutral-700'}`}
+                  >
+                    💰 القيمة
+                  </button>
                 </div>
-              );
-            })()}
-          </ChartCard>
-        </div>
-      )}
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="bg-orange-50/50">
+                      <th className="th w-[60px] text-center">#</th>
+                      <th className="th">المنتج</th>
+                      <th className="th text-center">الكمية</th>
+                      <th className="th text-center">سعر الوحدة</th>
+                      <th className="th text-center">القيمة</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const list = prodDerived.catalogRows;
+                      const totalPages = Math.ceil(list.length / TOP_SELLING_PER_PAGE);
+                      const safePage = Math.min(topSellingPage, totalPages);
+                      const start = (safePage - 1) * TOP_SELLING_PER_PAGE;
+                      const visible = list.slice(start, start + TOP_SELLING_PER_PAGE);
+
+                      return visible.map((p: any, idx: number) => {
+                        const unitPrice = p.qty > 0 ? p.amount / p.qty : 0;
+                        return (
+                          <tr key={p.id} className="hover:bg-orange-50 border-b border-neutral-100 last:border-0">
+                            <td className="td text-center text-neutral-500 font-mono">{start + idx + 1}</td>
+                            <td className="td">
+                              <div className="font-bold text-neutral-800">{p.name}</div>
+                              <div className="text-xs text-neutral-400 font-mono">{p.id}</div>
+                            </td>
+                            <td className={`td text-center font-semibold ${topSellingMetric === 'qty' ? 'text-orange-700 bg-orange-50/50' : 'text-neutral-600'}`}>
+                              {Math.round(p.qty).toLocaleString()}
+                            </td>
+                            <td className="td text-center text-neutral-600 font-mono">
+                              {formatSAR(unitPrice)}
+                            </td>
+                            <td className={`td text-center font-semibold ${topSellingMetric === 'val' ? 'text-green-700 bg-green-50/50' : 'text-neutral-600'}`} dir="ltr">
+                              {formatSAR(p.amount)}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {prodDerived.catalogRows.length > TOP_SELLING_PER_PAGE && (() => {
+                const totalPages = Math.ceil(prodDerived.catalogRows.length / TOP_SELLING_PER_PAGE);
+                const safePage = Math.min(topSellingPage, totalPages);
+                return (
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 mt-2">
+                    <div className="text-xs text-neutral-500">صفحة {safePage} من {totalPages}</div>
+                    <div className="flex gap-2">
+                      <button disabled={safePage <= 1} onClick={() => setTopSellingPage(safePage - 1)} className="px-2 py-1 border rounded disabled:opacity-50 text-xs">السابق</button>
+                      <button disabled={safePage >= totalPages} onClick={() => setTopSellingPage(safePage + 1)} className="px-2 py-1 border rounded disabled:opacity-50 text-xs">التالي</button>
+                    </div>
+                  </div>
+                );
+              })()}
+            </ChartCard>
+          </div>
+        )
+      }
 
       {/* نافذة اختيار الفرع للتقرير */}
       {
