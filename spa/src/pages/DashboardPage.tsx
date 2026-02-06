@@ -494,10 +494,14 @@ export default function DashboardPage() {
     const historyData: Record<string, any[]> = empRaw.history;
     const names: Record<string, string> = empRaw.employee_names;
     const targets: Record<string, number> = empRaw.targets || {};
+    const storeMeta: Record<string, any> = raw?.store_meta || {};
     const norm = (s: unknown) => String(s || '').substring(0, 10);
-    const agg: Record<string, { sales: number; trans: number; target: number }> = {};
+    const agg: Record<string, { sales: number; trans: number; target: number; name: string }> = {};
     Object.entries(historyData).forEach(([storeId, records]) => {
       if (!allowedStoreIds.has(storeId)) return;
+      // Exclude online stores
+      const storeType = String(storeMeta[storeId]?.type || '').toLowerCase();
+      if (storeType === 'online') return;
       for (const rec of records || []) {
         const date = rec?.[0];
         const rawId = rec?.[1];
@@ -505,26 +509,26 @@ export default function DashboardPage() {
         const trans = Number(rec?.[3]) || 0;
         if (!norm(date) || norm(date) < range.start || norm(date) > range.end) continue;
         let id = String(rawId || '').trim();
-        let name = id;
+        let empName = id;
         if (id.includes('-')) {
           const [a, b] = id.split('-');
           id = (a || '').trim();
-          name = (b || id).trim();
+          empName = (b || id).trim();
         }
-        if (!id || name === 'مرتجع') continue;
-        name = names[id] || names[id.padStart(4, '0')] || name;
-        if (!agg[id]) agg[id] = { sales: 0, trans: 0, target: targets[id] ?? targets[id.padStart(4, '0')] ?? 0 };
+        if (!id || empName === 'مرتجع') continue;
+        empName = names[id] || names[id.padStart(4, '0')] || empName;
+        if (!agg[id]) agg[id] = { sales: 0, trans: 0, target: targets[id] ?? targets[id.padStart(4, '0')] ?? 0, name: empName };
         agg[id].sales += sales;
         agg[id].trans += trans;
       }
     });
     return Object.entries(agg).map(([id, v]) => ({
-      name: names[id] || names[id.padStart(4, '0')] || id,
+      name: v.name || names[id] || names[id.padStart(4, '0')] || id,
       sales: v.sales,
       avg_inv: v.trans > 0 ? v.sales / v.trans : 0,
       achievement: v.target > 0 ? (v.sales / v.target) * 100 : 0,
     }));
-  }, [empRaw, range.start, range.end, allowedStoreIds]);
+  }, [empRaw, range.start, range.end, allowedStoreIds, raw?.store_meta]);
 
   if (err) {
     return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;

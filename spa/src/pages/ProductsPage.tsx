@@ -135,7 +135,7 @@ export default function ProductsPage() {
   }, []);
 
   // Reset page to 1 when filters change
-  useEffect(() => { setCurrentPage(1); }, [period, manager, city, store, search, catFilter, metric]);
+  useEffect(() => { setCurrentPage(1); }, [mode, manager, city, store, search, selectedCategory, metric]);
 
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;

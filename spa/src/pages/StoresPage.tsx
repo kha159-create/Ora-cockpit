@@ -806,6 +806,7 @@ export default function StoresPage() {
                   </td>
                   <td className="td text-center font-bold text-blue-600 font-mono">{formatSAR(s.dailyReq)}</td>
                   <td className="td text-center font-medium">{Math.round(s.trans).toLocaleString()}</td>
+                  <td className={`td text-center font-bold ${s.ach >= 100 ? 'text-green-600' : s.ach >= 80 ? 'text-yellow-600' : 'text-red-500'}`}>{s.ach.toFixed(1)}%</td>
                   <td className="td text-center font-mono">{formatSAR(s.avgInv)}</td>
                   <td className="td text-center font-bold text-orange-600">{s.conversion.toFixed(1)}%</td>
                   <td className="td text-center font-medium">{Math.round(s.visitors).toLocaleString()}</td>

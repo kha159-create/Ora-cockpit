@@ -12,7 +12,10 @@ function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
 }
 
-type PeriodKey = 'mtd' | '7d' | '14d' | '30d' | 'yest';
+function pad2(n: number) { return String(n).padStart(2, '0'); }
+function toYMD(d: Date) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+
+type PeriodKey = 'mtd' | '7d' | '14d' | '30d' | 'yest' | 'custom';
 
 export default function OffersPage() {
   const user = getCurrentUser();
@@ -25,6 +28,8 @@ export default function OffersPage() {
   const [period, setPeriod] = useState<PeriodKey>('mtd');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedOffer, setSelectedOffer] = useState<any>(null);
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
 
   useEffect(() => {
     loadOffersData()
@@ -78,36 +83,61 @@ export default function OffersPage() {
     return Array.isArray(data) ? data : (Array.isArray(data?.offers) ? data.offers : []);
   }, [data]);
 
-  const today = useMemo(() => new Date('2026-02-04'), []);
+  // Compute date range based on period
+  const dateRange = useMemo(() => {
+    const today = new Date();
+    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+    const ymd = (d: Date) => toYMD(d);
+
+    if (period === 'yest') return { start: ymd(yesterday), end: ymd(yesterday), label: 'أمس' };
+    if (period === '7d') {
+      const s = new Date(today); s.setDate(today.getDate() - 7);
+      return { start: ymd(s), end: ymd(yesterday), label: 'آخر 7 أيام' };
+    }
+    if (period === '14d') {
+      const s = new Date(today); s.setDate(today.getDate() - 14);
+      return { start: ymd(s), end: ymd(yesterday), label: 'آخر 14 يوم' };
+    }
+    if (period === '30d') {
+      const s = new Date(today); s.setDate(today.getDate() - 30);
+      return { start: ymd(s), end: ymd(yesterday), label: 'آخر 30 يوم' };
+    }
+    if (period === 'custom') {
+      const s = customStart || ymd(new Date(today.getFullYear(), today.getMonth(), 1));
+      const e = customEnd || ymd(yesterday);
+      return { start: s, end: e, label: `${s} → ${e}` };
+    }
+    // mtd
+    const mtdStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { start: ymd(mtdStart), end: ymd(yesterday), label: 'الشهر الحالي' };
+  }, [period, customStart, customEnd]);
 
   const offers = useMemo(() => {
-    const yesterdayDate = new Date(today);
-    yesterdayDate.setDate(today.getDate() - 1);
-    const yesterdayYMD = yesterdayDate.toISOString().split('T')[0];
-    const mtdStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const mtdStartYMD = mtdStart.toISOString().split('T')[0];
+    const { start, end } = dateRange;
+    const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayYMD = toYMD(yesterdayDate);
+    const storesMap = mgmt?.stores || {};
 
     return rawOffers.map((o: any) => {
       let yestSales = 0, yestDisc = 0, yestOps = 0;
-      let mtdSales = 0, mtdDisc = 0, mtdOps = 0;
+      let periodSales = 0, periodDisc = 0, periodOps = 0;
 
-      // Per-store breakdown
       const storeBreakdown: Record<string, { sales: number; disc: number; ops: number; name: string }> = {};
-      const storesMap = mgmt?.stores || {};
 
+      // Aggregate from stats (daily per-store sale records)
       const statsArray = o.stats || [];
       statsArray.forEach((s: any) => {
         const d = s.d;
         const sid = String(s.s);
         if (!allowedStoreIds.has(sid)) return;
 
-        if (d >= mtdStartYMD && d <= yesterdayYMD) {
+        if (d >= start && d <= end) {
           const sale = Number(s.bill ?? s.sale ?? 0);
           const disc = Number(s.disc ?? 0);
           const cnt = Number(s.cnt ?? 0);
-          mtdSales += sale;
-          mtdDisc += disc;
-          mtdOps += cnt;
+          periodSales += sale;
+          periodDisc += disc;
+          periodOps += cnt;
 
           if (!storeBreakdown[sid]) storeBreakdown[sid] = { sales: 0, disc: 0, ops: 0, name: storesMap[sid] || sid };
           storeBreakdown[sid].sales += sale;
@@ -122,16 +152,16 @@ export default function OffersPage() {
       });
 
       // Legacy fallback
-      if (mtdSales === 0 && mtdOps === 0 && o.stores) {
+      if (periodSales === 0 && periodOps === 0 && o.stores) {
         Object.keys(o.stores).forEach(sid => {
           if (allowedStoreIds.has(String(sid))) {
             const sObj = o.stores[sid] || {};
             const sale = Number(sObj.s_m ?? 0);
             const disc = Number(sObj.d_m ?? 0);
             const ops = Number(sObj.t_m ?? 0);
-            mtdSales += sale;
-            mtdDisc += disc;
-            mtdOps += ops;
+            periodSales += sale;
+            periodDisc += disc;
+            periodOps += ops;
             yestSales += Number(sObj.s_y ?? 0);
             yestDisc += Number(sObj.d_y ?? 0);
             yestOps += Number(sObj.t_y ?? 0);
@@ -144,101 +174,118 @@ export default function OffersPage() {
         });
       }
 
+      // Aggregate items within date range and allowed stores
+      const itemsRaw = o.items || [];
+      const itemAgg: Record<string, { id: string; name: string; qty: number }> = {};
+      itemsRaw.forEach((it: any) => {
+        const d = it.d;
+        const sid = String(it.s || '');
+        // Filter by date range and store
+        if (d && d >= start && d <= end && (sid === '' || allowedStoreIds.has(sid))) {
+          const itemId = String(it.i || it.id || it.item_id || '');
+          const itemName = String(it.n || it.name || it.item_name || itemId);
+          const qty = Math.abs(Number(it.q || it.qty || it.quantity || 0));
+          if (!itemId) return;
+          if (!itemAgg[itemId]) itemAgg[itemId] = { id: itemId, name: itemName, qty: 0 };
+          itemAgg[itemId].qty += qty;
+          // Use the longest/most descriptive name
+          if (itemName.length > itemAgg[itemId].name.length) itemAgg[itemId].name = itemName;
+        }
+      });
+      const aggregatedItems = Object.values(itemAgg).sort((a, b) => b.qty - a.qty);
+
       return {
         ...o,
         yestSales, yestDisc, yestOps,
-        mtdSales, mtdDisc, mtdOps,
+        periodSales, periodDisc, periodOps,
         yestEff: yestSales > 0 ? (yestSales / (yestSales + yestDisc)) * 100 : 100,
-        mtdEff: mtdSales > 0 ? (mtdSales / (mtdSales + mtdDisc)) * 100 : 100,
-        mtdAvgBasket: mtdOps > 0 ? mtdSales / mtdOps : 0,
+        periodEff: periodSales > 0 ? (periodSales / (periodSales + periodDisc)) * 100 : 100,
+        periodAvgBasket: periodOps > 0 ? periodSales / periodOps : 0,
         storeBreakdown,
+        aggregatedItems,
       };
     }).filter((o: any) => {
       if (statusFilter === 'Enabled' && (o.status === 'Disabled' || o.enabled === false)) return false;
       if (statusFilter === 'Disabled' && (o.status !== 'Disabled' && o.enabled !== false)) return false;
-      return o.mtdSales > 0 || o.mtdOps > 0 || o.yestSales > 0;
+      return o.periodSales > 0 || o.periodOps > 0 || o.yestSales > 0;
     });
-  }, [rawOffers, allowedStoreIds, today, statusFilter, mgmt]);
+  }, [rawOffers, allowedStoreIds, dateRange, statusFilter, mgmt]);
 
   const stats = useMemo(() => {
     const res = offers.reduce((acc: any, o: any) => {
       acc.totalYest += o.yestSales;
-      acc.totalMTD += o.mtdSales;
+      acc.totalPeriod += o.periodSales;
       acc.totalYestOps += o.yestOps;
-      acc.totalMTDOps += o.mtdOps;
-      acc.totalMTDDisc += o.mtdDisc;
+      acc.totalPeriodOps += o.periodOps;
+      acc.totalPeriodDisc += o.periodDisc;
       return acc;
-    }, { totalYest: 0, totalMTD: 0, totalYestOps: 0, totalMTDOps: 0, totalMTDDisc: 0 });
+    }, { totalYest: 0, totalPeriod: 0, totalYestOps: 0, totalPeriodOps: 0, totalPeriodDisc: 0 });
 
     return {
       ...res,
       totalOffers: offers.length,
-      mtdEff: res.totalMTD > 0 ? (res.totalMTD / (res.totalMTD + res.totalMTDDisc)) * 100 : 0,
-      mtdAvgBasket: res.totalMTDOps > 0 ? res.totalMTD / res.totalMTDOps : 0,
+      periodEff: res.totalPeriod > 0 ? (res.totalPeriod / (res.totalPeriod + res.totalPeriodDisc)) * 100 : 0,
+      periodAvgBasket: res.totalPeriodOps > 0 ? res.totalPeriod / res.totalPeriodOps : 0,
     };
   }, [offers]);
 
-  // Top products across all offers
+  // Top products across all offers (aggregated items)
   const topProducts = useMemo(() => {
     const prodMap = new Map<string, { id: string; name: string; qty: number; offerCount: number }>();
-    rawOffers.forEach((o: any) => {
-      const items = o.items || [];
+    offers.forEach((o: any) => {
+      const items = o.aggregatedItems || [];
       items.forEach((it: any) => {
-        const id = String(it.id || it.item_id || '');
-        const name = String(it.name || it.item_name || id);
-        const qty = Number(it.qty || it.quantity || 0);
-        const prev = prodMap.get(id) || { id, name, qty: 0, offerCount: 0 };
-        prev.qty += qty;
+        const prev = prodMap.get(it.id) || { id: it.id, name: it.name, qty: 0, offerCount: 0 };
+        prev.qty += it.qty;
         prev.offerCount += 1;
-        prodMap.set(id, prev);
+        if (it.name.length > prev.name.length) prev.name = it.name;
+        prodMap.set(it.id, prev);
       });
     });
     return Array.from(prodMap.values()).sort((a, b) => b.qty - a.qty).slice(0, 10);
-  }, [rawOffers]);
+  }, [offers]);
 
-  // Efficiency summary table
+  // Efficiency summary
   const efficiencySummary = useMemo(() => {
     return [...offers]
-      .filter((o: any) => o.mtdSales > 0)
-      .sort((a: any, b: any) => b.mtdEff - a.mtdEff)
+      .filter((o: any) => o.periodSales > 0)
+      .sort((a: any, b: any) => b.periodEff - a.periodEff)
       .slice(0, 15)
       .map((o: any) => ({
         name: o.name || o.offer_name || o.id || '-',
-        mtdEff: o.mtdEff,
-        mtdAvgBasket: o.mtdAvgBasket,
-        mtdSales: o.mtdSales,
-        mtdOps: o.mtdOps,
+        periodEff: o.periodEff,
+        periodAvgBasket: o.periodAvgBasket,
+        periodSales: o.periodSales,
+        periodOps: o.periodOps,
       }));
   }, [offers]);
 
   const exportToExcel = () => {
     const rows = offers.map((o: any) => ({
-      'كود العرض': o.code,
+      'كود العرض': o.id || o.code,
       'اسم العرض': o.name,
       'الحالة': o.status === 'Enabled' ? 'مفعل' : 'معطل',
       'مبيعات أمس': o.yestSales,
-      'مبيعات MTD': o.mtdSales,
+      [`مبيعات (${dateRange.label})`]: o.periodSales,
       'عمليات أمس': o.yestOps,
-      'عمليات MTD': o.mtdOps,
-      'خصم MTD': o.mtdDisc,
-      'كفاءة MTD %': o.mtdEff.toFixed(1) + '%'
+      [`عمليات (${dateRange.label})`]: o.periodOps,
+      [`خصم (${dateRange.label})`]: o.periodDisc,
+      'كفاءة %': o.periodEff.toFixed(1) + '%',
     }));
-    const mtdStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const mtdStartYMD = mtdStart.toISOString().split('T')[0];
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Offers Report');
-    XLSX.writeFile(wb, `Offers_Report_MTD_${mtdStartYMD}.xlsx`);
+    XLSX.writeFile(wb, `Offers_Report_${dateRange.start}_${dateRange.end}.xlsx`);
   };
 
   const top5 = useMemo(() => {
-    return [...offers].sort((a: any, b: any) => b.mtdSales - a.mtdSales).slice(0, 5);
+    return [...offers].sort((a: any, b: any) => b.periodSales - a.periodSales).slice(0, 5);
   }, [offers]);
 
   const weakOffers = useMemo(() => {
     return [...offers]
-      .filter((o: any) => o.mtdEff > 0 && o.mtdEff < 50)
-      .sort((a: any, b: any) => a.mtdEff - b.mtdEff)
+      .filter((o: any) => o.periodEff > 0 && o.periodEff < 50)
+      .sort((a: any, b: any) => a.periodEff - b.periodEff)
       .slice(0, 5);
   }, [offers]);
 
@@ -270,12 +317,23 @@ export default function OffersPage() {
       {/* Filters */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4">
         <div className="flex flex-wrap items-center gap-3 mb-3">
-          <span className="text-sm font-semibold text-neutral-600">الفترة (للمقارنة):</span>
+          <span className="text-sm font-semibold text-neutral-600">الفترة:</span>
           <div className="flex flex-wrap gap-2">
             <PeriodButton active={period === 'yest'} label="أمس" onClick={() => setPeriod('yest')} />
             <PeriodButton active={period === 'mtd'} label="الشهر الحالي" onClick={() => setPeriod('mtd')} />
+            <PeriodButton active={period === '7d'} label="7 أيام" onClick={() => setPeriod('7d')} />
+            <PeriodButton active={period === '14d'} label="14 يوم" onClick={() => setPeriod('14d')} />
+            <PeriodButton active={period === '30d'} label="30 يوم" onClick={() => setPeriod('30d')} />
+            <PeriodButton active={period === 'custom'} label="مخصص" onClick={() => setPeriod('custom')} />
           </div>
-          <span className="text-xs text-neutral-400 mr-auto">يتم عرض بيانات "أمس" و "تراكمي الشهر" جنباً إلى جنب تلقائياً.</span>
+          {period === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input type="date" className="input text-sm" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+              <span className="text-neutral-400">→</span>
+              <input type="date" className="input text-sm" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+            </div>
+          )}
+          <span className="text-xs text-neutral-400 mr-auto">{dateRange.label} | {dateRange.start} → {dateRange.end}</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {isAdminOrAuditor(user?.role) && (
@@ -316,26 +374,26 @@ export default function OffersPage() {
         </div>
       </div>
 
-      {/* KPI Cards - now includes Avg Basket + Total Discount */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
         <KPIBox label="إجمالي العروض" value={String(stats.totalOffers)} color="#f97316" />
         <KPIBox label="مبيعات أمس" value={formatSAR(stats.totalYest)} color="#10b981" />
-        <KPIBox label="مبيعات MTD" value={formatSAR(stats.totalMTD)} color="#10b981" />
-        <KPIBox label="عمليات MTD" value={stats.totalMTDOps.toLocaleString()} color="#3b82f6" />
-        <KPIBox label="كفاءة MTD" value={`${stats.mtdEff.toFixed(1)}%`} color="#8b5cf6" />
-        <KPIBox label="متوسط السلة" value={formatSAR(stats.mtdAvgBasket)} color="#0ea5e9" />
-        <KPIBox label="إجمالي الخصم MTD" value={formatSAR(stats.totalMTDDisc)} color="#ef4444" />
+        <KPIBox label={`مبيعات (${dateRange.label})`} value={formatSAR(stats.totalPeriod)} color="#10b981" />
+        <KPIBox label={`عمليات (${dateRange.label})`} value={stats.totalPeriodOps.toLocaleString()} color="#3b82f6" />
+        <KPIBox label="كفاءة" value={`${stats.periodEff.toFixed(1)}%`} color="#8b5cf6" />
+        <KPIBox label="متوسط السلة" value={formatSAR(stats.periodAvgBasket)} color="#0ea5e9" />
+        <KPIBox label="إجمالي الخصم" value={formatSAR(stats.totalPeriodDisc)} color="#ef4444" />
       </div>
 
-      {/* Top 5 Offers */}
+      {/* Top 5 */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
-        <h2 className="text-lg font-bold text-neutral-900 mb-4 border-r-4 border-orange-500 pr-2">أفضل 5 عروض (Top 5)</h2>
+        <h2 className="text-lg font-bold text-neutral-900 mb-4 border-r-4 border-orange-500 pr-2">أفضل 5 عروض</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {top5.length === 0 ? (
             <p className="text-neutral-500 col-span-full">لا توجد عروض لعرضها.</p>
           ) : (
             top5.map((o: any, i: number) => {
-              const pct = stats.totalMTD > 0 ? (o.mtdSales / stats.totalMTD) * 100 : 0;
+              const pct = stats.totalPeriod > 0 ? (o.periodSales / stats.totalPeriod) * 100 : 0;
               return (
                 <div
                   key={i}
@@ -348,9 +406,10 @@ export default function OffersPage() {
                   </div>
                   <div className="font-semibold text-neutral-900 text-sm mb-3 line-clamp-2">{o.name || o.offer_name || o.id || '-'}</div>
                   <div className="text-xs space-y-1 text-neutral-600">
-                    <div>مبيعات MTD: {formatSAR(o.mtdSales)}</div>
-                    <div>مبيعات أمس: {formatSAR(o.yestSales)}</div>
-                    <div>العمليات: {o.mtdOps.toLocaleString()}</div>
+                    <div>المبيعات: {formatSAR(o.periodSales)}</div>
+                    <div>أمس: {formatSAR(o.yestSales)}</div>
+                    <div>العمليات: {o.periodOps.toLocaleString()}</div>
+                    <div>المنتجات: {o.aggregatedItems?.length || 0}</div>
                   </div>
                 </div>
               );
@@ -360,13 +419,11 @@ export default function OffersPage() {
       </div>
 
       {/* Weak Offers */}
-      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
-        <h2 className="text-lg font-bold text-neutral-900 mb-4 border-r-4 border-red-500 pr-2">عروض ضعيفة الأداء</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          {weakOffers.length === 0 ? (
-            <p className="text-neutral-500 col-span-full">لا توجد عروض ضعيفة الأداء حسب معيار الكفاءة.</p>
-          ) : (
-            weakOffers.map((o: any, i: number) => (
+      {weakOffers.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
+          <h2 className="text-lg font-bold text-neutral-900 mb-4 border-r-4 border-red-500 pr-2">عروض ضعيفة الأداء</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {weakOffers.map((o: any, i: number) => (
               <div
                 key={i}
                 className="rounded-xl border border-red-200 p-4 bg-red-50/50 hover:shadow-md transition-shadow cursor-pointer"
@@ -374,24 +431,24 @@ export default function OffersPage() {
               >
                 <div className="flex justify-between items-start mb-2">
                   <span className="text-xs font-bold text-red-600">#{i + 1}</span>
-                  <span className="text-sm font-bold text-red-700">{o.mtdEff.toFixed(1)}%</span>
+                  <span className="text-sm font-bold text-red-700">{o.periodEff.toFixed(1)}%</span>
                 </div>
                 <div className="font-semibold text-neutral-900 text-sm mb-3 line-clamp-2">{o.name || o.offer_name || o.id || '-'}</div>
                 <div className="text-xs space-y-1 text-neutral-600">
-                  <div>المبيعات: {formatSAR(o.mtdSales)}</div>
-                  <div>الخصم: {formatSAR(o.mtdDisc)}</div>
-                  <div>العمليات: {o.mtdOps.toLocaleString()}</div>
+                  <div>المبيعات: {formatSAR(o.periodSales)}</div>
+                  <div>الخصم: {formatSAR(o.periodDisc)}</div>
+                  <div>العمليات: {o.periodOps.toLocaleString()}</div>
                 </div>
               </div>
-            ))
-          )}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Efficiency Summary Table */}
+      {/* Efficiency Summary */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
         <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-purple-50 to-white">
-          <h3 className="text-lg font-bold text-neutral-900">ملخص الكفاءة (Efficiency Summary)</h3>
+          <h3 className="text-lg font-bold text-neutral-900">ملخص الكفاءة</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -410,10 +467,10 @@ export default function OffersPage() {
                 <tr key={i} className="border-b border-neutral-100 hover:bg-purple-50 transition-colors">
                   <td className="py-3 px-4 text-neutral-500">{i + 1}</td>
                   <td className="py-3 px-4 font-bold text-neutral-900">{o.name}</td>
-                  <td className={`py-3 px-4 text-center font-bold ${o.mtdEff >= 80 ? 'text-green-600' : o.mtdEff >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{o.mtdEff.toFixed(1)}%</td>
-                  <td className="py-3 px-4 text-center font-semibold text-blue-700">{formatSAR(o.mtdAvgBasket)}</td>
-                  <td className="py-3 px-4 text-center">{formatSAR(o.mtdSales)}</td>
-                  <td className="py-3 px-4 text-center">{o.mtdOps.toLocaleString()}</td>
+                  <td className={`py-3 px-4 text-center font-bold ${o.periodEff >= 80 ? 'text-green-600' : o.periodEff >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{o.periodEff.toFixed(1)}%</td>
+                  <td className="py-3 px-4 text-center font-semibold text-blue-700">{formatSAR(o.periodAvgBasket)}</td>
+                  <td className="py-3 px-4 text-center">{formatSAR(o.periodSales)}</td>
+                  <td className="py-3 px-4 text-center">{o.periodOps.toLocaleString()}</td>
                 </tr>
               ))}
               {efficiencySummary.length === 0 && (
@@ -424,7 +481,7 @@ export default function OffersPage() {
         </div>
       </div>
 
-      {/* Top Products in Offers */}
+      {/* Top Products */}
       {topProducts.length > 0 && (
         <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
           <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-green-50 to-white">
@@ -461,7 +518,7 @@ export default function OffersPage() {
       {/* Offers List */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
         <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white">
-          <h3 className="text-lg font-bold text-neutral-900">قائمة العروض (Offers List)</h3>
+          <h3 className="text-lg font-bold text-neutral-900">قائمة العروض ({offers.length})</h3>
         </div>
         <div className="overflow-x-auto">
           {offers.length === 0 ? (
@@ -472,13 +529,14 @@ export default function OffersPage() {
                 <tr className="bg-neutral-800 text-white">
                   <th className="py-3 px-4 text-right">#</th>
                   <th className="py-3 px-4 text-right">اسم العرض</th>
-                  <th className="py-3 px-4 text-center bg-neutral-700/50">مبيعات أمس</th>
+                  <th className="py-3 px-4 text-center bg-neutral-700/50">أمس</th>
                   <th className="py-3 px-4 text-center bg-neutral-700/50">فواتير أمس</th>
-                  <th className="py-3 px-4 text-center">مبيعات MTD</th>
-                  <th className="py-3 px-4 text-center">فواتير MTD</th>
-                  <th className="py-3 px-4 text-center">خصم MTD</th>
-                  <th className="py-3 px-4 text-center">كفاءة MTD</th>
+                  <th className="py-3 px-4 text-center">المبيعات</th>
+                  <th className="py-3 px-4 text-center">الفواتير</th>
+                  <th className="py-3 px-4 text-center">الخصم</th>
+                  <th className="py-3 px-4 text-center">كفاءة</th>
                   <th className="py-3 px-4 text-center">م. السلة</th>
+                  <th className="py-3 px-4 text-center">منتجات</th>
                 </tr>
               </thead>
               <tbody>
@@ -492,11 +550,12 @@ export default function OffersPage() {
                     <td className="py-3 px-4 font-bold text-neutral-900">{o.name || o.offer_name || o.id || '-'}</td>
                     <td className="py-3 px-4 text-center font-bold text-green-600 bg-green-50/30">{formatSAR(o.yestSales)}</td>
                     <td className="py-3 px-4 text-center text-neutral-600 bg-green-50/30">{o.yestOps.toLocaleString()}</td>
-                    <td className="py-3 px-4 text-center font-bold text-blue-700">{formatSAR(o.mtdSales)}</td>
-                    <td className="py-3 px-4 text-center font-medium">{o.mtdOps.toLocaleString()}</td>
-                    <td className="py-3 px-4 text-center text-red-500 font-mono">{o.mtdDisc.toLocaleString()}</td>
-                    <td className="py-3 px-4 text-center font-black text-orange-600">{o.mtdEff.toFixed(1)}%</td>
-                    <td className="py-3 px-4 text-center text-sky-700 font-semibold">{formatSAR(o.mtdAvgBasket)}</td>
+                    <td className="py-3 px-4 text-center font-bold text-blue-700">{formatSAR(o.periodSales)}</td>
+                    <td className="py-3 px-4 text-center font-medium">{o.periodOps.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-center text-red-500 font-mono">{o.periodDisc.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-center font-black text-orange-600">{o.periodEff.toFixed(1)}%</td>
+                    <td className="py-3 px-4 text-center text-sky-700 font-semibold">{formatSAR(o.periodAvgBasket)}</td>
+                    <td className="py-3 px-4 text-center text-neutral-600">{o.aggregatedItems?.length || 0}</td>
                   </tr>
                 ))}
               </tbody>
@@ -509,54 +568,63 @@ export default function OffersPage() {
       {selectedOffer && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setSelectedOffer(null)}>
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="sticky top-0 bg-white border-b border-neutral-200 p-4 flex items-center justify-between rounded-t-2xl z-10">
-              <h2 className="text-lg font-bold text-neutral-900">{selectedOffer.name || selectedOffer.offer_name || '-'}</h2>
+              <div>
+                <h2 className="text-lg font-bold text-neutral-900">{selectedOffer.name || selectedOffer.offer_name || '-'}</h2>
+                <div className="text-xs text-neutral-500 mt-1">{selectedOffer.id || ''} | {selectedOffer.status || ''} | {dateRange.label}</div>
+              </div>
               <button onClick={() => setSelectedOffer(null)} className="p-2 hover:bg-neutral-100 rounded-lg"><XIcon /></button>
             </div>
 
             <div className="p-6 space-y-6">
               {/* Offer KPIs */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <div className="bg-green-50 rounded-xl p-3 text-center">
-                  <div className="text-xs text-neutral-500 font-semibold">مبيعات MTD</div>
-                  <div className="text-lg font-bold text-green-700">{formatSAR(selectedOffer.mtdSales)}</div>
+                  <div className="text-xs text-neutral-500 font-semibold">المبيعات</div>
+                  <div className="text-lg font-bold text-green-700">{formatSAR(selectedOffer.periodSales)}</div>
                 </div>
                 <div className="bg-red-50 rounded-xl p-3 text-center">
-                  <div className="text-xs text-neutral-500 font-semibold">خصم MTD</div>
-                  <div className="text-lg font-bold text-red-600">{formatSAR(selectedOffer.mtdDisc)}</div>
+                  <div className="text-xs text-neutral-500 font-semibold">الخصم</div>
+                  <div className="text-lg font-bold text-red-600">{formatSAR(selectedOffer.periodDisc)}</div>
                 </div>
                 <div className="bg-orange-50 rounded-xl p-3 text-center">
                   <div className="text-xs text-neutral-500 font-semibold">كفاءة %</div>
-                  <div className="text-lg font-bold text-orange-700">{selectedOffer.mtdEff.toFixed(1)}%</div>
+                  <div className="text-lg font-bold text-orange-700">{selectedOffer.periodEff.toFixed(1)}%</div>
                 </div>
                 <div className="bg-blue-50 rounded-xl p-3 text-center">
                   <div className="text-xs text-neutral-500 font-semibold">متوسط السلة</div>
-                  <div className="text-lg font-bold text-blue-700">{formatSAR(selectedOffer.mtdAvgBasket)}</div>
+                  <div className="text-lg font-bold text-blue-700">{formatSAR(selectedOffer.periodAvgBasket)}</div>
+                </div>
+                <div className="bg-purple-50 rounded-xl p-3 text-center">
+                  <div className="text-xs text-neutral-500 font-semibold">العمليات</div>
+                  <div className="text-lg font-bold text-purple-700">{selectedOffer.periodOps.toLocaleString()}</div>
                 </div>
               </div>
 
               {/* Products Breakdown */}
-              {Array.isArray(selectedOffer.items) && selectedOffer.items.length > 0 && (
+              {selectedOffer.aggregatedItems && selectedOffer.aggregatedItems.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-bold text-neutral-700 mb-2 border-r-4 border-orange-400 pr-2">منتجات العرض ({selectedOffer.items.length})</h3>
-                  <div className="overflow-x-auto rounded-lg border border-neutral-200">
+                  <h3 className="text-sm font-bold text-neutral-700 mb-2 border-r-4 border-orange-400 pr-2">منتجات العرض ({selectedOffer.aggregatedItems.length})</h3>
+                  <div className="overflow-x-auto rounded-lg border border-neutral-200 max-h-[300px] overflow-y-auto">
                     <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-neutral-100">
+                      <thead className="sticky top-0 bg-neutral-100">
+                        <tr>
+                          <th className="py-2 px-3 text-right">#</th>
                           <th className="py-2 px-3 text-right">كود</th>
                           <th className="py-2 px-3 text-right">المنتج</th>
                           <th className="py-2 px-3 text-center">الكمية</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedOffer.items.map((it: any, idx: number) => (
+                        {selectedOffer.aggregatedItems.map((it: any, idx: number) => (
                           <tr key={idx} className="border-t border-neutral-100 hover:bg-orange-50">
-                            <td className="py-2 px-3 font-mono text-xs text-neutral-500">{it.id || it.item_id || '-'}</td>
-                            <td className="py-2 px-3 font-semibold text-neutral-900">{it.name || it.item_name || '-'}</td>
-                            <td className="py-2 px-3 text-center font-bold text-orange-700">{Math.round(Number(it.qty || it.quantity || 0)).toLocaleString()}</td>
+                            <td className="py-2 px-3 text-neutral-400 text-xs">{idx + 1}</td>
+                            <td className="py-2 px-3 font-mono text-xs text-neutral-500">{it.id}</td>
+                            <td className="py-2 px-3 font-semibold text-neutral-900 text-sm">{it.name}</td>
+                            <td className="py-2 px-3 text-center font-bold text-orange-700">{Math.round(it.qty).toLocaleString()}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -565,10 +633,15 @@ export default function OffersPage() {
                 </div>
               )}
 
+              {/* No items message */}
+              {(!selectedOffer.aggregatedItems || selectedOffer.aggregatedItems.length === 0) && (
+                <div className="text-center p-6 bg-neutral-50 rounded-xl text-neutral-500 text-sm">لا توجد بيانات منتجات لهذا العرض في الفترة المحددة.</div>
+              )}
+
               {/* Per-Store Breakdown */}
               {selectedOffer.storeBreakdown && Object.keys(selectedOffer.storeBreakdown).length > 0 && (
                 <div>
-                  <h3 className="text-sm font-bold text-neutral-700 mb-2 border-r-4 border-blue-400 pr-2">أداء العرض حسب المعرض</h3>
+                  <h3 className="text-sm font-bold text-neutral-700 mb-2 border-r-4 border-blue-400 pr-2">أداء العرض حسب المعرض ({Object.keys(selectedOffer.storeBreakdown).length})</h3>
                   <div className="overflow-x-auto rounded-lg border border-neutral-200">
                     <table className="w-full text-sm">
                       <thead>
@@ -621,8 +694,7 @@ function PeriodButton({ active, label, onClick }: { active: boolean; label: stri
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${active ? 'bg-orange-600 text-white shadow-md' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
-        }`}
+      className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${active ? 'bg-orange-600 text-white shadow-md' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}
     >
       {label}
     </button>
