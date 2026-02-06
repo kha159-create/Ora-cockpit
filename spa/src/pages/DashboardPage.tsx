@@ -239,64 +239,6 @@ export default function DashboardPage() {
     setStoreReportModalOpen(false);
   };
 
-  const handlePrintEmployeeReport = () => {
-    // Initialize employee selection with all active employees
-    const allEmpIds = new Set<string>();
-    const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
-    Object.entries(empRaw?.history || {}).forEach(([sid, recs]: [string, any]) => {
-      if (!allowedStoreIds.has(sid)) return;
-      (recs || []).forEach((rec: any) => {
-        const dt = rec?.[0];
-        if (dt >= startOfMonth && dt <= yesterdayStr) {
-          const empId = String(rec?.[1] || '').split('-')[0].trim();
-          if (empId && empId !== 'مرتجع') allEmpIds.add(empId);
-        }
-      });
-    });
-    setSelectedEmployees(allEmpIds);
-    setEmpFilterBranch('all');
-    setEmpFilterStatus(new Set(['active']));
-    setEmployeeReportModalOpen(true);
-  };
-
-  // Calculate employee list for selection modal
-  const employeeListForSelection = useMemo(() => {
-    if (!empRaw?.history || !empRaw?.employee_names || !raw?.stores) return [];
-    const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
-    const historyData: Record<string, any[]> = empRaw.history;
-    const names: Record<string, string> = empRaw.employee_names;
-    const storesMap = raw.stores || {};
-    
-    const empData: Record<string, { id: string; name: string; storeId: string; storeName: string; sales: number }> = {};
-    
-    Object.entries(historyData).forEach(([sid, recs]: [string, any]) => {
-      if (!allowedStoreIds.has(sid)) return;
-      (recs || []).forEach((rec: any) => {
-        const dt = rec?.[0];
-        if (dt < startOfMonth || dt > yesterdayStr) return;
-        const rawId = rec?.[1];
-        let empId = String(rawId || '').split('-')[0].trim();
-        if (!empId || empId === 'مرتجع') return;
-        
-        const sales = Number(rec?.[2]) || 0;
-        const empName = names[empId] || names[empId.padStart(4, '0')] || rawId;
-        
-        if (!empData[empId]) {
-          empData[empId] = {
-            id: empId,
-            name: empName,
-            storeId: sid,
-            storeName: storesMap[sid] || sid,
-            sales: 0
-          };
-        }
-        empData[empId].sales += sales;
-      });
-    });
-    
-    return Object.values(empData).sort((a, b) => b.sales - a.sales);
-  }, [empRaw, raw, yesterdayStr, allowedStoreIds]);
-
   const handleGenerateEmployeeReport = async () => {
     if (!empRaw?.history || !empRaw?.employee_names || !raw?.stores) return;
 
@@ -591,6 +533,69 @@ export default function DashboardPage() {
   const ach = totals.target > 0 ? (totals.sales / totals.target) * 100 : 0;
   // Live data (today only)
   const todayStr = toYMD(new Date());
+  // Daily Report data (yesterday vs last year)
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = toYMD(yesterday);
+
+  const handlePrintEmployeeReport = () => {
+    // Initialize employee selection with all active employees
+    const allEmpIds = new Set<string>();
+    const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
+    Object.entries(empRaw?.history || {}).forEach(([sid, recs]: [string, any]) => {
+      if (!allowedStoreIds.has(sid)) return;
+      (recs || []).forEach((rec: any) => {
+        const dt = rec?.[0];
+        if (dt >= startOfMonth && dt <= yesterdayStr) {
+          const empId = String(rec?.[1] || '').split('-')[0].trim();
+          if (empId && empId !== 'مرتجع') allEmpIds.add(empId);
+        }
+      });
+    });
+    setSelectedEmployees(allEmpIds);
+    setEmpFilterBranch('all');
+    setEmpFilterStatus(new Set(['active']));
+    setEmployeeReportModalOpen(true);
+  };
+
+  // Calculate employee list for selection modal
+  const employeeListForSelection = useMemo(() => {
+    if (!empRaw?.history || !empRaw?.employee_names || !raw?.stores) return [];
+    const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
+    const historyData: Record<string, any[]> = empRaw.history;
+    const names: Record<string, string> = empRaw.employee_names;
+    const storesMap = raw.stores || {};
+    
+    const empData: Record<string, { id: string; name: string; storeId: string; storeName: string; sales: number }> = {};
+    
+    Object.entries(historyData).forEach(([sid, recs]: [string, any]) => {
+      if (!allowedStoreIds.has(sid)) return;
+      (recs || []).forEach((rec: any) => {
+        const dt = rec?.[0];
+        if (dt < startOfMonth || dt > yesterdayStr) return;
+        const rawId = rec?.[1];
+        let empId = String(rawId || '').split('-')[0].trim();
+        if (!empId || empId === 'مرتجع') return;
+        
+        const sales = Number(rec?.[2]) || 0;
+        const empName = names[empId] || names[empId.padStart(4, '0')] || rawId;
+        
+        if (!empData[empId]) {
+          empData[empId] = {
+            id: empId,
+            name: empName,
+            storeId: sid,
+            storeName: storesMap[sid] || sid,
+            sales: 0
+          };
+        }
+        empData[empId].sales += sales;
+      });
+    });
+    
+    return Object.values(empData).sort((a, b) => b.sales - a.sales);
+  }, [empRaw, raw, yesterdayStr, allowedStoreIds]);
+
   const liveData = useMemo(() => {
     if (!raw || !empRaw) return { totals: { sales: 0, trans: 0 }, stores: [] };
     const meta = raw.store_meta || {};
@@ -666,10 +671,6 @@ export default function DashboardPage() {
     return { totals: { sales: totalSales, trans: totalTrans }, stores: storeList };
   }, [raw, empRaw, todayStr, effectiveManager, allowedStoreIds]);
 
-  // Daily Report data (yesterday vs last year)
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = toYMD(yesterday);
   const lastYearYesterday = new Date(yesterday);
   lastYearYesterday.setFullYear(lastYearYesterday.getFullYear() - 1);
   const lastYearYesterdayStr = toYMD(lastYearYesterday);
