@@ -128,7 +128,7 @@ export const KPICard: React.FC<{
       <button
         onClick={onClick}
         disabled={!onClick}
-        className="modern-kpi-card group p-4 flex flex-col text-left w-full h-full disabled:cursor-default"
+        className="modern-kpi-card group p-3 sm:p-4 flex flex-col text-left w-full h-full disabled:cursor-default"
       >
         {/* تأثير الخلفية المتحرك */}
         <div className="kpi-card-background" />
@@ -484,7 +484,7 @@ export const GrowthTrajectoryChart: React.FC<{
               {data.map((d, i) => {
                 const curPct = (d.Current / maxVal) * 100;
                 const prevPct = (d.Previous / maxVal) * 100;
-                const growth = mode === 'TARGET' 
+                const growth = mode === 'TARGET'
                   ? (d.Previous > 0 ? (d.Current / d.Previous) * 100 : 0)
                   : (d.Previous > 0 ? ((d.Current - d.Previous) / d.Previous) * 100 : 0);
 
@@ -521,11 +521,10 @@ export const GrowthTrajectoryChart: React.FC<{
 
                     {/* Previous/Target Bar (Dark or Blue) */}
                     <div
-                      className={`w-4 rounded-t-lg transition-all duration-700 ease-out hover:brightness-125 cursor-pointer relative z-10 ${
-                        mode === 'TARGET' 
-                          ? 'bg-gradient-to-t from-blue-600 to-blue-400 shadow-[0_-4px_12px_rgba(59,130,246,0.1)]' 
+                      className={`w-4 rounded-t-lg transition-all duration-700 ease-out hover:brightness-125 cursor-pointer relative z-10 ${mode === 'TARGET'
+                          ? 'bg-gradient-to-t from-blue-600 to-blue-400 shadow-[0_-4px_12px_rgba(59,130,246,0.1)]'
                           : 'bg-gradient-to-t from-slate-900 to-slate-700 shadow-[0_-4px_12px_rgba(15,23,42,0.1)]'
-                      } group-hover/bar:scale-x-110`}
+                        } group-hover/bar:scale-x-110`}
                       style={{ height: `${Math.max(prevPct, 2)}%` }}
                     >
                       <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity rounded-t-lg" />

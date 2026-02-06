@@ -16,13 +16,13 @@
   --primary-700: #c2410c;
   --primary-800: #9a3412;
   --primary-900: #7c2d12;
-  
+
   /* الألوان المكملة */
   --accent-blue: #0ea5e9;
   --accent-green: #10b981;
   --accent-purple: #8b5cf6;
   --accent-red: #ef4444;
-  
+
   /* الألوان المحايدة المتقدمة */
   --neutral-50: #f8fafc;
   --neutral-100: #f1f5f9;
@@ -34,7 +34,7 @@
   --neutral-700: #334155;
   --neutral-800: #1e293b;
   --neutral-900: #0f172a;
-  
+
   /* ألوان النظام */
   --background: var(--neutral-50);
   --card-background: #ffffff;
@@ -51,14 +51,14 @@
   --border-color: var(--neutral-200);
   --input-border: var(--neutral-300);
   --accent: var(--primary-500);
-  
+
   /* الظلال المتقدمة */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
   --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
-  
+
   /* الانحناءات */
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
@@ -72,29 +72,35 @@ body {
   background-color: var(--background);
   color: var(--text-body);
 }
+
 html[dir="rtl"] body {
   font-family: 'Cairo', sans-serif;
 }
 
 /* القائمة الجانبية: أسود، ظاهرة على اليمين في RTL. على md فما فوق تكون دائماً ظاهرة */
 .main-layout-sidebar {
-  border-right: 1px solid rgba(255,255,255,0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   left: 0;
   right: auto;
 }
+
 html[dir="rtl"] .main-layout-sidebar {
   right: 0;
   left: auto;
   border-right: none;
-  border-left: 1px solid rgba(255,255,255,0.08);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
+
 .main-layout-sidebar--closed {
   transform: translateX(-100%);
 }
+
 html[dir="rtl"] .main-layout-sidebar--closed {
   transform: translateX(100%);
 }
+
 @media (min-width: 768px) {
+
   .main-layout-sidebar,
   .main-layout-sidebar.main-layout-sidebar--closed {
     transform: none !important;
@@ -108,60 +114,74 @@ html[dir="rtl"] .main-layout-sidebar--closed {
   position: relative;
   overflow-x: hidden;
 }
+
 @media (min-width: 768px) {
   .main-layout-main {
-    margin-left: 16rem; /* w-64 */
+    margin-left: 16rem;
+    /* w-64 */
   }
+
   html[dir="rtl"] .main-layout-main {
     margin-left: 0;
     margin-right: 16rem;
   }
 }
+
 @media (min-width: 1024px) {
   .main-layout-main {
-    margin-left: 18rem; /* w-72 */
+    margin-left: 18rem;
+    /* w-72 */
   }
+
   html[dir="rtl"] .main-layout-main {
     margin-right: 18rem;
   }
 }
 
 @layer components {
+
   /* المودال: منتصف الشاشة فقط، بدون طبقة سوداء تغطي الصفحة */
   .modal-center-screen {
-    @apply fixed inset-0 flex items-center justify-center z-50 p-4 overflow-auto;
+    @apply fixed inset-0 flex items-center justify-center z-50 p-2 sm:p-4 overflow-auto;
     animation: fadeIn 0.2s ease-out;
     background: transparent;
   }
+
   .modal-center-screen .modal-content {
-    @apply my-4 animate-scale-in;
+    @apply my-2 sm:my-4 animate-scale-in;
     box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
   }
+
   /* المودال: داخل حدود الصفحة (يُستخدم مع والد position: relative) — للتوافق */
   .modal-in-page {
-    @apply absolute inset-0 flex items-center justify-center z-40 p-4 overflow-auto;
+    @apply absolute inset-0 flex items-center justify-center z-40 p-2 sm:p-4 overflow-auto;
     animation: fadeIn 0.2s ease-out;
     background: transparent;
   }
+
   .modal-in-page .modal-content {
     @apply my-4;
   }
+
   /* المودال الكامل (شاشة كاملة) للتوافق مع من يستخدمه */
   .modal-backdrop {
     @apply fixed inset-0 flex items-center justify-center z-50 p-4 overflow-auto;
     animation: fadeIn 0.2s ease-out;
     background: transparent;
   }
+
   .modal-content {
-    @apply bg-white w-full max-w-lg p-6;
-    border-radius: var(--radius-2xl);
+    @apply bg-white w-full max-w-lg p-4 sm:p-6;
+    border-radius: var(--radius-xl);
     box-shadow: var(--shadow-2xl);
     border: 1px solid var(--neutral-200);
   }
+
   .modal-title {
     @apply text-xl font-bold mb-4;
     color: var(--text-heading);
   }
+
   .modal-actions {
     @apply mt-6 flex justify-end gap-3;
   }
@@ -174,22 +194,27 @@ html[dir="rtl"] .main-layout-sidebar--closed {
     border-left: 5px solid #f97316;
     animation: slideInOffcanvas 0.25s ease-out;
   }
+
   [dir="rtl"] .offcanvas-emp-detail {
     left: auto;
     right: 0;
     border-left: none;
     border-right: 5px solid #f97316;
   }
+
   [dir="ltr"] .offcanvas-emp-detail {
     right: auto;
     left: 0;
   }
+
   .offcanvas-emp-detail .offcanvas-header {
     @apply bg-neutral-100 p-4 flex items-start justify-between gap-3;
   }
+
   .offcanvas-emp-detail .offcanvas-body {
     @apply p-4;
   }
+
   /* بطاقات المقاييس داخل الـ offcanvas (مطابق employees.html) */
   .insight-card {
     background: #f8f9fa;
@@ -198,16 +223,19 @@ html[dir="rtl"] .main-layout-sidebar--closed {
     margin-bottom: 15px;
     border: 1px solid #eee;
   }
+
   .insight-label {
     font-size: 0.9rem;
     color: #666;
     margin-bottom: 5px;
   }
+
   .insight-value {
     font-size: 1.5rem;
     font-weight: bold;
     color: #333;
   }
+
   .diff-badge {
     font-size: 0.8rem;
     padding: 4px 8px;
@@ -215,14 +243,17 @@ html[dir="rtl"] .main-layout-sidebar--closed {
     display: inline-block;
     font-weight: bold;
   }
+
   .diff-badge.diff-pos {
     background: #d1e7dd;
     color: #0f5132;
   }
+
   .diff-badge.diff-neg {
     background: #f8d7da;
     color: #842029;
   }
+
   .diff-badge.diff-neutral {
     background: #e2e3e5;
     color: #41464b;
@@ -233,18 +264,21 @@ html[dir="rtl"] .main-layout-sidebar--closed {
     @apply block text-sm font-medium mb-2;
     color: var(--text-body);
   }
+
   .input {
-    @apply block w-full px-4 py-3 border shadow-sm transition-all duration-200;
+    @apply block w-full px-3 py-2 sm:px-4 sm:py-3 border shadow-sm transition-all duration-200 text-sm;
     border-radius: var(--radius-lg);
     border-color: var(--input-border);
     background-color: var(--card-background);
   }
+
   .input:focus {
     @apply outline-none ring-2 border;
     border-color: var(--primary);
     ring-color: var(--primary-100);
     box-shadow: var(--shadow-md);
   }
+
   select.input:focus,
   .input:focus {
     --tw-ring-color: var(--primary-100);
@@ -256,83 +290,93 @@ html[dir="rtl"] .main-layout-sidebar--closed {
     border-bottom: 3px solid var(--primary-500);
     padding-bottom: 0.5rem;
   }
-  
+
   /* الأزرار الحديثة */
   .btn-primary {
-    @apply py-3 px-6 text-white font-semibold border-none cursor-pointer transition-all duration-200;
+    @apply py-2 px-4 sm:py-3 sm:px-6 text-sm sm:text-base text-white font-semibold border-none cursor-pointer transition-all duration-200;
     border-radius: var(--radius-lg);
     background: linear-gradient(135deg, #f97316, #ea580c);
     box-shadow: var(--shadow-md);
   }
+
   .btn-primary:hover {
     background: linear-gradient(135deg, #ea580c, #dc2626);
     box-shadow: var(--shadow-lg);
     transform: translateY(-1px);
   }
+
   .btn-primary:disabled {
     background: #fed7aa;
     @apply cursor-not-allowed;
     transform: none;
     box-shadow: var(--shadow-sm);
   }
-  
+
   .btn-secondary {
-    @apply py-3 px-6 font-semibold border cursor-pointer transition-all duration-200;
+    @apply py-2 px-4 sm:py-3 sm:px-6 text-sm sm:text-base font-semibold border cursor-pointer transition-all duration-200;
     border-radius: var(--radius-lg);
     background-color: var(--secondary);
     border-color: var(--border-color);
     color: var(--text-body);
     box-shadow: var(--shadow-sm);
   }
+
   .btn-secondary:hover {
     background-color: var(--secondary-hover);
     box-shadow: var(--shadow-md);
     transform: translateY(-1px);
   }
-  
+
   .btn-danger {
-    @apply py-3 px-6 text-white font-semibold border-none cursor-pointer transition-all duration-200;
+    @apply py-2 px-4 sm:py-3 sm:px-6 text-sm sm:text-base text-white font-semibold border-none cursor-pointer transition-all duration-200;
     border-radius: var(--radius-lg);
     background: linear-gradient(135deg, var(--accent-red), #dc2626);
     box-shadow: var(--shadow-md);
   }
+
   .btn-danger:hover {
     background: linear-gradient(135deg, #dc2626, #b91c1c);
     box-shadow: var(--shadow-lg);
     transform: translateY(-1px);
   }
-  
+
   /* الجداول الحديثة */
   .th {
-    @apply px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider;
+    @apply px-3 py-2 sm:px-6 sm:py-4 text-left text-xs font-semibold uppercase tracking-wider;
     background: linear-gradient(135deg, var(--neutral-50), var(--neutral-100));
     border-color: var(--border-color);
     color: var(--text-muted);
   }
+
   html[dir="rtl"] .th {
     @apply text-right;
   }
+
   .td {
-    @apply px-6 py-4 text-sm border-b;
+    @apply px-3 py-2 sm:px-6 sm:py-4 text-sm border-b;
     border-color: var(--border-color);
     color: var(--text-body);
   }
+
   tbody tr:last-child .td {
     @apply border-b-0;
   }
+
   tbody tr:hover {
     background-color: var(--primary-50);
   }
-  
+
   /* بطاقات KPI الحديثة */
   /* هوية التطبيق: أسود وبرتقالي على البطاقات والروابط */
   .identity-card {
     border: 1px solid var(--neutral-200);
   }
+
   .identity-card:hover {
     border-color: var(--primary-300);
     box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
   }
+
   .modern-kpi-card {
     @apply relative overflow-hidden transition-all duration-500 hover:-translate-y-2;
     border-radius: var(--radius-2xl);
@@ -340,11 +384,12 @@ html[dir="rtl"] .main-layout-sidebar--closed {
     box-shadow: var(--shadow-lg);
     border: 1px solid var(--neutral-200);
   }
+
   .modern-kpi-card:hover {
     box-shadow: var(--shadow-2xl);
     border-color: var(--primary-300);
   }
-  
+
   .kpi-card-background {
     position: absolute;
     inset: 0;
@@ -352,50 +397,52 @@ html[dir="rtl"] .main-layout-sidebar--closed {
     opacity: 0;
     transition: opacity 0.3s ease;
   }
+
   .modern-kpi-card:hover .kpi-card-background {
     opacity: 1;
   }
-  
+
   .kpi-icon-container {
     @apply p-2 rounded-lg text-white;
     background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
     box-shadow: var(--shadow-sm);
   }
+
   .kpi-icon-container svg {
     width: 1rem;
     height: 1rem;
   }
-  
+
   .kpi-value {
     @apply text-lg font-bold;
     color: var(--text-heading) !important;
     line-height: 1.2;
     opacity: 1 !important;
   }
-  
+
   .kpi-title {
     @apply text-xs font-medium;
     color: var(--text-muted);
     line-height: 1.3;
   }
-  
+
   /* شريط التقدم الدائري */
   .circular-progress {
     position: relative;
     width: 60px;
     height: 60px;
   }
-  
+
   .circular-progress svg {
     transform: rotate(-90deg);
   }
-  
+
   .circular-progress-bg {
     fill: none;
     stroke: var(--neutral-200);
     stroke-width: 4;
   }
-  
+
   .circular-progress-fill {
     fill: none;
     stroke: var(--primary-500);
@@ -403,7 +450,7 @@ html[dir="rtl"] .main-layout-sidebar--closed {
     stroke-linecap: round;
     transition: stroke-dasharray 0.3s ease;
   }
-  
+
   .circular-progress-text {
     position: absolute;
     top: 50%;
@@ -416,38 +463,89 @@ html[dir="rtl"] .main-layout-sidebar--closed {
 
 /* الانيميشن المتقدمة */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideInUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.9); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes slideInOffcanvas {
-  from { opacity: 0; transform: translateX(100%); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
-[dir="ltr"] .offcanvas-emp-detail { animation: slideInOffcanvasLtr 0.25s ease-out; }
+
+[dir="ltr"] .offcanvas-emp-detail {
+  animation: slideInOffcanvasLtr 0.25s ease-out;
+}
+
 @keyframes slideInOffcanvasLtr {
-  from { opacity: 0; transform: translateX(-100%); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
 }
 
 @keyframes shimmer {
-  0% { background-position: -200px 0; }
-  100% { background-position: calc(200px + 100%) 0; }
+  0% {
+    background-position: -200px 0;
+  }
+
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
 }
 
 .greeting-fade-in {
@@ -484,18 +582,22 @@ html[dir="rtl"] .main-layout-sidebar--closed {
   font-weight: 800;
   font-size: 0.85rem;
 }
+
 .rank-1 {
   background: linear-gradient(135deg, #ffd700, #ffa500);
   color: white;
 }
+
 .rank-2 {
   background: linear-gradient(135deg, #c0c0c0, #a0a0a0);
   color: white;
 }
+
 .rank-3 {
   background: linear-gradient(135deg, #cd7f32, #8b4513);
   color: white;
 }
+
 .rank-other {
   background: #e9ecef;
   color: #495057;
@@ -509,14 +611,17 @@ html[dir="rtl"] .main-layout-sidebar--closed {
   font-weight: 800;
   white-space: nowrap;
 }
+
 .diff-pos {
   background: #d1e7dd;
   color: #0f5132;
 }
+
 .diff-neg {
   background: #f8d7da;
   color: #842029;
 }
+
 .diff-neutral {
   background: #e2e3e5;
   color: #41464b;

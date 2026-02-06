@@ -140,7 +140,7 @@ export default function DashboardPage() {
     const byStorePrev: Record<string, Record<string, { sales: number; trans: number; visitors: number }>> = {};
 
     // Initialize all stores and dates
-    const storeIds = selectedBranch === 'all' 
+    const storeIds = selectedBranch === 'all'
       ? Object.keys(storesMap).filter(sid => allowedStoreIds.has(sid))
       : [selectedBranch];
 
@@ -569,9 +569,9 @@ export default function DashboardPage() {
     const historyData: Record<string, any[]> = empRaw.history;
     const names: Record<string, string> = empRaw.employee_names;
     const storesMap = raw.stores || {};
-    
+
     const empData: Record<string, { id: string; name: string; storeId: string; storeName: string; sales: number }> = {};
-    
+
     Object.entries(historyData).forEach(([sid, recs]: [string, any]) => {
       if (!allowedStoreIds.has(sid)) return;
       (recs || []).forEach((rec: any) => {
@@ -580,10 +580,10 @@ export default function DashboardPage() {
         const rawId = rec?.[1];
         let empId = String(rawId || '').split('-')[0].trim();
         if (!empId || empId === 'مرتجع') return;
-        
+
         const sales = Number(rec?.[2]) || 0;
         const empName = names[empId] || names[empId.padStart(4, '0')] || rawId;
-        
+
         if (!empData[empId]) {
           empData[empId] = {
             id: empId,
@@ -596,7 +596,7 @@ export default function DashboardPage() {
         empData[empId].sales += sales;
       });
     });
-    
+
     return Object.values(empData).sort((a, b) => b.sales - a.sales);
   }, [empRaw, raw, yesterdayStr, allowedStoreIds]);
 
@@ -949,7 +949,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-3">
         <KPICard
           title="المبيعات"
           value={totals.sales}
@@ -1004,7 +1004,7 @@ export default function DashboardPage() {
       />
 
       {/* بطاقات الوصول السريع */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
         <button
           type="button"
           onClick={() => setDailyReportModalOpen(true)}
@@ -1073,13 +1073,13 @@ export default function DashboardPage() {
 
       {/* نافذة مبيعات اليوم */}
       {liveModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setLiveModalOpen(false)}>
-          <div 
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4" onClick={() => setLiveModalOpen(false)}>
+          <div
             className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-4">
+            <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-3 sm:p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-bold">🛒 مبيعات اليوم — لايف</h2>
@@ -1095,7 +1095,7 @@ export default function DashboardPage() {
                   ✕
                 </button>
               </div>
-              
+
               {/* Manager Filter */}
               {isAdminOrAuditor(user?.role) && (
                 <div className="mt-3 flex items-center gap-2">
@@ -1130,7 +1130,7 @@ export default function DashboardPage() {
             {/* Store List */}
             <div className="flex-1 overflow-y-auto p-4">
               <h3 className="text-sm font-bold text-gray-700 mb-3">المعارض ({liveData.stores.length})</h3>
-              
+
               {liveData.stores.length === 0 ? (
                 <div className="text-center py-12 text-gray-400">
                   <div className="text-4xl mb-2">📊</div>
@@ -1144,7 +1144,7 @@ export default function DashboardPage() {
                     return (
                       <div key={store.sid} className="border rounded-xl overflow-hidden bg-white shadow-sm">
                         {/* Store Row */}
-                        <div 
+                        <div
                           className="flex items-center gap-3 p-4 cursor-pointer hover:bg-orange-50 transition-colors border-b border-gray-100"
                           onClick={() => setExpandedStoreId(isExpanded ? null : store.sid)}
                         >
@@ -1175,7 +1175,7 @@ export default function DashboardPage() {
                           </div>
                           <div className={`text-gray-400 transition-transform text-xl ${isExpanded ? 'rotate-90' : ''} flex-shrink-0`}>▶</div>
                         </div>
-                        
+
                         {/* Employees Dropdown */}
                         {isExpanded && store.employees && store.employees.length > 0 && (
                           <div className="bg-gray-50 p-4">
@@ -1311,7 +1311,7 @@ export default function DashboardPage() {
                 <XIcon />
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-2">اختر الفرع:</label>
@@ -1363,10 +1363,10 @@ export default function DashboardPage() {
 
       {/* نافذة تقرير الموظفين */}
       {employeeReportModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setEmployeeReportModalOpen(false)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4" onClick={() => setEmployeeReportModalOpen(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
-            <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4">
+            <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-3 sm:p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">📄</span>
@@ -1378,9 +1378,9 @@ export default function DashboardPage() {
                 <button onClick={() => setEmployeeReportModalOpen(false)} className="bg-white/20 hover:bg-white/30 p-2 rounded-lg">✕</button>
               </div>
             </div>
-            
+
             {/* Filters */}
-            <div className="p-4 bg-gray-50 border-b">
+            <div className="p-3 sm:p-4 bg-gray-50 border-b">
               <div className="flex flex-wrap gap-4 items-center justify-between">
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-2 text-sm">
@@ -1423,12 +1423,12 @@ export default function DashboardPage() {
                     <span className="text-red-600 font-medium">□ مستقيل (معياران)</span>
                   </label>
                 </div>
-                
+
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   المحددين: <strong>{selectedEmployees.size}</strong> من <strong>{employeeListForSelection.length}</strong>
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-3 mt-3">
                 <button
                   onClick={() => setSelectedEmployees(new Set(employeeListForSelection.map(e => e.id)))}
@@ -1453,7 +1453,7 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
-            
+
             {/* Employee List */}
             <div className="flex-1 overflow-y-auto">
               <table className="w-full text-sm">
@@ -1514,9 +1514,9 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-            
+
             {/* Footer */}
-            <div className="p-4 bg-gray-50 border-t flex justify-between items-center">
+            <div className="p-3 sm:p-4 border-t flex justify-end gap-3 bg-gray-50">
               <div className="text-sm text-gray-500">
                 الفترة: من {yesterdayStr.substring(0, 8)}01 إلى {yesterdayStr}
               </div>

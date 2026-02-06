@@ -798,7 +798,7 @@ export default function ReportsPage() {
       {/* Report type choice modal */}
       {showReportChoiceModal && reportChoiceType && (
         <div className="modal-center-screen" onClick={() => setShowReportChoiceModal(false)}>
-          <div className="modal-content max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content max-w-md w-full p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h5 className="font-bold text-lg text-neutral-900 mb-4">
               {reportChoiceType === 'pdf' ? 'اختر التقرير للمعاينة' : 'اختر تقرير Excel'}
             </h5>
@@ -850,7 +850,7 @@ export default function ReportsPage() {
       {/* Excel confirm modal */}
       {showExcelModal && (
         <div className="modal-center-screen" onClick={() => setShowExcelModal(false)}>
-          <div className="modal-content max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content max-w-md w-full p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h5 className="font-bold text-lg text-neutral-900 mb-4">تصدير Excel</h5>
             <p className="text-sm text-neutral-600 mb-2">الفترة: {range.start} → {range.end}</p>
             <p className="text-sm text-neutral-500 mb-4">{excelType === 'store' ? 'مبيعات المعارض' : 'مبيعات الموظفين'}</p>
@@ -866,7 +866,7 @@ export default function ReportsPage() {
 
       {/* Report View Modal */}
       {previewReport && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
             <div className="p-4 border-b border-neutral-100 flex items-center justify-between bg-neutral-50">
               <h3 className="font-bold text-neutral-900">
@@ -892,7 +892,7 @@ export default function ReportsPage() {
                       const today = new Date();
                       const yest = new Date(today); yest.setDate(today.getDate() - 1);
                       const mStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                      
+
                       // Check if we have store-grouped data
                       if (previewReport.data[0]?.storeId && previewReport.data[0]?.employees) {
                         await generateEmployeeReportByStore(previewReport.data, {
