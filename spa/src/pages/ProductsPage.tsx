@@ -119,6 +119,8 @@ export default function ProductsPage() {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [productOpen, setProductOpen] = useState(false);
   const [productId, setProductId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   const [missedOpen, setMissedOpen] = useState(false);
   const [missedRow, setMissedRow] = useState<any>(null);
@@ -131,6 +133,9 @@ export default function ProductsPage() {
       })
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
+
+  // Reset page to 1 when filters change
+  useEffect(() => { setCurrentPage(1); }, [period, manager, city, store, search, catFilter, metric]);
 
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -321,6 +326,70 @@ export default function ProductsPage() {
       return pairs.slice(0, 10);
     })();
 
+    // ===== Sales Analysis by Value (Duvet King, Duvet Full, Pillows) =====
+    const valueAnalysis = (() => {
+      // Classify catalog items by category keywords and price range
+      type ValueBucket = { low: { qty: number; amount: number; count: number }; medium: { qty: number; amount: number; count: number }; high: { qty: number; amount: number; count: number }; total: { qty: number; amount: number; count: number } };
+      const makeBucket = (): ValueBucket => ({
+        low: { qty: 0, amount: 0, count: 0 },
+        medium: { qty: 0, amount: 0, count: 0 },
+        high: { qty: 0, amount: 0, count: 0 },
+        total: { qty: 0, amount: 0, count: 0 },
+      });
+
+      const duvetKing = makeBucket();
+      const duvetFull = makeBucket();
+      const pillows = makeBucket();
+      const others = makeBucket();
+
+      catalogRows.forEach(item => {
+        const avgPrice = item.qty > 0 ? item.amount / item.qty : 0;
+        const catLower = (item.category || '').toLowerCase();
+        const nameLower = (item.name || '').toLowerCase();
+        const combined = catLower + ' ' + nameLower;
+
+        let bucket: ValueBucket;
+        let ranges: [number, number, number]; // low max, medium max
+
+        if (combined.includes('pillow') || combined.includes('مخد') || combined.includes('وساد')) {
+          bucket = pillows;
+          ranges = [99, 189, 999999]; // Low <=99, Med 100-189, High 190+
+        } else if (combined.includes('duvet') || combined.includes('لحاف') || combined.includes('مفرش')) {
+          // Check if King or Full
+          if (combined.includes('king') || combined.includes('كنج') || combined.includes('كبير') || combined.includes('240') || combined.includes('260')) {
+            bucket = duvetKing;
+            ranges = [300, 600, 999999]; // Low <=300, Med 301-600, High 600+
+          } else {
+            bucket = duvetFull;
+            ranges = [300, 499, 999999]; // Low <=300, Med 301-499, High 500+
+          }
+        } else {
+          bucket = others;
+          ranges = [200, 500, 999999];
+        }
+
+        bucket.total.qty += item.qty;
+        bucket.total.amount += item.amount;
+        bucket.total.count += 1;
+
+        if (avgPrice <= ranges[0]) {
+          bucket.low.qty += item.qty;
+          bucket.low.amount += item.amount;
+          bucket.low.count += 1;
+        } else if (avgPrice <= ranges[1]) {
+          bucket.medium.qty += item.qty;
+          bucket.medium.amount += item.amount;
+          bucket.medium.count += 1;
+        } else {
+          bucket.high.qty += item.qty;
+          bucket.high.amount += item.amount;
+          bucket.high.count += 1;
+        }
+      });
+
+      return { duvetKing, duvetFull, pillows, others };
+    })();
+
     return {
       dateRangeLabel: pData?.date_range || '-',
       managers,
@@ -336,6 +405,7 @@ export default function ProductsPage() {
       selectedHistory,
       selectedPairs,
       storesMap,
+      valueAnalysis,
     };
   }, [city, effectiveManager, mgmt, mode, productId, raw, search, selectedCategory, store, metric, user?.name, user?.role]);
 
@@ -461,6 +531,45 @@ export default function ProductsPage() {
         <KPICard title="عدد المنتجات (بعد الفلترة)" value={derived.totals.productsCount} format={(v) => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
       </div>
 
+      {/* Sales Analysis by Value */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        {[
+          { label: 'لحاف كبير (King)', data: derived.valueAnalysis.duvetKing, color: 'blue' },
+          { label: 'لحاف عادي (Full)', data: derived.valueAnalysis.duvetFull, color: 'purple' },
+          { label: 'المخدات (Pillows)', data: derived.valueAnalysis.pillows, color: 'teal' },
+        ].map(({ label, data, color }) => {
+          const totalQty = data.total.qty || 1;
+          const buckets = [
+            { name: 'منخفض', ...data.low, barColor: 'bg-green-400' },
+            { name: 'متوسط', ...data.medium, barColor: 'bg-yellow-400' },
+            { name: 'مرتفع', ...data.high, barColor: 'bg-red-400' },
+          ];
+          return (
+            <div key={label} className="bg-white rounded-xl shadow border p-4">
+              <div className={`text-sm font-bold mb-3 text-${color}-700`}>{label}</div>
+              <div className="space-y-3">
+                {buckets.map(b => (
+                  <div key={b.name}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="font-semibold text-neutral-700">{b.name}</span>
+                      <span className="text-neutral-500">{Math.round(b.qty).toLocaleString()} قطعة &bull; {formatSAR(b.amount)}</span>
+                    </div>
+                    <div className="w-full bg-neutral-100 rounded-full h-3">
+                      <div className={`${b.barColor} h-3 rounded-full transition-all`} style={{ width: `${Math.min(100, (b.qty / totalQty) * 100)}%` }} />
+                    </div>
+                    <div className="text-[11px] text-neutral-400 mt-0.5">{(b.qty / totalQty * 100).toFixed(1)}% &bull; {b.count} منتج</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 pt-3 border-t border-neutral-100 text-xs font-bold text-neutral-600 flex justify-between">
+                <span>المجموع: {Math.round(data.total.qty).toLocaleString()} قطعة</span>
+                <span>{formatSAR(data.total.amount)}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       {/* Category performance */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <ChartCard title={`المنتج الأكثر مبيعاً حسب الفئة (${metricLabel})`}>
@@ -536,6 +645,12 @@ export default function ProductsPage() {
             </div>
           </div>
         </div>
+        {/* Summary badges */}
+        <div className="px-6 py-3 flex flex-wrap gap-4 border-b border-neutral-100">
+          <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-sm font-bold">عدد المنتجات: {derived.filteredCatalog.length.toLocaleString()}</span>
+          <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-bold">إجمالي الكمية: {Math.round(derived.filteredCatalog.reduce((s: number, p: any) => s + (p.qty || 0), 0)).toLocaleString()}</span>
+          <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-bold">إجمالي القيمة: {formatSAR(derived.filteredCatalog.reduce((s: number, p: any) => s + (p.amount || 0), 0))}</span>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
@@ -548,30 +663,36 @@ export default function ProductsPage() {
               </tr>
             </thead>
             <tbody>
-              {derived.filteredCatalog.slice(0, 200).map((p) => (
-                <tr
-                  key={`${p.category}-${p.id}`}
-                  className="hover:bg-orange-50 cursor-pointer"
-                  onClick={() => {
-                    setProductId(p.id);
-                    setProductOpen(true);
-                  }}
-                >
-                  <td className="td">
-                    <div className="font-mono text-xs text-neutral-500">{p.id}</div>
-                    <div className="font-semibold text-neutral-900">{p.name}</div>
-                  </td>
-                  <td className="td text-neutral-700">{p.category}</td>
-                  <td className="td text-center">{Math.round(p.qty).toLocaleString()}</td>
-                  <td className="td text-center font-bold text-green-700">{formatSAR(p.amount)}</td>
-                  <td className="td text-neutral-600">
-                    <div className={`inline-flex items-center gap-2 font-semibold ${p.trend === 'UP' ? 'text-green-700' : p.trend === 'DOWN' ? 'text-red-600' : 'text-neutral-600'}`}>
-                      {p.trend || '-'}
-                      <span className="text-xs font-normal text-neutral-500">{p.trendReason || ''}</span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {(() => {
+                const totalPages = Math.max(1, Math.ceil(derived.filteredCatalog.length / ITEMS_PER_PAGE));
+                const safePage = Math.min(currentPage, totalPages);
+                const start = (safePage - 1) * ITEMS_PER_PAGE;
+                const pageItems = derived.filteredCatalog.slice(start, start + ITEMS_PER_PAGE);
+                return pageItems.map((p: any) => (
+                  <tr
+                    key={`${p.category}-${p.id}`}
+                    className="hover:bg-orange-50 cursor-pointer"
+                    onClick={() => {
+                      setProductId(p.id);
+                      setProductOpen(true);
+                    }}
+                  >
+                    <td className="td">
+                      <div className="font-mono text-xs text-neutral-500">{p.id}</div>
+                      <div className="font-semibold text-neutral-900">{p.name}</div>
+                    </td>
+                    <td className="td text-neutral-700">{p.category}</td>
+                    <td className="td text-center">{Math.round(p.qty).toLocaleString()}</td>
+                    <td className="td text-center font-bold text-green-700">{formatSAR(p.amount)}</td>
+                    <td className="td text-neutral-600">
+                      <div className={`inline-flex items-center gap-2 font-semibold ${p.trend === 'UP' ? 'text-green-700' : p.trend === 'DOWN' ? 'text-red-600' : 'text-neutral-600'}`}>
+                        {p.trend || '-'}
+                        <span className="text-xs font-normal text-neutral-500">{p.trendReason || ''}</span>
+                      </div>
+                    </td>
+                  </tr>
+                ));
+              })()}
               {derived.filteredCatalog.length === 0 && (
                 <tr>
                   <td className="td text-center text-neutral-500" colSpan={5}>
@@ -581,11 +702,52 @@ export default function ProductsPage() {
               )}
             </tbody>
           </table>
-          {derived.filteredCatalog.length > 200 && (
-            <div className="p-3 text-xs text-neutral-500 bg-neutral-50 border-t border-neutral-200">
-              عرضنا أول 200 منتج فقط لتسريع الصفحة. استخدم البحث لتضييق النتائج.
-            </div>
-          )}
+          {/* Pagination Controls */}
+          {derived.filteredCatalog.length > ITEMS_PER_PAGE && (() => {
+            const totalPages = Math.ceil(derived.filteredCatalog.length / ITEMS_PER_PAGE);
+            const safePage = Math.min(currentPage, totalPages);
+            const maxVisible = 5;
+            let startPage = Math.max(1, safePage - Math.floor(maxVisible / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+            if (endPage - startPage + 1 < maxVisible) startPage = Math.max(1, endPage - maxVisible + 1);
+            const pages: number[] = [];
+            for (let p = startPage; p <= endPage; p++) pages.push(p);
+
+            return (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 bg-neutral-50">
+                <div className="text-sm text-neutral-500">
+                  صفحة {safePage} من {totalPages} ({derived.filteredCatalog.length} منتج)
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    disabled={safePage <= 1}
+                    onClick={() => setCurrentPage(safePage - 1)}
+                    className="px-3 py-1 rounded-lg border text-sm font-semibold disabled:opacity-40 hover:bg-orange-50"
+                  >
+                    السابق
+                  </button>
+                  {startPage > 1 && <span className="px-2 text-neutral-400">...</span>}
+                  {pages.map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setCurrentPage(p)}
+                      className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${p === safePage ? 'bg-orange-500 text-white shadow' : 'border border-neutral-200 hover:bg-orange-50 text-neutral-700'}`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  {endPage < totalPages && <span className="px-2 text-neutral-400">...</span>}
+                  <button
+                    disabled={safePage >= totalPages}
+                    onClick={() => setCurrentPage(safePage + 1)}
+                    className="px-3 py-1 rounded-lg border text-sm font-semibold disabled:opacity-40 hover:bg-orange-50"
+                  >
+                    التالي
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
