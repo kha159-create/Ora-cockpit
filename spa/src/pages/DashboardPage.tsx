@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
+import { loadManagementData, loadEmployeesData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { KPICard, RankCard, GrowthTrajectoryChart } from '../components/DashboardComponents';
 import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon, XIcon, PrinterIcon } from '../components/Icons';
@@ -41,6 +41,7 @@ const monthsAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'ما�
 export default function DashboardPage() {
   const [raw, setRaw] = useState<any>(null);
   const [empRaw, setEmpRaw] = useState<any>(null);
+  const [prodRaw, setProdRaw] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,10 +76,11 @@ export default function DashboardPage() {
 
   const loadData = useCallback(() => {
     setRefreshing(true);
-    Promise.all([loadManagementData(), loadEmployeesData()])
-      .then(([m, e]) => {
+    Promise.all([loadManagementData(), loadEmployeesData(), loadProductAnalysisData()])
+      .then(([m, e, p]) => {
         setRaw(m);
         setEmpRaw(e);
+        setProdRaw(p);
         setLastUpdate(new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
         setErr(null);
       })
@@ -735,22 +737,26 @@ export default function DashboardPage() {
     (raw.targets || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
       if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
-      if (dateStr === yesterdayStr) {
+      // Filter for the entire month of the report to calculate "Month Total Target"
+      // derived from yesterdayStr (e.g., if report is for 15th, we want 1st-30th targets)
+      if (dateStr.startsWith(yesterdayStr.substring(0, 7))) {
         const target = v || 0;
-        byStore[sid].target = target;
-
-        // Remaining is Target - MTD Sales
-        const remaining = Math.max(0, target - byStore[sid].sales);
-
-        // Remaining Days: Days in month - Today's Date (Remaining Work Days)
-        const nowForReq = new Date();
-        const lastDayOfMonth = new Date(nowForReq.getFullYear(), nowForReq.getMonth() + 1, 0).getDate();
-        let remainingDays = lastDayOfMonth - nowForReq.getDate() + 1;
-        if (remainingDays < 1) remainingDays = 1;
-
-        byStore[sid].dailyReq = remainingDays > 0 ? remaining / remainingDays : 0;
-        byStore[sid].ach = target > 0 ? (byStore[sid].sales / target) * 100 : 0;
+        byStore[sid].target += target;
       }
+    });
+
+    // Post-aggregation calculation loop
+    Object.keys(byStore).forEach(sid => {
+      const v = byStore[sid];
+      const remaining = Math.max(0, v.target - v.sales);
+
+      const nowForReq = new Date();
+      const lastDayOfMonth = new Date(nowForReq.getFullYear(), nowForReq.getMonth() + 1, 0).getDate();
+      let remainingDays = lastDayOfMonth - nowForReq.getDate() + 1;
+      if (remainingDays < 1) remainingDays = 1;
+
+      v.dailyReq = remainingDays > 0 ? remaining / remainingDays : 0;
+      v.ach = v.target > 0 ? (v.sales / v.target) * 100 : 0;
     });
 
     return Object.entries(byStore)
@@ -848,6 +854,87 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+
+  const prodDerived = useMemo(() => {
+    if (!prodRaw || !raw) return null;
+
+    // We only care about MTD for the dashboard summary usually, 
+    // or match the dashboard's selected range if possible. 
+    // For now, let's stick to 'mtd' (Month to Date) as per common dashboard behavior,
+    // or we could try to match 'mode' if it maps well. 
+    // Let's use 'mtd' to ensure consistency with the "Top Selling" widget original context.
+    const pData = prodRaw.periods?.['mtd'] || null;
+    if (!pData) return null;
+
+    const analysis: Record<string, any> = (pData?.analysis || {}) as any;
+    const storeMeta: Record<string, any> = raw.store_meta || {};
+
+    // Filter logic similar to ProductsPage but simplified for Dashboard
+    // We aggregate ALL stores that the user has access to.
+    let totalQty = 0;
+    let totalAmt = 0;
+    const catMap = new Map<string, { qty: number; amount: number; top: any }>();
+
+    Object.entries(analysis).forEach(([sid, storeObj]) => {
+      // Check accessibility
+      if (isAdminOrAuditor(user?.role) || storeMeta[sid]?.manager === user?.name) {
+        // Apply Dashboard Filters (Manager/City/Branch)
+        const meta = storeMeta[sid] || {};
+        if (effectiveManager !== 'all' && meta.manager !== effectiveManager) return;
+        if (city !== 'all' && meta.city !== city) return;
+        if (branch !== 'all' && String(sid) !== String(branch)) return;
+
+        const categories: any[] = storeObj?.categories || [];
+        categories.forEach((c) => {
+          const catName = String(c.category || 'Uncategorized');
+          const qty = Number(c.qty) || 0;
+          const amount = Number(c.amount) || 0;
+          totalQty += qty;
+          totalAmt += amount;
+
+          const prev = catMap.get(catName) || { qty: 0, amount: 0, top: null };
+          prev.qty += qty;
+          prev.amount += amount;
+
+          // Simple Top Item Logic (by Qty for now as default)
+          const topCandidate = {
+            top_item_id: String(c.top_item_id || ''),
+            top_item_name: String(c.top_item_name || ''),
+            top_item_qty: Number(c.top_item_qty) || 0,
+            top_item_amount: Number(c.top_item_amount) || 0,
+          };
+          const prevTop = prev.top;
+          if (!prevTop || topCandidate.top_item_qty > prevTop.top_item_qty) {
+            prev.top = topCandidate;
+          }
+          catMap.set(catName, prev);
+        });
+      }
+    });
+
+    const categoriesAgg = Array.from(catMap.entries()).map(([category, data]) => {
+      // Share based on Total Quantity
+      const share = totalQty > 0 ? (data.qty / totalQty) * 100 : 0;
+      return {
+        category,
+        qty: data.qty,
+        amount: data.amount,
+        sharePercent: share,
+        topItemId: data.top?.top_item_id || '',
+        topItemName: data.top?.top_item_name || '',
+      };
+    });
+
+    // Sort by Qty descending
+    categoriesAgg.sort((a, b) => b.qty - a.qty);
+
+    return { categoriesAgg };
+  }, [prodRaw, raw, user?.role, user?.name, effectiveManager, city, branch]);
+
+  // Pagination for Top Selling Widget
+  const [topSellingPage, setTopSellingPage] = useState(1);
+  const TOP_SELLING_PER_PAGE = 10;
 
   return (
     <div className="space-y-4">
@@ -1145,18 +1232,18 @@ export default function DashboardPage() {
                       <div key={store.sid} className="border rounded-xl overflow-hidden bg-white shadow-sm">
                         {/* Store Row */}
                         <div
-                          className="flex items-center gap-3 p-4 cursor-pointer hover:bg-orange-50 transition-colors border-b border-gray-100"
+                          className="flex items-center gap-3 p-3 sm:p-4 cursor-pointer hover:bg-orange-50 transition-colors border-b border-gray-100"
                           onClick={() => setExpandedStoreId(isExpanded ? null : store.sid)}
                         >
-                          <div className="w-10 h-10 bg-orange-500 text-white rounded-lg flex items-center justify-center font-bold text-base flex-shrink-0">
+                          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-500 text-white rounded-lg flex items-center justify-center font-bold text-sm sm:text-base flex-shrink-0">
                             {idx + 1}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between mb-1">
-                              <div className="font-bold text-gray-900 text-lg">{storeName}</div>
-                              <div className="font-bold text-orange-600 text-xl" dir="ltr">{formatSAR(store.sales)}</div>
+                              <div className="font-bold text-gray-900 text-base sm:text-lg truncate">{storeName}</div>
+                              <div className="font-bold text-orange-600 text-base sm:text-xl flex-shrink-0" dir="ltr">{formatSAR(store.sales)}</div>
                             </div>
-                            <div className="flex items-center gap-4 text-sm text-gray-600">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600">
                               <span className="flex items-center gap-1">
                                 <span>👥</span>
                                 <span className="font-medium">{store.employees?.length || 0} موظفين</span>
@@ -1178,16 +1265,16 @@ export default function DashboardPage() {
 
                         {/* Employees Dropdown */}
                         {isExpanded && store.employees && store.employees.length > 0 && (
-                          <div className="bg-gray-50 p-4">
-                            <table className="w-full text-sm">
+                          <div className="bg-gray-50 p-3 sm:p-4 overflow-x-auto">
+                            <table className="w-full text-xs sm:text-sm">
                               <thead>
                                 <tr className="bg-white border-b-2 border-gray-200">
-                                  <th className="text-right py-3 px-2 font-bold text-gray-700">#</th>
-                                  <th className="text-right py-3 px-2 font-bold text-gray-700">الموظف</th>
-                                  <th className="text-left py-3 px-2 font-bold text-gray-700">المبيعات</th>
-                                  <th className="text-left py-3 px-2 font-bold text-gray-700">الفواتير</th>
-                                  <th className="text-left py-3 px-2 font-bold text-gray-700">معدل الفاتورة</th>
-                                  <th className="text-left py-3 px-2 font-bold text-gray-700">%</th>
+                                  <th className="text-right py-2 px-2 font-bold text-gray-700">#</th>
+                                  <th className="text-right py-2 px-2 font-bold text-gray-700">الموظف</th>
+                                  <th className="text-left py-2 px-2 font-bold text-gray-700">المبيعات</th>
+                                  <th className="text-left py-2 px-2 font-bold text-gray-700">الفواتير</th>
+                                  <th className="text-left py-2 px-2 font-bold text-gray-700">معدل</th>
+                                  <th className="text-left py-2 px-2 font-bold text-gray-700">%</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1195,12 +1282,12 @@ export default function DashboardPage() {
                                   const avgInv = emp.avgInv || (emp.trans > 0 ? emp.sales / emp.trans : 0);
                                   return (
                                     <tr key={emp.id} className={`border-b border-gray-100 hover:bg-white transition-colors ${empIdx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}`}>
-                                      <td className="py-3 px-2 text-gray-500 font-medium text-center">{empIdx + 1}</td>
-                                      <td className="py-3 px-2 font-semibold text-gray-900">{emp.name || emp.id}</td>
-                                      <td className="py-3 px-2 font-bold text-orange-600" dir="ltr">{formatSAR(emp.sales)}</td>
-                                      <td className="py-3 px-2 text-gray-700 font-medium">{emp.trans}</td>
-                                      <td className="py-3 px-2 font-bold text-blue-600" dir="ltr">{formatSAR(avgInv)}</td>
-                                      <td className="py-3 px-2">
+                                      <td className="py-2 px-2 text-gray-500 font-medium text-center">{empIdx + 1}</td>
+                                      <td className="py-2 px-2 font-semibold text-gray-900">{emp.name || emp.id}</td>
+                                      <td className="py-2 px-2 font-bold text-orange-600" dir="ltr">{formatSAR(emp.sales)}</td>
+                                      <td className="py-2 px-2 text-gray-700 font-medium">{emp.trans}</td>
+                                      <td className="py-2 px-2 font-bold text-blue-600" dir="ltr">{formatSAR(avgInv)}</td>
+                                      <td className="py-2 px-2">
                                         <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded-md text-xs font-bold">
                                           {store.sales > 0 ? ((emp.sales / store.sales) * 100).toFixed(0) : 0}%
                                         </span>
@@ -1217,330 +1304,341 @@ export default function DashboardPage() {
                   })}
                 </div>
               )}
-            </div>
-          </div>
-        </div>
+            </div >
+          </div >
+        </div >
       )}
 
       {/* نافذة التقرير اليومي */}
-      {dailyReportModalOpen && (
-        <div className="modal-center-screen" onClick={() => setDailyReportModalOpen(false)}>
-          <div className="modal-content max-w-6xl my-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div>
-                <div className="text-base font-bold text-blue-600 flex items-center gap-2">
-                  <span>📄</span>
-                  <span>التقرير اليومي: تقرير الأمس ({yesterdayStr}) مقارنة بـ ({lastYearYesterdayStr})</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="btn-primary py-1.5 px-3 text-sm flex items-center gap-2"
-                  onClick={handlePrintDailyReport}
-                >
-                  <PrinterIcon className="w-4 h-4" /> طباعة التقرير
-                </button>
-                <button
-                  type="button"
-                  className="bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-50 py-1.5 px-3 rounded-lg text-sm flex items-center gap-2 transition-colors font-medium shadow-sm"
-                  onClick={handlePrintEmployeeReport}
-                >
-                  <UsersIcon className="w-4 h-4 text-orange-500" /> تقرير الموظفين
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary py-1.5 px-3 text-sm flex items-center gap-2"
-                  onClick={() => setDailyReportModalOpen(false)}
-                >
-                  <XIcon /> إغلاق
-                </button>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-orange-500 text-white">
-                    <th className="text-right py-3 px-4 font-semibold">#</th>
-                    <th className="text-right py-3 px-4 font-semibold">الفرع</th>
-                    <th className="text-right py-3 px-4 font-semibold">مبيعات الأمس</th>
-                    <th className="text-right py-3 px-4 font-semibold">العام الماضي</th>
-                    <th className="text-right py-3 px-4 font-semibold">النمو %</th>
-                    <th className="text-right py-3 px-4 font-semibold">اليومية المتبقية</th>
-                    <th className="text-right py-3 px-4 font-semibold">عدد الفواتير</th>
-                    <th className="text-right py-3 px-4 font-semibold">متوسط الفاتورة</th>
-                    <th className="text-right py-3 px-4 font-semibold">زوار</th>
-                    <th className="text-right py-3 px-4 font-semibold">زوار (LY)</th>
-                    <th className="text-right py-3 px-4 font-semibold">تحويل %</th>
-                    <th className="text-right py-3 px-4 font-semibold">قيمة العميل</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dailyReportData.map((row: any, idx) => (
-                    <tr key={row.sid} className={`border-b border-neutral-100 hover:bg-neutral-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-neutral-50'}`}>
-                      <td className="py-3 px-4 text-neutral-500">{idx + 1}</td>
-                      <td className="py-3 px-4 font-medium text-blue-600">{row.name}</td>
-                      <td className="py-3 px-4" dir="ltr">{formatSAR(row.sales)}</td>
-                      <td className="py-3 px-4" dir="ltr">{formatSAR(row.prevSales)}</td>
-                      <td className={`py-3 px-4 font-semibold ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`} dir="ltr">
-                        {row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%
-                      </td>
-                      <td className="py-3 px-4 text-red-500 font-semibold" dir="ltr">{formatSAR(row.dailyReq)}</td>
-                      <td className="py-3 px-4" dir="ltr">{row.trans.toLocaleString()}</td>
-                      <td className="py-3 px-4" dir="ltr">{Math.round(row.avgInv).toLocaleString()}</td>
-                      <td className="py-3 px-4" dir="ltr">{row.visitors.toLocaleString()}</td>
-                      <td className="py-3 px-4" dir="ltr">{row.prevVisitors.toLocaleString()}</td>
-                      <td className="py-3 px-4" dir="ltr">{row.conversion.toFixed(1)}%</td>
-                      <td className="py-3 px-4 font-bold" dir="ltr">{Math.round(row.customerValue).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* نافذة اختيار الفرع للتقرير */}
-      {storeReportModalOpen && (
-        <div className="modal-center-screen" onClick={() => setStoreReportModalOpen(false)}>
-          <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">تصدير التقرير PDF</h3>
-              <button onClick={() => setStoreReportModalOpen(false)} className="text-neutral-500 hover:text-neutral-700">
-                <XIcon />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-2">اختر الفرع:</label>
-                <select
-                  className="input w-full"
-                  value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
-                >
-                  <option value="all">الكل (ملخص عام)</option>
-                  {Array.from(allowedStoreIds).map(sid => (
-                    <option key={sid} value={sid}>{raw?.stores?.[sid] || sid}</option>
-                  ))}
-                </select>
-              </div>
-
-              {selectedBranch === 'all' && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="includeAllPages"
-                    checked={includeAllPages}
-                    onChange={(e) => setIncludeAllPages(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 rounded"
-                  />
-                  <label htmlFor="includeAllPages" className="text-sm text-neutral-600">
-                    إنشاء صفحة تفصيلية لكل فرع (عند اختيار الكل)
-                  </label>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setStoreReportModalOpen(false)}
-                className="btn-secondary py-2 px-4"
-              >
-                إلغاء
-              </button>
-              <button
-                onClick={handleGenerateStoreReport}
-                className="btn-primary py-2 px-4"
-              >
-                تصدير
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* نافذة تقرير الموظفين */}
-      {employeeReportModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4" onClick={() => setEmployeeReportModalOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-3 sm:p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">📄</span>
-                  <div>
-                    <h2 className="text-lg font-bold">اختيار الموظفين (PDF)</h2>
-                    <p className="text-green-100 text-sm">اختر الموظفين للتقرير وازل المستقيلين</p>
+      {
+        dailyReportModalOpen && (
+          <div className="modal-center-screen" onClick={() => setDailyReportModalOpen(false)}>
+            <div className="modal-content max-w-6xl my-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div>
+                  <div className="text-base font-bold text-blue-600 flex flex-col sm:flex-row sm:items-center gap-2">
+                    <span className="text-2xl sm:text-base">📄</span>
+                    <div className="flex flex-col">
+                      <span>التقرير اليومي</span>
+                      <span className="text-xs sm:text-sm text-gray-500 font-normal mt-1">
+                        تقرير الأمس ({yesterdayStr}) مقارنة بـ ({lastYearYesterdayStr})
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <button onClick={() => setEmployeeReportModalOpen(false)} className="bg-white/20 hover:bg-white/30 p-2 rounded-lg">✕</button>
-              </div>
-            </div>
-
-            {/* Filters */}
-            <div className="p-3 sm:p-4 bg-gray-50 border-b">
-              <div className="flex flex-wrap gap-4 items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={empFilterStatus.has('active')}
-                      onChange={(e) => {
-                        const newSet = new Set(empFilterStatus);
-                        e.target.checked ? newSet.add('active') : newSet.delete('active');
-                        setEmpFilterStatus(newSet);
-                      }}
-                      className="w-4 h-4 text-green-600 rounded"
-                    />
-                    <span className="text-green-600 font-medium">✓ موظف نشط</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={empFilterStatus.has('review')}
-                      onChange={(e) => {
-                        const newSet = new Set(empFilterStatus);
-                        e.target.checked ? newSet.add('review') : newSet.delete('review');
-                        setEmpFilterStatus(newSet);
-                      }}
-                      className="w-4 h-4 text-orange-600 rounded"
-                    />
-                    <span className="text-orange-600 font-medium">□ مراجعة (معيار واحد)</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={empFilterStatus.has('resigned')}
-                      onChange={(e) => {
-                        const newSet = new Set(empFilterStatus);
-                        e.target.checked ? newSet.add('resigned') : newSet.delete('resigned');
-                        setEmpFilterStatus(newSet);
-                      }}
-                      className="w-4 h-4 text-red-600 rounded"
-                    />
-                    <span className="text-red-600 font-medium">□ مستقيل (معياران)</span>
-                  </label>
-                </div>
-
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  المحددين: <strong>{selectedEmployees.size}</strong> من <strong>{employeeListForSelection.length}</strong>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn-primary py-1.5 px-3 text-sm flex items-center gap-2"
+                    onClick={handlePrintDailyReport}
+                  >
+                    <PrinterIcon className="w-4 h-4" /> طباعة التقرير
+                  </button>
+                  <button
+                    type="button"
+                    className="bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-50 py-1.5 px-3 rounded-lg text-sm flex items-center gap-2 transition-colors font-medium shadow-sm"
+                    onClick={handlePrintEmployeeReport}
+                  >
+                    <UsersIcon className="w-4 h-4 text-orange-500" /> تقرير الموظفين
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary py-1.5 px-3 text-sm flex items-center gap-2"
+                    onClick={() => setDailyReportModalOpen(false)}
+                  >
+                    <XIcon /> إغلاق
+                  </button>
                 </div>
               </div>
-
-              <div className="flex items-center gap-3 mt-3">
-                <button
-                  onClick={() => setSelectedEmployees(new Set(employeeListForSelection.map(e => e.id)))}
-                  className="text-sm bg-green-100 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-200 transition-colors"
-                >
-                  ✓ تحديد الكل
-                </button>
-                <button
-                  onClick={() => setSelectedEmployees(new Set())}
-                  className="text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  ✗ إلغاء الكل
-                </button>
-                <button
-                  onClick={() => {
-                    const activeEmps = employeeListForSelection.filter(e => e.sales > 0).map(e => e.id);
-                    setSelectedEmployees(new Set(activeEmps));
-                  }}
-                  className="text-sm bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors"
-                >
-                  👤 النشطين فقط
-                </button>
-              </div>
-            </div>
-
-            {/* Employee List */}
-            <div className="flex-1 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-100 sticky top-0">
-                  <tr>
-                    <th className="p-3 text-right w-10">
-                      <input
-                        type="checkbox"
-                        checked={selectedEmployees.size === employeeListForSelection.length && employeeListForSelection.length > 0}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedEmployees(new Set(employeeListForSelection.map(emp => emp.id)));
-                          } else {
-                            setSelectedEmployees(new Set());
-                          }
-                        }}
-                        className="w-4 h-4"
-                      />
-                    </th>
-                    <th className="p-3 text-right font-semibold text-gray-700">الموظف</th>
-                    <th className="p-3 text-right font-semibold text-gray-700">الفرع</th>
-                    <th className="p-3 text-left font-semibold text-gray-700">المبيعات</th>
-                    <th className="p-3 text-center font-semibold text-gray-700">الحالة</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {employeeListForSelection.map((emp, idx) => (
-                    <tr key={emp.id} className={`border-b hover:bg-gray-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                      <td className="p-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedEmployees.has(emp.id)}
-                          onChange={(e) => {
-                            const newSet = new Set(selectedEmployees);
-                            e.target.checked ? newSet.add(emp.id) : newSet.delete(emp.id);
-                            setSelectedEmployees(newSet);
-                          }}
-                          className="w-4 h-4"
-                        />
-                      </td>
-                      <td className="p-3">
-                        <div className="font-medium text-gray-800">{emp.name}</div>
-                        <div className="text-xs text-gray-400">{emp.id}</div>
-                      </td>
-                      <td className="p-3 text-gray-600 text-xs">{emp.storeName}</td>
-                      <td className="p-3 font-bold text-gray-800" dir="ltr">{Math.round(emp.sales).toLocaleString()}</td>
-                      <td className="p-3 text-center">
-                        <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">نشط</span>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-orange-500 text-white">
+                      <th className="text-right py-3 px-4 font-semibold">#</th>
+                      <th className="text-right py-3 px-4 font-semibold">الفرع</th>
+                      <th className="text-right py-3 px-4 font-semibold">مبيعات الأمس</th>
+                      <th className="text-right py-3 px-4 font-semibold">العام الماضي</th>
+                      <th className="text-right py-3 px-4 font-semibold">النمو %</th>
+                      <th className="text-right py-3 px-4 font-semibold">اليومية المتبقية</th>
+                      <th className="text-right py-3 px-4 font-semibold">عدد الفواتير</th>
+                      <th className="text-right py-3 px-4 font-semibold">متوسط الفاتورة</th>
+                      <th className="text-right py-3 px-4 font-semibold">زوار</th>
+                      <th className="text-right py-3 px-4 font-semibold">زوار (LY)</th>
+                      <th className="text-right py-3 px-4 font-semibold">تحويل %</th>
+                      <th className="text-right py-3 px-4 font-semibold">قيمة العميل</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {employeeListForSelection.length === 0 && (
-                <div className="text-center py-12 text-gray-400">
-                  <div className="text-4xl mb-2">👥</div>
-                  <div>لا توجد بيانات موظفين للفترة المحددة</div>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-3 sm:p-4 border-t flex justify-end gap-3 bg-gray-50">
-              <div className="text-sm text-gray-500">
-                الفترة: من {yesterdayStr.substring(0, 8)}01 إلى {yesterdayStr}
+                  </thead>
+                  <tbody>
+                    {dailyReportData.map((row: any, idx) => (
+                      <tr key={row.sid} className={`border-b border-neutral-100 hover:bg-neutral-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-neutral-50'}`}>
+                        <td className="py-3 px-4 text-neutral-500">{idx + 1}</td>
+                        <td className="py-3 px-4 font-medium text-blue-600">{row.name}</td>
+                        <td className="py-3 px-4" dir="ltr">{formatSAR(row.sales)}</td>
+                        <td className="py-3 px-4" dir="ltr">{formatSAR(row.prevSales)}</td>
+                        <td className={`py-3 px-4 font-semibold ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`} dir="ltr">
+                          {row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%
+                        </td>
+                        <td className="py-3 px-4 text-red-500 font-semibold" dir="ltr">{formatSAR(row.dailyReq)}</td>
+                        <td className="py-3 px-4" dir="ltr">{row.trans.toLocaleString()}</td>
+                        <td className="py-3 px-4" dir="ltr">{Math.round(row.avgInv).toLocaleString()}</td>
+                        <td className="py-3 px-4" dir="ltr">{row.visitors.toLocaleString()}</td>
+                        <td className="py-3 px-4" dir="ltr">{row.prevVisitors.toLocaleString()}</td>
+                        <td className="py-3 px-4" dir="ltr">{row.conversion.toFixed(1)}%</td>
+                        <td className="py-3 px-4 font-bold" dir="ltr">{Math.round(row.customerValue).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="flex gap-3">
+            </div>
+          </div>
+        )
+      }
+
+      {/* نافذة اختيار الفرع للتقرير */}
+      {
+        storeReportModalOpen && (
+          <div className="modal-center-screen" onClick={() => setStoreReportModalOpen(false)}>
+            <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold">تصدير التقرير PDF</h3>
+                <button onClick={() => setStoreReportModalOpen(false)} className="text-neutral-500 hover:text-neutral-700">
+                  <XIcon />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">اختر الفرع:</label>
+                  <select
+                    className="input w-full"
+                    value={selectedBranch}
+                    onChange={(e) => setSelectedBranch(e.target.value)}
+                  >
+                    <option value="all">الكل (ملخص عام)</option>
+                    {Array.from(allowedStoreIds).map(sid => (
+                      <option key={sid} value={sid}>{raw?.stores?.[sid] || sid}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedBranch === 'all' && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="includeAllPages"
+                      checked={includeAllPages}
+                      onChange={(e) => setIncludeAllPages(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <label htmlFor="includeAllPages" className="text-sm text-neutral-600">
+                      إنشاء صفحة تفصيلية لكل فرع (عند اختيار الكل)
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
                 <button
-                  onClick={() => setEmployeeReportModalOpen(false)}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                  onClick={() => setStoreReportModalOpen(false)}
+                  className="btn-secondary py-2 px-4"
                 >
                   إلغاء
                 </button>
                 <button
-                  onClick={handleGenerateEmployeeReport}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-                  disabled={selectedEmployees.size === 0}
+                  onClick={handleGenerateStoreReport}
+                  className="btn-primary py-2 px-4"
                 >
-                  📄 إنشاء التقرير
+                  تصدير
                 </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-    </div>
+      {/* نافذة تقرير الموظفين */}
+      {
+        employeeReportModalOpen && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4" onClick={() => setEmployeeReportModalOpen(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-3 sm:p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">📄</span>
+                    <div>
+                      <h2 className="text-lg font-bold">اختيار الموظفين (PDF)</h2>
+                      <p className="text-green-100 text-sm">اختر الموظفين للتقرير وازل المستقيلين</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setEmployeeReportModalOpen(false)} className="bg-white/20 hover:bg-white/30 p-2 rounded-lg">✕</button>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="p-3 sm:p-4 bg-gray-50 border-b">
+                <div className="flex flex-wrap gap-4 items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={empFilterStatus.has('active')}
+                        onChange={(e) => {
+                          const newSet = new Set(empFilterStatus);
+                          e.target.checked ? newSet.add('active') : newSet.delete('active');
+                          setEmpFilterStatus(newSet);
+                        }}
+                        className="w-4 h-4 text-green-600 rounded"
+                      />
+                      <span className="text-green-600 font-medium">✓ موظف نشط</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={empFilterStatus.has('review')}
+                        onChange={(e) => {
+                          const newSet = new Set(empFilterStatus);
+                          e.target.checked ? newSet.add('review') : newSet.delete('review');
+                          setEmpFilterStatus(newSet);
+                        }}
+                        className="w-4 h-4 text-orange-600 rounded"
+                      />
+                      <span className="text-orange-600 font-medium">□ مراجعة (معيار واحد)</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={empFilterStatus.has('resigned')}
+                        onChange={(e) => {
+                          const newSet = new Set(empFilterStatus);
+                          e.target.checked ? newSet.add('resigned') : newSet.delete('resigned');
+                          setEmpFilterStatus(newSet);
+                        }}
+                        className="w-4 h-4 text-red-600 rounded"
+                      />
+                      <span className="text-red-600 font-medium">□ مستقيل (معياران)</span>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    المحددين: <strong>{selectedEmployees.size}</strong> من <strong>{employeeListForSelection.length}</strong>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 mt-3">
+                  <button
+                    onClick={() => setSelectedEmployees(new Set(employeeListForSelection.map(e => e.id)))}
+                    className="text-sm bg-green-100 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-200 transition-colors"
+                  >
+                    ✓ تحديد الكل
+                  </button>
+                  <button
+                    onClick={() => setSelectedEmployees(new Set())}
+                    className="text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    ✗ إلغاء الكل
+                  </button>
+                  <button
+                    onClick={() => {
+                      const activeEmps = employeeListForSelection.filter(e => e.sales > 0).map(e => e.id);
+                      setSelectedEmployees(new Set(activeEmps));
+                    }}
+                    className="text-sm bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors"
+                  >
+                    👤 النشطين فقط
+                  </button>
+                </div>
+              </div>
+
+              {/* Employee List */}
+              <div className="flex-1 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 sticky top-0">
+                    <tr>
+                      <th className="p-3 text-right w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedEmployees.size === employeeListForSelection.length && employeeListForSelection.length > 0}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedEmployees(new Set(employeeListForSelection.map(emp => emp.id)));
+                            } else {
+                              setSelectedEmployees(new Set());
+                            }
+                          }}
+                          className="w-4 h-4"
+                        />
+                      </th>
+                      <th className="p-3 text-right font-semibold text-gray-700">الموظف</th>
+                      <th className="p-3 text-right font-semibold text-gray-700">الفرع</th>
+                      <th className="p-3 text-left font-semibold text-gray-700">المبيعات</th>
+                      <th className="p-3 text-center font-semibold text-gray-700">الحالة</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employeeListForSelection.map((emp, idx) => (
+                      <tr key={emp.id} className={`border-b hover:bg-gray-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                        <td className="p-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedEmployees.has(emp.id)}
+                            onChange={(e) => {
+                              const newSet = new Set(selectedEmployees);
+                              e.target.checked ? newSet.add(emp.id) : newSet.delete(emp.id);
+                              setSelectedEmployees(newSet);
+                            }}
+                            className="w-4 h-4"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <div className="font-medium text-gray-800">{emp.name}</div>
+                          <div className="text-xs text-gray-400">{emp.id}</div>
+                        </td>
+                        <td className="p-3 text-gray-600 text-xs">{emp.storeName}</td>
+                        <td className="p-3 font-bold text-gray-800" dir="ltr">{Math.round(emp.sales).toLocaleString()}</td>
+                        <td className="p-3 text-center">
+                          <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">نشط</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {employeeListForSelection.length === 0 && (
+                  <div className="text-center py-12 text-gray-400">
+                    <div className="text-4xl mb-2">👥</div>
+                    <div>لا توجد بيانات موظفين للفترة المحددة</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-3 sm:p-4 border-t flex justify-end gap-3 bg-gray-50">
+                <div className="text-sm text-gray-500">
+                  الفترة: من {yesterdayStr.substring(0, 8)}01 إلى {yesterdayStr}
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setEmployeeReportModalOpen(false)}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    onClick={handleGenerateEmployeeReport}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                    disabled={selectedEmployees.size === 0}
+                  >
+                    📄 إنشاء التقرير
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+    </div >
   );
 }
 

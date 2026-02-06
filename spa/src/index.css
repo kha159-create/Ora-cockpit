@@ -143,6 +143,8 @@ html[dir="rtl"] .main-layout-sidebar--closed {
   /* المودال: منتصف الشاشة فقط، بدون طبقة سوداء تغطي الصفحة */
   .modal-center-screen {
     @apply fixed inset-0 flex items-center justify-center z-50 p-2 sm:p-4 overflow-auto;
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
     animation: fadeIn 0.2s ease-out;
     background: transparent;
   }

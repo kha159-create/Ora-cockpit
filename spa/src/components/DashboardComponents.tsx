@@ -278,17 +278,17 @@ export const RankCard: React.FC<{
           const value = Number(item[key] || 0);
           const pct = maxVal > 0 ? (value / maxVal) * 100 : 0;
           return (
-            <div key={`${item.name}-${idx}`} className="flex items-center gap-4 flex-row-reverse">
-              <span className="text-base font-bold text-neutral-800 w-24 shrink-0 text-right tabular-nums" dir="ltr">
+            <div key={`${item.name}-${idx}`} className="flex items-center gap-2 sm:gap-4 flex-row-reverse">
+              <span className="text-sm sm:text-base font-bold text-neutral-800 w-20 sm:w-24 shrink-0 text-right tabular-nums" dir="ltr">
                 {format(value, key)}
               </span>
-              <div className="flex-1 min-w-0 h-5 bg-neutral-200 rounded-full overflow-hidden">
+              <div className="flex-1 min-w-0 h-4 sm:h-5 bg-neutral-200 rounded-full overflow-hidden hidden xs:block">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-orange-400 to-orange-600 transition-all duration-300"
                   style={{ width: `${Math.max(pct, 2)}%` }}
                 />
               </div>
-              <span className="text-base font-medium text-neutral-700 truncate min-w-0 flex-1 text-right" title={item.name}>
+              <span className="text-xs sm:text-base font-medium text-neutral-700 truncate min-w-0 flex-1 text-right" title={item.name}>
                 {idx + 1}- {item.name}
               </span>
             </div>
@@ -522,8 +522,8 @@ export const GrowthTrajectoryChart: React.FC<{
                     {/* Previous/Target Bar (Dark or Blue) */}
                     <div
                       className={`w-4 rounded-t-lg transition-all duration-700 ease-out hover:brightness-125 cursor-pointer relative z-10 ${mode === 'TARGET'
-                          ? 'bg-gradient-to-t from-blue-600 to-blue-400 shadow-[0_-4px_12px_rgba(59,130,246,0.1)]'
-                          : 'bg-gradient-to-t from-slate-900 to-slate-700 shadow-[0_-4px_12px_rgba(15,23,42,0.1)]'
+                        ? 'bg-gradient-to-t from-blue-600 to-blue-400 shadow-[0_-4px_12px_rgba(59,130,246,0.1)]'
+                        : 'bg-gradient-to-t from-slate-900 to-slate-700 shadow-[0_-4px_12px_rgba(15,23,42,0.1)]'
                         } group-hover/bar:scale-x-110`}
                       style={{ height: `${Math.max(prevPct, 2)}%` }}
                     >
@@ -790,8 +790,8 @@ export const LineChart: React.FC<{ data: { name: string;[key: string]: any }[] }
     PreviousVisitors: '#6366f1', // Indigo for previous visitors
   };
 
-  const width = 600;
-  const height = 250;
+  const width = 800;
+  const height = 300;
   const padding = { top: 30, right: 30, bottom: 40, left: 50 };
 
   const allValues = data.flatMap((d) => keys.filter((k) => visibleKeys.has(k)).map((k) => d[k] as number));
@@ -854,78 +854,85 @@ export const LineChart: React.FC<{ data: { name: string;[key: string]: any }[] }
   };
 
   return (
-    <div className="w-full h-full relative flex flex-col" ref={containerRef}>
-      <div className="flex-grow" onMouseLeave={() => setTooltip(null)}>
-        {tooltip && <Tooltip {...tooltip} />}
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full preserve-3d" preserveAspectRatio="xMidYMid meet">
-          {/* Grid Lines and Y-Axis */}
-          {Array.from({ length: yTicks }).map((_, i) => {
-            const y = height - padding.bottom - (i * (height - padding.top - padding.bottom)) / (yTicks - 1);
-            const val = (maxVal / (yTicks - 1)) * i;
-            return (
-              <g key={i} className="text-gray-400">
-                <text x={padding.left - 8} y={y + 4} textAnchor="end" fontSize="10" fill="currentColor">
-                  {val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val.toFixed(0)}
-                </text>
-                <line
-                  x1={padding.left}
-                  y1={y}
-                  x2={width - padding.right}
-                  y2={y}
-                  stroke="currentColor"
-                  strokeOpacity="0.2"
-                  strokeDasharray="2 2"
-                />
-              </g>
-            );
-          })}
-
-          {/* X-Axis */}
-          {data.map((item, i) => (
-            <text
-              key={item.name}
-              x={padding.left + (i * (width - padding.left - padding.right)) / Math.max(1, data.length - 1)}
-              y={height - padding.bottom + 15}
-              textAnchor="middle"
-              fontSize="10"
-              fill="#6b7280"
-            >
-              {item.name}
-            </text>
-          ))}
-
-          {/* Lines */}
-          {keys.map(
-            (key) =>
-              visibleKeys.has(key) && (
-                <path
-                  key={key}
-                  d={getPathData(key)}
-                  fill="none"
-                  stroke={colors[key] || '#000'}
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeDasharray={key.toLowerCase() === 'target' ? '6 6' : 'none'}
-                  className="transition-all duration-300"
-                />
-              ),
-          )}
-
-          <rect x={padding.left} y={padding.top} width={width - padding.left - padding.right} height={height - padding.top - padding.bottom} fill="transparent" onMouseMove={handleMouseMove} />
-        </svg>
-      </div>
-      <div className="flex justify-center flex-wrap gap-x-6 gap-y-2 text-sm mt-2">
+    <div className="w-full h-full flex flex-col" ref={containerRef}>
+      <div className="flex flex-wrap items-center gap-2 mb-4 px-2">
         {keys.map((key) => (
           <button
             key={key}
             onClick={() => toggleKey(key)}
-            className={`flex items-center gap-2 transition-opacity ${!visibleKeys.has(key) && 'opacity-40'}`}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-all ${visibleKeys.has(key)
+              ? 'bg-neutral-100 text-neutral-800 ring-1 ring-neutral-200'
+              : 'bg-transparent text-neutral-400 hover:bg-neutral-50'
+              }`}
           >
-            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: colors[key] || '#000' }}></span>
-            <span>{key}</span>
+            <span
+              className="w-2.5 h-2.5 rounded-full"
+              style={{ backgroundColor: visibleKeys.has(key) ? colors[key] : '#e5e7eb' }}
+            />
+            {key}
           </button>
         ))}
+      </div>
+
+      <div className="relative flex-grow w-full overflow-x-auto overflow-y-hidden">
+        {/* Using a fixed minimum width to ensure chart readability on small screens */}
+        <div className="min-w-[600px] h-full">
+          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full" onMouseMove={handleMouseMove} onMouseLeave={() => setTooltip(null)}>
+            {/* Grid Lines and Y-Axis */}
+            {Array.from({ length: yTicks }).map((_, i) => {
+              const y = height - padding.bottom - (i * (height - padding.top - padding.bottom)) / (yTicks - 1);
+              const val = (maxVal / (yTicks - 1)) * i;
+              return (
+                <g key={i} className="text-gray-400">
+                  <text x={padding.left - 8} y={y + 4} textAnchor="end" fontSize="10" fill="currentColor">
+                    {val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val.toFixed(0)}
+                  </text>
+                  <line
+                    x1={padding.left}
+                    y1={y}
+                    x2={width - padding.right}
+                    y2={y}
+                    stroke="currentColor"
+                    strokeOpacity="0.2"
+                    strokeDasharray="2 2"
+                  />
+                </g>
+              );
+            })}
+
+            {/* X-Axis */}
+            {data.map((item, i) => (
+              <text
+                key={item.name}
+                x={padding.left + (i * (width - padding.left - padding.right)) / Math.max(1, data.length - 1)}
+                y={height - padding.bottom + 15}
+                textAnchor="middle"
+                fontSize="10"
+                fill="#6b7280"
+              >
+                {item.name}
+              </text>
+            ))}
+
+            {/* Lines */}
+            {keys.filter((k) => visibleKeys.has(k)).map((key) => (
+              <path
+                key={key}
+                d={getPathData(key)}
+                fill="none"
+                stroke={colors[key] || '#000'}
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray={key.toLowerCase() === 'target' ? '6 6' : 'none'}
+                className="transition-all duration-300"
+              />
+            ))}
+
+            <rect x={padding.left} y={padding.top} width={width - padding.left - padding.right} height={height - padding.top - padding.bottom} fill="transparent" onMouseMove={handleMouseMove} />
+          </svg>
+        </div>
+        {tooltip && <Tooltip {...tooltip} />}
       </div>
     </div>
   );

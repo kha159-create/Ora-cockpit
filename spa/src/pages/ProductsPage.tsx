@@ -56,11 +56,10 @@ function PeriodButton({
 }) {
   return (
     <button
-      className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-all ${
-        active
-          ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white border-orange-500 shadow'
-          : 'bg-white text-neutral-700 border-neutral-200 hover:bg-orange-50'
-      }`}
+      className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-all ${active
+        ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white border-orange-500 shadow'
+        : 'bg-white text-neutral-700 border-neutral-200 hover:bg-orange-50'
+        }`}
       onClick={onClick}
       type="button"
     >
@@ -124,6 +123,12 @@ export default function ProductsPage() {
 
   const [missedOpen, setMissedOpen] = useState(false);
   const [missedRow, setMissedRow] = useState<any>(null);
+
+  // Pagination for new sections
+  const [basketPage, setBasketPage] = useState(1);
+  const [missedPage, setMissedPage] = useState(1);
+  const BASKET_PER_PAGE = 10;
+  const MISSED_PER_PAGE = 10;
 
   useEffect(() => {
     Promise.all([loadProductAnalysisData(), loadManagementData()])
@@ -571,43 +576,9 @@ export default function ProductsPage() {
       </div>
 
       {/* Category performance */}
+      {/* Category performance */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <ChartCard title={`المنتج الأكثر مبيعاً حسب الفئة (${metricLabel})`}>
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr>
-                  <th className="th">التصنيف</th>
-                  <th className="th">Top Item</th>
-                  <th className="th text-center">الكمية</th>
-                  <th className="th text-center">القيمة</th>
-                  <th className="th text-center">Share</th>
-                </tr>
-              </thead>
-              <tbody>
-                {derived.categoriesAgg.slice(0, 50).map((c) => (
-                  <tr key={c.category} className="hover:bg-orange-50 cursor-pointer" onClick={() => setSelectedCategory(c.category)}>
-                    <td className="td font-semibold text-neutral-900">{c.category}</td>
-                    <td className="td text-neutral-700">
-                      <div className="font-mono text-xs text-neutral-500">{c.topItemId || '-'}</div>
-                      <div className="font-semibold">{c.topItemName || '-'}</div>
-                    </td>
-                    <td className="td text-center">{Math.round(c.qty).toLocaleString()}</td>
-                    <td className="td text-center font-bold text-green-700">{formatSAR(c.amount)}</td>
-                    <td className="td text-center font-bold text-orange-700">{c.sharePercent.toFixed(1)}%</td>
-                  </tr>
-                ))}
-                {derived.categoriesAgg.length === 0 && (
-                  <tr>
-                    <td className="td text-center text-neutral-500" colSpan={5}>
-                      لا توجد بيانات.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </ChartCard>
+        {/* 'Top Selling Products by Category' moved to Dashboard as requested */}
 
         <ChartCard title={`أداء الفئات (مرتبة حسب ${metricLabel})`}>
           <div className="h-[360px]">
@@ -764,20 +735,27 @@ export default function ProductsPage() {
               </tr>
             </thead>
             <tbody>
-              {derived.basket.slice(0, 20).map((p: any, i: number) => (
-                <tr key={`${p.item_a_id}-${p.item_b_id}-${i}`} className="hover:bg-orange-50">
-                  <td className="td text-center text-neutral-500">{i + 1}</td>
-                  <td className="td">
-                    <div className="font-semibold text-neutral-900">{p.item_a_name}</div>
-                    <div className="font-mono text-xs text-neutral-500">{p.item_a_id}</div>
-                  </td>
-                  <td className="td">
-                    <div className="font-semibold text-neutral-900">{p.item_b_name}</div>
-                    <div className="font-mono text-xs text-neutral-500">{p.item_b_id}</div>
-                  </td>
-                  <td className="td text-center font-extrabold text-orange-700">{Math.round(safeNum(p.frequency)).toLocaleString()}</td>
-                </tr>
-              ))}
+              {(() => {
+                const list = derived.basket;
+                const pageCount = Math.ceil(list.length / BASKET_PER_PAGE);
+                const start = (basketPage - 1) * BASKET_PER_PAGE;
+                const visibleItems = list.slice(start, start + BASKET_PER_PAGE);
+
+                return visibleItems.map((p: any, i: number) => (
+                  <tr key={`${p.item_a_id}-${p.item_b_id}-${i}`} className="hover:bg-orange-50">
+                    <td className="td text-center text-neutral-500">{start + i + 1}</td>
+                    <td className="td">
+                      <div className="font-semibold text-neutral-900">{p.item_a_name}</div>
+                      <div className="font-mono text-xs text-neutral-500">{p.item_a_id}</div>
+                    </td>
+                    <td className="td">
+                      <div className="font-semibold text-neutral-900">{p.item_b_name}</div>
+                      <div className="font-mono text-xs text-neutral-500">{p.item_b_id}</div>
+                    </td>
+                    <td className="td text-center font-extrabold text-orange-700">{Math.round(safeNum(p.frequency)).toLocaleString()}</td>
+                  </tr>
+                ));
+              })()}
               {derived.basket.length === 0 && (
                 <tr>
                   <td className="td text-center text-neutral-500" colSpan={4}>
@@ -804,33 +782,40 @@ export default function ProductsPage() {
               </tr>
             </thead>
             <tbody>
-              {derived.missedList.map((r: any, i: number) => {
-                const missed = Array.isArray(r.missed_items) ? [...r.missed_items].sort((a, b) => safeNum(b.count) - safeNum(a.count)) : [];
-                const top = missed[0];
-                const others = missed.length - 1;
-                return (
-                  <tr
-                    key={`${r.employee_id}-${i}`}
-                    className="hover:bg-orange-50 cursor-pointer"
-                    onClick={() => {
-                      setMissedRow({ ...r, missed_items: missed });
-                      setMissedOpen(true);
-                    }}
-                  >
-                    <td className="td text-center text-neutral-500">{i + 1}</td>
-                    <td className="td">
-                      <div className="font-bold text-neutral-900">{r.employee_name}</div>
-                      <div className="font-mono text-xs text-neutral-500">{r.employee_id}</div>
-                    </td>
-                    <td className="td text-green-700 font-semibold">{r.sold_item}</td>
-                    <td className="td text-red-700">
-                      <span className="font-semibold">{top?.name || '-'}</span>
-                      {others > 0 && <span className="text-xs text-neutral-500 ms-2">+{others} أخرى</span>}
-                    </td>
-                    <td className="td text-center font-extrabold text-orange-700">{Math.round(safeNum(r.total_count)).toLocaleString()}</td>
-                  </tr>
-                );
-              })}
+              {(() => {
+                const list = derived.missedList;
+                const pageCount = Math.ceil(list.length / MISSED_PER_PAGE);
+                const start = (missedPage - 1) * MISSED_PER_PAGE;
+                const visibleItems = list.slice(start, start + MISSED_PER_PAGE);
+
+                return visibleItems.map((r: any, i: number) => {
+                  const missed = Array.isArray(r.missed_items) ? [...r.missed_items].sort((a, b) => safeNum(b.count) - safeNum(a.count)) : [];
+                  const top = missed[0];
+                  const others = missed.length - 1;
+                  return (
+                    <tr
+                      key={`${r.employee_id}-${i}`}
+                      className="hover:bg-orange-50 cursor-pointer"
+                      onClick={() => {
+                        setMissedRow({ ...r, missed_items: missed });
+                        setMissedOpen(true);
+                      }}
+                    >
+                      <td className="td text-center text-neutral-500">{start + i + 1}</td>
+                      <td className="td">
+                        <div className="font-bold text-neutral-900">{r.employee_name}</div>
+                        <div className="font-mono text-xs text-neutral-500">{r.employee_id}</div>
+                      </td>
+                      <td className="td text-green-700 font-semibold">{r.sold_item}</td>
+                      <td className="td text-red-700">
+                        <span className="font-semibold">{top?.name || '-'}</span>
+                        {others > 0 && <span className="text-xs text-neutral-500 ms-2">+{others} أخرى</span>}
+                      </td>
+                      <td className="td text-center font-extrabold text-orange-700">{Math.round(safeNum(r.total_count)).toLocaleString()}</td>
+                    </tr>
+                  );
+                });
+              })()}
               {derived.missedList.length === 0 && (
                 <tr>
                   <td className="td text-center text-neutral-500" colSpan={5}>
@@ -854,9 +839,8 @@ export default function ProductsPage() {
                   <button
                     key={c}
                     type="button"
-                    className={`w-full text-right px-4 py-2 text-sm font-semibold border-b border-neutral-200 hover:bg-orange-50 ${
-                      selectedCategory === c ? 'bg-orange-100 text-orange-800' : 'bg-white text-neutral-700'
-                    }`}
+                    className={`w-full text-right px-4 py-2 text-sm font-semibold border-b border-neutral-200 hover:bg-orange-50 ${selectedCategory === c ? 'bg-orange-100 text-orange-800' : 'bg-white text-neutral-700'
+                      }`}
                     onClick={() => setSelectedCategory(c)}
                   >
                     {c}
