@@ -608,23 +608,29 @@ export default function DashboardPage() {
     const storesMap = raw.stores || {};
     const historyData: Record<string, any[]> = empRaw.history || {};
     const names: Record<string, string> = empRaw.employee_names || {};
-    const byStore: Record<string, { sales: number; trans: number; employees: Record<string, { sales: number; trans: number; name: string }> }> = {};
+    const byStore: Record<string, { sales: number; trans: number; visitors: number; employees: Record<string, { sales: number; trans: number; name: string }> }> = {};
 
     (raw.sales || []).forEach(([d, sid, v]: any[]) => {
       if (String(d).startsWith(todayStr)) {
-        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, employees: {} };
+        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, employees: {} };
         byStore[sid].sales += v || 0;
       }
     });
     (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
       if (String(d).startsWith(todayStr)) {
-        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, employees: {} };
+        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, employees: {} };
         byStore[sid].trans += v || 0;
+      }
+    });
+    (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
+      if (String(d).startsWith(todayStr)) {
+        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, employees: {} };
+        byStore[sid].visitors += v || 0;
       }
     });
 
     Object.entries(historyData).forEach(([storeCode, records]) => {
-      if (!byStore[storeCode]) byStore[storeCode] = { sales: 0, trans: 0, employees: {} };
+      if (!byStore[storeCode]) byStore[storeCode] = { sales: 0, trans: 0, visitors: 0, employees: {} };
       for (const rec of records || []) {
         const date = rec?.[0];
         if (!String(date).startsWith(todayStr)) continue;
@@ -659,6 +665,7 @@ export default function DashboardPage() {
         name: storesMap[sid] || sid,
         sales: v.sales,
         trans: v.trans,
+        visitors: v.visitors,
         employees: Object.entries(v.employees)
           .map(([id, e]) => ({
             id,
@@ -1256,6 +1263,18 @@ export default function DashboardPage() {
                                   <span className="font-semibold">معدل:</span>
                                   <span className="font-bold" dir="ltr">{formatSAR(store.sales / store.trans)}</span>
                                 </span>
+                              )}
+                              {store.visitors > 0 && (
+                                <>
+                                  <span className="flex items-center gap-1 text-blue-600">
+                                    <span>👣</span>
+                                    <span className="font-medium">{store.visitors.toLocaleString()} زائر</span>
+                                  </span>
+                                  <span className="flex items-center gap-1 text-green-600">
+                                    <span className="font-semibold">تحويل:</span>
+                                    <span className="font-bold" dir="ltr">{((store.trans / store.visitors) * 100).toFixed(1)}%</span>
+                                  </span>
+                                </>
                               )}
                             </div>
                           </div>
