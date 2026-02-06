@@ -508,18 +508,18 @@ export const GrowthTrajectoryChart: React.FC<{
                       </div>
 
                       {/* Tooltip */}
-                      <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl opacity-0 hover:opacity-100 group-hover/bar:opacity-100 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap shadow-2xl border border-white/10 min-w-[160px] text-right">
-                        <div className="text-[10px] font-black text-orange-400 mb-1.5 tracking-widest uppercase border-b border-white/10 pb-1">{d.name}</div>
-                        {/* Tooltip content... (truncated for brevity in edit, preserving logic) */}
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[9px] text-neutral-400">{labels.currentLabel}:</span>
-                          <span className="text-base font-black">{format ? format(d.Current) : d.Current.toLocaleString()}</span>
+                      <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white p-2 md:p-3 rounded-xl md:rounded-2xl opacity-0 hover:opacity-100 group-hover/bar:opacity-100 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap shadow-2xl border border-white/10 min-w-[120px] md:min-w-[160px] text-right">
+                        <div className="text-[9px] md:text-[10px] font-black text-orange-400 mb-1 tracking-widest uppercase border-b border-white/10 pb-1">{d.name}</div>
+                        {/* Tooltip content */}
+                        <div className="flex justify-between items-center mb-0.5 md:mb-1">
+                          <span className="text-[8px] md:text-[9px] text-neutral-400">{labels.currentLabel}:</span>
+                          <span className="text-sm md:text-base font-black">{format ? format(d.Current) : d.Current.toLocaleString()}</span>
                         </div>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[9px] text-neutral-400">{labels.prevLabel}:</span>
-                          <span className="text-base font-bold text-slate-400">{format ? format(d.Previous) : d.Previous.toLocaleString()}</span>
+                        <div className="flex justify-between items-center mb-0.5 md:mb-1">
+                          <span className="text-[8px] md:text-[9px] text-neutral-400">{labels.prevLabel}:</span>
+                          <span className="text-sm md:text-base font-bold text-slate-400">{format ? format(d.Previous) : d.Previous.toLocaleString()}</span>
                         </div>
-                        <div className={`text-[10px] font-bold mt-2 pt-1 border-t border-white/10 flex items-center justify-end gap-1 ${mode === 'TARGET' ? (growth >= 100 ? 'text-green-400' : 'text-red-400') : (growth >= 0 ? 'text-green-400' : 'text-red-400')}`}>
+                        <div className={`text-[9px] md:text-[10px] font-bold mt-1 md:mt-2 pt-1 border-t border-white/10 flex items-center justify-end gap-1 ${mode === 'TARGET' ? (growth >= 100 ? 'text-green-400' : 'text-red-400') : (growth >= 0 ? 'text-green-400' : 'text-red-400')}`}>
                           {mode === 'TARGET' ? (
                             <span>{growth.toFixed(1)}% تحقيق</span>
                           ) : (

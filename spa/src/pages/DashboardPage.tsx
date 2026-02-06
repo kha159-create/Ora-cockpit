@@ -694,13 +694,14 @@ export default function DashboardPage() {
     const meta = raw.store_meta || {};
     const storesMap = raw.stores || {};
     const byStore: Record<string, {
-      sales: number;
-      yesterdaySales: number;
+      sales: number; // MTD
+      yesterdaySales: number; // Daily
       totalMonthSales: number;
       trans: number;
       visitors: number;
       avgInv: number;
-      prevSales: number;
+      prevSales: number; // Last Year MTD
+      prevYesterdaySales: number; // Last Year Daily
       prevVisitors: number;
       dailyReq: number;
       target: number;
@@ -711,42 +712,45 @@ export default function DashboardPage() {
 
     (raw.sales || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
-      if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
+      if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevYesterdaySales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
 
       if (dateStr === yesterdayStr) {
         byStore[sid].yesterdaySales += v || 0;
       }
 
-      // Sales is now MTD Sales as requested
+      // Sales is now MTD Sales for other calcs if needed, but report wants Yesterday
       if (dateStr >= startOfMonth && dateStr <= yesterdayStr) {
         byStore[sid].sales += v || 0;
         byStore[sid].totalMonthSales += v || 0;
       }
 
-      // Previous Sales is Last Year MTD
+      // Previous Sales Last Year MTD
       if (dateStr >= startOfLastYearMonth && dateStr <= lastYearYesterdayStr) {
         byStore[sid].prevSales += v || 0;
+      }
+
+      // Previous Sales Last Year (Single Day)
+      if (dateStr === lastYearYesterdayStr) {
+        byStore[sid].prevYesterdaySales += v || 0;
       }
     });
 
     (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
-      if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
+      if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevYesterdaySales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
       if (dateStr === yesterdayStr) byStore[sid].trans += v || 0;
     });
 
     (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
-      if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
+      if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevYesterdaySales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
       if (dateStr === yesterdayStr) byStore[sid].visitors += v || 0;
       if (dateStr === lastYearYesterdayStr) byStore[sid].prevVisitors += v || 0;
     });
 
     (raw.targets || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
-      if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
-      // Filter for the entire month of the report to calculate "Month Total Target"
-      // derived from yesterdayStr (e.g., if report is for 15th, we want 1st-30th targets)
+      if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevYesterdaySales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
       if (dateStr.startsWith(yesterdayStr.substring(0, 7))) {
         const target = v || 0;
         byStore[sid].target += target;
@@ -756,7 +760,7 @@ export default function DashboardPage() {
     // Post-aggregation calculation loop
     Object.keys(byStore).forEach(sid => {
       const v = byStore[sid];
-      const remaining = Math.max(0, v.target - v.sales);
+      const remaining = Math.max(0, v.target - v.sales); // Remaining is based on MTD sales vs Month Target
 
       const nowForReq = new Date();
       const lastDayOfMonth = new Date(nowForReq.getFullYear(), nowForReq.getMonth() + 1, 0).getDate();
@@ -764,32 +768,34 @@ export default function DashboardPage() {
       if (remainingDays < 1) remainingDays = 1;
 
       v.dailyReq = remainingDays > 0 ? remaining / remainingDays : 0;
-      v.ach = v.target > 0 ? (v.sales / v.target) * 100 : 0;
+      v.ach = v.target > 0 ? (v.sales / v.target) * 100 : 0; // Achievement is usually MTD vs Target
     });
 
     return Object.entries(byStore)
       .filter(([sid]) => {
         const m = meta[sid];
         if (effectiveManager !== 'all' && (!m || String(m.manager) !== effectiveManager)) return false;
-        return byStore[sid].sales > 0 || byStore[sid].trans > 0;
+        return byStore[sid].sales > 0 || byStore[sid].trans > 0 || byStore[sid].yesterdaySales > 0;
       })
       .map(([sid, v]) => {
         // Average Bill: Yesterday Sales / Yesterday Bills
         const avgInv = v.trans > 0 ? v.yesterdaySales / v.trans : 0;
 
-        const growth = v.prevSales > 0 ? ((v.sales - v.prevSales) / v.prevSales) * 100 : 0;
+        // Growth: Yesterday vs Last Year Yesterday
+        const growth = v.prevYesterdaySales > 0 ? ((v.yesterdaySales - v.prevYesterdaySales) / v.prevYesterdaySales) * 100 : 0;
         const conversion = v.visitors > 0 ? (v.trans / v.visitors) * 100 : 0;
+
         return {
           sid,
           name: storesMap[sid] || sid,
-          sales: v.sales, // MTD
-          prevSales: v.prevSales, // Last Year MTD
+          sales: v.yesterdaySales, // CHANGED: Now reporting Single Day Sales
+          prevSales: v.prevYesterdaySales, // CHANGED: Now reporting Single Day LY Sales
           growth,
           trans: v.trans, // Yesterday
           avgInv: avgInv, // Yesterday
           visitors: v.visitors, // Yesterday
           prevVisitors: v.prevVisitors,
-          dailyReq: v.dailyReq,
+          dailyReq: v.dailyReq, // Valid: based on MTD remaining
           conversion,
           customerValue: v.visitors > 0 ? v.yesterdaySales / v.visitors : 0, // Yesterday
         };
