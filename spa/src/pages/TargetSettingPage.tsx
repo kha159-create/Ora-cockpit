@@ -23,7 +23,19 @@ export default function TargetSettingPage() {
   const [growthRate, setGrowthRate] = useState<number>(10);
   const [customGrowth, setCustomGrowth] = useState<string>('');
 
+  const [manager, setManager] = useState<string>('all'); // Add manager state
+
   const canAccess = user?.role === 'Admin' || user?.name === 'Sales Manager';
+
+  // Extract managers list
+  const managers = useMemo(() => {
+    if (!raw?.store_meta) return [];
+    const mSet = new Set<string>();
+    Object.values(raw.store_meta).forEach((m: any) => {
+      if (m.manager) mSet.add(m.manager);
+    });
+    return Array.from(mSet).sort();
+  }, [raw]);
 
   useEffect(() => {
     loadManagementData()
@@ -33,8 +45,15 @@ export default function TargetSettingPage() {
 
   const stores = useMemo(() => {
     if (!raw?.stores) return [];
-    return Object.entries(raw.stores).map(([id, name]) => ({ id, name: (name as string) || id }));
-  }, [raw]);
+    return Object.entries(raw.stores)
+      .filter(([id]) => {
+        if (manager === 'all') return true;
+        // Check store meta for manager
+        const meta = raw.store_meta?.[id];
+        return meta?.manager === manager;
+      })
+      .map(([id, name]) => ({ id, name: (name as string) || id }));
+  }, [raw, manager]); // Add manager dependency
 
   const tableRows = useMemo(() => {
     const sales: Record<string, number> = {};
@@ -71,6 +90,8 @@ export default function TargetSettingPage() {
       const suggestedTarget = Math.round(prevSales * (1 + growthRate / 100));
       const newTarget = newTargets[store.id] ?? prevTarget;
       const growthPct = prevSales > 0 ? ((newTarget - prevSales) / prevSales) * 100 : 0;
+      // Achievement logic: Actual Sales / Target (Current Year) or Previous Year? 
+      // The snippet assumes previous year achievement for display based on context 'أداء السنة الماضية'
       const prevAchievement = prevTarget > 0 ? (prevSales / prevTarget) * 100 : 0;
       return {
         id: store.id,
@@ -145,9 +166,24 @@ export default function TargetSettingPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-neutral-900">تحديد التارجت الشهري</h1>
-        <p className="text-neutral-500 mt-1">تعيين أهداف المبيعات للمعارض حسب الشهر مع مقارنة السنة الماضية</p>
+      <header className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-neutral-900">تحديد التارجت الشهري</h1>
+          <p className="text-neutral-500 mt-1">تعيين أهداف المبيعات للمعارض حسب الشهر مع مقارنة السنة الماضية</p>
+        </div>
+
+        {/* Manager Filter */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-semibold text-neutral-700">مدير المنطقة:</label>
+          <select
+            className="input py-1 px-3"
+            value={manager}
+            onChange={(e) => setManager(e.target.value)}
+          >
+            <option value="all">الكل</option>
+            {managers.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
       </header>
 
       {/* KPI Summary Cards */}
@@ -256,7 +292,9 @@ export default function TargetSettingPage() {
             </thead>
             <tbody>
               {tableRows.map((r, i) => {
-                const achColor = r.prevAchievement >= 100 ? 'text-green-600' : r.prevAchievement >= 80 ? 'text-yellow-600' : 'text-red-600';
+                // Determine color based on strict achievement logic: <100 => Red, >=100 => Green
+                const achColor = r.prevAchievement >= 100 ? 'text-green-600' : 'text-red-600';
+
                 const targetDiff = r.newTarget - r.suggestedTarget;
                 const targetBg = targetDiff > 0 ? 'bg-green-50' : targetDiff < 0 ? 'bg-red-50' : '';
                 return (

@@ -409,11 +409,11 @@ export const GrowthTrajectoryChart: React.FC<{
   const ySteps = [0, 0.25, 0.5, 0.75, 1];
 
   return (
-    <div className="growth-chart-container bg-white rounded-[2.5rem] shadow-2xl border border-neutral-100 p-8 w-full relative group/chart mt-6">
+    <div className="growth-chart-container bg-white rounded-3xl md:rounded-[2.5rem] shadow-2xl border border-neutral-100 p-4 md:p-8 w-full relative group/chart mt-6 overflow-hidden">
       <div className="absolute top-0 right-0 w-64 h-64 bg-orange-50 rounded-full -mr-32 -mt-32 blur-3xl opacity-50 pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-64 h-64 bg-slate-50 rounded-full -ml-32 -mb-32 blur-3xl opacity-50 pointer-events-none" />
 
-      <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+      <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-10 gap-6">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
             <div className="h-6 w-1.5 bg-gradient-to-b from-orange-400 to-orange-600 rounded-full shadow-sm shadow-orange-200" />
@@ -421,19 +421,19 @@ export const GrowthTrajectoryChart: React.FC<{
               {mode === 'TARGET' ? 'Target Achievement' : mode === 'VISITORS' ? 'Visitors Trend' : 'Growth Trajectory'}
             </span>
           </div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-baseline gap-2">
+          <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex flex-wrap items-baseline gap-2">
             {mode === 'TARGET' ? 'تحقيق الهدف الشهري' : mode === 'VISITORS' ? 'مؤشر الزوار الشهري' : 'مؤشر نمو المحفظة الإجمالية'}
-            <span className="text-xs font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100">Live Analytics</span>
+            <span className="text-xs font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100 whitespace-nowrap">Live Analytics</span>
           </h2>
         </div>
 
-        <div className="flex flex-col items-end gap-5">
-          <div className="flex bg-neutral-100/80 backdrop-blur-sm p-1.5 rounded-2xl border border-neutral-200/50 shadow-inner">
+        <div className="flex flex-col items-end gap-5 w-full md:w-auto">
+          <div className="flex bg-neutral-100/80 backdrop-blur-sm p-1.5 rounded-2xl border border-neutral-200/50 shadow-inner w-full md:w-auto overflow-x-auto">
             {(['SALES', 'VISITORS', 'TARGET'] as const).map(m => (
               <button
                 key={m}
                 onClick={() => onModeChange(m)}
-                className={`px-6 py-2.5 rounded-xl text-[10px] font-black tracking-widest transition-all duration-300 ${mode === m
+                className={`flex-1 px-4 md:px-6 py-2.5 rounded-xl text-[10px] font-black tracking-widest transition-all duration-300 whitespace-nowrap ${mode === m
                   ? 'bg-white text-orange-600 shadow-lg shadow-orange-100 scale-[1.02]'
                   : 'text-neutral-400 hover:text-neutral-600 hover:bg-white/50'
                   }`}
@@ -443,104 +443,111 @@ export const GrowthTrajectoryChart: React.FC<{
             ))}
           </div>
 
-          <div className="flex gap-8 px-2 text-right">
+          <div className="flex gap-8 px-2 text-right hidden md:flex">
             <div className="flex items-center gap-3 group/legend flex-row-reverse">
               <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 shadow-sm shadow-orange-200 group-hover/legend:scale-125 transition-transform" />
               <div className="flex flex-col">
                 <span className="text-[10px] font-black text-slate-900 tracking-tight uppercase leading-none">{labels.currentLabel}</span>
-                <span className="text-[8px] font-bold text-neutral-400 uppercase tracking-tighter">{labels.currentSubLabel}</span>
+                <span className="text-sm font-bold text-neutral-400 uppercase tracking-tighter">{labels.currentSubLabel}</span>
               </div>
             </div>
             <div className="flex items-center gap-3 group/legend flex-row-reverse">
               <div className={`w-3.5 h-3.5 rounded-full shadow-sm group-hover/legend:scale-125 transition-transform ${mode === 'TARGET' ? 'bg-gradient-to-br from-blue-500 to-blue-700 shadow-blue-200' : 'bg-gradient-to-br from-slate-700 to-slate-900 shadow-slate-200'}`} />
               <div className="flex flex-col">
                 <span className="text-[10px] font-black text-slate-900 tracking-tight uppercase leading-none">{labels.prevLabel}</span>
-                <span className="text-[8px] font-bold text-neutral-400 uppercase tracking-tighter">{labels.prevSubLabel}</span>
+                <span className="text-sm font-bold text-neutral-400 uppercase tracking-tighter">{labels.prevSubLabel}</span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="relative h-96 flex gap-4 mt-4">
-        <div className="absolute left-0 top-0 bottom-12 flex flex-col justify-between text-[10px] font-black text-neutral-400 z-10 py-2">
+      <div className="relative h-96 flex gap-2 md:gap-4 mt-4">
+        {/* Y Axis - Fixed */}
+        <div className="flex flex-col justify-between text-[10px] font-black text-neutral-400 z-10 py-2 pb-14 h-full shrink-0">
           {ySteps.slice().reverse().map(s => (
             <div key={s} className="flex items-center gap-2 group/y">
-              <span className="bg-white/80 backdrop-blur-xs pr-2 min-w-[35px] text-right group-hover/y:text-orange-500 transition-colors uppercase tracking-tighter">{formatY(maxVal * s)}</span>
-              <div className="w-1 h-px bg-neutral-200 group-hover/y:w-2 group-hover/y:bg-orange-300 transition-all" />
+              <span className="bg-white/80 backdrop-blur-xs pr-2 min-w-[30px] text-right group-hover/y:text-orange-500 transition-colors uppercase tracking-tighter">
+                {formatY(maxVal * s)}
+              </span>
+              <div className="w-1 h-px bg-neutral-200 group-hover/y:w-2 group-hover/y:bg-orange-300 transition-all hidden md:block" />
             </div>
           ))}
         </div>
 
-        <div className="flex-1 flex flex-col ml-14">
-          <div className="flex-1 relative border-b-2 border-slate-100">
-            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none py-2">
-              {ySteps.map(s => (
-                <div key={s} className="w-full border-t border-dashed border-neutral-100 group-hover/chart:border-neutral-200/50 transition-colors" />
+        {/* Scrollable Chart Area */}
+        <div className="flex-1 overflow-x-auto pb-2 scrollbar-hide">
+          <div className="flex flex-col h-full min-w-[600px] md:min-w-0">
+            <div className="flex-1 relative border-b-2 border-slate-100">
+              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none py-2">
+                {ySteps.map(s => (
+                  <div key={s} className="w-full border-t border-dashed border-neutral-100 group-hover/chart:border-neutral-200/50 transition-colors" />
+                ))}
+              </div>
+
+              <div className="absolute inset-0 flex items-end justify-around px-2 md:px-8">
+                {data.map((d, i) => {
+                  const curPct = (d.Current / maxVal) * 100;
+                  const prevPct = (d.Previous / maxVal) * 100;
+                  const growth = mode === 'TARGET'
+                    ? (d.Previous > 0 ? (d.Current / d.Previous) * 100 : 0)
+                    : (d.Previous > 0 ? ((d.Current - d.Previous) / d.Previous) * 100 : 0);
+
+                  return (
+                    <div key={i} className="flex items-end gap-1.5 group/bar relative h-full w-full justify-center max-w-[80px]">
+                      {/* Current Bar (Orange) */}
+                      <div
+                        className="w-3 md:w-4 bg-gradient-to-t from-orange-600 to-orange-400 rounded-t-lg transition-all duration-700 ease-out hover:brightness-110 cursor-pointer relative z-10 shadow-[0_-4px_12px_rgba(249,115,22,0.1)] group-hover/bar:scale-x-110"
+                        style={{ height: `${Math.max(curPct, 2)}%` }}
+                      >
+                        <div className="absolute inset-0 bg-white/20 opacity-0 hover:opacity-100 transition-opacity rounded-t-lg" />
+                      </div>
+
+                      {/* Tooltip */}
+                      <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl opacity-0 hover:opacity-100 group-hover/bar:opacity-100 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap shadow-2xl border border-white/10 min-w-[160px] text-right hidden md:block">
+                        <div className="text-[10px] font-black text-orange-400 mb-1.5 tracking-widest uppercase border-b border-white/10 pb-1">{d.name}</div>
+                        {/* Tooltip content... (truncated for brevity in edit, preserving logic) */}
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[9px] text-neutral-400">{labels.currentLabel}:</span>
+                          <span className="text-base font-black">{format ? format(d.Current) : d.Current.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[9px] text-neutral-400">{labels.prevLabel}:</span>
+                          <span className="text-base font-bold text-slate-400">{format ? format(d.Previous) : d.Previous.toLocaleString()}</span>
+                        </div>
+                        <div className={`text-[10px] font-bold mt-2 pt-1 border-t border-white/10 flex items-center justify-end gap-1 ${mode === 'TARGET' ? (growth >= 100 ? 'text-green-400' : 'text-red-400') : (growth >= 0 ? 'text-green-400' : 'text-red-400')}`}>
+                          {mode === 'TARGET' ? (
+                            <span>{growth.toFixed(1)}% تحقيق</span>
+                          ) : (
+                            <span>{growth >= 0 ? '+' : ''}{growth.toFixed(1)}% {growth >= 0 ? '↗' : '↘'}</span>
+                          )}
+                        </div>
+                        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-slate-900/95"></div>
+                      </div>
+
+                      {/* Previous/Target Bar (Dark or Blue) */}
+                      <div
+                        className={`w-3 md:w-4 rounded-t-lg transition-all duration-700 ease-out hover:brightness-125 cursor-pointer relative z-10 ${mode === 'TARGET'
+                          ? 'bg-gradient-to-t from-blue-600 to-blue-400 shadow-[0_-4px_12px_rgba(59,130,246,0.1)]'
+                          : 'bg-gradient-to-t from-slate-900 to-slate-700 shadow-[0_-4px_12px_rgba(15,23,42,0.1)]'
+                          } group-hover/bar:scale-x-110`}
+                        style={{ height: `${Math.max(prevPct, 2)}%` }}
+                      >
+                        <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity rounded-t-lg" />
+                      </div>
+
+                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 md:w-1.5 h-1 md:h-1.5 bg-slate-200 rounded-full group-hover/bar:bg-orange-400 group-hover/bar:scale-150 transition-all opacity-0 md:opacity-100" />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex justify-around pt-6 px-2 md:px-8">
+              {data.map((d, i) => (
+                <span key={i} className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-tighter w-full text-center hover:text-slate-900 transition-colors cursor-default">{d.name}</span>
               ))}
             </div>
-
-            <div className="absolute inset-0 flex items-end justify-around px-8">
-              {data.map((d, i) => {
-                const curPct = (d.Current / maxVal) * 100;
-                const prevPct = (d.Previous / maxVal) * 100;
-                const growth = mode === 'TARGET'
-                  ? (d.Previous > 0 ? (d.Current / d.Previous) * 100 : 0)
-                  : (d.Previous > 0 ? ((d.Current - d.Previous) / d.Previous) * 100 : 0);
-
-                return (
-                  <div key={i} className="flex items-end gap-1.5 group/bar relative h-full w-full justify-center max-w-[80px]">
-                    {/* Current Bar (Orange) */}
-                    <div
-                      className="w-4 bg-gradient-to-t from-orange-600 to-orange-400 rounded-t-lg transition-all duration-700 ease-out hover:brightness-110 cursor-pointer relative z-10 shadow-[0_-4px_12px_rgba(249,115,22,0.1)] group-hover/bar:scale-x-110"
-                      style={{ height: `${Math.max(curPct, 2)}%` }}
-                    >
-                      <div className="absolute inset-0 bg-white/20 opacity-0 hover:opacity-100 transition-opacity rounded-t-lg" />
-                    </div>
-
-                    {/* Tooltip - positioned at the top of the chart */}
-                    <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl opacity-0 group-hover/bar:opacity-100 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap shadow-2xl border border-white/10 min-w-[160px] text-right">
-                      <div className="text-[10px] font-black text-orange-400 mb-1.5 tracking-widest uppercase border-b border-white/10 pb-1">{d.name}</div>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-[9px] text-neutral-400">{labels.currentLabel}:</span>
-                        <span className="text-base font-black">{format ? format(d.Current) : d.Current.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-[9px] text-neutral-400">{labels.prevLabel}:</span>
-                        <span className="text-base font-bold text-slate-400">{format ? format(d.Previous) : d.Previous.toLocaleString()}</span>
-                      </div>
-                      <div className={`text-[10px] font-bold mt-2 pt-1 border-t border-white/10 flex items-center justify-end gap-1 ${mode === 'TARGET' ? (growth >= 100 ? 'text-green-400' : 'text-red-400') : (growth >= 0 ? 'text-green-400' : 'text-red-400')}`}>
-                        {mode === 'TARGET' ? (
-                          <span>{growth.toFixed(1)}% تحقيق</span>
-                        ) : (
-                          <span>{growth >= 0 ? '+' : ''}{growth.toFixed(1)}% {growth >= 0 ? '↗' : '↘'}</span>
-                        )}
-                      </div>
-                      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-slate-900/95"></div>
-                    </div>
-
-                    {/* Previous/Target Bar (Dark or Blue) */}
-                    <div
-                      className={`w-4 rounded-t-lg transition-all duration-700 ease-out hover:brightness-125 cursor-pointer relative z-10 ${mode === 'TARGET'
-                        ? 'bg-gradient-to-t from-blue-600 to-blue-400 shadow-[0_-4px_12px_rgba(59,130,246,0.1)]'
-                        : 'bg-gradient-to-t from-slate-900 to-slate-700 shadow-[0_-4px_12px_rgba(15,23,42,0.1)]'
-                        } group-hover/bar:scale-x-110`}
-                      style={{ height: `${Math.max(prevPct, 2)}%` }}
-                    >
-                      <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity rounded-t-lg" />
-                    </div>
-
-                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-slate-200 rounded-full group-hover/bar:bg-orange-400 group-hover/bar:scale-150 transition-all" />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex justify-around pt-6 px-8">
-            {data.map((d, i) => (
-              <span key={i} className="text-[10px] font-black text-slate-400 uppercase tracking-tighter w-full text-center hover:text-slate-900 transition-colors cursor-default">{d.name}</span>
-            ))}
           </div>
         </div>
       </div>

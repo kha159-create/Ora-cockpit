@@ -536,44 +536,7 @@ export default function ProductsPage() {
         <KPICard title="عدد المنتجات (بعد الفلترة)" value={derived.totals.productsCount} format={(v) => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
       </div>
 
-      {/* Sales Analysis by Value */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        {[
-          { label: 'لحاف كبير (King)', data: derived.valueAnalysis.duvetKing, color: 'blue' },
-          { label: 'لحاف عادي (Full)', data: derived.valueAnalysis.duvetFull, color: 'purple' },
-          { label: 'المخدات (Pillows)', data: derived.valueAnalysis.pillows, color: 'teal' },
-        ].map(({ label, data, color }) => {
-          const totalQty = data.total.qty || 1;
-          const buckets = [
-            { name: 'منخفض', ...data.low, barColor: 'bg-green-400' },
-            { name: 'متوسط', ...data.medium, barColor: 'bg-yellow-400' },
-            { name: 'مرتفع', ...data.high, barColor: 'bg-red-400' },
-          ];
-          return (
-            <div key={label} className="bg-white rounded-xl shadow border p-4">
-              <div className={`text-sm font-bold mb-3 text-${color}-700`}>{label}</div>
-              <div className="space-y-3">
-                {buckets.map(b => (
-                  <div key={b.name}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="font-semibold text-neutral-700">{b.name}</span>
-                      <span className="text-neutral-500">{Math.round(b.qty).toLocaleString()} قطعة &bull; {formatSAR(b.amount)}</span>
-                    </div>
-                    <div className="w-full bg-neutral-100 rounded-full h-3">
-                      <div className={`${b.barColor} h-3 rounded-full transition-all`} style={{ width: `${Math.min(100, (b.qty / totalQty) * 100)}%` }} />
-                    </div>
-                    <div className="text-[11px] text-neutral-400 mt-0.5">{(b.qty / totalQty * 100).toFixed(1)}% &bull; {b.count} منتج</div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 pt-3 border-t border-neutral-100 text-xs font-bold text-neutral-600 flex justify-between">
-                <span>المجموع: {Math.round(data.total.qty).toLocaleString()} قطعة</span>
-                <span>{formatSAR(data.total.amount)}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+
 
       {/* Category performance */}
       {/* Category performance */}
@@ -766,6 +729,52 @@ export default function ProductsPage() {
             </tbody>
           </table>
         </div>
+        {/* Pagination Controls for Market Basket */}
+        {derived.basket.length > BASKET_PER_PAGE && (() => {
+          const totalPages = Math.ceil(derived.basket.length / BASKET_PER_PAGE);
+          const safePage = Math.min(basketPage, totalPages);
+          const maxVisible = 5;
+          let startPage = Math.max(1, safePage - Math.floor(maxVisible / 2));
+          let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+          if (endPage - startPage + 1 < maxVisible) startPage = Math.max(1, endPage - maxVisible + 1);
+          const pages: number[] = [];
+          for (let p = startPage; p <= endPage; p++) pages.push(p);
+
+          return (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 bg-neutral-50 mt-2">
+              <div className="text-sm text-neutral-500">
+                صفحة {safePage} من {totalPages}
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={safePage <= 1}
+                  onClick={() => setBasketPage(safePage - 1)}
+                  className="px-3 py-1 rounded-lg border text-sm font-semibold disabled:opacity-40 hover:bg-orange-50"
+                >
+                  السابق
+                </button>
+                {startPage > 1 && <span className="px-2 text-neutral-400">...</span>}
+                {pages.map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setBasketPage(p)}
+                    className={`w-8 h-8 rounded-lg text-sm font-bold transition-all ${p === safePage ? 'bg-orange-500 text-white shadow' : 'border border-neutral-200 hover:bg-orange-50 text-neutral-700'}`}
+                  >
+                    {p}
+                  </button>
+                ))}
+                {endPage < totalPages && <span className="px-2 text-neutral-400">...</span>}
+                <button
+                  disabled={safePage >= totalPages}
+                  onClick={() => setBasketPage(safePage + 1)}
+                  className="px-3 py-1 rounded-lg border text-sm font-semibold disabled:opacity-40 hover:bg-orange-50"
+                >
+                  التالي
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </ChartCard>
 
       {/* Missed opportunities */}
@@ -826,6 +835,52 @@ export default function ProductsPage() {
             </tbody>
           </table>
         </div>
+        {/* Pagination Controls for Missed Opportunities */}
+        {derived.missedList.length > MISSED_PER_PAGE && (() => {
+          const totalPages = Math.ceil(derived.missedList.length / MISSED_PER_PAGE);
+          const safePage = Math.min(missedPage, totalPages);
+          const maxVisible = 5;
+          let startPage = Math.max(1, safePage - Math.floor(maxVisible / 2));
+          let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+          if (endPage - startPage + 1 < maxVisible) startPage = Math.max(1, endPage - maxVisible + 1);
+          const pages: number[] = [];
+          for (let p = startPage; p <= endPage; p++) pages.push(p);
+
+          return (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 bg-neutral-50 mt-2">
+              <div className="text-sm text-neutral-500">
+                صفحة {safePage} من {totalPages}
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={safePage <= 1}
+                  onClick={() => setMissedPage(safePage - 1)}
+                  className="px-3 py-1 rounded-lg border text-sm font-semibold disabled:opacity-40 hover:bg-orange-50"
+                >
+                  السابق
+                </button>
+                {startPage > 1 && <span className="px-2 text-neutral-400">...</span>}
+                {pages.map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setMissedPage(p)}
+                    className={`w-8 h-8 rounded-lg text-sm font-bold transition-all ${p === safePage ? 'bg-orange-500 text-white shadow' : 'border border-neutral-200 hover:bg-orange-50 text-neutral-700'}`}
+                  >
+                    {p}
+                  </button>
+                ))}
+                {endPage < totalPages && <span className="px-2 text-neutral-400">...</span>}
+                <button
+                  disabled={safePage >= totalPages}
+                  onClick={() => setMissedPage(safePage + 1)}
+                  className="px-3 py-1 rounded-lg border text-sm font-semibold disabled:opacity-40 hover:bg-orange-50"
+                >
+                  التالي
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </ChartCard>
 
       {/* Catalog modal */}
