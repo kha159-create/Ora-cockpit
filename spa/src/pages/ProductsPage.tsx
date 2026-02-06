@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { BarChart, ChartCard, KPICard, LineChart, PieChart } from '../components/DashboardComponents';
-import { CubeIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, XIcon } from '../components/Icons';
+import { CubeIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, XIcon, ChartPieIcon } from '../components/Icons';
 
 type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest';
 type Metric = 'qty' | 'val';
@@ -541,10 +541,9 @@ export default function ProductsPage() {
       {/* Category performance */}
       {/* Category performance */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        {/* 'Top Selling Products by Category' moved to Dashboard as requested */}
-
+        {/* Bar Chart Card */}
         <ChartCard title={`أداء الفئات (مرتبة حسب ${metricLabel})`}>
-          <div className="h-[360px]">
+          <div className="h-[400px]">
             <BarChart
               data={derived.categoriesAgg.slice(0, 12).map((c) => ({
                 name: c.category,
@@ -555,8 +554,28 @@ export default function ProductsPage() {
               format={(v) => (metric === 'qty' ? `${Math.round(v).toLocaleString()} وحدة` : formatSAR(v))}
             />
           </div>
-          <div className="mt-4 h-[280px]">
-            <PieChart data={derived.categoriesAgg.slice(0, 10).map((c) => ({ name: c.category, value: metric === 'qty' ? c.qty : c.amount }))} vertical />
+        </ChartCard>
+
+        {/* New Pie Chart Card with Stats */}
+        <ChartCard title="نسبة الفئات" icon={<ChartPieIcon className="w-5 h-5 text-orange-500" />}>
+          <div className="flex flex-col h-full justify-between">
+            <div className="h-[250px] relative">
+              <PieChart data={derived.categoriesAgg.slice(0, 8).map((c) => ({ name: c.category, value: metric === 'qty' ? c.qty : c.amount }))} vertical />
+            </div>
+            <div className="mt-4 space-y-3">
+              <div className="flex justify-between items-center p-3 bg-neutral-50 rounded-lg border border-neutral-100">
+                <span className="text-sm font-semibold text-neutral-600">إجمالي {metric === 'qty' ? 'الكمية' : 'القيمة'}</span>
+                <span className="text-lg font-bold text-neutral-900">
+                  {metric === 'qty' ? Math.round(derived.totals.totalQty).toLocaleString() : formatSAR(derived.totals.totalAmt)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center p-3 bg-orange-50 rounded-lg border border-orange-100">
+                <span className="text-sm font-semibold text-orange-700">أعلى فئة ({derived.categoriesAgg[0]?.category})</span>
+                <span className="text-lg font-bold text-orange-700 dir-ltr">
+                  {derived.categoriesAgg[0]?.sharePercent.toFixed(1)}%
+                </span>
+              </div>
+            </div>
           </div>
         </ChartCard>
       </div>

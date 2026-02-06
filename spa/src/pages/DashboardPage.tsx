@@ -1459,98 +1459,90 @@ export default function DashboardPage() {
         )
       }
 
-                {/* Top Selling & Category Performance */}
+      {/* Top Selling & Category Performance */}
       {prodDerived && (
-         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            {/* Top Selling Products (Individual) */}
-            <ChartCard title="أكثر المنتجات مبيعاً (Top Selling Products)">
-              <div className="flex items-center justify-end mb-3 gap-2">
-                <div className="text-sm font-semibold text-neutral-500">الترتيب حسب:</div>
-                <div className="flex bg-neutral-100 rounded-lg p-1">
-                  <button
-                    onClick={() => setTopSellingMetric('qty')}
-                    className={`px-3 py-1 rounded-md text-sm font-bold transition-all ${topSellingMetric === 'qty' ? 'bg-white text-orange-600 shadow' : 'text-neutral-500 hover:text-neutral-700'}`}
-                  >
-                    📦 الكمية
-                  </button>
-                  <button
-                    onClick={() => setTopSellingMetric('val')}
-                    className={`px-3 py-1 rounded-md text-sm font-bold transition-all ${topSellingMetric === 'val' ? 'bg-white text-green-600 shadow' : 'text-neutral-500 hover:text-neutral-700'}`}
-                  >
-                    💰 القيمة
-                  </button>
+        <div className="grid grid-cols-1 gap-6 mt-6">
+          {/* Top Selling Products (Individual) - Full Width now */}
+          <ChartCard title="أكثر المنتجات مبيعاً (Top Selling Products)">
+            <div className="flex items-center justify-end mb-3 gap-2">
+              <div className="text-sm font-semibold text-neutral-500">الترتيب حسب:</div>
+              <div className="flex bg-neutral-100 rounded-lg p-1">
+                <button
+                  onClick={() => setTopSellingMetric('qty')}
+                  className={`px-3 py-1 rounded-md text-sm font-bold transition-all ${topSellingMetric === 'qty' ? 'bg-white text-orange-600 shadow' : 'text-neutral-500 hover:text-neutral-700'}`}
+                >
+                  📦 الكمية
+                </button>
+                <button
+                  onClick={() => setTopSellingMetric('val')}
+                  className={`px-3 py-1 rounded-md text-sm font-bold transition-all ${topSellingMetric === 'val' ? 'bg-white text-green-600 shadow' : 'text-neutral-500 hover:text-neutral-700'}`}
+                >
+                  💰 القيمة
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr className="bg-orange-50/50">
+                    <th className="th w-[60px] text-center">#</th>
+                    <th className="th">المنتج</th>
+                    <th className="th text-center">الكمية</th>
+                    <th className="th text-center">سعر الوحدة</th>
+                    <th className="th text-center">القيمة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const list = prodDerived.catalogRows;
+                    const totalPages = Math.ceil(list.length / TOP_SELLING_PER_PAGE);
+                    const safePage = Math.min(topSellingPage, totalPages);
+                    const start = (safePage - 1) * TOP_SELLING_PER_PAGE;
+                    const visible = list.slice(start, start + TOP_SELLING_PER_PAGE);
+
+                    return visible.map((p: any, idx: number) => {
+                      const unitPrice = p.qty > 0 ? p.amount / p.qty : 0;
+                      return (
+                        <tr key={p.id} className="hover:bg-orange-50 border-b border-neutral-100 last:border-0">
+                          <td className="td text-center text-neutral-500 font-mono">{start + idx + 1}</td>
+                          <td className="td">
+                            <div className="font-bold text-neutral-800">{p.name}</div>
+                            <div className="text-xs text-neutral-400 font-mono">{p.id}</div>
+                          </td>
+                          <td className={`td text-center font-semibold ${topSellingMetric === 'qty' ? 'text-orange-700 bg-orange-50/50' : 'text-neutral-600'}`}>
+                            {Math.round(p.qty).toLocaleString()}
+                          </td>
+                          <td className="td text-center text-neutral-600 font-mono">
+                            {formatSAR(unitPrice)}
+                          </td>
+                          <td className={`td text-center font-semibold ${topSellingMetric === 'val' ? 'text-green-700 bg-green-50/50' : 'text-neutral-600'}`} dir="ltr">
+                            {formatSAR(p.amount)}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {prodDerived.catalogRows.length > TOP_SELLING_PER_PAGE && (() => {
+              const totalPages = Math.ceil(prodDerived.catalogRows.length / TOP_SELLING_PER_PAGE);
+              const safePage = Math.min(topSellingPage, totalPages);
+              return (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 mt-2">
+                  <div className="text-xs text-neutral-500">صفحة {safePage} من {totalPages}</div>
+                  <div className="flex gap-2">
+                    <button disabled={safePage <= 1} onClick={() => setTopSellingPage(safePage - 1)} className="px-2 py-1 border rounded disabled:opacity-50 text-xs">السابق</button>
+                    <button disabled={safePage >= totalPages} onClick={() => setTopSellingPage(safePage + 1)} className="px-2 py-1 border rounded disabled:opacity-50 text-xs">التالي</button>
+                  </div>
                 </div>
-              </div>
-              
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="bg-orange-50/50">
-                      <th className="th w-[60px] text-center">#</th>
-                      <th className="th">المنتج</th>
-                      <th className="th text-center">الكمية</th>
-                      <th className="th text-center">القيمة</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                        const list = prodDerived.catalogRows;
-                        const totalPages = Math.ceil(list.length / TOP_SELLING_PER_PAGE);
-                        const safePage = Math.min(topSellingPage, totalPages);
-                        const start = (safePage - 1) * TOP_SELLING_PER_PAGE;
-                        const visible = list.slice(start, start + TOP_SELLING_PER_PAGE);
-                        
-                        return visible.map((p: any, idx: number) => (
-                           <tr key={p.id} className="hover:bg-orange-50 border-b border-neutral-100 last:border-0">
-                             <td className="td text-center text-neutral-500 font-mono">{start + idx + 1}</td>
-                             <td className="td">
-                               <div className="font-bold text-neutral-800">{p.name}</div>
-                               <div className="text-xs text-neutral-400 font-mono">{p.id}</div>
-                             </td>
-                             <td className={`td text-center font-semibold ${topSellingMetric === 'qty' ? 'text-orange-700 bg-orange-50/50' : 'text-neutral-600'}`}>
-                               {Math.round(p.qty).toLocaleString()}
-                             </td>
-                             <td className={`td text-center font-semibold ${topSellingMetric === 'val' ? 'text-green-700 bg-green-50/50' : 'text-neutral-600'}`} dir="ltr">
-                               {formatSAR(p.amount)}
-                             </td>
-                           </tr>
-                        ));
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              {prodDerived.catalogRows.length > TOP_SELLING_PER_PAGE && (() => {
-                  const totalPages = Math.ceil(prodDerived.catalogRows.length / TOP_SELLING_PER_PAGE);
-                  const safePage = Math.min(topSellingPage, totalPages);
-                  return (
-                    <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 mt-2">
-                       <div className="text-xs text-neutral-500">صفحة {safePage} من {totalPages}</div>
-                       <div className="flex gap-2">
-                         <button disabled={safePage <= 1} onClick={() => setTopSellingPage(safePage - 1)} className="px-2 py-1 border rounded disabled:opacity-50 text-xs">السابق</button>
-                         <button disabled={safePage >= totalPages} onClick={() => setTopSellingPage(safePage + 1)} className="px-2 py-1 border rounded disabled:opacity-50 text-xs">التالي</button>
-                       </div>
-                    </div>
-                  );
-              })()}
-            </ChartCard>
-
-            {/* Category Performance (Bar Chart Only) */}
-            <ChartCard title="أداء الفئات (Category Performance)">
-              <div className="h-[400px]">
-                 <BarChart 
-                   data={prodDerived.categoriesAgg.slice(0, 8).map(c => ({
-                      name: c.category,
-                      value: topSellingMetric === 'qty' ? c.qty : c.amount
-                   }))}
-                   dataKey="value"
-                   nameKey="name"
-                   format={(v) => topSellingMetric === 'qty' ? Math.round(v).toLocaleString() : formatSAR(v)}
-                 />
-              </div>
-            </ChartCard>
-         </div>
+              );
+            })()}
+          </ChartCard>
+        </div>
       )}
 
       {/* نافذة اختيار الفرع للتقرير */}

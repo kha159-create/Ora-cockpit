@@ -128,7 +128,7 @@ export const KPICard: React.FC<{
       <button
         onClick={onClick}
         disabled={!onClick}
-        className="modern-kpi-card group p-3 sm:p-4 flex flex-col text-left w-full h-full disabled:cursor-default"
+        className="modern-kpi-card group p-2 sm:p-3 flex flex-col text-left w-full h-full disabled:cursor-default"
       >
         {/* تأثير الخلفية المتحرك */}
         <div className="kpi-card-background" />
@@ -136,11 +136,11 @@ export const KPICard: React.FC<{
         {/* المحتوى الرئيسي */}
         <div className="relative z-10 flex-1 flex flex-col">
           {/* الرأس - الأيقونة والعنوان */}
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-start gap-3 flex-1 min-w-0">
-              {icon && <div className="kpi-icon-container flex-shrink-0">{icon}</div>}
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              {icon && <div className="kpi-icon-container flex-shrink-0 scale-90">{icon}</div>}
               <div className="flex-1 min-w-0">
-                <h3 className="kpi-title truncate">{title}</h3>
+                <h3 className="kpi-title truncate text-xs sm:text-sm">{title}</h3>
               </div>
             </div>
 
@@ -149,9 +149,9 @@ export const KPICard: React.FC<{
           </div>
 
           {/* القيمة الرئيسية */}
-          <div className="mb-3 flex-1 flex flex-col justify-center">
-            <div className="kpi-value break-all leading-tight">{formattedValue}</div>
-            {subtitle && <div className="text-xs text-neutral-500 mt-1 font-medium">{subtitle}</div>}
+          <div className="mb-1 flex-1 flex flex-col justify-center">
+            <div className="kpi-value break-all leading-tight text-lg sm:text-2xl">{formattedValue}</div>
+            {subtitle && <div className="text-[10px] text-neutral-500 mt-0.5 font-medium">{subtitle}</div>}
           </div>
 
           {/* القسم السفلي */}
@@ -224,12 +224,16 @@ export const ChartCard: React.FC<{
   className?: string;
   watermark?: string;
   watermarkOpacity?: number;
-}> = ({ title, children, className = '', watermark, watermarkOpacity = 0.1 }) => (
+  icon?: React.ReactNode;
+}> = ({ title, children, className = '', watermark, watermarkOpacity = 0.1, icon }) => (
   <div
-    className={`bg-white p-4 rounded-xl shadow-md border border-neutral-200 h-full flex flex-col transition-all duration-300 hover:shadow-lg hover:border-orange-200 ${className}`}
+    className={`bg-white p-3 md:p-4 rounded-xl shadow-md border border-neutral-200 h-full flex flex-col transition-all duration-300 hover:shadow-lg hover:border-orange-200 ${className}`}
   >
-    <div className="text-base font-bold text-neutral-800 mb-3 border-b border-neutral-100 pb-2 flex items-center justify-between">
-      <span>{title}</span>
+    <div className="text-sm md:text-base font-bold text-neutral-800 mb-2 border-b border-neutral-100 pb-2 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        {icon}
+        <span>{title}</span>
+      </div>
       {watermark && watermarkOpacity > 0.1 && <span className="text-xs font-normal text-orange-500 ml-2">{watermark}</span>}
     </div>
     <div className="flex-grow relative">{children}</div>
@@ -428,7 +432,7 @@ export const GrowthTrajectoryChart: React.FC<{
         </div>
 
         <div className="flex flex-col items-end gap-5 w-full md:w-auto">
-          <div className="flex bg-neutral-100/80 backdrop-blur-sm p-1.5 rounded-2xl border border-neutral-200/50 shadow-inner w-full md:w-auto overflow-x-auto">
+          <div className="flex bg-neutral-100/80 backdrop-blur-sm p-1.5 rounded-2xl border border-neutral-200/50 shadow-inner w-full md:w-auto overflow-x-auto touch-pan-x">
             {(['SALES', 'VISITORS', 'TARGET'] as const).map(m => (
               <button
                 key={m}
@@ -476,7 +480,7 @@ export const GrowthTrajectoryChart: React.FC<{
         </div>
 
         {/* Scrollable Chart Area */}
-        <div className="flex-1 overflow-x-auto pb-2 scrollbar-hide">
+        <div className="flex-1 overflow-x-auto pb-2 scrollbar-hide touch-pan-x">
           <div className="flex flex-col h-full min-w-[600px] md:min-w-0">
             <div className="flex-1 relative border-b-2 border-slate-100">
               <div className="absolute inset-0 flex flex-col justify-between pointer-events-none py-2">
