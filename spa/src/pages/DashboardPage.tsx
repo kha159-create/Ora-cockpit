@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { loadManagementData, loadEmployeesData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { KPICard, RankCard, GrowthTrajectoryChart, BarChart, ChartCard } from '../components/DashboardComponents';
-import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon, XIcon, PrinterIcon } from '../components/Icons';
+import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon, XIcon, PrinterIcon, ExclamationIcon, CheckBadgeIcon, UserGroupIcon } from '../components/Icons';
 import { generateDailyReportPDF, generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
 
 function isAdminOrAuditor(role?: string) {
@@ -986,6 +986,52 @@ export default function DashboardPage() {
   const [topSellingPage, setTopSellingPage] = useState(1);
   const TOP_SELLING_PER_PAGE = 10;
 
+  // Risk Analysis (Stores below expected achievement based on elapsed days)
+  const riskAnalysis = useMemo(() => {
+    if (!raw?.sales || !raw?.targets) return { count: 0, expectedPct: 0, totalStores: 0 };
+
+    const now = new Date();
+    // Format YYYY-MM for filtering
+    const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const elapsedDays = now.getDate();
+    // Formula: (100 / daysInMonth) * elapsedDays
+    // Example: 6th day of 28 => (100/28)*6 = 21.4%
+    const expectedPct = (100 / daysInMonth) * elapsedDays;
+
+    const storeStats: Record<string, { sales: number; target: number }> = {};
+    const allow = (sid: string) => allowedStoreIds.has(sid);
+
+    (raw.sales || []).forEach(([d, s, v]: any[]) => {
+      const dateStr = String(d);
+      if (dateStr.startsWith(currentMonthPrefix) && allow(s)) {
+        if (!storeStats[s]) storeStats[s] = { sales: 0, target: 0 };
+        storeStats[s].sales += v || 0;
+      }
+    });
+
+    (raw.targets || []).forEach(([d, s, v]: any[]) => {
+      const dateStr = String(d);
+      if (dateStr.startsWith(currentMonthPrefix) && allow(s)) {
+        if (!storeStats[s]) storeStats[s] = { sales: 0, target: 0 };
+        storeStats[s].target += v || 0;
+      }
+    });
+
+    let count = 0;
+    let total = 0;
+    Object.values(storeStats).forEach(st => {
+      if (st.target > 0) {
+        total++;
+        const ach = (st.sales / st.target) * 100;
+        // User logic: If store is below the approx expected % (e.g. 21.4%), it is "At Risk"
+        if (ach < expectedPct) count++;
+      }
+    });
+
+    return { count, expectedPct, totalStores: total };
+  }, [raw, allowedStoreIds]);
+
   if (!raw) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
@@ -1094,49 +1140,62 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2 sm:gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3">
+        {/* New At Risk Card */}
+        <KPICard
+          title="معارض في خطر"
+          value={riskAnalysis.count}
+          subtitle={`أقل من ${riskAnalysis.expectedPct.toFixed(1)}%`}
+          icon={<ExclamationIcon className="w-6 h-6 text-red-500" />}
+          trend="down"
+          trendValue={`${riskAnalysis.totalStores > 0 ? ((riskAnalysis.count / riskAnalysis.totalStores) * 100).toFixed(0) : 0}% من المعارض`}
+          showProgress={false}
+          className="border-red-100 bg-red-50/30"
+        />
+
         <KPICard
           title="المبيعات"
           value={totals.sales}
           format={formatSAR}
-          icon={<CurrencyDollarIcon />}
           comparisonValue={prevYearTotals.sales}
           comparisonLabel="السنة الماضية"
+          icon={<CurrencyDollarIcon />}
+          trendData={monthlyChartData.map(d => d.Sales)}
         />
         <KPICard
           title="الفواتير"
           value={totals.trans}
-          format={(v) => Math.round(v).toLocaleString()}
-          icon={<ReceiptTaxIcon />}
           comparisonValue={prevYearTotals.trans}
           comparisonLabel="السنة الماضية"
-          subtitle={`متوسط الفاتورة: ${formatSAR(totals.trans > 0 ? totals.sales / totals.trans : 0)}`}
+          icon={<ReceiptTaxIcon />}
+          trendData={monthlyChartData.map(d => d.Sales)}
         />
         <KPICard
           title="الزوار"
           value={totals.visitors}
-          format={(v) => Math.round(v).toLocaleString()}
-          icon={<UsersIcon />}
           comparisonValue={prevYearTotals.visitors}
           comparisonLabel="السنة الماضية"
+          icon={<UsersIcon />}
+          trendData={monthlyChartData.map(d => d.Visitors)}
         />
         <KPICard
           title="قيمة العميل"
           value={totals.visitors > 0 ? totals.sales / totals.visitors : 0}
           format={formatSAR}
-          icon={<UsersIcon />}
           comparisonValue={prevYearTotals.visitors > 0 ? prevYearTotals.sales / prevYearTotals.visitors : 0}
           comparisonLabel="السنة الماضية"
+          icon={<UserGroupIcon />}
         />
         <KPICard
-          title="تحقيق الهدف"
-          value={ach}
-          format={(v) => `${v.toFixed(1)}%`}
-          icon={<ChartPieIcon />}
-          showProgress
-          progressValue={ach}
-          trend="neutral"
-          trendValue={`الهدف: ${formatSAR(totals.target)}`}
+          title="الهدف"
+          value={totals.sales}
+          comparisonValue={totals.target}
+          comparisonLabel="الهدف"
+          icon={<CheckBadgeIcon />}
+          trendValue={`${totals.target > 0 ? (totals.sales / totals.target * 100).toFixed(1) : 0}%`}
+          showProgress={true}
+          trend={totals.target > 0 && (totals.sales / totals.target * 100) >= 100 ? 'up' : 'down'}
+          compactTarget={true}
         />
       </div>
 
