@@ -847,15 +847,6 @@ export default function DashboardPage() {
   }, [raw, allowedStoreIds, chartMode]);
 
 
-  if (!raw) {
-    return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
-      </div>
-    );
-  }
-
-
   const prodDerived = useMemo(() => {
     if (!prodRaw || !raw) return null;
 
@@ -935,6 +926,14 @@ export default function DashboardPage() {
   // Pagination for Top Selling Widget
   const [topSellingPage, setTopSellingPage] = useState(1);
   const TOP_SELLING_PER_PAGE = 10;
+
+  if (!raw) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
