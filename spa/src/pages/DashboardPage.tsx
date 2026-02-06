@@ -62,6 +62,8 @@ export default function DashboardPage() {
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [includeAllPages, setIncludeAllPages] = useState(true);
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
+  const [empFilterBranch, setEmpFilterBranch] = useState<string>('all');
+  const [empFilterStatus, setEmpFilterStatus] = useState<Set<string>>(new Set(['active']));
   const user = getCurrentUser();
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -238,9 +240,62 @@ export default function DashboardPage() {
   };
 
   const handlePrintEmployeeReport = () => {
-    // Open employee report modal
+    // Initialize employee selection with all active employees
+    const allEmpIds = new Set<string>();
+    const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
+    Object.entries(empRaw?.history || {}).forEach(([sid, recs]: [string, any]) => {
+      if (!allowedStoreIds.has(sid)) return;
+      (recs || []).forEach((rec: any) => {
+        const dt = rec?.[0];
+        if (dt >= startOfMonth && dt <= yesterdayStr) {
+          const empId = String(rec?.[1] || '').split('-')[0].trim();
+          if (empId && empId !== 'مرتجع') allEmpIds.add(empId);
+        }
+      });
+    });
+    setSelectedEmployees(allEmpIds);
+    setEmpFilterBranch('all');
+    setEmpFilterStatus(new Set(['active']));
     setEmployeeReportModalOpen(true);
   };
+
+  // Calculate employee list for selection modal
+  const employeeListForSelection = useMemo(() => {
+    if (!empRaw?.history || !empRaw?.employee_names || !raw?.stores) return [];
+    const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
+    const historyData: Record<string, any[]> = empRaw.history;
+    const names: Record<string, string> = empRaw.employee_names;
+    const storesMap = raw.stores || {};
+    
+    const empData: Record<string, { id: string; name: string; storeId: string; storeName: string; sales: number }> = {};
+    
+    Object.entries(historyData).forEach(([sid, recs]: [string, any]) => {
+      if (!allowedStoreIds.has(sid)) return;
+      (recs || []).forEach((rec: any) => {
+        const dt = rec?.[0];
+        if (dt < startOfMonth || dt > yesterdayStr) return;
+        const rawId = rec?.[1];
+        let empId = String(rawId || '').split('-')[0].trim();
+        if (!empId || empId === 'مرتجع') return;
+        
+        const sales = Number(rec?.[2]) || 0;
+        const empName = names[empId] || names[empId.padStart(4, '0')] || rawId;
+        
+        if (!empData[empId]) {
+          empData[empId] = {
+            id: empId,
+            name: empName,
+            storeId: sid,
+            storeName: storesMap[sid] || sid,
+            sales: 0
+          };
+        }
+        empData[empId].sales += sales;
+      });
+    });
+    
+    return Object.values(empData).sort((a, b) => b.sales - a.sales);
+  }, [empRaw, raw, yesterdayStr, allowedStoreIds]);
 
   const handleGenerateEmployeeReport = async () => {
     if (!empRaw?.history || !empRaw?.employee_names || !raw?.stores) return;
@@ -582,6 +637,8 @@ export default function DashboardPage() {
 
     const storeList = Object.entries(byStore)
       .filter(([sid]) => {
+        // تصفية حسب المعارض المسموح بها
+        if (!allowedStoreIds.has(sid)) return false;
         const m = meta[sid];
         if (effectiveManager !== 'all' && (!m || String(m.manager) !== effectiveManager)) return false;
         return (byStore[sid].sales > 0 || byStore[sid].trans > 0);
@@ -607,7 +664,7 @@ export default function DashboardPage() {
     const totalTrans = storeList.reduce((s, st) => s + st.trans, 0);
 
     return { totals: { sales: totalSales, trans: totalTrans }, stores: storeList };
-  }, [raw, empRaw, todayStr, effectiveManager]);
+  }, [raw, empRaw, todayStr, effectiveManager, allowedStoreIds]);
 
   // Daily Report data (yesterday vs last year)
   const yesterday = new Date();
@@ -1011,130 +1068,131 @@ export default function DashboardPage() {
 
       {/* نافذة مبيعات اليوم */}
       {liveModalOpen && (
-        <div className="modal-center-screen" onClick={() => setLiveModalOpen(false)}>
-          <div className="modal-content max-w-5xl my-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex flex-col gap-4 mb-6">
-              <div className="flex items-start justify-between">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setLiveModalOpen(false)}>
+          <div 
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-4">
+              <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-xl font-bold text-neutral-900">مبيعات اليوم — لايف</div>
-                  <div className="text-sm text-neutral-500 mt-1 flex items-center gap-2">
-                    <span>📅 {toYMD(new Date())}</span>
-                    <span>🕒 {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
+                  <h2 className="text-xl font-bold">🛒 مبيعات اليوم — لايف</h2>
+                  <p className="text-orange-100 text-sm mt-1">
+                    📅 {toYMD(new Date())} • 🕒 {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
                 </div>
                 <button
                   type="button"
-                  className="btn-secondary py-2 px-3 flex items-center gap-2"
+                  className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-lg transition-colors"
                   onClick={() => setLiveModalOpen(false)}
                 >
-                  <XIcon /> إغلاق
+                  ✕
                 </button>
               </div>
-
+              
               {/* Manager Filter */}
               {isAdminOrAuditor(user?.role) && (
-                <div className="flex items-center gap-2 bg-neutral-50 p-3 rounded-xl border border-neutral-100">
-                  <span className="text-sm font-semibold text-neutral-600">مدير المنطقة:</span>
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="text-sm text-orange-100">مدير المنطقة:</span>
                   <select
-                    className="input py-1 px-3 text-sm min-w-[200px]"
+                    className="bg-white/20 border border-white/30 text-white rounded-lg py-1 px-3 text-sm"
                     value={manager}
                     onChange={(e) => setManager(e.target.value)}
                   >
-                    <option value="all">الكل</option>
+                    <option value="all" className="text-black">الكل</option>
                     {managers.map((m) => (
-                      <option key={m} value={m}>{m}</option>
+                      <option key={m} value={m} className="text-black">{m}</option>
                     ))}
                   </select>
                 </div>
               )}
             </div>
 
-            {/* KPIs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              <KPICard title="المجموع (اليوم)" value={liveData.totals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
-              <KPICard
-                title="الفواتير"
-                value={liveData.totals.trans}
-                format={(v) => Math.round(v).toLocaleString()}
-                icon={<ReceiptTaxIcon />}
-                subtitle={`متوسط: ${formatSAR(liveData.totals.trans > 0 ? liveData.totals.sales / liveData.totals.trans : 0)}`}
-              />
+            {/* KPIs Summary */}
+            <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 border-b">
+              <div className="bg-white rounded-xl p-4 border shadow-sm">
+                <div className="text-sm text-gray-500">إجمالي المبيعات</div>
+                <div className="text-2xl font-bold text-orange-600" dir="ltr">{formatSAR(liveData.totals.sales)}</div>
+              </div>
+              <div className="bg-white rounded-xl p-4 border shadow-sm">
+                <div className="text-sm text-gray-500">عدد الفواتير</div>
+                <div className="text-2xl font-bold text-blue-600">{liveData.totals.trans}</div>
+                <div className="text-xs text-gray-400">متوسط: {formatSAR(liveData.totals.trans > 0 ? liveData.totals.sales / liveData.totals.trans : 0)}</div>
+              </div>
             </div>
 
-            {/* Store List with Accordion */}
-            <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-2">
+            {/* Store List */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <h3 className="text-sm font-bold text-gray-700 mb-3">المعارض ({liveData.stores.length})</h3>
+              
               {liveData.stores.length === 0 ? (
-                <div className="text-center py-8 text-neutral-500">لا توجد بيانات لهذا اليوم</div>
+                <div className="text-center py-12 text-gray-400">
+                  <div className="text-4xl mb-2">📊</div>
+                  <div>لا توجد بيانات مبيعات لهذا اليوم</div>
+                </div>
               ) : (
-                liveData.stores.map((store, storeIdx) => {
-                  const isExpanded = expandedStoreId === store.sid;
-                  return (
-                    <div
-                      key={store.sid}
-                      className="bg-white rounded-xl border border-neutral-200 overflow-hidden shadow-sm"
-                    >
-                      {/* Store Header - clickable */}
-                      <div
-                        onClick={() => setExpandedStoreId(isExpanded ? null : store.sid)}
-                        className="p-3 cursor-pointer hover:bg-orange-50 transition-colors flex items-center justify-between gap-4"
-                      >
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <div className="w-8 h-8 bg-orange-100 text-orange-600 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0">
-                            {storeIdx + 1}
+                <div className="space-y-2">
+                  {liveData.stores.map((store, idx) => {
+                    const isExpanded = expandedStoreId === store.sid;
+                    const storeName = store.name || raw?.stores?.[store.sid] || store.sid;
+                    return (
+                      <div key={store.sid} className="border rounded-xl overflow-hidden bg-white">
+                        {/* Store Row */}
+                        <div 
+                          className="flex items-center gap-3 p-3 cursor-pointer hover:bg-orange-50 transition-colors"
+                          onClick={() => setExpandedStoreId(isExpanded ? null : store.sid)}
+                        >
+                          <div className="w-8 h-8 bg-orange-500 text-white rounded-lg flex items-center justify-center font-bold text-sm">
+                            {idx + 1}
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="font-bold text-gray-900 text-sm truncate" style={{ color: '#111827' }}>
-                              {store.name || store.sid}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-0.5">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-bold text-gray-800 text-base">{storeName}</div>
+                            <div className="text-xs text-gray-500">
                               👥 {store.employees?.length || 0} موظفين • 🧾 {store.trans || 0} فاتورة
                             </div>
                           </div>
+                          <div className="text-left">
+                            <div className="font-bold text-orange-600 text-lg" dir="ltr">{formatSAR(store.sales)}</div>
+                          </div>
+                          <div className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</div>
                         </div>
-                        <div className="flex items-center gap-3 flex-shrink-0">
-                          <div className="text-orange-600 font-bold text-lg" dir="ltr">{formatSAR(store.sales)}</div>
-                          <span className={`text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
-                        </div>
+                        
+                        {/* Employees Dropdown */}
+                        {isExpanded && store.employees && store.employees.length > 0 && (
+                          <div className="bg-gray-50 border-t p-3">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-gray-500 text-xs">
+                                  <th className="text-right pb-2">#</th>
+                                  <th className="text-right pb-2">الموظف</th>
+                                  <th className="text-left pb-2">المبيعات</th>
+                                  <th className="text-left pb-2">الفواتير</th>
+                                  <th className="text-left pb-2">%</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {store.employees.sort((a, b) => b.sales - a.sales).map((emp, empIdx) => (
+                                  <tr key={emp.id} className="border-t border-gray-100">
+                                    <td className="py-2 text-gray-400">{empIdx + 1}</td>
+                                    <td className="py-2 font-medium text-gray-800">{emp.name || emp.id}</td>
+                                    <td className="py-2 font-bold text-orange-600" dir="ltr">{formatSAR(emp.sales)}</td>
+                                    <td className="py-2 text-gray-600">{emp.trans}</td>
+                                    <td className="py-2">
+                                      <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-xs font-bold">
+                                        {store.sales > 0 ? ((emp.sales / store.sales) * 100).toFixed(0) : 0}%
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
-
-                      {/* Employee List - Expandable */}
-                      {isExpanded && (
-                        <div className="border-t border-neutral-200 bg-gray-50 p-3">
-                          {(!store.employees || store.employees.length === 0) ? (
-                            <div className="text-center text-sm text-gray-500 py-2">لا توجد بيانات موظفين</div>
-                          ) : (
-                            <div className="space-y-2">
-                              {store.employees.sort((a, b) => b.sales - a.sales).map((emp, idx) => (
-                                <div
-                                  key={emp.id}
-                                  className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-neutral-100"
-                                >
-                                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    <span className="w-5 h-5 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
-                                      {idx + 1}
-                                    </span>
-                                    <span className="font-medium text-gray-900 text-sm truncate" style={{ color: '#111827' }}>
-                                      {emp.name || emp.id}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-3 text-xs flex-shrink-0">
-                                    <div className="text-left">
-                                      <div className="font-bold text-orange-600" dir="ltr">{formatSAR(emp.sales)}</div>
-                                      <div className="text-gray-400">{emp.trans} فاتورة</div>
-                                    </div>
-                                    <div className="bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded text-xs font-bold">
-                                      {store.sales > 0 ? ((emp.sales / store.sales) * 100).toFixed(0) : 0}%
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -1282,45 +1340,178 @@ export default function DashboardPage() {
 
       {/* نافذة تقرير الموظفين */}
       {employeeReportModalOpen && (
-        <div className="modal-center-screen" onClick={() => setEmployeeReportModalOpen(false)}>
-          <div className="modal-content max-w-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <span className="text-green-500">📄</span>
-                <h3 className="text-lg font-bold">اختيار الموظفين (PDF)</h3>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setEmployeeReportModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">📄</span>
+                  <div>
+                    <h2 className="text-lg font-bold">اختيار الموظفين (PDF)</h2>
+                    <p className="text-green-100 text-sm">اختر الموظفين للتقرير وازل المستقيلين</p>
+                  </div>
+                </div>
+                <button onClick={() => setEmployeeReportModalOpen(false)} className="bg-white/20 hover:bg-white/30 p-2 rounded-lg">✕</button>
               </div>
-              <button onClick={() => setEmployeeReportModalOpen(false)} className="text-neutral-500 hover:text-neutral-700">
-                <XIcon />
-              </button>
             </div>
             
-            <p className="text-sm text-neutral-600 mb-4">
-              سيتم إنشاء تقرير PDF يحتوي على صفحة لكل معرض مع بيانات الموظفين
-            </p>
-
-            <div className="bg-neutral-50 p-4 rounded-lg mb-4">
-              <div className="text-sm text-neutral-700">
-                <strong>الفترة:</strong> من {yesterdayStr.substring(0, 8)}01 إلى {yesterdayStr}
+            {/* Filters */}
+            <div className="p-4 bg-gray-50 border-b">
+              <div className="flex flex-wrap gap-4 items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={empFilterStatus.has('active')}
+                      onChange={(e) => {
+                        const newSet = new Set(empFilterStatus);
+                        e.target.checked ? newSet.add('active') : newSet.delete('active');
+                        setEmpFilterStatus(newSet);
+                      }}
+                      className="w-4 h-4 text-green-600 rounded"
+                    />
+                    <span className="text-green-600 font-medium">✓ موظف نشط</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={empFilterStatus.has('review')}
+                      onChange={(e) => {
+                        const newSet = new Set(empFilterStatus);
+                        e.target.checked ? newSet.add('review') : newSet.delete('review');
+                        setEmpFilterStatus(newSet);
+                      }}
+                      className="w-4 h-4 text-orange-600 rounded"
+                    />
+                    <span className="text-orange-600 font-medium">□ مراجعة (معيار واحد)</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={empFilterStatus.has('resigned')}
+                      onChange={(e) => {
+                        const newSet = new Set(empFilterStatus);
+                        e.target.checked ? newSet.add('resigned') : newSet.delete('resigned');
+                        setEmpFilterStatus(newSet);
+                      }}
+                      className="w-4 h-4 text-red-600 rounded"
+                    />
+                    <span className="text-red-600 font-medium">□ مستقيل (معياران)</span>
+                  </label>
+                </div>
+                
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  المحددين: <strong>{selectedEmployees.size}</strong> من <strong>{employeeListForSelection.length}</strong>
+                </div>
               </div>
-              <div className="text-sm text-neutral-700 mt-1">
-                <strong>عدد المعارض:</strong> {allowedStoreIds.size}
+              
+              <div className="flex items-center gap-3 mt-3">
+                <button
+                  onClick={() => setSelectedEmployees(new Set(employeeListForSelection.map(e => e.id)))}
+                  className="text-sm bg-green-100 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-200 transition-colors"
+                >
+                  ✓ تحديد الكل
+                </button>
+                <button
+                  onClick={() => setSelectedEmployees(new Set())}
+                  className="text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  ✗ إلغاء الكل
+                </button>
+                <button
+                  onClick={() => {
+                    const activeEmps = employeeListForSelection.filter(e => e.sales > 0).map(e => e.id);
+                    setSelectedEmployees(new Set(activeEmps));
+                  }}
+                  className="text-sm bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors"
+                >
+                  👤 النشطين فقط
+                </button>
               </div>
             </div>
-
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setEmployeeReportModalOpen(false)}
-                className="btn-secondary py-2 px-4"
-              >
-                إلغاء
-              </button>
-              <button
-                onClick={handleGenerateEmployeeReport}
-                className="btn-primary py-2 px-4 flex items-center gap-2"
-              >
-                <PrinterIcon className="w-4 h-4" />
-                إنشاء التقرير
-              </button>
+            
+            {/* Employee List */}
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-100 sticky top-0">
+                  <tr>
+                    <th className="p-3 text-right w-10">
+                      <input
+                        type="checkbox"
+                        checked={selectedEmployees.size === employeeListForSelection.length && employeeListForSelection.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedEmployees(new Set(employeeListForSelection.map(emp => emp.id)));
+                          } else {
+                            setSelectedEmployees(new Set());
+                          }
+                        }}
+                        className="w-4 h-4"
+                      />
+                    </th>
+                    <th className="p-3 text-right font-semibold text-gray-700">الموظف</th>
+                    <th className="p-3 text-right font-semibold text-gray-700">الفرع</th>
+                    <th className="p-3 text-left font-semibold text-gray-700">المبيعات</th>
+                    <th className="p-3 text-center font-semibold text-gray-700">الحالة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employeeListForSelection.map((emp, idx) => (
+                    <tr key={emp.id} className={`border-b hover:bg-gray-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                      <td className="p-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedEmployees.has(emp.id)}
+                          onChange={(e) => {
+                            const newSet = new Set(selectedEmployees);
+                            e.target.checked ? newSet.add(emp.id) : newSet.delete(emp.id);
+                            setSelectedEmployees(newSet);
+                          }}
+                          className="w-4 h-4"
+                        />
+                      </td>
+                      <td className="p-3">
+                        <div className="font-medium text-gray-800">{emp.name}</div>
+                        <div className="text-xs text-gray-400">{emp.id}</div>
+                      </td>
+                      <td className="p-3 text-gray-600 text-xs">{emp.storeName}</td>
+                      <td className="p-3 font-bold text-gray-800" dir="ltr">{Math.round(emp.sales).toLocaleString()}</td>
+                      <td className="p-3 text-center">
+                        <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">نشط</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {employeeListForSelection.length === 0 && (
+                <div className="text-center py-12 text-gray-400">
+                  <div className="text-4xl mb-2">👥</div>
+                  <div>لا توجد بيانات موظفين للفترة المحددة</div>
+                </div>
+              )}
+            </div>
+            
+            {/* Footer */}
+            <div className="p-4 bg-gray-50 border-t flex justify-between items-center">
+              <div className="text-sm text-gray-500">
+                الفترة: من {yesterdayStr.substring(0, 8)}01 إلى {yesterdayStr}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setEmployeeReportModalOpen(false)}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={handleGenerateEmployeeReport}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                  disabled={selectedEmployees.size === 0}
+                >
+                  📄 إنشاء التقرير
+                </button>
+              </div>
             </div>
           </div>
         </div>

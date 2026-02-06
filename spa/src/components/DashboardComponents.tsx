@@ -366,6 +366,39 @@ export const GrowthTrajectoryChart: React.FC<{
   format?: (val: number) => string;
 }> = ({ data, mode, onModeChange, format }) => {
   const maxVal = Math.max(...data.flatMap(d => [d.Current, d.Previous]), 1);
+  const currentYear = new Date().getFullYear();
+  const prevYear = currentYear - 1;
+
+  // Dynamic labels based on mode
+  const getLabels = () => {
+    if (mode === 'TARGET') {
+      return {
+        currentLabel: 'المبيعات',
+        currentSubLabel: 'Sales',
+        prevLabel: 'الهدف',
+        prevSubLabel: 'Target',
+        tooltipCompare: 'vs Target'
+      };
+    } else if (mode === 'VISITORS') {
+      return {
+        currentLabel: `زوار ${currentYear}`,
+        currentSubLabel: 'Current Visitors',
+        prevLabel: `زوار ${prevYear}`,
+        prevSubLabel: 'Previous Visitors',
+        tooltipCompare: `vs ${prevYear}`
+      };
+    } else {
+      return {
+        currentLabel: `${currentYear} الحالي`,
+        currentSubLabel: 'Current Year',
+        prevLabel: `${prevYear} السابق`,
+        prevSubLabel: 'Previous Year',
+        tooltipCompare: `vs ${prevYear}`
+      };
+    }
+  };
+
+  const labels = getLabels();
 
   const formatY = (v: number) => {
     if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
@@ -384,10 +417,12 @@ export const GrowthTrajectoryChart: React.FC<{
         <div className="space-y-2">
           <div className="flex items-center gap-3">
             <div className="h-6 w-1.5 bg-gradient-to-b from-orange-400 to-orange-600 rounded-full shadow-sm shadow-orange-200" />
-            <span className="text-[11px] font-black text-neutral-400 tracking-[0.25em] uppercase">Growth Trajectory</span>
+            <span className="text-[11px] font-black text-neutral-400 tracking-[0.25em] uppercase">
+              {mode === 'TARGET' ? 'Target Achievement' : mode === 'VISITORS' ? 'Visitors Trend' : 'Growth Trajectory'}
+            </span>
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-baseline gap-2">
-            مؤشر نمو المحفظة الإجمالية
+            {mode === 'TARGET' ? 'تحقيق الهدف الشهري' : mode === 'VISITORS' ? 'مؤشر الزوار الشهري' : 'مؤشر نمو المحفظة الإجمالية'}
             <span className="text-xs font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100">Live Analytics</span>
           </h2>
         </div>
@@ -412,15 +447,15 @@ export const GrowthTrajectoryChart: React.FC<{
             <div className="flex items-center gap-3 group/legend flex-row-reverse">
               <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 shadow-sm shadow-orange-200 group-hover/legend:scale-125 transition-transform" />
               <div className="flex flex-col">
-                <span className="text-[10px] font-black text-slate-900 tracking-tight uppercase leading-none">2025 الحالي</span>
-                <span className="text-[8px] font-bold text-neutral-400 uppercase tracking-tighter">Current Year</span>
+                <span className="text-[10px] font-black text-slate-900 tracking-tight uppercase leading-none">{labels.currentLabel}</span>
+                <span className="text-[8px] font-bold text-neutral-400 uppercase tracking-tighter">{labels.currentSubLabel}</span>
               </div>
             </div>
             <div className="flex items-center gap-3 group/legend flex-row-reverse">
-              <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 shadow-sm shadow-slate-200 group-hover/legend:scale-125 transition-transform" />
+              <div className={`w-3.5 h-3.5 rounded-full shadow-sm group-hover/legend:scale-125 transition-transform ${mode === 'TARGET' ? 'bg-gradient-to-br from-blue-500 to-blue-700 shadow-blue-200' : 'bg-gradient-to-br from-slate-700 to-slate-900 shadow-slate-200'}`} />
               <div className="flex flex-col">
-                <span className="text-[10px] font-black text-slate-900 tracking-tight uppercase leading-none">2024 السابق</span>
-                <span className="text-[8px] font-bold text-neutral-400 uppercase tracking-tighter">Previous Year</span>
+                <span className="text-[10px] font-black text-slate-900 tracking-tight uppercase leading-none">{labels.prevLabel}</span>
+                <span className="text-[8px] font-bold text-neutral-400 uppercase tracking-tighter">{labels.prevSubLabel}</span>
               </div>
             </div>
           </div>
@@ -449,10 +484,13 @@ export const GrowthTrajectoryChart: React.FC<{
               {data.map((d, i) => {
                 const curPct = (d.Current / maxVal) * 100;
                 const prevPct = (d.Previous / maxVal) * 100;
-                const growth = d.Previous > 0 ? ((d.Current - d.Previous) / d.Previous) * 100 : 0;
+                const growth = mode === 'TARGET' 
+                  ? (d.Previous > 0 ? (d.Current / d.Previous) * 100 : 0)
+                  : (d.Previous > 0 ? ((d.Current - d.Previous) / d.Previous) * 100 : 0);
 
                 return (
                   <div key={i} className="flex items-end gap-1.5 group/bar relative h-full w-full justify-center max-w-[80px]">
+                    {/* Current Bar (Orange) */}
                     <div
                       className="w-4 bg-gradient-to-t from-orange-600 to-orange-400 rounded-t-lg transition-all duration-700 ease-out hover:brightness-110 cursor-pointer relative z-10 shadow-[0_-4px_12px_rgba(249,115,22,0.1)] group-hover/bar:scale-x-110"
                       style={{ height: `${Math.max(curPct, 2)}%` }}
@@ -461,18 +499,33 @@ export const GrowthTrajectoryChart: React.FC<{
                     </div>
 
                     {/* Tooltip - positioned at the top of the chart */}
-                    <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl opacity-0 group-hover/bar:opacity-100 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap shadow-2xl border border-white/10 min-w-[140px] text-right">
-                      <div className="text-[10px] font-black text-orange-400 mb-1.5 tracking-widest uppercase border-b border-white/10 pb-1">{d.name} 2025</div>
-                      <div className="text-lg font-black tracking-tight">{format ? format(d.Current) : d.Current.toLocaleString()}</div>
-                      <div className={`text-[10px] font-bold mt-1 flex items-center justify-end gap-1 ${growth >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        <span className="text-neutral-400 font-normal">v 2024</span> {growth.toFixed(1)}% {growth >= 0 ? '↗' : '↘'}
+                    <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl opacity-0 group-hover/bar:opacity-100 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap shadow-2xl border border-white/10 min-w-[160px] text-right">
+                      <div className="text-[10px] font-black text-orange-400 mb-1.5 tracking-widest uppercase border-b border-white/10 pb-1">{d.name}</div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[9px] text-neutral-400">{labels.currentLabel}:</span>
+                        <span className="text-base font-black">{format ? format(d.Current) : d.Current.toLocaleString()}</span>
                       </div>
-                      {/* Arrow pointer */}
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[9px] text-neutral-400">{labels.prevLabel}:</span>
+                        <span className="text-base font-bold text-slate-400">{format ? format(d.Previous) : d.Previous.toLocaleString()}</span>
+                      </div>
+                      <div className={`text-[10px] font-bold mt-2 pt-1 border-t border-white/10 flex items-center justify-end gap-1 ${mode === 'TARGET' ? (growth >= 100 ? 'text-green-400' : 'text-red-400') : (growth >= 0 ? 'text-green-400' : 'text-red-400')}`}>
+                        {mode === 'TARGET' ? (
+                          <span>{growth.toFixed(1)}% تحقيق</span>
+                        ) : (
+                          <span>{growth >= 0 ? '+' : ''}{growth.toFixed(1)}% {growth >= 0 ? '↗' : '↘'}</span>
+                        )}
+                      </div>
                       <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-slate-900/95"></div>
                     </div>
 
+                    {/* Previous/Target Bar (Dark or Blue) */}
                     <div
-                      className="w-4 bg-gradient-to-t from-slate-900 to-slate-700 rounded-t-lg transition-all duration-700 ease-out hover:brightness-125 cursor-pointer relative z-10 shadow-[0_-4px_12px_rgba(15,23,42,0.1)] group-hover/bar:scale-x-110"
+                      className={`w-4 rounded-t-lg transition-all duration-700 ease-out hover:brightness-125 cursor-pointer relative z-10 ${
+                        mode === 'TARGET' 
+                          ? 'bg-gradient-to-t from-blue-600 to-blue-400 shadow-[0_-4px_12px_rgba(59,130,246,0.1)]' 
+                          : 'bg-gradient-to-t from-slate-900 to-slate-700 shadow-[0_-4px_12px_rgba(15,23,42,0.1)]'
+                      } group-hover/bar:scale-x-110`}
                       style={{ height: `${Math.max(prevPct, 2)}%` }}
                     >
                       <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity rounded-t-lg" />

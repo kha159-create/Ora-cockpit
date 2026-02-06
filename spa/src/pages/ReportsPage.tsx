@@ -671,27 +671,128 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-        <button
-          type="button"
-          onClick={() => openReportChoice('pdf')}
-          className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6 text-center hover:shadow-xl hover:border-primary-200 transition-all cursor-pointer group"
-        >
-          <div className="text-red-500 text-4xl mb-3">📄</div>
-          <h5 className="font-bold text-neutral-900">تقارير PDF</h5>
-          <p className="text-sm text-neutral-500 mt-1">لوحة التحكم، ملخص عام، أداء الموظفين</p>
-          <span className="inline-block mt-3 px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-lg group-hover:bg-amber-600">اختر وتنسيق التقرير</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => openReportChoice('excel')}
-          className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6 text-center hover:shadow-xl hover:border-primary-200 transition-all cursor-pointer group"
-        >
-          <div className="text-green-600 text-4xl mb-3">📊</div>
-          <h5 className="font-bold text-neutral-900">تقارير Excel</h5>
-          <p className="text-sm text-neutral-500 mt-1">مبيعات المعارض، مبيعات الموظفين</p>
-          <span className="inline-block mt-3 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg group-hover:bg-green-700">اختر وتصدير Excel</span>
-        </button>
+      {/* تقارير المعارض */}
+      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
+        <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
+          <span className="text-2xl">🏪</span> تقارير المعارض
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <button
+            type="button"
+            onClick={() => handlePdfGeneration('yesterday_store')}
+            className="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-red-400 transition-all group"
+          >
+            <div className="text-red-500 text-2xl mb-2">📄</div>
+            <h5 className="font-bold text-neutral-800 text-sm">تقرير المعارض</h5>
+            <p className="text-xs text-neutral-500 mt-1">PDF - مقارنة المبيعات والنمو</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setExcelType('store'); setShowExcelModal(true); }}
+            className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-green-400 transition-all group"
+          >
+            <div className="text-green-600 text-2xl mb-2">📊</div>
+            <h5 className="font-bold text-neutral-800 text-sm">بيانات المعارض</h5>
+            <p className="text-xs text-neutral-500 mt-1">Excel - بيانات تفصيلية</p>
+          </button>
+          <button
+            type="button"
+            onClick={generateGlobalSummary}
+            className="bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-amber-400 transition-all group"
+          >
+            <div className="text-amber-600 text-2xl mb-2">📈</div>
+            <h5 className="font-bold text-neutral-800 text-sm">ملخص عام</h5>
+            <p className="text-xs text-neutral-500 mt-1">PDF - تحليل الأداء اليومي</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => handlePdfGeneration('monthly_summary')}
+            className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-blue-400 transition-all group"
+          >
+            <div className="text-blue-600 text-2xl mb-2">📊</div>
+            <h5 className="font-bold text-neutral-800 text-sm">التقرير الشهري</h5>
+            <p className="text-xs text-neutral-500 mt-1">PDF - ملخص الشهر</p>
+          </button>
+        </div>
+      </div>
+
+      {/* تقارير الموظفين */}
+      {canExportEmployee && (
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
+          <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
+            <span className="text-2xl">👥</span> تقارير الموظفين
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <button
+              type="button"
+              onClick={() => generateEmployeePerformance()}
+              className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-purple-400 transition-all group"
+            >
+              <div className="text-purple-500 text-2xl mb-2">📄</div>
+              <h5 className="font-bold text-neutral-800 text-sm">أداء الموظفين</h5>
+              <p className="text-xs text-neutral-500 mt-1">PDF - أمس والشهر الحالي</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setExcelType('employee'); setShowExcelModal(true); }}
+              className="bg-gradient-to-br from-teal-50 to-teal-100 border border-teal-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-teal-400 transition-all group"
+            >
+              <div className="text-teal-600 text-2xl mb-2">📊</div>
+              <h5 className="font-bold text-neutral-800 text-sm">بيانات الموظفين</h5>
+              <p className="text-xs text-neutral-500 mt-1">Excel - مبيعات تفصيلية</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePdfGeneration('yesterday_employee')}
+              className="bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-indigo-400 transition-all group"
+            >
+              <div className="text-indigo-500 text-2xl mb-2">👤</div>
+              <h5 className="font-bold text-neutral-800 text-sm">تقرير أمس</h5>
+              <p className="text-xs text-neutral-500 mt-1">PDF - مقارنة الأمس بالشهر</p>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* تقارير أخرى */}
+      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
+        <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
+          <span className="text-2xl">📦</span> تقارير أخرى
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <a
+            href="/offers"
+            className="bg-gradient-to-br from-pink-50 to-pink-100 border border-pink-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-pink-400 transition-all group block"
+          >
+            <div className="text-pink-500 text-2xl mb-2">🏷️</div>
+            <h5 className="font-bold text-neutral-800 text-sm">تحليل العروض</h5>
+            <p className="text-xs text-neutral-500 mt-1">مبيعات العروض والخصومات</p>
+          </a>
+          <a
+            href="/stagnant"
+            className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-orange-400 transition-all group block"
+          >
+            <div className="text-orange-500 text-2xl mb-2">⏸️</div>
+            <h5 className="font-bold text-neutral-800 text-sm">المنتجات الراكدة</h5>
+            <p className="text-xs text-neutral-500 mt-1">المنتجات بدون حركة</p>
+          </a>
+          <a
+            href="/products"
+            className="bg-gradient-to-br from-cyan-50 to-cyan-100 border border-cyan-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-cyan-400 transition-all group block"
+          >
+            <div className="text-cyan-500 text-2xl mb-2">📦</div>
+            <h5 className="font-bold text-neutral-800 text-sm">تحليل المنتجات</h5>
+            <p className="text-xs text-neutral-500 mt-1">أداء المنتجات والأصناف</p>
+          </a>
+          <a
+            href="/stores"
+            className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-slate-400 transition-all group block"
+          >
+            <div className="text-slate-500 text-2xl mb-2">🏬</div>
+            <h5 className="font-bold text-neutral-800 text-sm">تفاصيل المعارض</h5>
+            <p className="text-xs text-neutral-500 mt-1">بيانات الفروع</p>
+          </a>
+        </div>
       </div>
 
       {/* Report type choice modal */}
