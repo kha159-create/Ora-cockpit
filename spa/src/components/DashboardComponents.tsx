@@ -128,7 +128,7 @@ export const KPICard: React.FC<{
       <button
         onClick={onClick}
         disabled={!onClick}
-        className="modern-kpi-card group p-3 flex flex-col w-full h-full disabled:cursor-default text-right relative overflow-hidden"
+        className="modern-kpi-card group p-2 sm:p-3 flex flex-col w-full h-full disabled:cursor-default text-right relative overflow-hidden"
       >
         {/* تأثير الخلفية المتحرك */}
         <div className="kpi-card-background" />
@@ -137,7 +137,7 @@ export const KPICard: React.FC<{
         <div className="relative z-10 flex-1 flex flex-col justify-between">
           {/* الرأس - العنوان */}
           <div className="flex justify-between items-start mb-2">
-            <h3 className="kpi-title text-sm text-neutral-500 font-semibold">{title}</h3>
+            <h3 className="kpi-title text-xs sm:text-sm text-neutral-500 font-semibold">{title}</h3>
             {showProgress && trendValue && <TrendIndicator trend={trend} value={trendValue} />}
           </div>
 
@@ -145,14 +145,14 @@ export const KPICard: React.FC<{
           <div className="flex items-center justify-between px-1">
             {/* اليمين: الأيقونة */}
             {icon && (
-              <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-100/50 text-orange-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300 shadow-sm">
-                <div className="w-6 h-6">{icon}</div>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-orange-50 border border-orange-100/50 text-orange-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300 shadow-sm">
+                <div className="w-5 h-5 sm:w-6 sm:h-6">{icon}</div>
               </div>
             )}
 
             {/* اليسار: القيمة */}
             <div className="flex flex-col items-end justify-center flex-1 pl-3">
-              <div className="text-2xl sm:text-3xl font-bold text-neutral-900 leading-tight dir-ltr font-mono tracking-tight">
+              <div className="text-xl sm:text-3xl font-bold text-neutral-900 leading-tight dir-ltr font-mono tracking-tight">
                 {formattedValue}
               </div>
               {subtitle && <div className="text-[10px] text-neutral-400 font-medium">{subtitle}</div>}

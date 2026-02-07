@@ -807,7 +807,7 @@ export default function DashboardPage() {
   const monthlyChartData = useMemo(() => {
     if (!raw) return [];
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const currentYear = new Date().getFullYear();
+    const currentYear = selYear || new Date().getFullYear();
     const data: { name: string; Sales?: number; Target?: number; Current?: number; Previous?: number; CurrentVisitors?: number; PreviousVisitors?: number }[] = [];
 
     for (let m = 0; m < 12; m++) {
@@ -1219,11 +1219,11 @@ export default function DashboardPage() {
             <div className="text-xs text-neutral-500">عروض ومبيعات</div>
           </div>
         </Link>
-        <Link to="/products" className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 flex items-center gap-3 hover:border-orange-400 hover:shadow-xl transition-all identity-card">
-          <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600"><PauseIcon /></div>
+        <Link to="/employees" className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 flex items-center gap-3 hover:border-orange-400 hover:shadow-xl transition-all identity-card">
+          <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600"><UserGroupIcon /></div>
           <div>
-            <div className="font-bold text-neutral-900">المنتجات الراكدة</div>
-            <div className="text-xs text-neutral-500">أصناف راكدة</div>
+            <div className="font-bold text-neutral-900">الموظفين</div>
+            <div className="text-xs text-neutral-500">تحليل الأداء</div>
           </div>
         </Link>
         <Link to="/stores" className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 flex items-center gap-3 hover:border-orange-400 hover:shadow-xl transition-all identity-card">

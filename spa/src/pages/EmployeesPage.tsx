@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { loadEmployeesData, loadManagementData } from '../services/upstreamData';
+import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { AchievementBar, ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
+import { AchievementBar, ChartCard, KPICard, LineChart, PieChart } from '../components/DashboardComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UserGroupIcon } from '../components/Icons';
 
 type Period = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
@@ -141,6 +141,7 @@ function EmployeeDetailModal({
   onClose,
   periodLabel,
   targetEnabled,
+  prodRaw, // New prop for product data
 }: {
   open: boolean;
   employee: EmployeeAgg | null;
@@ -148,6 +149,7 @@ function EmployeeDetailModal({
   dailyMaps: EmployeeDailyMaps;
   periodLabel: string;
   targetEnabled: boolean;
+  prodRaw: any;
   onClose: () => void;
 }) {
   const detail = employee;
@@ -157,16 +159,56 @@ function EmployeeDetailModal({
   const bAvgTicket = b && b.transactions > 0 ? b.current / b.transactions : 0;
   const bAvgUPT = b && b.transactions > 0 ? b.items / b.transactions : 0;
 
-  const diffPct = (val: number, base: number) => (base > 0 ? ((val - base) / base) * 100 : 0);
-  const diffClass = (v: number) => (Math.abs(v) < 1 ? 'diff-neutral' : v >= 0 ? 'diff-pos' : 'diff-neg');
+  // New Data Computations
+  const storeId = detail.storeCode;
 
-  const daily = Object.values(dailyMaps[detail.id] || {});
-  daily.sort((a, b2) => String(a.date).localeCompare(String(b2.date)));
-  const chartData = daily.map((d) => {
-    const dd = new Date(d.date);
-    const name = `${dd.getDate()}/${dd.getMonth() + 1}`;
-    return { name, Sales: d.sales };
-  });
+  // Missed Opportunities (Store Level)
+  const missedOpportunities = useMemo(() => {
+    if (!prodRaw?.missed_opportunities) return [];
+    const missedByStore = prodRaw.missed_opportunities;
+    // If we had per-employee missed opps, we'd use them. For now, show Store's.
+    // Or show nothing if strict. User asked for "Missed Opportunities found in Products Page" logic.
+    // In Products Page, it uses `missedByStore`.
+    const list = missedByStore[storeId] || [];
+    return list.sort((a: any, b: any) => safeNum(b.total_count) - safeNum(a.total_count)).slice(0, 50);
+  }, [prodRaw, storeId]);
+
+  // Product Mix (Store Level Assumption)
+  const productMix = useMemo(() => {
+    // Calculate share of King Duvet, Felt, Pillows
+    // Using 'mtd' period analysis for consistency
+    const pData = prodRaw?.periods?.['mtd']?.analysis?.[storeId]?.categories || [];
+    if (!pData.length) return [];
+
+    let totalAmt = 0;
+    let kingAmt = 0;
+    let feltAmt = 0;
+    let pillowAmt = 0;
+
+    // We need to look at specific items, but here we only have categories.
+    // If we don't have item-level data in 'categories', we might check 'catalog'.
+    // 'catalog' in prodRaw is usually per-store item list.
+    const catalog = prodRaw?.periods?.['mtd']?.catalog?.[storeId] || [];
+
+    catalog.forEach((item: any) => {
+      const name = String(item.name || '').toLowerCase();
+      const amt = Number(item.amount) || 0;
+      totalAmt += amt;
+
+      if (name.includes('لحاف') && name.includes('كينج')) kingAmt += amt;
+      else if (name.includes('لباد')) feltAmt += amt;
+      else if (name.includes('مخدة') || name.includes('وسادة')) pillowAmt += amt;
+    });
+
+    if (totalAmt === 0) return [];
+
+    return [
+      { name: 'لحاف كينج', value: kingAmt, percentage: (kingAmt / totalAmt) * 100 },
+      { name: 'لباد', value: feltAmt, percentage: (feltAmt / totalAmt) * 100 },
+      { name: 'مخدات', value: pillowAmt, percentage: (pillowAmt / totalAmt) * 100 },
+      { name: 'أخرى', value: totalAmt - kingAmt - feltAmt - pillowAmt, percentage: ((totalAmt - kingAmt - feltAmt - pillowAmt) / totalAmt) * 100 },
+    ];
+  }, [prodRaw, storeId]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30" onClick={onClose} role="dialog" aria-label="تفاصيل الموظف">
@@ -206,6 +248,12 @@ function EmployeeDetailModal({
           <div className="bg-white rounded-xl border border-neutral-200 p-4">
             <div className="text-neutral-500 text-sm">التحقيق</div>
             <div className="text-2xl font-bold text-neutral-900 mt-1">{targetEnabled ? `${detail.achievement.toFixed(1)}%` : '-'}</div>
+            {/* Daily Remaining % - ADDED */}
+            {targetEnabled && detail.dailyReq > 0 && (
+              <div className="text-xs text-neutral-500 mt-1 border-t border-neutral-100 pt-1">
+                مطلوب يومياً: <span className="font-bold text-neutral-800">{formatSAR(detail.dailyReq)}</span>
+              </div>
+            )}
           </div>
           <div className="bg-white rounded-xl border border-neutral-200 p-4">
             <div className="text-neutral-500 text-sm">مساهمة مبيعات الفرع</div>
@@ -213,36 +261,68 @@ function EmployeeDetailModal({
           </div>
         </div>
 
-        {/* جودة الأداء (مقارنة بالفرع) + تطور المبيعات */}
+        {/* REPLACED: New Widgets */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-          <ChartCard title="⚡ جودة الأداء (مقارنة بالفرع)">
-            <div className="space-y-4">
-              <div className="insight-card">
-                <div className="insight-label">معدل الفاتورة</div>
-                <div className="flex justify-between items-center">
-                  <div className="insight-value">{formatSAR(detail.avg_ticket)}</div>
-                  <div className={`diff-badge ${diffClass(diffPct(detail.avg_ticket, bAvgTicket))}`}>
-                    {bAvgTicket > 0 ? `${diffPct(detail.avg_ticket, bAvgTicket) >= 0 ? '▲' : '▼'} ${Math.abs(diffPct(detail.avg_ticket, bAvgTicket)).toFixed(0)}%` : '--'}
-                  </div>
+          {/* Missed Opportunities (Scrollable List) */}
+          <ChartCard title="⚡ الفرص الضائعة (Missed Opportunities)" className="h-[400px] flex flex-col">
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+              {missedOpportunities.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-neutral-400">لا توجد بيانات متاحة</div>
+              ) : (
+                <div className="space-y-2">
+                  {missedOpportunities.map((m: any, idx: number) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs">{idx + 1}</div>
+                        <div>
+                          <div className="text-sm font-bold text-neutral-900">{m.product_a_name} + {m.product_b_name}</div>
+                          <div className="text-xs text-neutral-500">تكرار الفواتير: {m.total_count}</div>
+                        </div>
+                      </div>
+                      <div className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-lg border border-orange-100">
+                        فرصة عالية
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <small className="text-neutral-500 block mt-2">متوسط الفرع: <span className="font-semibold">{formatSAR(bAvgTicket)}</span></small>
-              </div>
-              <div className="insight-card">
-                <div className="insight-label">متوسط القطع (Items/Inv)</div>
-                <div className="flex justify-between items-center">
-                  <div className="insight-value">{detail.items_per_inv.toFixed(2)}</div>
-                  <div className={`diff-badge ${diffClass(diffPct(detail.items_per_inv, bAvgUPT))}`}>
-                    {bAvgUPT > 0 ? `${diffPct(detail.items_per_inv, bAvgUPT) >= 0 ? '▲' : '▼'} ${Math.abs(diffPct(detail.items_per_inv, bAvgUPT)).toFixed(0)}%` : '--'}
-                  </div>
-                </div>
-                <small className="text-neutral-500 block mt-2">متوسط الفرع: <span className="font-semibold">{bAvgUPT.toFixed(2)}</span></small>
-              </div>
+              )}
             </div>
           </ChartCard>
-          <ChartCard title={`📈 تطور المبيعات (${periodLabel})`}>
-            <div className="h-[240px]">
-              <LineChart data={chartData} />
-            </div>
+
+          {/* Product Mix Analysis (Pie/Table) */}
+          <ChartCard title="تحليل المنتجات (نسبة المبيعات)" className="h-[400px]">
+            {productMix.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-neutral-400">جاري التحميل أو لا توجد بيانات للمنتجات</div>
+            ) : (
+              <div className="h-full flex flex-col">
+                <div className="h-[200px] flex-shrink-0">
+                  <PieChart data={productMix.map(p => ({ name: p.name, value: p.value }))} />
+                </div>
+                <div className="flex-1 overflow-y-auto mt-4">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-neutral-500 border-b border-neutral-100">
+                        <th className="pb-2 text-right">المنتج</th>
+                        <th className="pb-2 text-right">القيمة</th>
+                        <th className="pb-2 text-right">النسبة</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-50">
+                      {productMix.map((p) => (
+                        <tr key={p.name}>
+                          <td className="py-2 font-medium">{p.name}</td>
+                          <td className="py-2 dir-ltr text-right">{formatSAR(p.value)}</td>
+                          <td className="py-2 dir-ltr text-right font-bold text-neutral-900">{p.percentage.toFixed(1)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="text-[10px] text-neutral-400 mt-2 text-center">
+                  * التحليل بناءً على بيانات الفرع (المتوفرة حالياً)
+                </div>
+              </div>
+            )}
           </ChartCard>
         </div>
 
@@ -258,6 +338,7 @@ export default function EmployeesPage() {
   const user = getCurrentUser();
   const [empRaw, setEmpRaw] = useState<any>(null);
   const [mgmtRaw, setMgmtRaw] = useState<any>(null);
+  const [prodRaw, setProdRaw] = useState<any>(null); // New state
   const [err, setErr] = useState<string | null>(null);
 
   const [manager, setManager] = useState<string>('all');
@@ -279,10 +360,11 @@ export default function EmployeesPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([loadEmployeesData(), loadManagementData()])
-      .then(([e, m]) => {
+    Promise.all([loadEmployeesData(), loadManagementData(), loadProductAnalysisData()])
+      .then(([e, m, p]) => {
         setEmpRaw(e);
         setMgmtRaw(m);
+        setProdRaw(p);
       })
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
