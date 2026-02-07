@@ -115,8 +115,12 @@ export default function ProductsPage() {
 
   // Stagnant Data State
   const [stagnantRaw, setStagnantRaw] = useState<any>(null);
+  const [stagnantRaw, setStagnantRaw] = useState<any>(null);
   const [stagnantPage, setStagnantPage] = useState(1);
-  const STAGNANT_PER_PAGE = 5;
+  const STAGNANT_PER_PAGE = 10;
+  // Category Share Pagination
+  const [catSharePage, setCatSharePage] = useState(1);
+  const CAT_SHARE_PER_PAGE = 10;
   const [productOpen, setProductOpen] = useState(false);
   const [productId, setProductId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -548,7 +552,8 @@ export default function ProductsPage() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
         {/* Bar Chart Card */}
         {/* Stagnant Products Widget (Replaces Bar Chart) */}
-        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden h-[340px] flex flex-col">
+        {/* Stagnant Products Widget (Replaces Bar Chart) */}
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden h-[500px] flex flex-col">
           <div className="p-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
             <h3 className="font-bold text-neutral-800">⚠️ المنتجات الراكدة (Stagnant)</h3>
             <span className="text-xs text-neutral-500 bg-white border border-neutral-200 px-2 py-1 rounded-lg">
@@ -660,8 +665,8 @@ export default function ProductsPage() {
         </div>
 
         {/* Categories Share List (Replaces Overlapping Pie/Stats) */}
-        <ChartCard title="نسبة الفئات (Category Share)" className="h-[340px] overflow-hidden">
-          <div className="h-full overflow-y-auto custom-scrollbar pr-1">
+        <ChartCard title="نسبة الفئات (Category Share)" className="h-[500px] flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-x-auto custom-scrollbar pr-1 relative">
             <table className="w-full">
               <thead className="sticky top-0 bg-white z-10">
                 <tr className="text-xs text-neutral-500 border-b border-neutral-100">
@@ -671,29 +676,61 @@ export default function ProductsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-50">
-                {derived.categoriesAgg.map((c, idx) => (
-                  <tr key={c.category} className="group hover:bg-orange-50/50 transition-colors">
-                    <td className="py-2.5 text-xs sm:text-sm font-bold text-neutral-700">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${['bg-blue-500', 'bg-orange-500', 'bg-emerald-500', 'bg-purple-500'][idx % 4]}`} />
-                        <span className="truncate max-w-[150px]" title={c.category}>{c.category}</span>
-                      </div>
-                    </td>
-                    <td className="py-2.5 text-center">
-                      <span className="inline-block bg-neutral-100 text-neutral-700 text-[10px] font-bold px-1.5 py-0.5 rounded dir-ltr">
-                        {c.sharePercent.toFixed(1)}%
-                      </span>
-                    </td>
-                    <td className="py-2.5 text-left dir-ltr">
-                      <div className="h-1.5 w-full bg-neutral-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-orange-500 rounded-full" style={{ width: `${c.sharePercent}%` }} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {(() => {
+                  const page = catSharePage;
+                  const perPage = CAT_SHARE_PER_PAGE;
+                  const start = (page - 1) * perPage;
+                  const visible = derived.categoriesAgg.slice(start, start + perPage);
+
+                  return visible.map((c, idx) => (
+                    <tr key={c.category} className="group hover:bg-orange-50/50 transition-colors">
+                      <td className="py-2.5 text-xs sm:text-sm font-bold text-neutral-700">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${['bg-blue-500', 'bg-orange-500', 'bg-emerald-500', 'bg-purple-500'][idx % 4]}`} />
+                          <span className="truncate max-w-[150px]" title={c.category}>{c.category}</span>
+                        </div>
+                      </td>
+                      <td className="py-2.5 text-center">
+                        <span className="inline-block bg-neutral-100 text-neutral-700 text-[10px] font-bold px-1.5 py-0.5 rounded dir-ltr">
+                          {c.sharePercent.toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-left dir-ltr">
+                        <div className="h-1.5 w-full bg-neutral-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-orange-500 rounded-full" style={{ width: `${c.sharePercent}%` }} />
+                        </div>
+                      </td>
+                    </tr>
+                  ));
+                })()}
               </tbody>
             </table>
           </div>
+          {/* Pagination for Category Share */}
+          {(() => {
+            const total = derived.categoriesAgg.length;
+            if (total <= CAT_SHARE_PER_PAGE) return null;
+            const totalPages = Math.ceil(total / CAT_SHARE_PER_PAGE);
+            return (
+              <div className="flex items-center justify-between px-3 py-2 border-t border-neutral-100 bg-neutral-50 text-xs mt-auto">
+                <button
+                  onClick={() => setCatSharePage(Math.max(1, catSharePage - 1))}
+                  disabled={catSharePage <= 1}
+                  className="px-2 py-1 border rounded bg-white disabled:opacity-50 hover:bg-neutral-100"
+                >
+                  السابق
+                </button>
+                <span className="text-neutral-500">{catSharePage} / {totalPages}</span>
+                <button
+                  onClick={() => setCatSharePage(Math.min(totalPages, catSharePage + 1))}
+                  disabled={catSharePage >= totalPages}
+                  className="px-2 py-1 border rounded bg-white disabled:opacity-50 hover:bg-neutral-100"
+                >
+                  التالي
+                </button>
+              </div>
+            );
+          })()}
         </ChartCard>
       </div>
 

@@ -174,8 +174,8 @@ export const KPICard: React.FC<{
                     })()}
                   </span>
                 </div>
-                <div className="text-[10px] text-neutral-400 truncate">
-                  {comparisonLabel || 'السنة الماضية'}: <span className="dir-ltr inline-block font-medium">{format ? format(comparisonValue) : comparisonValue.toLocaleString()}</span>
+                <div className="text-xs text-neutral-500 truncate mt-1">
+                  {comparisonLabel || 'السنة الماضية'}: <span className="dir-ltr inline-block font-bold text-neutral-700">{format ? format(comparisonValue) : comparisonValue.toLocaleString()}</span>
                 </div>
               </>
             )}
@@ -415,7 +415,7 @@ export const GrowthTrajectoryChart: React.FC<{
             </span>
           </div>
           <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex flex-wrap items-baseline gap-2">
-            {mode === 'TARGET' ? 'تحقيق الهدف الشهري' : mode === 'VISITORS' ? 'مؤشر الزوار الشهري' : 'مؤشر نمو المحفظة الإجمالية'}
+            {mode === 'TARGET' ? 'تحقيق الهدف الشهري' : mode === 'VISITORS' ? 'مؤشر الزوار الشهري' : ''}
             <span className="text-xs font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100 whitespace-nowrap">Live Analytics</span>
           </h2>
         </div>

@@ -22,7 +22,7 @@ const baseNavItems = [
   { to: '/stores', label: 'المعارض', icon: <OfficeBuildingIcon /> },
   { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
   { to: '/offers', label: 'تحليل العروض', icon: <TagIcon /> },
-  { to: '/stagnant', label: 'المنتجات الراكدة', icon: <PauseIcon /> },
+
 ] as const;
 
 const targetsNavItem = { to: '/targets', label: 'تحديد الأهداف', icon: <TargetIcon /> } as const;
