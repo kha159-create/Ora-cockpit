@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 import { useCommissions, getStoreCommissionRate } from '../hooks/useCommissions';
 import { CommissionData } from '../types';
-import { CalendarIcon, ChevronDownIcon, ChevronUpIcon, CurrencyDollarIcon, UserGroupIcon, CalculatorIcon, XIcon } from '../components/Icons';
+import { CalendarIcon, ChevronDownIcon, ChevronUpIcon, UserGroupIcon, CalculatorIcon, XIcon } from '../components/Icons';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 
 // Simulation Modal Component
@@ -129,7 +129,7 @@ export default function CommissionsPage() {
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-200 flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-neutral-900 flex items-center gap-2">
-                        <CurrencyDollarIcon />
+                        <span className="text-2xl">💰</span>
                         تقرير العمولات (Commissions)
                     </h1>
                     <p className="text-neutral-500 text-sm mt-1">حساب العمولات بناءً على تحقيق الهدف للفرع والموظف</p>
