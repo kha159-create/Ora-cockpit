@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { ChartCard, KPICard } from '../components/DashboardComponents';
+import { ChartCard, KPICard, PieChart } from '../components/DashboardComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon } from '../components/Icons';
 import { runProductValueAnalysis, safeNum } from '../services/analysisHelpers';
 
@@ -353,6 +353,56 @@ function StoreDetailsModal({
     };
   }, [employeesJson, endYMD, startYMD, store, prodRaw, mode, mgmtRaw]);
 
+  // Product Mix (Store Level Interaction)
+  const productMix = useMemo(() => {
+    if (!details?.catalog) return [];
+
+    // Aggregate into buckets (King, Felt, Pillow, Others)
+    let kingAmt = 0;
+    let feltAmt = 0;
+    let pillowAmt = 0;
+    let totalAmt = 0;
+
+    // Is catalog an array or object? Upstream seems to return object { itemId: { ... } } or array?
+    // In EmployeesPage logic we assumed array. Here catalog is from prodRaw.periods...catalog which is usually { item_id: { ... } } or Array?
+    // Let's check logic in extraction. 
+    // In EmployeesPage we did: catalog.forEach...
+    // In StoresPage details.catalog comes from pData.catalog.
+
+    const items = Array.isArray(details.catalog) ? details.catalog : Object.values(details.catalog || {});
+
+    items.forEach((item: any) => {
+      const name = String(item.name || '').toLowerCase();
+      const cat = String(item.category || '').toLowerCase();
+      const combined = `${cat} ${name}`;
+      const amt = Number(item.amount) || Number(item.a) || 0; // Support both structures
+
+      if (amt <= 0) return;
+
+      totalAmt += amt;
+
+      if (combined.includes('pillow') || combined.includes('مخد') || combined.includes('وساد')) {
+        pillowAmt += amt;
+      } else if (combined.includes('duvet') || combined.includes('لحاف') || combined.includes('مفرش')) {
+        if (combined.includes('king') || combined.includes('كنج') || combined.includes('كبير') || combined.includes('240') || combined.includes('260') || combined.includes('180') || combined.includes('200')) {
+          kingAmt += amt;
+        }
+      } else if (combined.includes('lbab') || combined.includes('لباد') || combined.includes('topper')) {
+        feltAmt += amt;
+      }
+    });
+
+    if (totalAmt === 0) return [];
+
+    return [
+      { name: 'لحاف كينج', value: kingAmt, percentage: (kingAmt / totalAmt) * 100 },
+      { name: 'لباد', value: feltAmt, percentage: (feltAmt / totalAmt) * 100 },
+      { name: 'مخدات', value: pillowAmt, percentage: (pillowAmt / totalAmt) * 100 },
+      { name: 'أخرى', value: totalAmt - kingAmt - feltAmt - pillowAmt, percentage: ((totalAmt - kingAmt - feltAmt - pillowAmt) / totalAmt) * 100 },
+    ].sort((a, b) => b.value - a.value);
+
+  }, [details?.catalog]);
+
 
   if (!open || !store) return null;
 
@@ -382,6 +432,13 @@ function StoreDetailsModal({
               icon={<FireIcon />}
             />
             <KPICard title="تحقيق الهدف" value={store.ach} format={(v) => `${v.toFixed(1)}% `} showProgress progressValue={store.ach} />
+            {/* New KPI: Customer Value */}
+            <KPICard
+              title="قيمة العميل"
+              value={store.customerValue}
+              format={(v) => formatSAR(v)}
+              icon={<UsersIcon />} // Reusing UsersIcon or creating a new one? UsersIcon is fine for now or maybe Currency?
+            />
           </div>
 
 
@@ -430,8 +487,43 @@ function StoreDetailsModal({
               </table>
             </div>
           </div>
+
+          {/* Product Mix Widget (Moved from Employees) */}
+          <div className="mt-6">
+            <ChartCard title="تحليل المنتجات (نسبة المبيعات)" className="h-[400px]">
+              {productMix.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-neutral-400">لا توجد بيانات</div>
+              ) : (
+                <div className="h-full flex flex-col">
+                  <div className="h-[200px] flex-shrink-0">
+                    <PieChart data={productMix.map(p => ({ name: p.name, value: p.value }))} />
+                  </div>
+                  <div className="flex-1 overflow-y-auto mt-4 custom-scrollbar">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-neutral-500 border-b border-neutral-100">
+                          <th className="pb-2 text-right">المنتج</th>
+                          <th className="pb-2 text-right">القيمة</th>
+                          <th className="pb-2 text-right">النسبة</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-50">
+                        {productMix.map((p) => (
+                          <tr key={p.name}>
+                            <td className="py-2 font-medium">{p.name}</td>
+                            <td className="py-2 dir-ltr text-right">{formatSAR(p.value)}</td>
+                            <td className="py-2 dir-ltr text-right font-bold text-neutral-900">{p.percentage.toFixed(1)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </ChartCard>
+          </div>
         </div>
-      </div>
+      </div >
     </>
   );
 }

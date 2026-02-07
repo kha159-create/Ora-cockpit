@@ -142,6 +142,7 @@ function EmployeeDetailModal({
   periodLabel,
   targetEnabled,
   prodRaw, // New prop for product data
+  empRaw, // New prop for sales history
 }: {
   open: boolean;
   employee: EmployeeAgg | null;
@@ -150,6 +151,7 @@ function EmployeeDetailModal({
   periodLabel: string;
   targetEnabled: boolean;
   prodRaw: any;
+  empRaw: any;
   onClose: () => void;
 }) {
   const detail = employee;
@@ -159,6 +161,60 @@ function EmployeeDetailModal({
   const bAvgTicket = b && b.transactions > 0 ? b.current / b.transactions : 0;
   const bAvgUPT = b && b.transactions > 0 ? b.items / b.transactions : 0;
 
+  // Sales Evolution (Daily Sales)
+  const salesEvolution = useMemo(() => {
+    if (!empRaw?.history) return [];
+
+    const storeId = String(detail.storeCode || '');
+    const storeHistory = empRaw.history[storeId] || [];
+    const empNamesMap = empRaw.employee_names || {};
+
+    // Filter history for this employee
+    const myId = String(detail.id || '').trim();
+    const myName = String(detail.name || '').trim();
+
+    const dailyMap: Record<string, number> = {};
+
+    storeHistory.forEach((r: any[]) => {
+      const date = String(r[0] || '').substring(0, 10);
+      const rawName = String(r[1] || '');
+      const val = safeNum(r[2]);
+
+      // Match Employee (Quick resolve)
+      let lookupId = rawName.trim();
+      if (rawName.includes('-')) {
+        const parts = rawName.split('-');
+        lookupId = parts[0].trim();
+      }
+
+      // 1. Strict ID match
+      if (lookupId === myId || lookupId === myId.replace(/^0+/, '')) {
+        if (date) dailyMap[date] = (dailyMap[date] || 0) + val;
+        return;
+      }
+
+      // 2. Name match (if available from map)
+      const mapName = empNamesMap[lookupId] || empNamesMap[lookupId.padStart(4, '0')];
+      if (mapName && mapName === myName) {
+        if (date) dailyMap[date] = (dailyMap[date] || 0) + val;
+        return;
+      }
+
+      // 3. Raw name match
+      if (rawName === myName || rawName.includes(myName)) {
+        if (date) dailyMap[date] = (dailyMap[date] || 0) + val;
+        return;
+      }
+    });
+
+    // Convert to array and sort
+    return Object.entries(dailyMap)
+      .map(([date, value]) => ({ name: date.substring(5), fullDate: date, value })) // name: MM-DD
+      .sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+  }, [empRaw, detail.id, detail.name, detail.storeCode]);
+
+
+
   // New Data Computations
   const storeId = detail.storeCode;
 
@@ -167,92 +223,61 @@ function EmployeeDetailModal({
     if (!prodRaw?.missed_opportunities) return [];
 
     // Normalize store ID
-    const sid = String(storeId || '').trim();
-    // Try to find the store data using various keys if direct match fails (though direct should work)
-    const storeMissed = prodRaw.missed_opportunities[sid] ||
-      prodRaw.missed_opportunities[Number(sid)] || [];
+    // Some stores might be "Store 1" vs "1". Try strict first, then flexible.
+    const sidVal = String(storeId || '').trim();
+    const sidNum = Number(sidVal);
 
-    if (!Array.isArray(storeMissed)) return [];
+    // Find matching store key in missed_opportunities
+    // Keys could be "29", " 29", "Store 29", etc.
+    let targetStoreData: any[] = [];
 
-    // Filter by Employee ID or Name
-    // Data structure: { employee_id, employee_name, sold_item, missed_items: [{name, count}], total_count }
+    // 1. Direct Access
+    if (prodRaw.missed_opportunities[sidVal]) targetStoreData = prodRaw.missed_opportunities[sidVal];
+    else if (!Number.isNaN(sidNum) && prodRaw.missed_opportunities[sidNum]) targetStoreData = prodRaw.missed_opportunities[sidNum];
+
+    // 2. Search if not found
+    if (!targetStoreData || targetStoreData.length === 0) {
+      const keys = Object.keys(prodRaw.missed_opportunities);
+      // Try to find a key that equals the ID
+      const foundKey = keys.find(k => String(k).trim() === sidVal || Number(k) === sidNum);
+      if (foundKey) targetStoreData = prodRaw.missed_opportunities[foundKey];
+    }
+
+    if (!Array.isArray(targetStoreData)) return [];
+
+    // Filter by Employee ID or Name (Relaxed Match)
     const empId = String(detail.id || '').trim();
+    // "Unknown 263" -> "263"
+    const empIdClean = empId.replace(/^0+/, '');
     const empName = String(detail.name || '').trim();
 
-    const empMissed = storeMissed.filter((m: any) => {
+    const empMissed = targetStoreData.filter((m: any) => {
       const mId = String(m.employee_id || '').trim();
+      const mIdClean = mId.replace(/^0+/, '');
       const mName = String(m.employee_name || '').trim();
-      // Try precise ID match first, then Name
-      if (mId && empId) return mId === empId || mId === empId.padStart(4, '0');
-      return mName === empName;
+
+      // 1. ID Match (Loose)
+      // Check if mId contains empId or vice versa (e.g. "Unknown 263" vs "263")
+      if (empIdClean && mIdClean) {
+        if (mIdClean === empIdClean) return true;
+        if (mIdClean.includes(empIdClean)) return true;
+        if (empIdClean.includes(mIdClean)) return true;
+      }
+
+      // 2. Name Match (Loose)
+      if (mName === empName) return true;
+      if (mName && empName) {
+        if (mName.includes(empName) || empName.includes(mName)) return true;
+      }
+
+      return false;
     });
 
     return empMissed.sort((a: any, b: any) => safeNum(b.total_count) - safeNum(a.total_count));
   }, [prodRaw, storeId, detail.id, detail.name]);
 
-  // Product Mix (Store Level - Proxy for Employee)
-  // Note: We use Store Level data because Employee-level product sales mix is not available in current JSONs.
-  const productMix = useMemo(() => {
-    const sid = String(storeId || '').trim();
+  // Product Mix Removed - Replaced by Sales Evolution above
 
-    // 1. Try to get catalog from multiple possible paths
-    let catalog: any[] = [];
-
-    // Path A: Direct catalog access
-    if (prodRaw?.catalog?.[sid]) {
-      catalog = prodRaw.catalog[sid];
-    }
-    // Path B: Periods analysis (sometimes contains catalog or categories)
-    else if (prodRaw?.periods) {
-      const pKey = Object.keys(prodRaw.periods).find(k => prodRaw.periods[k]?.catalog?.[sid]);
-      if (pKey) catalog = prodRaw.periods[pKey].catalog[sid];
-    }
-
-    if (!Array.isArray(catalog) || catalog.length === 0) return [];
-
-    // 2. Aggregate into buckets (King, Felt, Pillow, Others)
-    let kingAmt = 0;
-    let feltAmt = 0;
-    let pillowAmt = 0;
-    let totalAmt = 0;
-
-    catalog.forEach((item: any) => {
-      const name = String(item.name || '').toLowerCase();
-      const cat = String(item.category || '').toLowerCase();
-      const combined = `${cat} ${name}`;
-      const amt = Number(item.amount) || 0;
-      const qty = Number(item.qty) || 0;
-
-      // Skip zero amount items
-      if (amt <= 0) return;
-
-      totalAmt += amt;
-
-      // Classification Logic (matching ProductsPage)
-      if (combined.includes('pillow') || combined.includes('مخد') || combined.includes('وساد')) {
-        pillowAmt += amt;
-      } else if (combined.includes('duvet') || combined.includes('لحاف') || combined.includes('مفرش')) {
-        if (combined.includes('king') || combined.includes('كنج') || combined.includes('كبير') || combined.includes('240') || combined.includes('260')) {
-          kingAmt += amt;
-        } else {
-          // Full/Queen - considered 'Other' for this specific view or we could add another category
-          // The requirement usually focuses on King vs others. Let's keep it simple.
-        }
-      } else if (combined.includes('lbab') || combined.includes('لباد') || combined.includes('topper')) {
-        feltAmt += amt;
-      }
-    });
-
-    if (totalAmt === 0) return [];
-
-    return [
-      { name: 'لحاف كينج', value: kingAmt, percentage: (kingAmt / totalAmt) * 100 },
-      { name: 'لباد', value: feltAmt, percentage: (feltAmt / totalAmt) * 100 },
-      { name: 'مخدات', value: pillowAmt, percentage: (pillowAmt / totalAmt) * 100 },
-      { name: 'أخرى', value: totalAmt - kingAmt - feltAmt - pillowAmt, percentage: ((totalAmt - kingAmt - feltAmt - pillowAmt) / totalAmt) * 100 },
-    ].sort((a, b) => b.value - a.value);
-
-  }, [prodRaw, storeId]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" onClick={onClose} role="dialog" aria-label="تفاصيل الموظف">
@@ -343,42 +368,17 @@ function EmployeeDetailModal({
             </div>
           </ChartCard>
 
-          {/* Product Mix Analysis (Pie/Table) */}
-          <ChartCard title="تحليل المنتجات (نسبة المبيعات)" className="h-[400px]">
-            {productMix.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-neutral-400 text-center p-4">
-                جاري التحميل أو لا توجد بيانات منتجات للفرع.<br />
-                <span className="text-xs opacity-70">(يتم عرض تحليل الفرع كمرجع لعدم توفر تفاصيل المنتجات لكل موظف)</span>
-              </div>
+          {/* Product Mix Analysis (Pie/Table) -> REPLACED by Sales Evolution */}
+          <ChartCard title="تطور المبيعات (Sales Evolution)" className="h-[400px]">
+            {salesEvolution.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-neutral-400">لا توجد بيانات مبيعات يومية</div>
             ) : (
-              <div className="h-full flex flex-col">
-                <div className="h-[200px] flex-shrink-0">
-                  <PieChart data={productMix.map(p => ({ name: p.name, value: p.value }))} />
-                </div>
-                <div className="flex-1 overflow-y-auto mt-4 custom-scrollbar">
-                  <table className="w-full text-sm">
-                    <thead>
-
-                      <tr className="text-neutral-500 border-b border-neutral-100">
-                        <th className="pb-2 text-right">المنتج</th>
-                        <th className="pb-2 text-right">القيمة</th>
-                        <th className="pb-2 text-right">النسبة</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-neutral-50">
-                      {productMix.map((p) => (
-                        <tr key={p.name}>
-                          <td className="py-2 font-medium">{p.name}</td>
-                          <td className="py-2 dir-ltr text-right">{formatSAR(p.value)}</td>
-                          <td className="py-2 dir-ltr text-right font-bold text-neutral-900">{p.percentage.toFixed(1)}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="text-[10px] text-neutral-400 mt-2 text-center">
-                  * التحليل بناءً على بيانات الفرع (المتوفرة حالياً)
-                </div>
+              <div className="h-full w-full pt-4">
+                <LineChart
+                  data={salesEvolution}
+                  xKey="name"
+                  series={[{ key: 'value', name: 'المبيعات', color: '#ea580c' }]}
+                />
               </div>
             )}
           </ChartCard>
@@ -1210,6 +1210,8 @@ export default function EmployeesPage() {
           onClose={() => setSelectedEmployeeId(null)}
           periodLabel={periodLabel}
           targetEnabled={targetEnabled}
+          prodRaw={prodRaw}
+          empRaw={empRaw}
         />
       )}
     </div>
