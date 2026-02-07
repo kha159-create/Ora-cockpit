@@ -1219,7 +1219,7 @@ export default function DashboardPage() {
             <div className="text-xs text-neutral-500">عروض ومبيعات</div>
           </div>
         </Link>
-        <Link to="/stagnant" className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 flex items-center gap-3 hover:border-orange-400 hover:shadow-xl transition-all identity-card">
+        <Link to="/products" className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 flex items-center gap-3 hover:border-orange-400 hover:shadow-xl transition-all identity-card">
           <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600"><PauseIcon /></div>
           <div>
             <div className="font-bold text-neutral-900">المنتجات الراكدة</div>

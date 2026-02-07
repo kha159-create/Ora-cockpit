@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
+import { loadManagementData, loadProductAnalysisData, loadStagnantData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { BarChart, ChartCard, KPICard, LineChart, PieChart } from '../components/DashboardComponents';
 import { CubeIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, XIcon, ChartPieIcon } from '../components/Icons';
@@ -114,8 +114,12 @@ export default function ProductsPage() {
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [metric, setMetric] = useState<Metric>('qty');
 
-  const [catalogOpen, setCatalogOpen] = useState(false);
+  // Stagnant Data State
+  const [stagnantRaw, setStagnantRaw] = useState<any>(null);
+  const [stagnantPage, setStagnantPage] = useState(1);
+  const STAGNANT_PER_PAGE = 5;
   const [productOpen, setProductOpen] = useState(false);
   const [productId, setProductId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -131,10 +135,15 @@ export default function ProductsPage() {
   const MISSED_PER_PAGE = 10;
 
   useEffect(() => {
-    Promise.all([loadProductAnalysisData(), loadManagementData()])
-      .then(([p, m]) => {
+    Promise.all([
+      loadProductAnalysisData(),
+      loadManagementData(),
+      loadStagnantData(),
+    ])
+      .then(([p, m, s]) => {
         setRaw(p);
         setMgmt(m);
+        setStagnantRaw(s);
       })
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
@@ -541,19 +550,117 @@ export default function ProductsPage() {
       {/* Category performance */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
         {/* Bar Chart Card */}
-        <ChartCard title={`أداء الفئات (مرتبة حسب ${metricLabel})`} className="h-[340px]">
-          <div className="h-full w-full">
-            <BarChart
-              data={derived.categoriesAgg.slice(0, 10).map((c) => ({
-                name: c.category,
-                value: metric === 'qty' ? c.qty : c.amount,
-              }))}
-              dataKey="value"
-              nameKey="name"
-              format={(v) => (metric === 'qty' ? `${Math.round(v).toLocaleString()} وحدة` : formatSAR(v))}
-            />
+        {/* Stagnant Products Widget (Replaces Bar Chart) */}
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden h-[340px] flex flex-col">
+          <div className="p-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
+            <h3 className="font-bold text-neutral-800">⚠️ المنتجات الراكدة (Stagnant)</h3>
+            <span className="text-xs text-neutral-500 bg-white border border-neutral-200 px-2 py-1 rounded-lg">
+              {(() => {
+                if (!stagnantRaw?.data) return 0;
+                const list = (stagnantRaw.data[store] || []); // If specific store selected
+                // This logic is tentative, real logic is below in variable definition
+                return '...';
+              })() && ''}
+              نظرة عامة
+            </span>
           </div>
-        </ChartCard>
+
+          <div className="flex-1 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-white sticky top-0 z-10">
+                <tr className="border-b border-neutral-100 text-neutral-500">
+                  <th className="py-2 px-3 text-right font-semibold">المنتج</th>
+                  <th className="py-2 px-3 text-center font-semibold">الكمية</th>
+                  <th className="py-2 px-3 text-left font-semibold">المعرض</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-50">
+                {(() => {
+                  // Calculate Stagnant List on the fly or use memo below
+                  // Getting allowedStoreIds from derived
+                  const allowed = derived?.allowedStoreIds;
+                  if (!stagnantRaw?.data || !allowed) {
+                    return <tr><td colSpan={3} className="p-4 text-center text-neutral-400">جاري التحميل...</td></tr>;
+                  }
+
+                  let allItems: any[] = [];
+                  const dataMap = stagnantRaw.data as Record<string, any[]>;
+
+                  // Filter by derived allowed stores
+                  Object.entries(dataMap).forEach(([sid, arr]) => {
+                    if (allowed.has(sid)) {
+                      (Array.isArray(arr) ? arr : []).forEach(i => allItems.push({ ...i, _storeName: derived.storesMap[sid] || sid }));
+                    }
+                  });
+
+                  if (allItems.length === 0) {
+                    return <tr><td colSpan={3} className="p-4 text-center text-neutral-400">لا توجد منتجات راكدة.</td></tr>;
+                  }
+
+                  // Sorting (High qty first?)
+                  allItems.sort((a, b) => safeNum(b.qty ?? b.count) - safeNum(a.qty ?? a.count));
+
+                  const totalPages = Math.ceil(allItems.length / STAGNANT_PER_PAGE);
+                  const safePage = Math.min(stagnantPage, totalPages);
+                  const start = (safePage - 1) * STAGNANT_PER_PAGE;
+                  const visible = allItems.slice(start, start + STAGNANT_PER_PAGE);
+
+                  return (
+                    <>
+                      {visible.map((it, idx) => (
+                        <tr key={idx} className="hover:bg-red-50/10">
+                          <td className="py-2 px-3 font-medium text-neutral-800">
+                            <div className="truncate max-w-[120px] sm:max-w-[180px]" title={it.name || it.item_name}>
+                              {it.name || it.item_name || '-'}
+                            </div>
+                            <div className="text-[10px] text-neutral-400 font-mono">{it.id}</div>
+                          </td>
+                          <td className="py-2 px-3 text-center font-bold text-red-600 dir-ltr">{Number(it.qty ?? it.count).toLocaleString()}</td>
+                          <td className="py-2 px-3 text-left text-xs text-neutral-500 truncate max-w-[100px]">{it._storeName}</td>
+                        </tr>
+                      ))}
+                      {/* Pagination internal logic to update outer state? No, render controls below table */}
+                    </>
+                  );
+                })()}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Footer */}
+          {(() => {
+            const allowed = derived?.allowedStoreIds;
+            if (!stagnantRaw?.data || !allowed) return null;
+            let count = 0;
+            Object.entries(stagnantRaw.data).forEach(([sid, arr]) => {
+              if (allowed.has(sid)) count += (arr as any[]).length;
+            });
+            if (count <= STAGNANT_PER_PAGE) return null;
+
+            const totalPages = Math.ceil(count / STAGNANT_PER_PAGE);
+            const safePage = Math.min(stagnantPage, totalPages);
+
+            return (
+              <div className="flex items-center justify-between px-3 py-2 border-t border-neutral-100 bg-neutral-50 text-xs">
+                <button
+                  onClick={() => setStagnantPage(Math.max(1, safePage - 1))}
+                  disabled={safePage <= 1}
+                  className="px-2 py-1 border rounded bg-white disabled:opacity-50 hover:bg-neutral-100"
+                >
+                  السابق
+                </button>
+                <span className="text-neutral-500">{safePage} / {totalPages}</span>
+                <button
+                  onClick={() => setStagnantPage(Math.min(totalPages, safePage + 1))}
+                  disabled={safePage >= totalPages}
+                  className="px-2 py-1 border rounded bg-white disabled:opacity-50 hover:bg-neutral-100"
+                >
+                  التالي
+                </button>
+              </div>
+            );
+          })()}
+        </div>
 
         {/* Categories Share List (Replaces Overlapping Pie/Stats) */}
         <ChartCard title="نسبة الفئات (Category Share)" className="h-[340px] overflow-hidden">
