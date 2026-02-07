@@ -162,60 +162,86 @@ function EmployeeDetailModal({
   // New Data Computations
   const storeId = detail.storeCode;
 
-  // Missed Opportunities (Store Level)
+  // Missed Opportunities (Employee Specific)
   const missedOpportunities = useMemo(() => {
-    if (!prodRaw) return [];
-    // Try top-level missed_opportunities first
-    let missedByStore = prodRaw.missed_opportunities;
+    if (!prodRaw?.missed_opportunities) return [];
 
-    // Fallback: check inside periods (e.g. if structure matches product_analysis_data.json from repo)
-    if (!missedByStore && prodRaw.periods?.['mtd']?.missed_opportunities) {
-      missedByStore = prodRaw.periods['mtd'].missed_opportunities;
+    // Normalize store ID
+    const sid = String(storeId || '').trim();
+    // Try to find the store data using various keys if direct match fails (though direct should work)
+    const storeMissed = prodRaw.missed_opportunities[sid] ||
+      prodRaw.missed_opportunities[Number(sid)] || [];
+
+    if (!Array.isArray(storeMissed)) return [];
+
+    // Filter by Employee ID or Name
+    // Data structure: { employee_id, employee_name, sold_item, missed_items: [{name, count}], total_count }
+    const empId = String(detail.id || '').trim();
+    const empName = String(detail.name || '').trim();
+
+    const empMissed = storeMissed.filter((m: any) => {
+      const mId = String(m.employee_id || '').trim();
+      const mName = String(m.employee_name || '').trim();
+      // Try precise ID match first, then Name
+      if (mId && empId) return mId === empId || mId === empId.padStart(4, '0');
+      return mName === empName;
+    });
+
+    return empMissed.sort((a: any, b: any) => safeNum(b.total_count) - safeNum(a.total_count));
+  }, [prodRaw, storeId, detail.id, detail.name]);
+
+  // Product Mix (Store Level - Proxy for Employee)
+  // Note: We use Store Level data because Employee-level product sales mix is not available in current JSONs.
+  const productMix = useMemo(() => {
+    const sid = String(storeId || '').trim();
+
+    // 1. Try to get catalog from multiple possible paths
+    let catalog: any[] = [];
+
+    // Path A: Direct catalog access
+    if (prodRaw?.catalog?.[sid]) {
+      catalog = prodRaw.catalog[sid];
+    }
+    // Path B: Periods analysis (sometimes contains catalog or categories)
+    else if (prodRaw?.periods) {
+      const pKey = Object.keys(prodRaw.periods).find(k => prodRaw.periods[k]?.catalog?.[sid]);
+      if (pKey) catalog = prodRaw.periods[pKey].catalog[sid];
     }
 
-    if (!missedByStore) return [];
+    if (!Array.isArray(catalog) || catalog.length === 0) return [];
 
-    const list = missedByStore[storeId] || [];
-    return list.sort((a: any, b: any) => safeNum(b.total_count) - safeNum(a.total_count)).slice(0, 50);
-  }, [prodRaw, storeId]);
-
-  // Product Mix (Store Level Assumption)
-  const productMix = useMemo(() => {
-    // Calculate share of King Duvet, Felt, Pillows
-    // Using 'mtd' period analysis for consistency, or 'month' if available?
-    const pData = prodRaw?.periods?.['mtd'] || prodRaw?.periods?.['month'] || Object.values(prodRaw?.periods || {})[0];
-
-    const analysisCat = pData?.analysis?.[storeId]?.categories || [];
-    const catalog = pData?.catalog?.[storeId] || [];
-
-    let totalAmt = 0;
+    // 2. Aggregate into buckets (King, Felt, Pillow, Others)
     let kingAmt = 0;
     let feltAmt = 0;
     let pillowAmt = 0;
+    let totalAmt = 0;
 
-    // Strategy 1: Use Categories Analysis if available (faster)
-    if (analysisCat.length > 0) {
-      analysisCat.forEach((c: any) => {
-        const name = String(c.category || '').toLowerCase();
-        const amt = Number(c.amount) || 0;
-        totalAmt += amt;
-        if (name.includes('لحاف') && name.includes('كينج')) kingAmt += amt;
-        else if (name.includes('لباد')) feltAmt += amt;
-        else if (name.includes('مخدة') || name.includes('وسادة')) pillowAmt += amt;
-      });
-    }
-    // Strategy 2: Use Catalog if Categories empty or we want item-level precision
-    if (totalAmt === 0 && catalog.length > 0) {
-      catalog.forEach((item: any) => {
-        const name = String(item.name || '').toLowerCase();
-        const amt = Number(item.amount) || 0;
-        totalAmt += amt;
+    catalog.forEach((item: any) => {
+      const name = String(item.name || '').toLowerCase();
+      const cat = String(item.category || '').toLowerCase();
+      const combined = `${cat} ${name}`;
+      const amt = Number(item.amount) || 0;
+      const qty = Number(item.qty) || 0;
 
-        if (name.includes('لحاف') && name.includes('كينج')) kingAmt += amt;
-        else if (name.includes('لباد')) feltAmt += amt;
-        else if (name.includes('مخدة') || name.includes('وسادة')) pillowAmt += amt;
-      });
-    }
+      // Skip zero amount items
+      if (amt <= 0) return;
+
+      totalAmt += amt;
+
+      // Classification Logic (matching ProductsPage)
+      if (combined.includes('pillow') || combined.includes('مخد') || combined.includes('وساد')) {
+        pillowAmt += amt;
+      } else if (combined.includes('duvet') || combined.includes('لحاف') || combined.includes('مفرش')) {
+        if (combined.includes('king') || combined.includes('كنج') || combined.includes('كبير') || combined.includes('240') || combined.includes('260')) {
+          kingAmt += amt;
+        } else {
+          // Full/Queen - considered 'Other' for this specific view or we could add another category
+          // The requirement usually focuses on King vs others. Let's keep it simple.
+        }
+      } else if (combined.includes('lbab') || combined.includes('لباد') || combined.includes('topper')) {
+        feltAmt += amt;
+      }
+    });
 
     if (totalAmt === 0) return [];
 
@@ -224,11 +250,12 @@ function EmployeeDetailModal({
       { name: 'لباد', value: feltAmt, percentage: (feltAmt / totalAmt) * 100 },
       { name: 'مخدات', value: pillowAmt, percentage: (pillowAmt / totalAmt) * 100 },
       { name: 'أخرى', value: totalAmt - kingAmt - feltAmt - pillowAmt, percentage: ((totalAmt - kingAmt - feltAmt - pillowAmt) / totalAmt) * 100 },
-    ];
+    ].sort((a, b) => b.value - a.value);
+
   }, [prodRaw, storeId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30" onClick={onClose} role="dialog" aria-label="تفاصيل الموظف">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" onClick={onClose} role="dialog" aria-label="تفاصيل الموظف">
       <div className="modal-content max-w-4xl w-full my-4 max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-neutral-200 p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4 border-b border-neutral-200 pb-4">
           <div className="min-w-0">
@@ -238,7 +265,7 @@ function EmployeeDetailModal({
           <button type="button" className="btn-secondary py-2 px-3" onClick={onClose} aria-label="إغلاق">إغلاق</button>
         </div>
 
-        {/* بطاقات الملخص — مطابق التصميم */}
+        {/* KPIs Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-6">
           <div className="bg-white rounded-xl border border-neutral-200 p-4">
             <div className="text-neutral-500 text-sm">المبيعات الإجمالية</div>
@@ -265,7 +292,6 @@ function EmployeeDetailModal({
           <div className="bg-white rounded-xl border border-neutral-200 p-4">
             <div className="text-neutral-500 text-sm">التحقيق</div>
             <div className="text-2xl font-bold text-neutral-900 mt-1">{targetEnabled ? `${detail.achievement.toFixed(1)}%` : '-'}</div>
-            {/* Daily Remaining % - ADDED */}
             {targetEnabled && detail.dailyReq > 0 && (
               <div className="text-xs text-neutral-500 mt-1 border-t border-neutral-100 pt-1">
                 مطلوب يومياً: <span className="font-bold text-neutral-800">{formatSAR(detail.dailyReq)}</span>
@@ -278,29 +304,40 @@ function EmployeeDetailModal({
           </div>
         </div>
 
-        {/* REPLACED: New Widgets */}
+        {/* Widgets Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
           {/* Missed Opportunities (Scrollable List) */}
           <ChartCard title="⚡ الفرص الضائعة (Missed Opportunities)" className="h-[400px] flex flex-col">
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
               {missedOpportunities.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-neutral-400">لا توجد بيانات متاحة</div>
+                <div className="flex items-center justify-center h-full text-center p-4">
+                  <div className="text-neutral-400 text-sm">
+                    لا توجد فرص ضائعة مسجلة لهذا الموظف.<br />
+                    <span className="text-xs opacity-70">(تأكد من اختيار نطاق تاريخ صحيح يحتوي على بيانات تحليل)</span>
+                  </div>
+                </div>
               ) : (
-                <div className="space-y-2">
-                  {missedOpportunities.map((m: any, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs">{idx + 1}</div>
-                        <div>
-                          <div className="text-sm font-bold text-neutral-900">{m.product_a_name} + {m.product_b_name}</div>
-                          <div className="text-xs text-neutral-500">تكرار الفواتير: {m.total_count}</div>
+                <div className="space-y-3">
+                  {missedOpportunities.map((m: any, idx: number) => {
+                    const topMissed = Array.isArray(m.missed_items) ? m.missed_items[0] : null;
+                    return (
+                      <div key={idx} className="flex items-start justify-between p-3 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors border border-neutral-100">
+                        <div className="flex items-start gap-3">
+                          <div className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs mt-1">{idx + 1}</div>
+                          <div>
+                            <div className="text-sm font-bold text-neutral-900">باع: <span className="text-green-700">{m.sold_item}</span></div>
+                            <div className="text-xs text-red-600 mt-1">
+                              فقد: <span className="font-semibold">{topMissed?.name || 'منتج غير محدد'}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-center min-w-[60px]">
+                          <div className="text-lg font-bold text-orange-600">{m.total_count}</div>
+                          <div className="text-[10px] text-neutral-500">تكرار</div>
                         </div>
                       </div>
-                      <div className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-lg border border-orange-100">
-                        فرصة عالية
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -309,15 +346,19 @@ function EmployeeDetailModal({
           {/* Product Mix Analysis (Pie/Table) */}
           <ChartCard title="تحليل المنتجات (نسبة المبيعات)" className="h-[400px]">
             {productMix.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-neutral-400">جاري التحميل أو لا توجد بيانات للمنتجات</div>
+              <div className="flex items-center justify-center h-full text-neutral-400 text-center p-4">
+                جاري التحميل أو لا توجد بيانات منتجات للفرع.<br />
+                <span className="text-xs opacity-70">(يتم عرض تحليل الفرع كمرجع لعدم توفر تفاصيل المنتجات لكل موظف)</span>
+              </div>
             ) : (
               <div className="h-full flex flex-col">
                 <div className="h-[200px] flex-shrink-0">
                   <PieChart data={productMix.map(p => ({ name: p.name, value: p.value }))} />
                 </div>
-                <div className="flex-1 overflow-y-auto mt-4">
+                <div className="flex-1 overflow-y-auto mt-4 custom-scrollbar">
                   <table className="w-full text-sm">
                     <thead>
+
                       <tr className="text-neutral-500 border-b border-neutral-100">
                         <th className="pb-2 text-right">المنتج</th>
                         <th className="pb-2 text-right">القيمة</th>
