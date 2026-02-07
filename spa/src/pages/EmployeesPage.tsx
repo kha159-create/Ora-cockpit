@@ -210,22 +210,29 @@ function EmployeeDetailModal({
 
   // 2. Hook: Missed Opportunities
   const missedOpportunities = useMemo(() => {
-    if (!open || !detail || !prodRaw?.missed_opportunities) return [];
+    if (!open || !detail || !prodRaw) return [];
 
     const storeId = detail.storeCode;
     // Normalize store ID
     const sidVal = String(storeId || '').trim();
     const sidNum = Number(sidVal);
 
+    // Try multiple data sources: top-level missed_opportunities, then nested inside periods
+    const sources = [
+      prodRaw?.missed_opportunities,
+      prodRaw?.periods?.mtd?.missed_opportunities,
+      prodRaw?.periods?.yest?.missed_opportunities,
+    ].filter(Boolean);
+
     let targetStoreData: any[] = [];
 
-    if (prodRaw.missed_opportunities[sidVal]) targetStoreData = prodRaw.missed_opportunities[sidVal];
-    else if (!Number.isNaN(sidNum) && prodRaw.missed_opportunities[sidNum]) targetStoreData = prodRaw.missed_opportunities[sidNum];
-
-    if (!targetStoreData || targetStoreData.length === 0) {
-      const keys = Object.keys(prodRaw.missed_opportunities);
+    for (const src of sources) {
+      if (targetStoreData.length > 0) break;
+      if (src[sidVal]) { targetStoreData = src[sidVal]; break; }
+      if (!Number.isNaN(sidNum) && src[sidNum]) { targetStoreData = src[sidNum]; break; }
+      const keys = Object.keys(src);
       const foundKey = keys.find(k => String(k).trim() === sidVal || Number(k) === sidNum);
-      if (foundKey) targetStoreData = prodRaw.missed_opportunities[foundKey];
+      if (foundKey) { targetStoreData = src[foundKey]; break; }
     }
 
     if (!Array.isArray(targetStoreData)) return [];
@@ -801,10 +808,6 @@ export default function EmployeesPage() {
     user?.role,
   ]);
 
-  if (!empRaw || !mgmtRaw || !prodRaw) {
-    return <DashboardSkeleton />;
-  }
-
   const selectedEmployee = useMemo(() => {
     if (!selectedEmployeeId) return null;
     return derived.employees.find((e) => e.id === selectedEmployeeId) || null;
@@ -827,6 +830,10 @@ export default function EmployeesPage() {
       setCustomEnd(toLocalYMD(new Date()));
     }
   }, [period]);
+
+  if (!empRaw || !mgmtRaw || !prodRaw) {
+    return <DashboardSkeleton />;
+  }
 
   const handleHeaderSort = (k: SortKey) => {
     if (sortKey === k) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));

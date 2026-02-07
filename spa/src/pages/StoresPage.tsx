@@ -364,19 +364,25 @@ function StoreDetailsModal({
     let pillowAmt = 0;
     let totalAmt = 0;
 
-    // Is catalog an array or object? Upstream seems to return object { itemId: { ... } } or array?
-    // In EmployeesPage logic we assumed array. Here catalog is from prodRaw.periods...catalog which is usually { item_id: { ... } } or Array?
-    // Let's check logic in extraction. 
-    // In EmployeesPage we did: catalog.forEach...
-    // In StoresPage details.catalog comes from pData.catalog.
+    // Catalog is Record<category_name, item[]>. Flatten all category arrays into a single list.
+    const rawValues = Object.values(details.catalog || {});
+    const items: any[] = [];
+    rawValues.forEach((val: any) => {
+      if (Array.isArray(val)) {
+        items.push(...val);
+      } else if (val && typeof val === 'object') {
+        items.push(val);
+      }
+    });
 
-    const items = Array.isArray(details.catalog) ? details.catalog : Object.values(details.catalog || {});
-
+    const sid = store?.sid || '';
     items.forEach((item: any) => {
       const name = String(item.name || '').toLowerCase();
       const cat = String(item.category || '').toLowerCase();
       const combined = `${cat} ${name}`;
-      const amt = Number(item.amount) || Number(item.a) || 0; // Support both structures
+      // Get amount from store-specific data, or fallback to global
+      const storeData = item.stores?.[sid];
+      const amt = storeData ? (Number(storeData.a) || 0) : (Number(item.amount) || Number(item.a) || 0);
 
       if (amt <= 0) return;
 
@@ -402,7 +408,7 @@ function StoreDetailsModal({
       { name: 'أخرى', value: totalAmt - kingAmt - feltAmt - pillowAmt, percentage: ((totalAmt - kingAmt - feltAmt - pillowAmt) / totalAmt) * 100 },
     ].sort((a, b) => b.value - a.value);
 
-  }, [details?.catalog]);
+  }, [details?.catalog, store]);
 
 
   if (!open || !store) return null;
@@ -579,10 +585,6 @@ export default function StoresPage() {
       setCustomEnd(toLocalYMD(today));
     }
   }, [mode, customStart, customEnd]);
-
-  if (!mgmtRaw || !empRaw || !prodRaw) {
-    return <DashboardSkeleton />;
-  }
 
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -767,12 +769,8 @@ export default function StoresPage() {
   if (err) {
     return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
   }
-  if (!mgmtRaw || !empRaw || !derived) {
-    return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
-      </div>
-    );
+  if (!mgmtRaw || !empRaw || !prodRaw || !derived) {
+    return <DashboardSkeleton />;
   }
 
   const monthsArNames = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];

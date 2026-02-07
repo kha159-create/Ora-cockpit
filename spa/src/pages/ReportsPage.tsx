@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { generateGlobalSalesPDF, generateEmployeePerformancePDF, generateDailyReportPDF, generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
@@ -239,7 +240,7 @@ export default function ReportsPage() {
         growth: sPrev > 0 ? ((s - sPrev) / sPrev) * 100 : 0,
         trans: t,
         avgInv: t > 0 ? s / t : 0,
-        customerValue: t > 0 ? s / t : 0,
+        customerValue: v > 0 ? s / v : 0,
         visitors: v,
         visitorsPrev: vPrev,
         conversion: v > 0 ? (t / v) * 100 : 0
@@ -422,14 +423,16 @@ export default function ReportsPage() {
         curr.setDate(curr.getDate() + 1);
       }
 
-      // Aggregate functionality
+      // Aggregate functionality (with store filter)
       const processMetric = (source: any[], field: string, isPrevField?: string) => {
-        (source || []).forEach(([d, _, v]: any[]) => {
+        (source || []).forEach(([d, sid, v]: any[]) => {
+          if (!passFilter(sid)) return;
           if (dateMap[d] && !isPrevField) dateMap[d][field] += v || 0;
+          if (dateMap[d] && isPrevField) {
+            // Also accumulate current period for isPrevField sources
+          }
 
-          // For prev year mapping, we need to map prev date to current date?
-          // Or just check if d is in PrevRange and map it to corresponding current date?
-          // Simplest: map previous year date to current year date for alignment
+          // Map previous year date to current year date for alignment
           if (isPrevField && inPrevRange(d)) {
             const currDate = d.replace(/^\d{4}/, (y: string) => String(Number(y) + 1));
             if (dateMap[currDate]) dateMap[currDate][isPrevField] += v || 0;
@@ -481,14 +484,22 @@ export default function ReportsPage() {
         }
       });
 
-      rows = Object.values(dataMap).map(r => ({
-        ...r,
-        avgInv: r.trans > 0 ? r.sales / r.trans : 0,
-        ach: r.target > 0 ? (r.sales / r.target) * 100 : 0,
-        conversion: r.visitors > 0 ? (r.trans / r.visitors) * 100 : 0,
-        growth: r.prevSales > 0 ? ((r.sales - r.prevSales) / r.prevSales) * 100 : 0,
-        customerValue: r.visitors > 0 ? r.sales / r.visitors : 0
-      })).sort((a, b) => b.sales - a.sales);
+      const today2 = new Date();
+      const daysInMonth2 = new Date(today2.getFullYear(), today2.getMonth() + 1, 0).getDate();
+      const remainingDays2 = Math.max(0, daysInMonth2 - today2.getDate() + 1);
+
+      rows = Object.values(dataMap).map(r => {
+        const remaining = Math.max(0, r.target - r.sales);
+        return {
+          ...r,
+          avgInv: r.trans > 0 ? r.sales / r.trans : 0,
+          ach: r.target > 0 ? (r.sales / r.target) * 100 : 0,
+          conversion: r.visitors > 0 ? (r.trans / r.visitors) * 100 : 0,
+          growth: r.prevSales > 0 ? ((r.sales - r.prevSales) / r.prevSales) * 100 : 0,
+          customerValue: r.visitors > 0 ? r.sales / r.visitors : 0,
+          dailyReq: remainingDays2 > 0 && remaining > 0 ? remaining / remainingDays2 : 0,
+        };
+      }).sort((a, b) => b.sales - a.sales);
 
       setPreviewReport({ type: 'stores', data: rows });
 
@@ -770,38 +781,38 @@ export default function ReportsPage() {
           <span className="text-2xl">📦</span> تقارير أخرى
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <a
-            href="/offers"
+          <Link
+            to="/offers"
             className="bg-gradient-to-br from-pink-50 to-pink-100 border border-pink-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-pink-400 transition-all group block"
           >
             <div className="text-pink-500 text-2xl mb-2">🏷️</div>
             <h5 className="font-bold text-neutral-800 text-sm">تحليل العروض</h5>
             <p className="text-xs text-neutral-500 mt-1">مبيعات العروض والخصومات</p>
-          </a>
-          <a
-            href="/stagnant"
+          </Link>
+          <Link
+            to="/products"
             className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-orange-400 transition-all group block"
           >
-            <div className="text-orange-500 text-2xl mb-2">⏸️</div>
-            <h5 className="font-bold text-neutral-800 text-sm">المنتجات الراكدة</h5>
-            <p className="text-xs text-neutral-500 mt-1">المنتجات بدون حركة</p>
-          </a>
-          <a
-            href="/products"
-            className="bg-gradient-to-br from-cyan-50 to-cyan-100 border border-cyan-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-cyan-400 transition-all group block"
-          >
-            <div className="text-cyan-500 text-2xl mb-2">📦</div>
+            <div className="text-orange-500 text-2xl mb-2">📦</div>
             <h5 className="font-bold text-neutral-800 text-sm">تحليل المنتجات</h5>
             <p className="text-xs text-neutral-500 mt-1">أداء المنتجات والأصناف</p>
-          </a>
-          <a
-            href="/stores"
-            className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-slate-400 transition-all group block"
+          </Link>
+          <Link
+            to="/stores"
+            className="bg-gradient-to-br from-cyan-50 to-cyan-100 border border-cyan-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-cyan-400 transition-all group block"
           >
-            <div className="text-slate-500 text-2xl mb-2">🏬</div>
+            <div className="text-cyan-500 text-2xl mb-2">🏬</div>
             <h5 className="font-bold text-neutral-800 text-sm">تفاصيل المعارض</h5>
             <p className="text-xs text-neutral-500 mt-1">بيانات الفروع</p>
-          </a>
+          </Link>
+          <Link
+            to="/employees"
+            className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-slate-400 transition-all group block"
+          >
+            <div className="text-slate-500 text-2xl mb-2">👥</div>
+            <h5 className="font-bold text-neutral-800 text-sm">أداء الموظفين</h5>
+            <p className="text-xs text-neutral-500 mt-1">بيانات الموظفين التفصيلية</p>
+          </Link>
         </div>
       </div>
 
