@@ -28,6 +28,9 @@ function getDefaultRange(mode: Mode, selYear?: number, selMonth?: number) {
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
   if (mode === 'mtd') return { start: toYMD(startOfCurrentMonth), end: toYMD(yesterday) };
   if (mode === 'month' && selYear != null && selMonth != null) {
+    if (selMonth === 0) {
+      return { start: `${selYear}-01-01`, end: `${selYear}-12-31` };
+    }
     const start = new Date(selYear, selMonth - 1, 1);
     let end = new Date(selYear, selMonth, 0);
     if (end > today) end = new Date(today);
@@ -858,7 +861,7 @@ export default function DashboardPage() {
     }
 
     return data;
-  }, [raw, allowedStoreIds, chartMode]);
+  }, [raw, allowedStoreIds, chartMode, selYear]);
 
 
   const prodDerived = useMemo(() => {
@@ -1069,6 +1072,7 @@ export default function DashboardPage() {
               <div>
                 <div className="text-xs font-semibold text-neutral-500 mb-1">الشهر</div>
                 <select className="input" value={selMonth} onChange={(e) => setSelMonth(Number(e.target.value))}>
+                  <option value={0}>الكل (سنة كاملة)</option>
                   {monthsAr.map((m, i) => (<option key={m} value={i + 1}>{m}</option>))}
                 </select>
               </div>

@@ -164,11 +164,17 @@ function EmployeeDetailModal({
 
   // Missed Opportunities (Store Level)
   const missedOpportunities = useMemo(() => {
-    if (!prodRaw?.missed_opportunities) return [];
-    const missedByStore = prodRaw.missed_opportunities;
-    // If we had per-employee missed opps, we'd use them. For now, show Store's.
-    // Or show nothing if strict. User asked for "Missed Opportunities found in Products Page" logic.
-    // In Products Page, it uses `missedByStore`.
+    if (!prodRaw) return [];
+    // Try top-level missed_opportunities first
+    let missedByStore = prodRaw.missed_opportunities;
+
+    // Fallback: check inside periods (e.g. if structure matches product_analysis_data.json from repo)
+    if (!missedByStore && prodRaw.periods?.['mtd']?.missed_opportunities) {
+      missedByStore = prodRaw.periods['mtd'].missed_opportunities;
+    }
+
+    if (!missedByStore) return [];
+
     const list = missedByStore[storeId] || [];
     return list.sort((a: any, b: any) => safeNum(b.total_count) - safeNum(a.total_count)).slice(0, 50);
   }, [prodRaw, storeId]);
@@ -176,29 +182,40 @@ function EmployeeDetailModal({
   // Product Mix (Store Level Assumption)
   const productMix = useMemo(() => {
     // Calculate share of King Duvet, Felt, Pillows
-    // Using 'mtd' period analysis for consistency
-    const pData = prodRaw?.periods?.['mtd']?.analysis?.[storeId]?.categories || [];
-    if (!pData.length) return [];
+    // Using 'mtd' period analysis for consistency, or 'month' if available?
+    const pData = prodRaw?.periods?.['mtd'] || prodRaw?.periods?.['month'] || Object.values(prodRaw?.periods || {})[0];
+
+    const analysisCat = pData?.analysis?.[storeId]?.categories || [];
+    const catalog = pData?.catalog?.[storeId] || [];
 
     let totalAmt = 0;
     let kingAmt = 0;
     let feltAmt = 0;
     let pillowAmt = 0;
 
-    // We need to look at specific items, but here we only have categories.
-    // If we don't have item-level data in 'categories', we might check 'catalog'.
-    // 'catalog' in prodRaw is usually per-store item list.
-    const catalog = prodRaw?.periods?.['mtd']?.catalog?.[storeId] || [];
+    // Strategy 1: Use Categories Analysis if available (faster)
+    if (analysisCat.length > 0) {
+      analysisCat.forEach((c: any) => {
+        const name = String(c.category || '').toLowerCase();
+        const amt = Number(c.amount) || 0;
+        totalAmt += amt;
+        if (name.includes('لحاف') && name.includes('كينج')) kingAmt += amt;
+        else if (name.includes('لباد')) feltAmt += amt;
+        else if (name.includes('مخدة') || name.includes('وسادة')) pillowAmt += amt;
+      });
+    }
+    // Strategy 2: Use Catalog if Categories empty or we want item-level precision
+    if (totalAmt === 0 && catalog.length > 0) {
+      catalog.forEach((item: any) => {
+        const name = String(item.name || '').toLowerCase();
+        const amt = Number(item.amount) || 0;
+        totalAmt += amt;
 
-    catalog.forEach((item: any) => {
-      const name = String(item.name || '').toLowerCase();
-      const amt = Number(item.amount) || 0;
-      totalAmt += amt;
-
-      if (name.includes('لحاف') && name.includes('كينج')) kingAmt += amt;
-      else if (name.includes('لباد')) feltAmt += amt;
-      else if (name.includes('مخدة') || name.includes('وسادة')) pillowAmt += amt;
-    });
+        if (name.includes('لحاف') && name.includes('كينج')) kingAmt += amt;
+        else if (name.includes('لباد')) feltAmt += amt;
+        else if (name.includes('مخدة') || name.includes('وسادة')) pillowAmt += amt;
+      });
+    }
 
     if (totalAmt === 0) return [];
 
@@ -468,7 +485,12 @@ export default function EmployeesPage() {
       if (period === 'mtd') {
         if (dYear === todayYear && dMonth0 === todayMonth0 && dVal <= todayVal) return 1;
       } else if (period === 'month') {
-        if (dYear === selYear && dMonth0 === selMonth - 1) return 1;
+        if (selMonth === 0) {
+          // Yearly logic
+          if (dYear === selYear) return 1;
+        } else {
+          if (dYear === selYear && dMonth0 === selMonth - 1) return 1;
+        }
       } else if (period === 'yesterday') {
         if (dNorm === yesterdayStr) return 1;
       } else if (period === 'today') {
@@ -476,10 +498,13 @@ export default function EmployeesPage() {
       }
 
       const prevYearForMode = period === 'month' ? selYear - 1 : prevYear;
-      const prevMonthForMode = period === 'month' ? selMonth - 1 : prevMonth0;
+      const prevMonthForMode = period === 'month' ? (selMonth === 0 ? -1 : selMonth - 1) : prevMonth0;
       const yesterdayDay = yesterday.getDate();
 
-      if (dYear === prevYearForMode && dMonth0 === prevMonthForMode) {
+      if (period === 'month' && selMonth === 0) {
+        // Compare with previous year fully
+        if (dYear === prevYearForMode) return 2;
+      } else if (dYear === prevYearForMode && dMonth0 === prevMonthForMode) {
         if (period === 'mtd' && dDay <= todayDay) return 2;
         if (period === 'month') return 2;
         if (period === 'yesterday' && dDay === yesterdayDay) return 2;
@@ -495,13 +520,33 @@ export default function EmployeesPage() {
 
       // For month filter, prefer that month target
       if (period === 'month') {
-        const monthKey = `${selYear}-${pad2(selMonth)}`;
-        const tbm = targetsByMonth[monthKey];
-        for (const c of candidates) {
-          const v = tbm?.[c];
-          if (v != null) return safeNum(v);
+        if (selMonth === 0) {
+          // Yearly target? Sum of available months for this year?
+          // This is tricky if data is month-based.
+          // Let's summing up all months for this year.
+          let totalYearTarget = 0;
+          for (let m = 1; m <= 12; m++) {
+            const mKey = `${selYear}-${pad2(m)}`;
+            const tbm = targetsByMonth[mKey];
+            for (const c of candidates) {
+              if (tbm?.[c] != null) {
+                totalYearTarget += safeNum(tbm[c]);
+                break;
+              }
+            }
+          }
+          if (totalYearTarget > 0) return totalYearTarget;
+          // Fallback to defaults or return 0
+        } else {
+          const monthKey = `${selYear}-${pad2(selMonth)}`;
+          const tbm = targetsByMonth[monthKey];
+          for (const c of candidates) {
+            const v = tbm?.[c];
+            if (v != null) return safeNum(v);
+          }
         }
-        return 0;
+        // If not found specific month/year, maybe return 0 to avoid wrong target
+        if (selMonth !== 0) return 0;
       }
 
       // Default: current month target
@@ -862,6 +907,7 @@ export default function EmployeesPage() {
               <div>
                 <div className="text-xs font-semibold text-neutral-500 mb-1">الشهر</div>
                 <select className="input" value={selMonth} onChange={(e) => setSelMonth(Number(e.target.value))}>
+                  <option value={0}>الكل (سنة كاملة)</option>
                   {monthsAr.map((m, i) => (
                     <option key={m} value={i + 1}>
                       {m}
