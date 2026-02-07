@@ -986,160 +986,9 @@ export default function DashboardPage() {
   const [topSellingPage, setTopSellingPage] = useState(1);
   const TOP_SELLING_PER_PAGE = 10;
 
-  // Pagination for Underperforming Stores Widget
-  const [riskPage, setRiskPage] = useState(1);
-  const RISK_ITEMS_PER_PAGE = 10;
 
-  // Risk Analysis (Stores below expected achievement based on elapsed days)
-  const riskAnalysis = useMemo(() => {
-    if (!raw?.sales || !raw?.targets) return { count: 0, expectedPct: 0, totalStores: 0, atRiskStores: [] };
 
-    const now = new Date();
-    // Format YYYY-MM for filtering
-    const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const elapsedDays = now.getDate();
-    // Formula: (100 / daysInMonth) * elapsedDays
-    const expectedPct = (100 / daysInMonth) * elapsedDays;
 
-    const storeStats: Record<string, { sales: number; target: number }> = {};
-    const allow = (sid: string) => allowedStoreIds.has(sid);
-    const storeNames = raw.stores || {};
-
-    (raw.sales || []).forEach(([d, s, v]: any[]) => {
-      const dateStr = String(d);
-      if (dateStr.startsWith(currentMonthPrefix) && allow(s)) {
-        if (!storeStats[s]) storeStats[s] = { sales: 0, target: 0 };
-        storeStats[s].sales += v || 0;
-      }
-    });
-
-    (raw.targets || []).forEach(([d, s, v]: any[]) => {
-      const dateStr = String(d);
-      if (dateStr.startsWith(currentMonthPrefix) && allow(s)) {
-        if (!storeStats[s]) storeStats[s] = { sales: 0, target: 0 };
-        storeStats[s].target += v || 0;
-      }
-    });
-
-    let count = 0;
-    let total = 0;
-    const atRiskStores: any[] = [];
-
-    Object.entries(storeStats).forEach(([sid, st]) => {
-      if (st.target > 0) {
-        total++;
-        const ach = (st.sales / st.target) * 100;
-        const gap = expectedPct - ach;
-
-        // User Logic:
-        // Gap <= 2%: Safe (Ignore)
-        // Gap > 2% and < 6%: Medium (Yellow)
-        // Gap >= 6%: Critical (Red)
-
-        if (gap > 2) {
-          count++;
-          atRiskStores.push({
-            sid,
-            name: storeNames[sid] || sid,
-            sales: st.sales,
-            target: st.target,
-            ach,
-            gap,
-            status: gap >= 6 ? 'Critical' : 'Medium'
-          });
-        }
-      }
-    });
-
-    return { count, expectedPct, totalStores: total, atRiskStores: atRiskStores.sort((a, b) => a.ach - b.ach) };
-  }, [raw, allowedStoreIds]);
-
-  // Early Warning Widget Component (Internal)
-  const EarlyWarningWidget = () => {
-    if (riskAnalysis.atRiskStores.length === 0) return null;
-
-    return (
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden animate-fade-in-up mt-6">
-        <div className="bg-red-50/50 p-4 border-b border-red-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-1 h-6 bg-red-500 rounded-full" />
-            <h3 className="font-bold text-neutral-800 text-lg">معارض تحت الأداء (Underperforming Stores)</h3>
-          </div>
-          <div className="flex items-center gap-2 text-sm font-medium text-red-700 bg-red-100/50 px-3 py-1 rounded-lg">
-            <ExclamationIcon className="w-4 h-4" />
-            أقل من {riskAnalysis.expectedPct.toFixed(1)}%
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-neutral-50/50 text-neutral-500 border-b border-neutral-100">
-                <th className="py-3 px-4 text-right font-semibold">الفرع</th>
-                <th className="py-3 px-4 text-right font-semibold">التحقيق (Achieved)</th>
-                <th className="py-3 px-4 text-center font-semibold">التقييم (Status)</th>
-                <th className="py-3 px-4 text-left font-semibold">المبيعات (Sales)</th>
-                <th className="py-3 px-4 text-left font-semibold">الهدف (Target)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-50">
-              {(() => {
-                const totalPages = Math.max(1, Math.ceil(riskAnalysis.atRiskStores.length / RISK_ITEMS_PER_PAGE));
-                const safePage = Math.min(riskPage, totalPages);
-                const start = (safePage - 1) * RISK_ITEMS_PER_PAGE;
-                const pageItems = riskAnalysis.atRiskStores.slice(start, start + RISK_ITEMS_PER_PAGE);
-
-                return pageItems.map((st: any) => (
-                  <tr key={st.sid} className="hover:bg-red-50/10 transition-colors group">
-                    <td className="py-3 px-4 font-bold text-neutral-700">{st.name}</td>
-                    <td className="py-3 px-4 font-bold text-neutral-800 dir-ltr text-right">{st.ach.toFixed(1)}%</td>
-                    <td className="py-3 px-4 text-center">
-                      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold border ${st.status === 'Critical'
-                        ? 'bg-red-100 text-red-700 border-red-200'
-                        : 'bg-yellow-100 text-yellow-700 border-yellow-200'
-                        }`}>
-                        {st.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-left font-medium text-neutral-600 dir-ltr">{formatSAR(st.sales)}</td>
-                    <td className="py-3 px-4 text-left font-medium text-neutral-500 dir-ltr">{formatSAR(st.target)}</td>
-                  </tr>
-                ));
-              })()}
-            </tbody>
-          </table>
-          {riskAnalysis.atRiskStores.length > RISK_ITEMS_PER_PAGE && (() => {
-            const totalPages = Math.ceil(riskAnalysis.atRiskStores.length / RISK_ITEMS_PER_PAGE);
-            const safePage = Math.min(riskPage, totalPages);
-            return (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-100 bg-neutral-50/30">
-                <div className="text-xs text-neutral-500">
-                  صفحة {safePage} من {totalPages} (إجمالي {riskAnalysis.atRiskStores.length} معرض)
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setRiskPage(p => Math.max(1, p - 1))}
-                    disabled={safePage <= 1}
-                    className="px-2 py-1 text-xs font-semibold border rounded hover:bg-white disabled:opacity-50"
-                  >
-                    السابق
-                  </button>
-                  <button
-                    onClick={() => setRiskPage(p => Math.min(totalPages, p + 1))}
-                    disabled={safePage >= totalPages}
-                    className="px-2 py-1 text-xs font-semibold border rounded hover:bg-white disabled:opacity-50"
-                  >
-                    التالي
-                  </button>
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-      </div>
-    );
-  };
 
   if (!raw) {
     return (
@@ -1284,53 +1133,57 @@ export default function DashboardPage() {
           icon={<UserGroupIcon />}
         />
         {/* Custom Target Card */}
-        <div className="active:scale-[0.98] transition-transform select-none bg-white rounded-xl shadow-sm border border-neutral-200 p-3 sm:p-4 flex flex-col justify-between h-full relative overflow-hidden">
+        {/* Custom Target Card */}
+        <div className="modern-kpi-card group p-2 sm:p-3 flex flex-col w-full h-full relative overflow-hidden text-center sm:text-right">
+          <div className="kpi-card-background" />
 
-          {/* Header */}
-          <div className="flex justify-center sm:justify-end mb-4">
-            <h3 className="text-sm sm:text-base font-semibold text-neutral-600">تحقيق الهدف (Target)</h3>
-          </div>
-
-          {/* Content: Donut & Big Value */}
-          <div className="flex items-center justify-between px-2">
-            {/* Donut Chart (Left) */}
-            <div className="relative w-12 h-12 sm:w-14 sm:h-14">
-              <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
-                <path
-                  className="text-gray-100"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3.5"
-                />
-                <path
-                  className={totals.target > 0 && (totals.sales / totals.target) >= 1 ? "text-green-500" : "text-orange-500"}
-                  strokeDasharray={`${Math.min((totals.sales / (totals.target || 1)) * 100, 100)}, 100`}
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                />
-              </svg>
+          <div className="relative z-10 flex-1 flex flex-col justify-between">
+            {/* Header */}
+            <div className="flex justify-center sm:justify-end mb-2">
+              <h3 className="kpi-title text-xs sm:text-sm truncate">تحقيق الهدف (Target)</h3>
             </div>
 
-            {/* Big Percentage (Right) */}
-            <div className="text-right">
-              <div className="text-3xl sm:text-4xl font-bold text-neutral-900">
-                {totals.target > 0 ? (totals.sales / totals.target * 100).toFixed(1) : '0.0'}%
+            {/* Content: Donut & Big Value */}
+            <div className="flex items-center justify-between px-1 flex-1">
+              {/* Donut Chart (Left) */}
+              <div className="relative w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0">
+                <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
+                  <path
+                    className="text-gray-100/50"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3.5"
+                  />
+                  <path
+                    className={totals.target > 0 && (totals.sales / totals.target) >= 1 ? "text-green-500" : "text-orange-500"}
+                    strokeDasharray={`${Math.min((totals.sales / (totals.target || 1)) * 100, 100)}, 100`}
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </div>
+
+              {/* Big Percentage (Right) */}
+              <div className="flex flex-col items-end justify-center">
+                <div className="text-2xl sm:text-3xl font-bold text-neutral-900 leading-tight">
+                  {totals.target > 0 ? (totals.sales / totals.target * 100).toFixed(1) : '0.0'}%
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Footer: Target Value */}
-          <div className="mt-4 text-center sm:text-right border-t border-neutral-50 pt-2">
-            <span className="text-xs text-neutral-400">Target: </span>
-            <span className="text-sm font-medium text-neutral-600 dir-ltr inline-block">{formatSAR(totals.target)}</span>
+            {/* Footer: Target Value */}
+            <div className="mt-2 text-center sm:text-right border-t border-neutral-100/50 pt-2">
+              <span className="text-[10px] text-neutral-500">Target: </span>
+              <span className="text-xs font-semibold text-neutral-700 dir-ltr inline-block">{formatSAR(totals.target)}</span>
+            </div>
           </div>
 
           {/* Bottom Green Bar Decoration matching image */}
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-green-600 rounded-b-xl" />
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-green-600 rounded-b-xl z-20" />
         </div>
       </div>
 
@@ -1338,7 +1191,7 @@ export default function DashboardPage() {
 
 
       {/* Early Warning Widget (Advanced Analysis) */}
-      <EarlyWarningWidget />
+
       <GrowthTrajectoryChart
         data={monthlyChartData as any}
         mode={chartMode}
