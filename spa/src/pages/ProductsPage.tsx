@@ -115,7 +115,7 @@ export default function ProductsPage() {
 
   // Stagnant Data State
   const [stagnantRaw, setStagnantRaw] = useState<any>(null);
-  const [stagnantRaw, setStagnantRaw] = useState<any>(null);
+
   const [stagnantPage, setStagnantPage] = useState(1);
   const STAGNANT_PER_PAGE = 10;
   // Category Share Pagination
