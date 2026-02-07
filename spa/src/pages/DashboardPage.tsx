@@ -2,7 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { loadManagementData, loadEmployeesData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { KPICard, RankCard, GrowthTrajectoryChart, ChartCard } from '../components/DashboardComponents';
+import { KPIGrid } from '../components/dashboard/KPIGrid';
+import { SalesChart } from '../components/dashboard/SalesChart';
+import { QuickAccess } from '../components/dashboard/QuickAccess';
+import { RankWidgets } from '../components/dashboard/RankWidgets';
+import { TopSellingWidget } from '../components/dashboard/TopSellingWidget';
+import { LiveSalesModal } from '../components/dashboard/LiveSalesModal';
+import { DailyReportModal } from '../components/dashboard/DailyReportModal';
+import { StoreReportModal } from '../components/dashboard/StoreReportModal';
+import { EmployeeReportModal } from '../components/dashboard/EmployeeReportModal';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, OfficeBuildingIcon, XIcon, PrinterIcon, UserGroupIcon } from '../components/Icons';
 import { generateDailyReportPDF, generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
 
@@ -1108,424 +1116,60 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2 sm:gap-3">
-        <KPICard
-          title="المبيعات"
-          value={totals.sales}
-          format={formatSAR}
-          comparisonValue={prevYearTotals.sales}
-          comparisonLabel="السنة الماضية"
-          icon={<CurrencyDollarIcon />}
-          trendData={monthlyChartData.map(d => d.Sales)}
-        />
-        <KPICard
-          title="الفواتير"
-          value={totals.trans}
-          comparisonValue={prevYearTotals.trans}
-          comparisonLabel="السنة الماضية"
-          icon={<ReceiptTaxIcon />}
-          trendData={monthlyChartData.map(d => d.Sales)}
-        />
-        <KPICard
-          title="الزوار"
-          value={totals.visitors}
-          comparisonValue={prevYearTotals.visitors}
-          comparisonLabel="السنة الماضية"
-          icon={<UsersIcon />}
-          trendData={monthlyChartData.map(d => d.Visitors)}
-        />
-        <KPICard
-          title="قيمة العميل"
-          value={totals.visitors > 0 ? totals.sales / totals.visitors : 0}
-          format={formatSAR}
-          comparisonValue={prevYearTotals.visitors > 0 ? prevYearTotals.sales / prevYearTotals.visitors : 0}
-          comparisonLabel="السنة الماضية"
-          icon={<UserGroupIcon />}
-        />
-        {/* Custom Target Card */}
-        {/* Custom Target Card */}
-        <div className="modern-kpi-card group p-2 sm:p-3 flex flex-col w-full h-full relative overflow-hidden text-center sm:text-right">
-          <div className="kpi-card-background" />
-
-          <div className="relative z-10 flex-1 flex flex-col justify-between">
-            {/* Header */}
-            <div className="flex justify-center sm:justify-end mb-2">
-              <h3 className="kpi-title text-xs sm:text-sm truncate">تحقيق الهدف (Target)</h3>
-            </div>
-
-            {/* Content: Donut & Big Value */}
-            <div className="flex items-center justify-between px-1 flex-1">
-              {/* Donut Chart (Left) */}
-              <div className="relative w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0">
-                <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
-                  <path
-                    className="text-gray-100/50"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3.5"
-                  />
-                  <path
-                    className={totals.target > 0 && (totals.sales / totals.target) >= 1 ? "text-green-500" : "text-orange-500"}
-                    strokeDasharray={`${Math.min((totals.sales / (totals.target || 1)) * 100, 100)}, 100`}
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </div>
-
-              {/* Big Percentage (Right) */}
-              <div className="flex flex-col items-end justify-center">
-                <div className="text-2xl sm:text-3xl font-bold text-neutral-900 leading-tight">
-                  {totals.target > 0 ? (totals.sales / totals.target * 100).toFixed(1) : '0.0'}%
-                </div>
-              </div>
-            </div>
-
-            {/* Footer: Target Value */}
-            <div className="mt-2 text-center sm:text-right border-t border-neutral-100/50 pt-2">
-              <span className="text-[10px] text-neutral-500">Target: </span>
-              <span className="text-xs font-semibold text-neutral-700 dir-ltr inline-block">{formatSAR(totals.target)}</span>
-            </div>
-          </div>
-
-          {/* Bottom Green Bar Decoration matching image */}
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-green-600 rounded-b-xl z-20" />
-        </div>
-      </div>
+      <KPIGrid
+        totals={totals}
+        prevYearTotals={prevYearTotals}
+        monthlyChartData={monthlyChartData as any}
+        formatSAR={formatSAR}
+      />
 
 
 
 
       {/* Early Warning Widget (Advanced Analysis) */}
 
-      <GrowthTrajectoryChart
+      <SalesChart
         data={monthlyChartData as any}
         mode={chartMode}
         onModeChange={setChartMode}
-        format={chartMode === 'VISITORS' ? undefined : (v) => v.toLocaleString()}
       />
 
       {/* بطاقات الوصول السريع */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
-        <button
-          type="button"
-          onClick={() => setDailyReportModalOpen(true)}
-          className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 flex items-center gap-3 hover:border-orange-400 hover:shadow-xl transition-all identity-card text-right w-full"
-        >
-          <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600"><FireIcon /></div>
-          <div>
-            <div className="font-bold text-neutral-900">التقرير اليومي</div>
-            <div className="text-xs text-neutral-500">تقرير الأمس</div>
-          </div>
-        </button>
-        <Link to="/offers" className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 flex items-center gap-3 hover:border-orange-400 hover:shadow-xl transition-all identity-card">
-          <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600"><TagIcon /></div>
-          <div>
-            <div className="font-bold text-neutral-900">تحليل العروض</div>
-            <div className="text-xs text-neutral-500">عروض ومبيعات</div>
-          </div>
-        </Link>
-        <Link to="/employees" className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 flex items-center gap-3 hover:border-orange-400 hover:shadow-xl transition-all identity-card">
-          <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600"><UserGroupIcon /></div>
-          <div>
-            <div className="font-bold text-neutral-900">الموظفين</div>
-            <div className="text-xs text-neutral-500">تحليل الأداء</div>
-          </div>
-        </Link>
-        <Link to="/stores" className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 flex items-center gap-3 hover:border-orange-400 hover:shadow-xl transition-all identity-card">
-          <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600"><OfficeBuildingIcon /></div>
-          <div>
-            <div className="font-bold text-neutral-900">المعارض</div>
-            <div className="text-xs text-neutral-500">تفاصيل الفروع</div>
-          </div>
-        </Link>
-      </div>
+      <QuickAccess onOpenDailyReport={() => setDailyReportModalOpen(true)} />
 
       {/* أعلى الموظفين / أعلى الفروع — هوية برتقالي وأسود */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <RankCard
-          title="أعلى الموظفين (Top Employees)"
-          metrics={[
-            { key: 'avg_inv', label: 'معدل فاتورة' },
-            { key: 'sales', label: 'بيع' },
-            { key: 'achievement', label: 'تحقيق' },
-          ]}
-          data={topEmployeesRank}
-          format={(v, k) => (k === 'achievement' ? `${Number(v).toFixed(1)}%` : k === 'sales' ? formatSAR(v) : Number(v).toLocaleString())}
-          maxItems={10}
-        />
-        <RankCard
-          title="أعلى الفروع (Top Stores)"
-          metrics={[
-            { key: 'avg_inv', label: 'معدل فاتورة' },
-            { key: 'visitors', label: 'زوار' },
-            { key: 'growth', label: 'نمو' },
-            { key: 'achievement', label: 'تحقيق' },
-            { key: 'sales', label: 'بيع' },
-          ]}
-          data={topStoresRank}
-          format={(v, k) => {
-            if (k === 'achievement' || k === 'growth') return `${Number(v).toFixed(1)}%`;
-            if (k === 'sales') return formatSAR(v);
-            return Number(v).toLocaleString();
-          }}
-          maxItems={10}
-        />
-      </div>
+      <RankWidgets
+        topEmployees={topEmployeesRank}
+        topStores={topStoresRank}
+        formatSAR={formatSAR}
+      />
 
       {/* نافذة مبيعات اليوم */}
       {
-        liveModalOpen && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4" onClick={() => setLiveModalOpen(false)}>
-            <div
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-3 sm:p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-bold">🛒 مبيعات اليوم — لايف</h2>
-                    <p className="text-orange-100 text-sm mt-1">
-                      📅 {toYMD(new Date())} • 🕒 {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-lg transition-colors"
-                    onClick={() => setLiveModalOpen(false)}
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* Manager Filter */}
-                {isAdminOrAuditor(user?.role) && (
-                  <div className="mt-3 flex items-center gap-2">
-                    <span className="text-sm text-orange-100">مدير المنطقة:</span>
-                    <select
-                      className="bg-white/20 border border-white/30 text-white rounded-lg py-1 px-3 text-sm"
-                      value={manager}
-                      onChange={(e) => setManager(e.target.value)}
-                    >
-                      <option value="all" className="text-black">الكل</option>
-                      {managers.map((m) => (
-                        <option key={m} value={m} className="text-black">{m}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {/* KPIs Summary */}
-              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 border-b">
-                <div className="bg-white rounded-xl p-4 border shadow-sm">
-                  <div className="text-sm text-gray-500">إجمالي المبيعات</div>
-                  <div className="text-2xl font-bold text-orange-600" dir="ltr">{formatSAR(liveData.totals.sales)}</div>
-                </div>
-                <div className="bg-white rounded-xl p-4 border shadow-sm">
-                  <div className="text-sm text-gray-500">عدد الفواتير</div>
-                  <div className="text-2xl font-bold text-blue-600">{liveData.totals.trans}</div>
-                  <div className="text-xs text-gray-400">متوسط: {formatSAR(liveData.totals.trans > 0 ? liveData.totals.sales / liveData.totals.trans : 0)}</div>
-                </div>
-              </div>
-
-              {/* Store List */}
-              <div className="flex-1 overflow-y-auto p-4">
-                <h3 className="text-sm font-bold text-gray-700 mb-3">المعارض ({liveData.stores.length})</h3>
-
-                {liveData.stores.length === 0 ? (
-                  <div className="text-center py-12 text-gray-400">
-                    <div className="text-4xl mb-2">📊</div>
-                    <div>لا توجد بيانات مبيعات لهذا اليوم</div>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {liveData.stores.map((store, idx) => {
-                      const isExpanded = expandedStoreId === store.sid;
-                      const storeName = store.name || raw?.stores?.[store.sid] || store.sid;
-                      return (
-                        <div key={store.sid} className="border rounded-xl overflow-hidden bg-white shadow-sm">
-                          {/* Store Row */}
-                          <div
-                            className="flex items-center gap-3 p-3 sm:p-4 cursor-pointer hover:bg-orange-50 transition-colors border-b border-gray-100"
-                            onClick={() => setExpandedStoreId(isExpanded ? null : store.sid)}
-                          >
-                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-500 text-white rounded-lg flex items-center justify-center font-bold text-sm sm:text-base flex-shrink-0">
-                              {idx + 1}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between mb-1">
-                                <div className="font-bold text-gray-900 text-base sm:text-lg truncate">{storeName}</div>
-                                <div className="font-bold text-orange-600 text-base sm:text-xl flex-shrink-0" dir="ltr">{formatSAR(store.sales)}</div>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600">
-                                <span className="flex items-center gap-1">
-                                  <span>👥</span>
-                                  <span className="font-medium">{store.employees?.length || 0} موظفين</span>
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <span>🧾</span>
-                                  <span className="font-medium">{store.trans || 0} فاتورة</span>
-                                </span>
-                                {store.trans > 0 && (
-                                  <span className="flex items-center gap-1 text-orange-600">
-                                    <span className="font-semibold">معدل:</span>
-                                    <span className="font-bold" dir="ltr">{formatSAR(store.sales / store.trans)}</span>
-                                  </span>
-                                )}
-                                {store.visitors > 0 && (
-                                  <>
-                                    <span className="flex items-center gap-1 text-blue-600">
-                                      <span>👣</span>
-                                      <span className="font-medium">{store.visitors.toLocaleString()} زائر</span>
-                                    </span>
-                                    <span className="flex items-center gap-1 text-green-600">
-                                      <span className="font-semibold">تحويل:</span>
-                                      <span className="font-bold" dir="ltr">{((store.trans / store.visitors) * 100).toFixed(1)}%</span>
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                            <div className={`text-gray-400 transition-transform text-xl ${isExpanded ? 'rotate-90' : ''} flex-shrink-0`}>▶</div>
-                          </div>
-
-                          {/* Employees Dropdown */}
-                          {isExpanded && store.employees && store.employees.length > 0 && (
-                            <div className="bg-gray-50 p-3 sm:p-4 overflow-x-auto">
-                              <table className="w-full text-xs sm:text-sm">
-                                <thead>
-                                  <tr className="bg-white border-b-2 border-gray-200">
-                                    <th className="text-right py-2 px-2 font-bold text-gray-700">#</th>
-                                    <th className="text-right py-2 px-2 font-bold text-gray-700">الموظف</th>
-                                    <th className="text-left py-2 px-2 font-bold text-gray-700">المبيعات</th>
-                                    <th className="text-left py-2 px-2 font-bold text-gray-700">الفواتير</th>
-                                    <th className="text-left py-2 px-2 font-bold text-gray-700">معدل</th>
-                                    <th className="text-left py-2 px-2 font-bold text-gray-700">%</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {store.employees.sort((a, b) => b.sales - a.sales).map((emp, empIdx) => {
-                                    const avgInv = emp.avgInv || (emp.trans > 0 ? emp.sales / emp.trans : 0);
-                                    return (
-                                      <tr key={emp.id} className={`border-b border-gray-100 hover:bg-white transition-colors ${empIdx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}`}>
-                                        <td className="py-2 px-2 text-gray-500 font-medium text-center">{empIdx + 1}</td>
-                                        <td className="py-2 px-2 font-semibold text-gray-900">{emp.name || emp.id}</td>
-                                        <td className="py-2 px-2 font-bold text-orange-600" dir="ltr">{formatSAR(emp.sales)}</td>
-                                        <td className="py-2 px-2 text-gray-700 font-medium">{emp.trans}</td>
-                                        <td className="py-2 px-2 font-bold text-blue-600" dir="ltr">{formatSAR(avgInv)}</td>
-                                        <td className="py-2 px-2">
-                                          <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded-md text-xs font-bold">
-                                            {store.sales > 0 ? ((emp.sales / store.sales) * 100).toFixed(0) : 0}%
-                                          </span>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div >
-            </div >
-          </div >
-        )
+        <LiveSalesModal
+          isOpen={liveModalOpen}
+          onClose={() => setLiveModalOpen(false)}
+          liveData={liveData}
+          formatSAR={formatSAR}
+          isAdminOrAuditor={isAdminOrAuditor(user?.role)}
+          manager={manager}
+          setManager={setManager}
+          managers={managers}
+        />
       }
 
       {/* نافذة التقرير اليومي */}
       {
-        dailyReportModalOpen && (
-          <div className="modal-center-screen" onClick={() => setDailyReportModalOpen(false)}>
-            <div className="modal-content max-w-6xl my-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div>
-                  <div className="text-base font-bold text-blue-600 flex flex-col sm:flex-row sm:items-center gap-2">
-                    <span className="text-2xl sm:text-base">📄</span>
-                    <div className="flex flex-col">
-                      <span>التقرير اليومي</span>
-                      <span className="text-xs sm:text-sm text-gray-500 font-normal mt-1">
-                        تقرير الأمس ({yesterdayStr}) مقارنة بـ ({lastYearYesterdayStr})
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="btn-primary py-1.5 px-3 text-sm flex items-center gap-2"
-                    onClick={handlePrintDailyReport}
-                  >
-                    <PrinterIcon className="w-4 h-4" /> طباعة التقرير
-                  </button>
-                  <button
-                    type="button"
-                    className="bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-50 py-1.5 px-3 rounded-lg text-sm flex items-center gap-2 transition-colors font-medium shadow-sm"
-                    onClick={handlePrintEmployeeReport}
-                  >
-                    <UsersIcon className="w-4 h-4 text-orange-500" /> تقرير الموظفين
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary py-1.5 px-3 text-sm flex items-center gap-2"
-                    onClick={() => setDailyReportModalOpen(false)}
-                  >
-                    <XIcon /> إغلاق
-                  </button>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-orange-500 text-white">
-                      <th className="text-right py-3 px-4 font-semibold">#</th>
-                      <th className="text-right py-3 px-4 font-semibold">الفرع</th>
-                      <th className="text-right py-3 px-4 font-semibold">مبيعات الأمس</th>
-                      <th className="text-right py-3 px-4 font-semibold">العام الماضي</th>
-                      <th className="text-right py-3 px-4 font-semibold">النمو %</th>
-                      <th className="text-right py-3 px-4 font-semibold">اليومية المتبقية</th>
-                      <th className="text-right py-3 px-4 font-semibold">عدد الفواتير</th>
-                      <th className="text-right py-3 px-4 font-semibold">متوسط الفاتورة</th>
-                      <th className="text-right py-3 px-4 font-semibold">زوار</th>
-                      <th className="text-right py-3 px-4 font-semibold">زوار (LY)</th>
-                      <th className="text-right py-3 px-4 font-semibold">تحويل %</th>
-                      <th className="text-right py-3 px-4 font-semibold">قيمة العميل</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dailyReportData.map((row: any, idx) => (
-                      <tr key={row.sid} className={`border-b border-neutral-100 hover:bg-neutral-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-neutral-50'}`}>
-                        <td className="py-3 px-4 text-neutral-500">{idx + 1}</td>
-                        <td className="py-3 px-4 font-medium text-blue-600">{row.name}</td>
-                        <td className="py-3 px-4" dir="ltr">{formatSAR(row.sales)}</td>
-                        <td className="py-3 px-4" dir="ltr">{formatSAR(row.prevSales)}</td>
-                        <td className={`py-3 px-4 font-semibold ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`} dir="ltr">
-                          {row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%
-                        </td>
-                        <td className="py-3 px-4 text-red-500 font-semibold" dir="ltr">{formatSAR(row.dailyReq)}</td>
-                        <td className="py-3 px-4" dir="ltr">{row.trans.toLocaleString()}</td>
-                        <td className="py-3 px-4" dir="ltr">{Math.round(row.avgInv).toLocaleString()}</td>
-                        <td className="py-3 px-4" dir="ltr">{row.visitors.toLocaleString()}</td>
-                        <td className="py-3 px-4" dir="ltr">{row.prevVisitors.toLocaleString()}</td>
-                        <td className="py-3 px-4" dir="ltr">{row.conversion.toFixed(1)}%</td>
-                        <td className="py-3 px-4 font-bold" dir="ltr">{Math.round(row.customerValue).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )
+        <DailyReportModal
+          isOpen={dailyReportModalOpen}
+          onClose={() => setDailyReportModalOpen(false)}
+          dailyReportData={dailyReportData}
+          yesterdayStr={yesterdayStr}
+          lastYearYesterdayStr={lastYearYesterdayStr}
+          formatSAR={formatSAR}
+          onPrintDailyReport={handlePrintDailyReport}
+          onPrintEmployeeReport={handlePrintEmployeeReport}
+        />
       }
 
       {/* Top Selling & Category Performance */}
@@ -1533,330 +1177,46 @@ export default function DashboardPage() {
         prodDerived && (
           <div className="grid grid-cols-1 gap-6 mt-6">
             {/* Top Selling Products (Individual) - Full Width now */}
-            <ChartCard title="أكثر المنتجات مبيعاً (Top Selling Products)">
-              <div className="flex items-center justify-end mb-3 gap-2">
-                <div className="text-sm font-semibold text-neutral-500">الترتيب حسب:</div>
-                <div className="flex bg-neutral-100 rounded-lg p-1">
-                  <button
-                    onClick={() => setTopSellingMetric('qty')}
-                    className={`px-3 py-1 rounded-md text-sm font-bold transition-all ${topSellingMetric === 'qty' ? 'bg-white text-orange-600 shadow' : 'text-neutral-500 hover:text-neutral-700'}`}
-                  >
-                    📦 الكمية
-                  </button>
-                  <button
-                    onClick={() => setTopSellingMetric('val')}
-                    className={`px-3 py-1 rounded-md text-sm font-bold transition-all ${topSellingMetric === 'val' ? 'bg-white text-green-600 shadow' : 'text-neutral-500 hover:text-neutral-700'}`}
-                  >
-                    💰 القيمة
-                  </button>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="bg-orange-50/50">
-                      <th className="th w-[60px] text-center">#</th>
-                      <th className="th">المنتج</th>
-                      <th className="th text-center">الكمية</th>
-                      <th className="th text-center">سعر الوحدة</th>
-                      <th className="th text-center">القيمة</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const list = prodDerived.catalogRows;
-                      const totalPages = Math.ceil(list.length / TOP_SELLING_PER_PAGE);
-                      const safePage = Math.min(topSellingPage, totalPages);
-                      const start = (safePage - 1) * TOP_SELLING_PER_PAGE;
-                      const visible = list.slice(start, start + TOP_SELLING_PER_PAGE);
-
-                      return visible.map((p: any, idx: number) => {
-                        const unitPrice = p.qty > 0 ? p.amount / p.qty : 0;
-                        return (
-                          <tr key={p.id} className="hover:bg-orange-50 border-b border-neutral-100 last:border-0">
-                            <td className="td text-center text-neutral-500 font-mono">{start + idx + 1}</td>
-                            <td className="td">
-                              <div className="font-bold text-neutral-800">{p.name}</div>
-                              <div className="text-xs text-neutral-400 font-mono">{p.id}</div>
-                            </td>
-                            <td className={`td text-center font-semibold ${topSellingMetric === 'qty' ? 'text-orange-700 bg-orange-50/50' : 'text-neutral-600'}`}>
-                              {Math.round(p.qty).toLocaleString()}
-                            </td>
-                            <td className="td text-center text-neutral-600 font-mono">
-                              {formatSAR(unitPrice)}
-                            </td>
-                            <td className={`td text-center font-semibold ${topSellingMetric === 'val' ? 'text-green-700 bg-green-50/50' : 'text-neutral-600'}`} dir="ltr">
-                              {formatSAR(p.amount)}
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              {prodDerived.catalogRows.length > TOP_SELLING_PER_PAGE && (() => {
-                const totalPages = Math.ceil(prodDerived.catalogRows.length / TOP_SELLING_PER_PAGE);
-                const safePage = Math.min(topSellingPage, totalPages);
-                return (
-                  <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 mt-2">
-                    <div className="text-xs text-neutral-500">صفحة {safePage} من {totalPages}</div>
-                    <div className="flex gap-2">
-                      <button disabled={safePage <= 1} onClick={() => setTopSellingPage(safePage - 1)} className="px-2 py-1 border rounded disabled:opacity-50 text-xs">السابق</button>
-                      <button disabled={safePage >= totalPages} onClick={() => setTopSellingPage(safePage + 1)} className="px-2 py-1 border rounded disabled:opacity-50 text-xs">التالي</button>
-                    </div>
-                  </div>
-                );
-              })()}
-            </ChartCard>
+            <TopSellingWidget
+              catalogRows={prodDerived.catalogRows}
+              metric={topSellingMetric}
+              onMetricChange={setTopSellingMetric}
+              page={topSellingPage}
+              onPageChange={setTopSellingPage}
+              formatSAR={formatSAR}
+            />
           </div>
         )
       }
 
       {/* نافذة اختيار الفرع للتقرير */}
       {
-        storeReportModalOpen && (
-          <div className="modal-center-screen" onClick={() => setStoreReportModalOpen(false)}>
-            <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold">تصدير التقرير PDF</h3>
-                <button onClick={() => setStoreReportModalOpen(false)} className="text-neutral-500 hover:text-neutral-700">
-                  <XIcon />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-2">اختر الفرع:</label>
-                  <select
-                    className="input w-full"
-                    value={selectedBranch}
-                    onChange={(e) => setSelectedBranch(e.target.value)}
-                  >
-                    <option value="all">الكل (ملخص عام)</option>
-                    {Array.from(allowedStoreIds).map(sid => (
-                      <option key={sid} value={sid}>{raw?.stores?.[sid] || sid}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {selectedBranch === 'all' && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="includeAllPages"
-                      checked={includeAllPages}
-                      onChange={(e) => setIncludeAllPages(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <label htmlFor="includeAllPages" className="text-sm text-neutral-600">
-                      إنشاء صفحة تفصيلية لكل فرع (عند اختيار الكل)
-                    </label>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  onClick={() => setStoreReportModalOpen(false)}
-                  className="btn-secondary py-2 px-4"
-                >
-                  إلغاء
-                </button>
-                <button
-                  onClick={handleGenerateStoreReport}
-                  className="btn-primary py-2 px-4"
-                >
-                  تصدير
-                </button>
-              </div>
-            </div>
-          </div>
-        )
+        <StoreReportModal
+          isOpen={storeReportModalOpen}
+          onClose={() => setStoreReportModalOpen(false)}
+          selectedBranch={selectedBranch}
+          setSelectedBranch={setSelectedBranch}
+          allowedStoreIds={allowedStoreIds}
+          storesMap={raw?.stores}
+          includeAllPages={includeAllPages}
+          setIncludeAllPages={setIncludeAllPages}
+          onGenerate={handleGenerateStoreReport}
+        />
       }
 
       {/* نافذة تقرير الموظفين */}
       {
-        employeeReportModalOpen && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4" onClick={() => setEmployeeReportModalOpen(false)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-              {/* Header */}
-              <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-3 sm:p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">📄</span>
-                    <div>
-                      <h2 className="text-lg font-bold">اختيار الموظفين (PDF)</h2>
-                      <p className="text-green-100 text-sm">اختر الموظفين للتقرير وازل المستقيلين</p>
-                    </div>
-                  </div>
-                  <button onClick={() => setEmployeeReportModalOpen(false)} className="bg-white/20 hover:bg-white/30 p-2 rounded-lg">✕</button>
-                </div>
-              </div>
-
-              {/* Filters */}
-              <div className="p-3 sm:p-4 bg-gray-50 border-b">
-                <div className="flex flex-wrap gap-4 items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={empFilterStatus.has('active')}
-                        onChange={(e) => {
-                          const newSet = new Set(empFilterStatus);
-                          e.target.checked ? newSet.add('active') : newSet.delete('active');
-                          setEmpFilterStatus(newSet);
-                        }}
-                        className="w-4 h-4 text-green-600 rounded"
-                      />
-                      <span className="text-green-600 font-medium">✓ موظف نشط</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={empFilterStatus.has('review')}
-                        onChange={(e) => {
-                          const newSet = new Set(empFilterStatus);
-                          e.target.checked ? newSet.add('review') : newSet.delete('review');
-                          setEmpFilterStatus(newSet);
-                        }}
-                        className="w-4 h-4 text-orange-600 rounded"
-                      />
-                      <span className="text-orange-600 font-medium">□ مراجعة (معيار واحد)</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={empFilterStatus.has('resigned')}
-                        onChange={(e) => {
-                          const newSet = new Set(empFilterStatus);
-                          e.target.checked ? newSet.add('resigned') : newSet.delete('resigned');
-                          setEmpFilterStatus(newSet);
-                        }}
-                        className="w-4 h-4 text-red-600 rounded"
-                      />
-                      <span className="text-red-600 font-medium">□ مستقيل (معياران)</span>
-                    </label>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    المحددين: <strong>{selectedEmployees.size}</strong> من <strong>{employeeListForSelection.length}</strong>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 mt-3">
-                  <button
-                    onClick={() => setSelectedEmployees(new Set(employeeListForSelection.map(e => e.id)))}
-                    className="text-sm bg-green-100 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-200 transition-colors"
-                  >
-                    ✓ تحديد الكل
-                  </button>
-                  <button
-                    onClick={() => setSelectedEmployees(new Set())}
-                    className="text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    ✗ إلغاء الكل
-                  </button>
-                  <button
-                    onClick={() => {
-                      const activeEmps = employeeListForSelection.filter(e => e.sales > 0).map(e => e.id);
-                      setSelectedEmployees(new Set(activeEmps));
-                    }}
-                    className="text-sm bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors"
-                  >
-                    👤 النشطين فقط
-                  </button>
-                </div>
-              </div>
-
-              {/* Employee List */}
-              <div className="flex-1 overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-100 sticky top-0">
-                    <tr>
-                      <th className="p-3 text-right w-10">
-                        <input
-                          type="checkbox"
-                          checked={selectedEmployees.size === employeeListForSelection.length && employeeListForSelection.length > 0}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedEmployees(new Set(employeeListForSelection.map(emp => emp.id)));
-                            } else {
-                              setSelectedEmployees(new Set());
-                            }
-                          }}
-                          className="w-4 h-4"
-                        />
-                      </th>
-                      <th className="p-3 text-right font-semibold text-gray-700">الموظف</th>
-                      <th className="p-3 text-right font-semibold text-gray-700">الفرع</th>
-                      <th className="p-3 text-left font-semibold text-gray-700">المبيعات</th>
-                      <th className="p-3 text-center font-semibold text-gray-700">الحالة</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {employeeListForSelection.map((emp, idx) => (
-                      <tr key={emp.id} className={`border-b hover:bg-gray-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                        <td className="p-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedEmployees.has(emp.id)}
-                            onChange={(e) => {
-                              const newSet = new Set(selectedEmployees);
-                              e.target.checked ? newSet.add(emp.id) : newSet.delete(emp.id);
-                              setSelectedEmployees(newSet);
-                            }}
-                            className="w-4 h-4"
-                          />
-                        </td>
-                        <td className="p-3">
-                          <div className="font-medium text-gray-800">{emp.name}</div>
-                          <div className="text-xs text-gray-400">{emp.id}</div>
-                        </td>
-                        <td className="p-3 text-gray-600 text-xs">{emp.storeName}</td>
-                        <td className="p-3 font-bold text-gray-800" dir="ltr">{Math.round(emp.sales).toLocaleString()}</td>
-                        <td className="p-3 text-center">
-                          <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">نشط</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {employeeListForSelection.length === 0 && (
-                  <div className="text-center py-12 text-gray-400">
-                    <div className="text-4xl mb-2">👥</div>
-                    <div>لا توجد بيانات موظفين للفترة المحددة</div>
-                  </div>
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className="p-3 sm:p-4 border-t flex justify-end gap-3 bg-gray-50">
-                <div className="text-sm text-gray-500">
-                  الفترة: من {yesterdayStr.substring(0, 8)}01 إلى {yesterdayStr}
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setEmployeeReportModalOpen(false)}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-                  >
-                    إلغاء
-                  </button>
-                  <button
-                    onClick={handleGenerateEmployeeReport}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-                    disabled={selectedEmployees.size === 0}
-                  >
-                    📄 إنشاء التقرير
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )
+        <EmployeeReportModal
+          isOpen={employeeReportModalOpen}
+          onClose={() => setEmployeeReportModalOpen(false)}
+          empFilterStatus={empFilterStatus}
+          setEmpFilterStatus={setEmpFilterStatus}
+          selectedEmployees={selectedEmployees}
+          setSelectedEmployees={setSelectedEmployees}
+          employeeList={employeeListForSelection}
+          yesterdayStr={yesterdayStr}
+          onGenerate={handleGenerateEmployeeReport}
+        />
       }
 
     </div >
