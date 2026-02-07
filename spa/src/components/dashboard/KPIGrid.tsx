@@ -45,6 +45,8 @@ interface KPIGridProps {
 }
 
 export const KPIGrid: React.FC<KPIGridProps> = ({ totals, prevYearTotals, monthlyChartData, formatSAR }) => {
+    const avgInvoice = totals.trans > 0 ? totals.sales / totals.trans : 0;
+    const conversionRate = totals.visitors > 0 ? (totals.trans / totals.visitors) * 100 : 0;
     const achievementPct = totals.target > 0 ? (totals.sales / totals.target) * 100 : 0;
     const achievementCapped = Math.min(achievementPct, 100);
     const isTargetMet = achievementPct >= 100;
@@ -75,6 +77,7 @@ export const KPIGrid: React.FC<KPIGridProps> = ({ totals, prevYearTotals, monthl
                 comparisonLabel="السنة الماضية"
                 icon={<InvoicesIcon />}
                 trendData={monthlyChartData.map(d => d.Sales)}
+                subtitle={`معدل الفاتورة: ${formatSAR(avgInvoice)}`}
             />
             <KPICard
                 title="الزوار"
@@ -83,6 +86,7 @@ export const KPIGrid: React.FC<KPIGridProps> = ({ totals, prevYearTotals, monthl
                 comparisonLabel="السنة الماضية"
                 icon={<VisitorsIcon />}
                 trendData={monthlyChartData.map(d => d.Visitors)}
+                subtitle={`نسبة الاستحواذ: ${conversionRate.toFixed(1)}%`}
             />
             <KPICard
                 title="قيمة العميل"

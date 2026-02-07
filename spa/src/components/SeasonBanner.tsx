@@ -19,7 +19,7 @@ export default function SeasonBanner() {
           <div>
             <div className="text-white font-bold text-sm sm:text-base flex items-center gap-2">
               <span className="bg-white/20 px-2 py-0.5 rounded-lg text-xs font-bold tracking-wide">
-                مود المواسم
+                فترة المواسم
               </span>
               <span>{season.nameAr}</span>
             </div>

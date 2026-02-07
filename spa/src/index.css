@@ -115,6 +115,21 @@ html[dir="rtl"] .main-layout-sidebar--closed {
   overflow-x: hidden;
 }
 
+/* Safe area for mobile notch/status bar */
+.pt-safe {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+@media (min-width: 640px) {
+  .pt-safe {
+    padding-top: 1rem;
+  }
+}
+@media (min-width: 768px) {
+  .pt-safe {
+    padding-top: 1.5rem;
+  }
+}
+
 @media (min-width: 768px) {
   .main-layout-main {
     margin-left: 16rem;
