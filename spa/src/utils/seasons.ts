@@ -1,0 +1,208 @@
+/**
+ * Seasonal Comparison Mode (مود المواسم)
+ *
+ * During Hijri seasons (Sha'ban, Ramadan, Eid al-Fitr, Eid al-Adha),
+ * previous-year comparisons are adjusted to use the same Hijri date
+ * from the previous Hijri year, rather than subtracting 1 Gregorian year.
+ *
+ * This ensures fair comparison: 19 Sha'ban 1447 vs 19 Sha'ban 1446,
+ * instead of 3 Feb 2026 vs 3 Feb 2025 (which would be a different Hijri date).
+ */
+import { gregorianToHijri, hijriToGregorian } from '@tabby_ai/hijri-converter';
+
+// ===== Season Definitions =====
+
+interface HijriSeason {
+  name: string;
+  nameAr: string;
+  icon: string;
+  hijriMonth: number;
+  startDay: number;
+  endDay: number;
+}
+
+interface GregorianSeason {
+  name: string;
+  nameAr: string;
+  icon: string;
+  startMonth: number;
+  startDay: number;
+  endMonth: number;
+  endDay: number;
+}
+
+const HIJRI_SEASONS: HijriSeason[] = [
+  { name: 'Shaaban',    nameAr: 'شعبان',       icon: '🌙', hijriMonth: 8,  startDay: 1,  endDay: 29 },
+  { name: 'Ramadan',    nameAr: 'رمضان',       icon: '🌙', hijriMonth: 9,  startDay: 1,  endDay: 30 },
+  { name: 'Eid al-Fitr', nameAr: 'عيد الفطر', icon: '🎉', hijriMonth: 10, startDay: 1,  endDay: 6 },
+  { name: 'Eid al-Adha', nameAr: 'عيد الأضحى', icon: '🎉', hijriMonth: 12, startDay: 8,  endDay: 13 },
+];
+
+const GREGORIAN_SEASONS: GregorianSeason[] = [
+  { name: 'National Day', nameAr: 'اليوم الوطني', icon: '🇸🇦', startMonth: 9, startDay: 18, endMonth: 9, endDay: 28 },
+  { name: 'Black Friday', nameAr: 'بلاك فرايدي',  icon: '🏷️', startMonth: 11, startDay: 20, endMonth: 12, endDay: 5 },
+];
+
+// ===== Season Detection =====
+
+export interface SeasonInfo {
+  active: boolean;
+  name: string;
+  nameAr: string;
+  icon: string;
+  isHijri: boolean;
+}
+
+/**
+ * Detect if a given date falls within a known season.
+ * Returns season info or null if not in any season.
+ */
+export function detectCurrentSeason(date?: Date): SeasonInfo | null {
+  const d = date || new Date();
+
+  // Check Hijri seasons
+  try {
+    const hijri = gregorianToHijri({
+      year: d.getFullYear(),
+      month: d.getMonth() + 1,
+      day: d.getDate(),
+    });
+
+    for (const season of HIJRI_SEASONS) {
+      if (
+        hijri.month === season.hijriMonth &&
+        hijri.day >= season.startDay &&
+        hijri.day <= season.endDay
+      ) {
+        return {
+          active: true,
+          name: season.name,
+          nameAr: season.nameAr,
+          icon: season.icon,
+          isHijri: true,
+        };
+      }
+    }
+  } catch {
+    // If Hijri conversion fails, skip Hijri check
+  }
+
+  // Check Gregorian seasons
+  const gMonth = d.getMonth() + 1;
+  const gDay = d.getDate();
+
+  for (const season of GREGORIAN_SEASONS) {
+    const afterStart = gMonth > season.startMonth || (gMonth === season.startMonth && gDay >= season.startDay);
+    const beforeEnd = gMonth < season.endMonth || (gMonth === season.endMonth && gDay <= season.endDay);
+
+    if (season.startMonth <= season.endMonth) {
+      // Same year range (e.g., Sep 18 - Sep 28)
+      if (afterStart && beforeEnd) {
+        return { active: true, name: season.name, nameAr: season.nameAr, icon: season.icon, isHijri: false };
+      }
+    } else {
+      // Cross-year range (e.g., Nov 20 - Dec 5)
+      if (afterStart || beforeEnd) {
+        return { active: true, name: season.name, nameAr: season.nameAr, icon: season.icon, isHijri: false };
+      }
+    }
+  }
+
+  return null;
+}
+
+/** Shorthand: is seasonal mode currently active? */
+export function isSeasonalModeActive(date?: Date): boolean {
+  const s = detectCurrentSeason(date);
+  return s !== null && s.isHijri;
+}
+
+// ===== Seasonal Date Conversion =====
+
+function pad(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+/**
+ * For a Gregorian date string (YYYY-MM-DD), find the equivalent date
+ * from the previous HIJRI year.
+ *
+ * Example: "2026-02-03" = 19 Sha'ban 1447
+ *          -> 19 Sha'ban 1446 = "2025-02-14"
+ */
+export function getSeasonalPrevDate(dateStr: string): string {
+  try {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const hijri = gregorianToHijri({ year: y, month: m, day: d });
+    const prevHijri = hijriToGregorian({ year: hijri.year - 1, month: hijri.month, day: Math.min(hijri.day, 30) });
+    return `${prevHijri.year}-${pad(prevHijri.month)}-${pad(prevHijri.day)}`;
+  } catch {
+    // Fallback: subtract 1 Gregorian year
+    return dateStr.replace(/^\d{4}/, (yr) => String(Number(yr) - 1));
+  }
+}
+
+/**
+ * For a Gregorian date range, compute the corresponding previous-Hijri-year range.
+ */
+export function getSeasonalPrevRange(start: string, end: string): { start: string; end: string } {
+  return {
+    start: getSeasonalPrevDate(start),
+    end: getSeasonalPrevDate(end),
+  };
+}
+
+// ===== Smart Prev-Year Functions (auto-detect mode) =====
+
+/**
+ * Get previous-year date: if in a Hijri season, use Hijri alignment;
+ * otherwise, subtract 1 Gregorian year.
+ */
+export function getPrevYearDate(dateStr: string): string {
+  const season = detectCurrentSeason();
+  if (season?.isHijri) {
+    return getSeasonalPrevDate(dateStr);
+  }
+  // Default: subtract 1 Gregorian year
+  return dateStr.replace(/^\d{4}/, (yr) => String(Number(yr) - 1));
+}
+
+/**
+ * Get previous-year range: if in a Hijri season, use Hijri alignment;
+ * otherwise, subtract 1 Gregorian year from both dates.
+ */
+export function getPrevYearRange(start: string, end: string): { start: string; end: string } {
+  const season = detectCurrentSeason();
+  if (season?.isHijri) {
+    return getSeasonalPrevRange(start, end);
+  }
+  return {
+    start: start.replace(/^\d{4}/, (yr) => String(Number(yr) - 1)),
+    end: end.replace(/^\d{4}/, (yr) => String(Number(yr) - 1)),
+  };
+}
+
+/**
+ * Get the current Hijri date info string for display.
+ * Returns e.g. "19 شعبان 1447"
+ */
+export function getCurrentHijriDisplay(date?: Date): string {
+  const d = date || new Date();
+  try {
+    const hijri = gregorianToHijri({
+      year: d.getFullYear(),
+      month: d.getMonth() + 1,
+      day: d.getDate(),
+    });
+
+    const hijriMonths = [
+      '', 'محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني',
+      'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان',
+      'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة',
+    ];
+
+    return `${hijri.day} ${hijriMonths[hijri.month]} ${hijri.year}`;
+  } catch {
+    return '';
+  }
+}

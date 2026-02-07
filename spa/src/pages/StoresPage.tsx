@@ -6,6 +6,7 @@ import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon } from '../components/Icons';
 import { runProductValueAnalysis, safeNum } from '../services/analysisHelpers';
 import StoreCompareModal from '../components/StoreCompareModal';
+import { getPrevYearRange, getPrevYearDate } from '../utils/seasons';
 
 type Mode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
 
@@ -123,15 +124,16 @@ function getRange(mode: Mode, standardYear: number, standardMonth: string, custo
     if (currEnd > today) currEnd = new Date(today);
   }
 
-  const prevStart = new Date(currStart);
-  prevStart.setFullYear(prevStart.getFullYear() - 1);
-  const prevEnd = new Date(currEnd);
-  prevEnd.setFullYear(prevEnd.getFullYear() - 1);
-
   const startYMD = toLocalYMD(currStart);
   const endYMD = toLocalYMD(currEnd);
-  const prevStartYMD = toLocalYMD(prevStart);
-  const prevEndYMD = toLocalYMD(prevEnd);
+
+  // Use seasonal prev-year range (Hijri-aligned when in season)
+  const seasonalPrev = getPrevYearRange(startYMD, endYMD);
+  const prevStartYMD = seasonalPrev.start;
+  const prevEndYMD = seasonalPrev.end;
+
+  const prevStart = new Date(prevStartYMD + 'T00:00:00');
+  const prevEnd = new Date(prevEndYMD + 'T23:59:59');
 
   return { currStart, currEnd, prevStart, prevEnd, startYMD, endYMD, prevStartYMD, prevEndYMD };
 }
@@ -279,21 +281,20 @@ function StoreDetailsModal({
       }
     });
 
-    const prevYearStart = rangeStart.split('-').map(Number);
-    prevYearStart[0] -= 1;
-    const prevYearEnd = rangeEnd.split('-').map(Number);
-    prevYearEnd[0] -= 1;
-    const prevYearStartStr = prevYearStart.map((n, i) => (i === 0 ? n : String(n).padStart(2, '0'))).join('-');
-    const prevYearEndStr = prevYearEnd.map((n, i) => (i === 0 ? n : String(n).padStart(2, '0'))).join('-');
+    // Build seasonal prev-year date mapping for daily breakdown
+    const currentDates = Object.keys(dailyBreakdown);
+    const prevToCurrentMap: Record<string, string> = {};
+    currentDates.forEach(dt => {
+      const prevDt = getPrevYearDate(dt);
+      prevToCurrentMap[prevDt] = dt;
+    });
+    const prevRange = getPrevYearRange(rangeStart, rangeEnd);
 
     for (const r of rec) {
       const d = normDate(r?.[0]);
-      if (d && d >= prevYearStartStr && d <= prevYearEndStr) {
-        const currentDate = d.split('-');
-        currentDate[0] = String(Number(currentDate[0]) + 1);
-        const currentDateStr = currentDate.join('-');
-        if (currentDateStr >= rangeStart && currentDateStr <= rangeEnd) {
-          if (!dailyBreakdown[currentDateStr]) dailyBreakdown[currentDateStr] = { sales: 0, trans: 0, visitors: 0, prevSales: 0, prevVisitors: 0 };
+      if (d && d >= prevRange.start && d <= prevRange.end) {
+        const currentDateStr = prevToCurrentMap[d];
+        if (currentDateStr && dailyBreakdown[currentDateStr]) {
           dailyBreakdown[currentDateStr].prevSales += safeNum(r?.[2]);
         }
       }
@@ -303,11 +304,9 @@ function StoreDetailsModal({
     visitorsData.forEach(([d, sid, v]: any[]) => {
       if (sid !== store?.sid) return;
       const dateStr = normDate(d);
-      if (dateStr && dateStr >= prevYearStartStr && dateStr <= prevYearEndStr) {
-        const currentDate = dateStr.split('-');
-        currentDate[0] = String(Number(currentDate[0]) + 1);
-        const currentDateStr = currentDate.join('-');
-        if (currentDateStr >= rangeStart && currentDateStr <= rangeEnd) {
+      if (dateStr && dateStr >= prevRange.start && dateStr <= prevRange.end) {
+        const currentDateStr = prevToCurrentMap[dateStr];
+        if (currentDateStr) {
           if (!dailyBreakdown[currentDateStr]) dailyBreakdown[currentDateStr] = { sales: 0, trans: 0, visitors: 0, prevSales: 0, prevVisitors: 0 };
           dailyBreakdown[currentDateStr].prevVisitors += safeNum(v);
         }

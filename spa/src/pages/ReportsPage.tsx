@@ -5,6 +5,7 @@ import { generateGlobalSalesPDF, generateEmployeePerformancePDF, generateDailyRe
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 
 import { getCurrentUser } from '../auth/storage';
+import { getPrevYearDate, getPrevYearRange } from '../utils/seasons';
 import * as XLSX from 'xlsx';
 
 type FilterMode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
@@ -224,9 +225,7 @@ export default function ReportsPage() {
     }
 
     const reportData = days.map(d => {
-      const prevD = new Date(d);
-      prevD.setFullYear(prevD.getFullYear() - 1);
-      const dPrev = toYMD(prevD);
+      const dPrev = getPrevYearDate(d);
 
       let s = 0, sPrev = 0, t = 0, v = 0, vPrev = 0;
       (rawMgmt.sales || []).forEach(([dt, sid, val]: any[]) => {
@@ -413,11 +412,8 @@ export default function ReportsPage() {
     let title = '';
     let rows: any[] = [];
 
-    // Helper for date ranges
-    const prevRange = {
-      start: range.start.replace(/^\d{4}/, (y) => String(Number(y) - 1)),
-      end: range.end.replace(/^\d{4}/, (y) => String(Number(y) - 1))
-    };
+    // Helper for date ranges (seasonal-aware)
+    const prevRange = getPrevYearRange(range.start, range.end);
     const inRange = (d: string) => d >= range.start && d <= range.end;
     const inPrevRange = (d: string) => d >= prevRange.start && d <= prevRange.end;
 
@@ -435,19 +431,22 @@ export default function ReportsPage() {
         curr.setDate(curr.getDate() + 1);
       }
 
+      // Build reverse mapping: prevDate -> currentDate for seasonal alignment
+      const prevToCurrentMap: Record<string, string> = {};
+      Object.keys(dateMap).forEach(dt => {
+        prevToCurrentMap[getPrevYearDate(dt)] = dt;
+      });
+
       // Aggregate functionality (with store filter)
       const processMetric = (source: any[], field: string, isPrevField?: string) => {
         (source || []).forEach(([d, sid, v]: any[]) => {
           if (!passFilter(sid)) return;
-          if (dateMap[d] && !isPrevField) dateMap[d][field] += v || 0;
-          if (dateMap[d] && isPrevField) {
-            // Also accumulate current period for isPrevField sources
-          }
+          if (dateMap[d]) dateMap[d][field] += v || 0;
 
           // Map previous year date to current year date for alignment
           if (isPrevField && inPrevRange(d)) {
-            const currDate = d.replace(/^\d{4}/, (y: string) => String(Number(y) + 1));
-            if (dateMap[currDate]) dateMap[currDate][isPrevField] += v || 0;
+            const currDate = prevToCurrentMap[d];
+            if (currDate && dateMap[currDate]) dateMap[currDate][isPrevField] += v || 0;
           }
         });
       };
@@ -1141,7 +1140,7 @@ export default function ReportsPage() {
                       // generateDailyReportPDF(data, { yesterday: 'YYYY-MM-DD', lastYear: 'YYYY-MM-DD' })
                       // We'll use range.start as the 'yesterday' date since that's what we built the report for.
                       const yDate = range.start;
-                      const lyDate = range.start.replace(/^\d{4}/, (y) => String(Number(y) - 1));
+                      const lyDate = getPrevYearDate(range.start);
                       await generateDailyReportPDF(previewReport.data, { yesterday: yDate, lastYear: lyDate });
                     } else if (previewReport.type === 'employee') {
                       const today = new Date();

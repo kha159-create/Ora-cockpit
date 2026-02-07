@@ -13,6 +13,7 @@ import { StoreReportModal } from '../components/dashboard/StoreReportModal';
 import { EmployeeReportModal } from '../components/dashboard/EmployeeReportModal';
 import { FireIcon, TagIcon, OfficeBuildingIcon, XIcon, PrinterIcon, UserGroupIcon } from '../components/Icons';
 import { generateDailyReportPDF, generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
+import { getPrevYearRange, getPrevYearDate } from '../utils/seasons';
 
 function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
@@ -138,8 +139,6 @@ export default function DashboardPage() {
     const dateRange = { start: startOfMonth, end: yesterdayStr };
     const meta = raw.store_meta || {};
     const storesMap = raw.stores || {};
-    const currentYear = new Date(yesterdayStr).getFullYear();
-    const prevYear = currentYear - 1;
 
     // Get all dates from start of month to yesterday
     const dates: string[] = [];
@@ -148,6 +147,15 @@ export default function DashboardPage() {
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
       dates.push(d.toISOString().substring(0, 10));
     }
+
+    // Build seasonal prev-year date mapping
+    const prevDateMap: Record<string, string> = {};
+    const prevDatesSet = new Set<string>();
+    dates.forEach(dt => {
+      const prevDt = getPrevYearDate(dt);
+      prevDateMap[dt] = prevDt;
+      prevDatesSet.add(prevDt);
+    });
 
     // Build daily data for all stores
     const byStore: Record<string, Record<string, { sales: number; trans: number; visitors: number }>> = {};
@@ -163,8 +171,7 @@ export default function DashboardPage() {
       byStorePrev[sid] = {};
       dates.forEach(dt => {
         byStore[sid][dt] = { sales: 0, trans: 0, visitors: 0 };
-        const prevYearDate = `${prevYear}-${dt.substring(5)}`;
-        byStorePrev[sid][prevYearDate] = { sales: 0, trans: 0, visitors: 0 };
+        byStorePrev[sid][prevDateMap[dt]] = { sales: 0, trans: 0, visitors: 0 };
       });
     });
 
@@ -173,8 +180,7 @@ export default function DashboardPage() {
       const dateStr = String(d).substring(0, 10);
       if (!storeIds.includes(sid)) return;
       if (byStore[sid]?.[dateStr]) byStore[sid][dateStr].sales += v || 0;
-      const prevYearDate = `${prevYear}-${dateStr.substring(5)}`;
-      if (dateStr.startsWith(String(prevYear)) && byStorePrev[sid]?.[dateStr]) {
+      if (prevDatesSet.has(dateStr) && byStorePrev[sid]?.[dateStr]) {
         byStorePrev[sid][dateStr].sales += v || 0;
       }
     });
@@ -189,21 +195,21 @@ export default function DashboardPage() {
       const dateStr = String(d).substring(0, 10);
       if (!storeIds.includes(sid)) return;
       if (byStore[sid]?.[dateStr]) byStore[sid][dateStr].visitors += v || 0;
-      if (dateStr.startsWith(String(prevYear)) && byStorePrev[sid]?.[dateStr]) {
+      if (prevDatesSet.has(dateStr) && byStorePrev[sid]?.[dateStr]) {
         byStorePrev[sid][dateStr].visitors += v || 0;
       }
     });
 
     // Build global daily data
     const globalData = dates.map(dt => {
-      const prevYearDate = `${prevYear}-${dt.substring(5)}`;
+      const prevDt = prevDateMap[dt];
       let sales = 0, salesPrev = 0, trans = 0, visitors = 0, visitorsPrev = 0;
       storeIds.forEach(sid => {
         sales += byStore[sid]?.[dt]?.sales || 0;
         trans += byStore[sid]?.[dt]?.trans || 0;
         visitors += byStore[sid]?.[dt]?.visitors || 0;
-        salesPrev += byStorePrev[sid]?.[prevYearDate]?.sales || 0;
-        visitorsPrev += byStorePrev[sid]?.[prevYearDate]?.visitors || 0;
+        salesPrev += byStorePrev[sid]?.[prevDt]?.sales || 0;
+        visitorsPrev += byStorePrev[sid]?.[prevDt]?.visitors || 0;
       });
       const growth = salesPrev > 0 ? ((sales - salesPrev) / salesPrev * 100) : 0;
       const avgInv = trans > 0 ? sales / trans : 0;
@@ -219,9 +225,9 @@ export default function DashboardPage() {
       const storeTarget = (raw.targets || []).filter(([d, s]: any[]) => s === sid && String(d).substring(0, 7) === startOfMonth.substring(0, 7)).reduce((acc: number, [, , v]: any[]) => acc + (v || 0), 0);
 
       const dailyData = dates.map(dt => {
-        const prevYearDate = `${prevYear}-${dt.substring(5)}`;
+        const prevDt = prevDateMap[dt];
         const d = byStore[sid]?.[dt] || { sales: 0, trans: 0, visitors: 0 };
-        const dPrev = byStorePrev[sid]?.[prevYearDate] || { sales: 0, trans: 0, visitors: 0 };
+        const dPrev = byStorePrev[sid]?.[prevDt] || { sales: 0, trans: 0, visitors: 0 };
         const growth = dPrev.sales > 0 ? ((d.sales - dPrev.sales) / dPrev.sales * 100) : 0;
         const avgInv = d.trans > 0 ? d.sales / d.trans : 0;
         const customerValue = d.visitors > 0 ? d.sales / d.visitors : 0;
@@ -407,14 +413,9 @@ export default function DashboardPage() {
     return { sales, trans, visitors, target };
   }, [raw, range.start, range.end, allowedStoreIds]);
 
-  // نفس الفترة من السنة الماضية للمقارنة
+  // نفس الفترة من السنة الماضية للمقارنة (مع دعم المواسم الهجرية)
   const prevYearRange = useMemo(() => {
-    const [y, m, d] = range.start.split('-').map(Number);
-    const [ye, me, de] = range.end.split('-').map(Number);
-    return {
-      start: `${y - 1}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
-      end: `${ye - 1}-${String(me).padStart(2, '0')}-${String(de).padStart(2, '0')}`,
-    };
+    return getPrevYearRange(range.start, range.end);
   }, [range.start, range.end]);
 
   const prevYearTotals = useMemo(() => {
@@ -700,9 +701,7 @@ export default function DashboardPage() {
     return { totals: { sales: totalSales, trans: totalTrans }, stores: storeList };
   }, [raw, empRaw, todayStr, effectiveManager, allowedStoreIds]);
 
-  const lastYearYesterday = new Date(yesterday);
-  lastYearYesterday.setFullYear(lastYearYesterday.getFullYear() - 1);
-  const lastYearYesterdayStr = toYMD(lastYearYesterday);
+  const lastYearYesterdayStr = getPrevYearDate(yesterdayStr);
 
   const dailyReportData = useMemo(() => {
     if (!raw) return [];
@@ -831,10 +830,11 @@ export default function DashboardPage() {
       const monthStartStr = toYMD(monthStart);
       const monthEndStr = toYMD(monthEnd > new Date() ? new Date() : monthEnd);
 
-      const prevYearStart = new Date(currentYear - 1, m, 1);
-      const prevYearEnd = new Date(currentYear - 1, m + 1, 0);
-      const prevYearStartStr = toYMD(prevYearStart);
-      const prevYearEndStr = toYMD(prevYearEnd);
+      const plainPrevStart = `${currentYear - 1}-${String(m + 1).padStart(2, '0')}-01`;
+      const plainPrevEnd = toYMD(new Date(currentYear - 1, m + 1, 0));
+      const seasonPrev = getPrevYearRange(monthStartStr, monthEndStr);
+      const prevYearStartStr = seasonPrev.start !== monthStartStr ? seasonPrev.start : plainPrevStart;
+      const prevYearEndStr = seasonPrev.end !== monthEndStr ? seasonPrev.end : plainPrevEnd;
 
       let sales = 0, target = 0, prevSales = 0, visitors = 0, prevVisitors = 0;
 

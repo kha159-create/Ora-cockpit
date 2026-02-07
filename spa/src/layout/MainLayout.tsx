@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { clearCurrentUser, getCurrentUser } from '../auth/storage';
 import GlobalSearch from '../components/GlobalSearch';
+import SeasonBanner from '../components/SeasonBanner';
 import {
   CashIcon,
   ClipboardListIcon,
@@ -189,6 +190,8 @@ export default function MainLayout() {
             </div>
           </div>
         </header>
+
+        <SeasonBanner />
 
         <Outlet />
       </main>
