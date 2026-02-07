@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { clearCurrentUser, getCurrentUser } from '../auth/storage';
+import GlobalSearch from '../components/GlobalSearch';
 import {
   ClipboardListIcon,
   CubeIcon,
@@ -12,6 +13,7 @@ import {
   TagIcon,
   TargetIcon,
   UserGroupIcon,
+  SearchIcon,
   XIcon,
 } from '../components/Icons';
 
@@ -22,7 +24,7 @@ const baseNavItems = [
   { to: '/stores', label: 'المعارض', icon: <OfficeBuildingIcon /> },
   { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
   { to: '/offers', label: 'تحليل العروض', icon: <TagIcon /> },
-  { to: '/commissions', label: 'العمولات', icon: <CurrencyDollarIcon /> }, // Added Commissions
+  { to: '/commissions', label: 'العمولات', icon: <span className="text-xl">💰</span> }, // Added Commissions
 ] as const;
 
 const targetsNavItem = { to: '/targets', label: 'تحديد الأهداف', icon: <TargetIcon /> } as const;

@@ -29,8 +29,7 @@ export type AnalysisBreakdown = {
     breakdown: { name: string; units: number; percentage: number }[];
 };
 
-import { BarChart, ChartCard, KPICard, ProductValueAnalysis } from '../components/DashboardComponents';
-import { CubeIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon } from '../components/Icons';
+
 
 export function runProductValueAnalysis(params: {
     catalog: Record<string, any[]>;
