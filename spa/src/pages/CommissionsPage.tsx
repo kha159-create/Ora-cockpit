@@ -185,12 +185,13 @@ export default function CommissionsPage() {
         return { managers: managersList, storeOptions: storeList };
     }, [data?.mgmt, effectiveManager]);
 
-    // Calculate Date Range for selected month
+    // Calculate Date Range for selected month (use local date to avoid UTC timezone shift)
     const dateRange = React.useMemo(() => {
-        const start = new Date(selectedYear, selectedMonth - 1, 1);
-        const end = new Date(selectedYear, selectedMonth, 0);
-        const fmt = (d: Date) => d.toISOString().split('T')[0];
-        return { start: fmt(start), end: fmt(end) };
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const startStr = `${selectedYear}-${pad(selectedMonth)}-01`;
+        const endDate = new Date(selectedYear, selectedMonth, 0); // last day of month
+        const endStr = `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())}`;
+        return { start: startStr, end: endStr };
     }, [selectedYear, selectedMonth]);
 
     const commissionData = useCommissions(data?.mgmt, data?.emp, dateRange);

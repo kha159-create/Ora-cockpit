@@ -505,7 +505,6 @@ export default function ReportsPage() {
 
     } else if (type === 'yesterday_employee') {
       const today = new Date();
-      // Ensure we use the correct yesterday date logic
       const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
       const yesterdayYMD = toYMD(yesterdayDate);
       const mtdStartYMD = toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -513,57 +512,83 @@ export default function ReportsPage() {
       title = `أداء الموظفين (أمس vs MTD)`;
       const history = rawEmp?.history || {};
       const names = rawEmp?.employee_names || {};
-      const empData: Record<string, any> = {};
+      const targets = rawEmp?.targets || {};
       const selectedIdsArray = Array.from(selectedEmpIds);
+      const storesMap = rawMgmt.stores || {};
+
+      // Group by store → employees (same structure as generateEmployeePerformance)
+      const byStore: Record<string, Record<string, any>> = {};
 
       Object.entries(history).forEach(([sid, recs]: [string, any]) => {
         if (!passFilter(sid)) return;
-        recs.forEach((rec: any[]) => {
+        if (!byStore[sid]) byStore[sid] = {};
+
+        (recs || []).forEach((rec: any[]) => {
           const d = rec[0];
           const rawId = String(rec[1] || '').split('-')[0].trim();
           const id = rawId.padStart(4, '0');
           if (rawId === 'مرتجع') return;
           if (selectedIdsArray.length > 0 && !selectedIdsArray.includes(id)) return;
 
-          if (!empData[id]) {
-            const entTarget = rawEmp.targets?.[id] || rawEmp.targets?.[id.padStart(4, '0')] || 0;
-            empData[id] = { id, name: names[id] || rawId, yestSales: 0, mtdSales: 0, target: entTarget, store: rawMgmt.stores?.[sid] || sid, yTrans: 0, mTrans: 0 };
+          if (!byStore[sid][id]) {
+            byStore[sid][id] = {
+              name: names[id] || names[rawId] || rawId,
+              ySales: 0, yTrans: 0,
+              mSales: 0, mTrans: 0,
+              target: targets[id] || targets[rawId] || 0
+            };
           }
-          // Assuming rec[2] is sales, rec[3] might be trans? Original code didn't use trans for Emp?
-          // Looking at line 304 in view 3002: const [date, empId, sales, trans] = rec;
-          // So rec[3] IS transactions.
           const sales = Number(rec[2]) || 0;
           const trans = Number(rec[3]) || 0;
 
           if (d === yesterdayYMD) {
-            empData[id].yestSales += sales;
-            empData[id].yTrans += trans;
+            byStore[sid][id].ySales += sales;
+            byStore[sid][id].yTrans += trans;
           }
           if (d >= mtdStartYMD && d <= yesterdayYMD) {
-            empData[id].mtdSales += sales;
-            empData[id].mTrans += trans;
+            byStore[sid][id].mSales += sales;
+            byStore[sid][id].mTrans += trans;
           }
         });
       });
-      rows = Object.values(empData).map(e => ({
-        ...e,
-        yAvgInv: e.yTrans > 0 ? e.yestSales / e.yTrans : 0,
-        mAvgInv: e.mTrans > 0 ? e.mtdSales / e.mTrans : 0,
-        yShare: 0, // Calculated below
-        mShare: 0, // Calculated below
-        achievement: e.target > 0 ? (e.mtdSales / e.target) * 100 : 0,
-        remaining: e.target > e.mtdSales ? e.target - e.mtdSales : 0
-      })).sort((a, b) => b.mtdSales - a.mtdSales);
 
-      // Calculate Shares
-      const totalYEst = rows.reduce((acc, r) => acc + r.yestSales, 0);
-      const totalMTD = rows.reduce((acc, r) => acc + r.mtdSales, 0);
-      rows.forEach(r => {
-        r.yShare = totalYEst > 0 ? (r.yestSales / totalYEst) * 100 : 0;
-        r.mShare = totalMTD > 0 ? (r.mtdSales / totalMTD) * 100 : 0;
-      });
+      const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+      const remainingDays3 = Math.max(0, daysInMonth - yesterdayDate.getDate());
 
-      setPreviewReport({ type: 'employee', data: rows });
+      const storesData = Object.entries(byStore)
+        .filter(([, emps]) => Object.keys(emps).length > 0)
+        .map(([storeId, emps]) => {
+          const storeTotalY = Object.values(emps).reduce((s: number, e: any) => s + (e.ySales || 0), 0);
+          const storeTotalM = Object.values(emps).reduce((s: number, e: any) => s + (e.mSales || 0), 0);
+
+          const employees = Object.values(emps).map((e: any) => {
+            const remaining = Math.max(0, e.target - e.mSales);
+            return {
+              name: e.name,
+              ySales: e.ySales,
+              yShare: storeTotalY > 0 ? (e.ySales / storeTotalY * 100) : 0,
+              yTrans: e.yTrans,
+              yAvgInv: e.yTrans > 0 ? e.ySales / e.yTrans : 0,
+              mSales: e.mSales,
+              mShare: storeTotalM > 0 ? (e.mSales / storeTotalM * 100) : 0,
+              mTrans: e.mTrans,
+              mAvgInv: e.mTrans > 0 ? e.mSales / e.mTrans : 0,
+              target: e.target,
+              achievement: e.target > 0 ? (e.mSales / e.target * 100) : 0,
+              remaining,
+              dailyReq: remainingDays3 > 0 ? remaining / remainingDays3 : 0
+            };
+          }).sort((a: any, b: any) => b.mSales - a.mSales);
+
+          return { storeId, storeName: storesMap[storeId] || storeId, employees };
+        })
+        .sort((a, b) => {
+          const aSales = a.employees.reduce((s, e) => s + e.mSales, 0);
+          const bSales = b.employees.reduce((s, e) => s + e.mSales, 0);
+          return bSales - aSales;
+        });
+
+      setPreviewReport({ type: 'employee', data: storesData });
     }
   };
   const openReportChoice = (type: 'pdf' | 'excel') => {

@@ -354,59 +354,38 @@ function StoreDetailsModal({
     };
   }, [employeesJson, endYMD, startYMD, store, prodRaw, mode, mgmtRaw]);
 
-  // Product Mix (Store Level Interaction)
+  // Product Mix (Store Level Interaction) - Use category keys from catalog
   const productMix = useMemo(() => {
     if (!details?.catalog) return [];
 
-    // Aggregate into buckets (King, Felt, Pillow, Others)
-    let kingAmt = 0;
-    let feltAmt = 0;
-    let pillowAmt = 0;
+    const sid = store?.sid || '';
+    // Catalog is Record<category_name, item[]>. Use the category keys for proper classification.
+    const categoryTotals: Record<string, number> = {};
     let totalAmt = 0;
 
-    // Catalog is Record<category_name, item[]>. Flatten all category arrays into a single list.
-    const rawValues = Object.values(details.catalog || {});
-    const items: any[] = [];
-    rawValues.forEach((val: any) => {
-      if (Array.isArray(val)) {
-        items.push(...val);
-      } else if (val && typeof val === 'object') {
-        items.push(val);
-      }
-    });
-
-    const sid = store?.sid || '';
-    items.forEach((item: any) => {
-      const name = String(item.name || '').toLowerCase();
-      const cat = String(item.category || '').toLowerCase();
-      const combined = `${cat} ${name}`;
-      // Get amount from store-specific data, or fallback to global
-      const storeData = item.stores?.[sid];
-      const amt = storeData ? (Number(storeData.a) || 0) : (Number(item.amount) || Number(item.a) || 0);
-
-      if (amt <= 0) return;
-
-      totalAmt += amt;
-
-      if (combined.includes('pillow') || combined.includes('مخد') || combined.includes('وساد')) {
-        pillowAmt += amt;
-      } else if (combined.includes('duvet') || combined.includes('لحاف') || combined.includes('مفرش')) {
-        if (combined.includes('king') || combined.includes('كنج') || combined.includes('كبير') || combined.includes('240') || combined.includes('260') || combined.includes('180') || combined.includes('200')) {
-          kingAmt += amt;
-        }
-      } else if (combined.includes('lbab') || combined.includes('لباد') || combined.includes('topper')) {
-        feltAmt += amt;
+    Object.entries(details.catalog || {}).forEach(([catKey, catItems]: [string, any]) => {
+      if (!Array.isArray(catItems)) return;
+      let catTotal = 0;
+      catItems.forEach((item: any) => {
+        const storeData = item.stores?.[sid];
+        const amt = storeData ? (Number(storeData.a) || 0) : (Number(item.amount) || 0);
+        if (amt > 0) catTotal += amt;
+      });
+      if (catTotal > 0) {
+        categoryTotals[catKey] = (categoryTotals[catKey] || 0) + catTotal;
+        totalAmt += catTotal;
       }
     });
 
     if (totalAmt === 0) return [];
 
-    return [
-      { name: 'لحاف كينج', value: kingAmt, percentage: (kingAmt / totalAmt) * 100 },
-      { name: 'لباد', value: feltAmt, percentage: (feltAmt / totalAmt) * 100 },
-      { name: 'مخدات', value: pillowAmt, percentage: (pillowAmt / totalAmt) * 100 },
-      { name: 'أخرى', value: totalAmt - kingAmt - feltAmt - pillowAmt, percentage: ((totalAmt - kingAmt - feltAmt - pillowAmt) / totalAmt) * 100 },
-    ].sort((a, b) => b.value - a.value);
+    return Object.entries(categoryTotals)
+      .map(([name, value]) => ({
+        name,
+        value,
+        percentage: (value / totalAmt) * 100,
+      }))
+      .sort((a, b) => b.value - a.value);
 
   }, [details?.catalog, store]);
 
