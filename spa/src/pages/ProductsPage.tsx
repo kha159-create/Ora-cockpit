@@ -1,15 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { loadManagementData, loadProductAnalysisData, loadStagnantData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { BarChart, ChartCard, KPICard, LineChart, PieChart } from '../components/DashboardComponents';
-import { CubeIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, XIcon, ChartPieIcon } from '../components/Icons';
+import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
+import { CubeIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, XIcon } from '../components/Icons';
 
 type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest';
 type Metric = 'qty' | 'val';
-
-function pad2(n: number) {
-  return String(n).padStart(2, '0');
-}
 
 function safeNum(x: unknown) {
   const n = Number(x);
@@ -114,7 +110,8 @@ export default function ProductsPage() {
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [metric, setMetric] = useState<Metric>('qty');
+  const [catalogOpen, setCatalogOpen] = useState(false);
+
 
   // Stagnant Data State
   const [stagnantRaw, setStagnantRaw] = useState<any>(null);

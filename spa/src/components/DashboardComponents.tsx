@@ -128,85 +128,74 @@ export const KPICard: React.FC<{
       <button
         onClick={onClick}
         disabled={!onClick}
-        className="modern-kpi-card group p-2 sm:p-3 flex flex-col text-center sm:text-right w-full h-full disabled:cursor-default"
+        className="modern-kpi-card group p-3 flex flex-col w-full h-full disabled:cursor-default text-right relative overflow-hidden"
       >
         {/* تأثير الخلفية المتحرك */}
         <div className="kpi-card-background" />
 
         {/* المحتوى الرئيسي */}
-        <div className="relative z-10 flex-1 flex flex-col">
-          {/* الرأس - الأيقونة والعنوان */}
-          <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between mb-2 gap-1 sm:gap-0">
-            <div className="flex items-center gap-2 flex-1 min-w-0 justify-center sm:justify-start w-full sm:w-auto">
-              {icon && <div className="kpi-icon-container flex-shrink-0 scale-90">{icon}</div>}
-              <div className="flex-1 min-w-0">
-                <h3 className="kpi-title truncate text-xs sm:text-sm text-center sm:text-right">{title}</h3>
-              </div>
-            </div>
-
-            {/* مؤشر الاتجاه - فقط للهدف */}
+        <div className="relative z-10 flex-1 flex flex-col justify-between">
+          {/* الرأس - العنوان */}
+          <div className="flex justify-between items-start mb-2">
+            <h3 className="kpi-title text-sm text-neutral-500 font-semibold">{title}</h3>
             {showProgress && trendValue && <TrendIndicator trend={trend} value={trendValue} />}
           </div>
 
-          {/* القيمة الرئيسية */}
-          <div className="mb-1 flex-1 flex flex-col justify-center">
-            <div className="kpi-value break-all leading-tight text-lg sm:text-2xl">{formattedValue}</div>
-            {subtitle && <div className="text-[10px] text-neutral-500 mt-0.5 font-medium">{subtitle}</div>}
+          {/* الجسم - تقسيم: أيقونة يمين، قيمة يسار */}
+          <div className="flex items-center justify-between px-1">
+            {/* اليمين: الأيقونة */}
+            {icon && (
+              <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-100/50 text-orange-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300 shadow-sm">
+                <div className="w-6 h-6">{icon}</div>
+              </div>
+            )}
+
+            {/* اليسار: القيمة */}
+            <div className="flex flex-col items-end justify-center flex-1 pl-3">
+              <div className="text-2xl sm:text-3xl font-bold text-neutral-900 leading-tight dir-ltr font-mono tracking-tight">
+                {formattedValue}
+              </div>
+              {subtitle && <div className="text-[10px] text-neutral-400 font-medium">{subtitle}</div>}
+            </div>
           </div>
 
-          {/* القسم السفلي */}
-          <div className="flex flex-col gap-2">
-            {/* نسبة التغيير مع القيمة */}
+          {/* التذييل comparison */}
+          <div className="mt-3 border-t border-neutral-100/50 pt-2 flex flex-col gap-1">
             {comparisonValue !== undefined && !showProgress && (
-              <div className="flex flex-col gap-1">
-                <div
-                  className={`text-sm font-bold flex items-center gap-1 ${isPositive ? 'text-green-600' : 'text-red-500'
-                    }`}
-                >
+              <>
+                <div className={`text-xs font-bold flex items-center justify-end gap-1 dir-ltr ${isPositive ? 'text-green-600' : 'text-red-500'}`}>
                   <span>{isPositive ? '▲' : '▼'}</span>
                   <span>
                     {(() => {
                       const diff = value - comparisonValue;
                       const pct = comparisonValue > 0 ? ((diff / comparisonValue) * 100) : 0;
                       const diffFormatted = format ? format(Math.abs(diff)) : Math.abs(diff).toLocaleString();
-                      return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% (${diff >= 0 ? '+' : '-'}${diffFormatted})`;
+                      return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% (${diffFormatted})`;
                     })()}
                   </span>
                 </div>
-                <div className="text-xs text-neutral-500">
-                  {comparisonLabel || 'السنة الماضية'}: {format ? format(comparisonValue) : comparisonValue.toLocaleString()}
+                <div className="text-[10px] text-neutral-400 truncate">
+                  {comparisonLabel || 'السنة الماضية'}: <span className="dir-ltr inline-block font-medium">{format ? format(comparisonValue) : comparisonValue.toLocaleString()}</span>
                 </div>
-              </div>
+              </>
             )}
 
             {showProgress && !compactTarget && (
-              <div className="flex items-center gap-3">
-                <CircularProgress percentage={progressValue} size={50} />
+              <div className="flex items-center gap-3 justify-end">
+                <CircularProgress percentage={progressValue} size={40} />
                 <div className="text-xs font-bold text-neutral-900">
                   {comparisonValue !== undefined && (
-                    <span>{format ? format(value) : value.toLocaleString()} / {format ? format(comparisonValue) : comparisonValue.toLocaleString()}</span>
+                    <span className="dir-ltr">{format ? format(value) : value.toLocaleString()} / {format ? format(comparisonValue) : comparisonValue.toLocaleString()}</span>
                   )}
                 </div>
               </div>
             )}
 
             {showProgress && compactTarget && (
-              <div className="flex flex-col items-center justify-center p-3 bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden relative group-hover:border-orange-200 transition-colors">
-                <div className="flex items-center gap-4 relative z-10 w-full justify-center">
-                  <div className="relative flex-shrink-0">
-                    <CircularProgress percentage={progressValue} size={64} />
-                  </div>
-                  <div className="flex flex-col">
-                    <div className="text-[10px] font-black text-neutral-400 uppercase tracking-tighter mb-1">Target / الهدف</div>
-                    <div className="text-3xl font-black text-neutral-900 tabular-nums leading-none flex items-baseline gap-1">
-                      {trendValue}
-                    </div>
-                  </div>
-                </div>
+              <div className="flex flex-col items-center justify-center">
+                <CircularProgress percentage={progressValue} size={50} />
               </div>
             )}
-
-            {/* مخطط الاتجاه */}
             {trendData && trendData.length > 1 && !showProgress && comparisonValue === undefined && (
               <div className="mt-auto">
                 <Sparkline data={trendData} />
