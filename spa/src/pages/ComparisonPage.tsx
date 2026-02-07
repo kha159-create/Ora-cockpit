@@ -345,12 +345,18 @@ export default function ComparisonPage() {
                                 axisLine={false}
                                 tickLine={false}
                                 tick={{ fill: '#9ca3af', fontSize: 12 }}
-                                width={40}
-                                tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}
+                                width={50}
+                                tickFormatter={(val) => {
+                                    if (val >= 1000000) return `${Math.round(val / 1000000)}M`;
+                                    if (val >= 1000) return `${Math.round(val / 1000)}k`;
+                                    return Math.round(val).toLocaleString();
+                                }}
                             />
                             <Tooltip
                                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                 itemStyle={{ color: '#1f2937' }}
+                                formatter={(value: number) => [Math.round(value).toLocaleString(), undefined]}
+                                labelFormatter={(label) => label}
                             />
                             <Area
                                 type="monotone"

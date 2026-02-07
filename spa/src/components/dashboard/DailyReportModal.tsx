@@ -33,8 +33,8 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({
                             <span className="text-2xl sm:text-base">📄</span>
                             <div className="flex flex-col">
                                 <span>التقرير اليومي</span>
-                                <span className="text-xs sm:text-sm text-gray-500 font-normal mt-1">
-                                    تقرير الأمس ({yesterdayStr}) مقارنة بـ ({lastYearYesterdayStr})
+                                <span className="text-[10px] sm:text-sm text-gray-500 font-normal mt-1">
+                                    تقرير الأمس <span className="font-mono dir-ltr inline">({yesterdayStr})</span> مقارنة بـ <span className="font-mono dir-ltr inline">({lastYearYesterdayStr})</span>
                                 </span>
                             </div>
                         </div>
