@@ -9,10 +9,36 @@ import { DashboardSkeleton } from '../components/SkeletonComponents';
 const SimulationModal = ({ isOpen, onClose, employeeName, storeRate }: { isOpen: boolean; onClose: () => void; employeeName: string; storeRate: number }) => {
     const [sales, setSales] = useState<number>(0);
     const [achievement, setAchievement] = useState<number>(0);
+    const [storeAchMode, setStoreAchMode] = useState<number | 'custom'>(100);
+    const [customStoreAch, setCustomStoreAch] = useState<number>(100);
+
+    // Reset state when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            setSales(0);
+            setAchievement(0);
+            setStoreAchMode(100);
+            setCustomStoreAch(100);
+        }
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
-    const finalRate = storeRate * (Math.min(achievement, 1000) / 100);
+    const getSimStoreRate = () => {
+        let ach = storeAchMode === 'custom' ? customStoreAch : storeAchMode;
+        // Logic from useCommissions (simplified replication)
+        // >= 100% -> 0.75%, >= 90% -> 0.5%, >= 80% -> 0.25%, < 80% -> 0%
+        if (ach >= 100) return 0.75;
+        if (ach >= 90) return 0.5;
+        if (ach >= 80) return 0.25;
+        return 0;
+    };
+
+    const simulatedStoreRate = getSimStoreRate();
+    // Commission Rate = Store Rate * (Employee Achievement / 100)
+    // Capped at 1000% achievement for safety if needed, or matching logic
+    const empFactor = Math.min(achievement, 1000) / 100;
+    const finalRate = simulatedStoreRate * empFactor;
     const commissionAmount = sales * (finalRate / 100);
 
     return (
@@ -29,6 +55,43 @@ const SimulationModal = ({ isOpen, onClose, employeeName, storeRate }: { isOpen:
                 <p className="text-neutral-500 text-sm mb-6">للموظف: <span className="font-semibold text-neutral-700">{employeeName}</span></p>
 
                 <div className="space-y-4">
+                    {/* Store Achievement Setting */}
+                    <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-2">نسبة تحقيق المعرض</label>
+                        <div className="flex gap-2">
+                            {[80, 90, 100].map(rate => (
+                                <button
+                                    key={rate}
+                                    onClick={() => setStoreAchMode(rate)}
+                                    className={`flex-1 py-1.5 rounded-lg text-sm font-bold border transition-colors ${storeAchMode === rate
+                                        ? 'bg-neutral-800 text-white border-neutral-800'
+                                        : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'
+                                        }`}
+                                >
+                                    {rate}%
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => setStoreAchMode('custom')}
+                                className={`flex-1 py-1.5 rounded-lg text-sm font-bold border transition-colors ${storeAchMode === 'custom'
+                                    ? 'bg-neutral-800 text-white border-neutral-800'
+                                    : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'
+                                    }`}
+                            >
+                                مخصص
+                            </button>
+                        </div>
+                        {storeAchMode === 'custom' && (
+                            <input
+                                type="number"
+                                value={customStoreAch}
+                                onChange={(e) => setCustomStoreAch(Number(e.target.value))}
+                                className="w-full mt-2 px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-right"
+                                placeholder="أدخل النسبة"
+                            />
+                        )}
+                    </div>
+
                     <div>
                         <label className="block text-sm font-medium text-neutral-700 mb-1">المبيعات المتوقعة (SAR)</label>
                         <input
@@ -53,8 +116,8 @@ const SimulationModal = ({ isOpen, onClose, employeeName, storeRate }: { isOpen:
 
                     <div className="bg-neutral-50 p-4 rounded-xl space-y-2 mt-4">
                         <div className="flex justify-between text-sm">
-                            <span className="text-neutral-500">نسبة الفرع الحالية:</span>
-                            <span className="font-bold">{storeRate}%</span>
+                            <span className="text-neutral-500">نسبة المعرض (المحاكاة):</span>
+                            <span className="font-bold">{simulatedStoreRate}%</span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-neutral-500">نسبة العمولة النهائية:</span>
@@ -65,14 +128,14 @@ const SimulationModal = ({ isOpen, onClose, employeeName, storeRate }: { isOpen:
                             <span className="font-bold text-xl text-green-600">{Math.round(commissionAmount).toLocaleString()} SAR</span>
                         </div>
                     </div>
-                </div>
 
-                <button
-                    onClick={onClose}
-                    className="w-full mt-6 bg-neutral-900 text-white py-3 rounded-xl font-bold hover:bg-neutral-800 transition-colors"
-                >
-                    إغلاق
-                </button>
+                    <button
+                        onClick={onClose}
+                        className="w-full mt-6 bg-neutral-900 text-white py-3 rounded-xl font-bold hover:bg-neutral-800 transition-colors"
+                    >
+                        إغلاق
+                    </button>
+                </div>
             </div>
         </div>
     );

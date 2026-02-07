@@ -25,6 +25,7 @@ const baseNavItems = [
   { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
   { to: '/offers', label: 'تحليل العروض', icon: <TagIcon /> },
   { to: '/commissions', label: 'العمولات', icon: <span className="text-xl">💰</span> }, // Added Commissions
+  { to: '/comparison', label: 'المقارنات', icon: <span className="text-xl">⚖️</span> },
 ] as const;
 
 const targetsNavItem = { to: '/targets', label: 'تحديد الأهداف', icon: <TargetIcon /> } as const;

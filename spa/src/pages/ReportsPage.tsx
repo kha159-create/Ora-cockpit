@@ -86,10 +86,6 @@ export default function ReportsPage() {
     loadEmployeesData().then(setRawEmp).catch(() => { });
   }, []);
 
-  if (!rawMgmt || !rawEmp) {
-    return <DashboardSkeleton />;
-  }
-
   const range = useMemo(
     () => getRange(filterMode, standardYear, standardMonth, customStart, customEnd),
     [filterMode, standardYear, standardMonth, customStart, customEnd]
@@ -126,6 +122,10 @@ export default function ReportsPage() {
       .map(([id, name]) => ({ id, name: (name as string) || id }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [rawMgmt, manager, city]);
+
+  if (!rawMgmt || !rawEmp) {
+    return <DashboardSkeleton />;
+  }
 
   const passFilter = (storeId: string) => {
     if (branch !== 'all' && storeId !== branch) return false;

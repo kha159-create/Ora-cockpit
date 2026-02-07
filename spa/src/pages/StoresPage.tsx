@@ -571,7 +571,7 @@ export default function StoresPage() {
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
 
-  if (!raw || !empRaw || !prodRaw) {
+  if (!mgmtRaw || !empRaw || !prodRaw) {
     return <DashboardSkeleton />;
   }
 

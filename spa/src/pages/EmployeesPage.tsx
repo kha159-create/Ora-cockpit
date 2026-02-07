@@ -429,9 +429,7 @@ export default function EmployeesPage() {
     return user?.name || manager;
   }, [manager, user?.name, user?.role]);
 
-  if (!empRaw || !mgmtRaw || !prodRaw) {
-    return <DashboardSkeleton />;
-  }
+
 
   const monthsAr = useMemo(
     () => ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'],
@@ -843,6 +841,10 @@ export default function EmployeesPage() {
     sortKey,
     user?.role,
   ]);
+
+  if (!empRaw || !mgmtRaw || !prodRaw) {
+    return <DashboardSkeleton />;
+  }
 
   const selectedEmployee = useMemo(() => {
     if (!selectedEmployeeId) return null;
