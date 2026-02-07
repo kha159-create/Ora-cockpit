@@ -9,11 +9,6 @@ export const getStoreCommissionRate = (achievement: number): number => {
     return 0;
 };
 
-// Helper to check date range
-const isDateInRange = (dateStr: string, start: string, end: string) => {
-    return dateStr >= start && dateStr <= end;
-};
-
 export function useCommissions(
     rawMgmt: any,
     rawEmp: any,
@@ -24,53 +19,39 @@ export function useCommissions(
 
         const { start, end } = dateRange;
         const storesMap = rawMgmt.stores || {};
-        const targets = rawEmp.targets || {};
         const names = rawEmp.employee_names || {};
 
-        // 1. Calculate Store Achievement
-        // Structure: StoreID -> { sales, target }
-        const storeStats: Record<string, { sales: number; target: number, name: string }> = {};
+        // ===== 1. Calculate Store Stats (sales + target) =====
+        const storeStats: Record<string, { sales: number; target: number; name: string }> = {};
 
-        // 1a. Store Sales from rawMgmt.sales (Daily sales)
-        // rawMgmt.sales is [[date, storeId, amount], ...]
-        rawMgmt.sales.forEach(([d, sid, amt]: any[]) => {
+        (rawMgmt.sales || []).forEach(([d, sid, amt]: any[]) => {
             const dateStr = String(d).substring(0, 10);
             if (dateStr >= start && dateStr <= end) {
-                if (!storeStats[sid]) {
-                    storeStats[sid] = { sales: 0, target: 0, name: storesMap[sid] || sid };
-                }
+                if (!storeStats[sid]) storeStats[sid] = { sales: 0, target: 0, name: storesMap[sid] || sid };
                 storeStats[sid].sales += (amt || 0);
             }
         });
 
-        // 1b. Store Targets
-        // rawMgmt.targets is [[date, storeId, amount], ...]
-        // Targets are usually monthly, date is YYYY-MM-01.
-        // We need to approximate daily target or take full month if range covers it.
-        // For simplicity in this logic: if any day of the target month is in range, we might need to prorate.
-        // Actually, rawMgmt.targets might come as daily targets or monthly. 
-        // Let's assume rawMgmt.targets are rows of [date, storeId, amount].
-        if (rawMgmt.targets) {
-            rawMgmt.targets.forEach(([d, sid, amt]: any[]) => {
-                const dateStr = String(d).substring(0, 10);
-                if (dateStr >= start && dateStr <= end) {
-                    if (!storeStats[sid]) {
-                        storeStats[sid] = { sales: 0, target: 0, name: storesMap[sid] || sid };
-                    }
-                    storeStats[sid].target += (amt || 0);
-                }
-            });
-        }
+        (rawMgmt.targets || []).forEach(([d, sid, amt]: any[]) => {
+            const dateStr = String(d).substring(0, 10);
+            if (dateStr >= start && dateStr <= end) {
+                if (!storeStats[sid]) storeStats[sid] = { sales: 0, target: 0, name: storesMap[sid] || sid };
+                storeStats[sid].target += (amt || 0);
+            }
+        });
 
-        // 2. Calculate Employee Sales & Achievement
-        // Structure: StoreID -> [EmployeeData]
-        const employeesByStore: Record<string, Record<string, { sales: number; target: number; name: string }>> = {};
+        // ===== 2. Aggregate employee data across ALL stores =====
+        // Track per-employee: total sales, and per-store sales + latest date for primary store detection
+        const empAgg: Record<string, {
+            totalSales: number;
+            storeStats: Record<string, number>;    // storeId -> sales in that store
+            latestDates: Record<string, string>;   // storeId -> latest date
+            firstStore: string;                     // first store seen
+            name: string;
+        }> = {};
 
-        // rawEmp.history: { storeId: [[date, empId, sales, trans], ...] }
         Object.entries(rawEmp.history as Record<string, any[]>).forEach(([storeId, records]) => {
-            if (!storeStats[storeId]) return; // Skip if store not found in sales
-
-            records.forEach(rec => {
+            (records || []).forEach(rec => {
                 const date = String(rec[0]).substring(0, 10);
                 if (date < start || date > end) return;
 
@@ -78,39 +59,100 @@ export function useCommissions(
                 let empId = String(rawId || '').trim();
                 let empName = empId;
 
-                // Handle "ID - Name" format
                 if (empId.includes('-')) {
                     const [a, b] = empId.split('-');
                     empId = (a || '').trim();
                     empName = (b || empId).trim();
                 }
 
-                // Skip returns/unknown
                 if (!empId || empName === 'مرتجع') return;
-
-                // Resolve Name
                 empName = names[empId] || names[empId.padStart(4, '0')] || empName;
-                const cleanId = empId; // Use ID for uniqueness
 
-                if (!employeesByStore[storeId]) employeesByStore[storeId] = {};
-                if (!employeesByStore[storeId][cleanId]) {
-                    employeesByStore[storeId][cleanId] = { sales: 0, target: 0, name: empName };
+                const sales = Number(rec[2]) || 0;
+
+                if (!empAgg[empId]) {
+                    empAgg[empId] = {
+                        totalSales: 0,
+                        storeStats: {},
+                        latestDates: {},
+                        firstStore: storeId,
+                        name: empName,
+                    };
                 }
 
-                employeesByStore[storeId][cleanId].sales += (Number(rec[2]) || 0);
+                empAgg[empId].totalSales += sales;
+
+                // Track per-store sales for this employee
+                if (!empAgg[empId].storeStats[storeId]) empAgg[empId].storeStats[storeId] = 0;
+                empAgg[empId].storeStats[storeId] += sales;
+
+                // Track latest date per store
+                if (sales > 0) {
+                    if (!empAgg[empId].latestDates[storeId] || date > empAgg[empId].latestDates[storeId]) {
+                        empAgg[empId].latestDates[storeId] = date;
+                    }
+                }
             });
         });
 
-        // 2b. Employee Targets
-        // rawEmp.targets: { empId: number (monthly target) } ?? 
-        // Actually rawEmp.targets is usually a single number (current month). 
-        // If we are looking at a range, we might need to be careful. 
-        // For now, assuming standard month view, we use the target value.
-        // If the range is partial month, we should ideally prorate, but let's use the provided target for the period.
-        // Ref: DashboardPage logic uses specific target logic.
-        // Let's assume rawEmp.targets contains the target for the CURRENT context.
+        // ===== 3. Determine primary store (same logic as EmployeesPage) =====
+        // Primary store = store where employee had the latest sale date
+        const empByPrimaryStore: Record<string, { empId: string; name: string; totalSales: number }[]> = {};
 
-        // 3. Assemble Final Data
+        Object.entries(empAgg).forEach(([empId, data]) => {
+            let primaryStore = data.firstStore;
+            let latestDate = '';
+
+            for (const [sCode, dStr] of Object.entries(data.latestDates)) {
+                if (dStr > latestDate) {
+                    latestDate = dStr;
+                    primaryStore = sCode;
+                }
+            }
+
+            if (!empByPrimaryStore[primaryStore]) empByPrimaryStore[primaryStore] = [];
+            empByPrimaryStore[primaryStore].push({
+                empId,
+                name: data.name,
+                totalSales: data.totalSales,
+            });
+        });
+
+        // ===== 4. Resolve employee target for the selected month =====
+        const targetsByMonth = rawEmp.targets_by_month || {};
+        const monthlyTargets = rawEmp.monthly_targets || {};
+        const flatTargets = rawEmp.targets || {};
+        const monthKey = start.substring(0, 7); // YYYY-MM
+
+        const resolveTargetForMonth = (empId: string) => {
+            const id = String(empId).trim();
+            const cands = [id, id.padStart(4, '0')];
+
+            // 1. Try targets_by_month[YYYY-MM][empId]
+            const tbm = targetsByMonth[monthKey];
+            if (tbm) {
+                for (const c of cands) {
+                    if (tbm[c] != null) return Number(tbm[c]) || 0;
+                }
+            }
+
+            // 2. Try monthly_targets[empId][YYYY-MM-01]
+            for (const c of cands) {
+                const mt = monthlyTargets[c];
+                if (mt && typeof mt === 'object') {
+                    const targetVal = mt[`${monthKey}-01`];
+                    if (targetVal != null) return Number(targetVal) || 0;
+                }
+            }
+
+            // 3. Fallback to flat targets
+            for (const c of cands) {
+                if (flatTargets[c] != null) return Number(flatTargets[c]) || 0;
+            }
+            return 0;
+        };
+
+        // ===== 5. Assemble results =====
         const results: CommissionData[] = [];
 
         Object.entries(storeStats).forEach(([storeId, stats]) => {
@@ -118,68 +160,32 @@ export function useCommissions(
             const storeRate = getStoreCommissionRate(storeAchievement);
 
             const storeEmployees: EmployeeCommission[] = [];
-            const emps = employeesByStore[storeId] || {};
+            const emps = empByPrimaryStore[storeId] || [];
 
-            const targetsByMonth = rawEmp.targets_by_month || {};
-            const monthlyTargets = rawEmp.monthly_targets || {};
-            const targets = rawEmp.targets || {};
-
-            const resolveTargetForMonth = (empId: string) => {
-                const id = String(empId).trim();
-                const cands = [id, id.padStart(4, '0')];
-
-                // Get month key for the range (YYYY-MM)
-                const monthKey = start.substring(0, 7);
-
-                // 1. Try targets_by_month
-                const tbm = targetsByMonth[monthKey];
-                if (tbm) {
-                    for (const c of cands) {
-                        if (tbm[c] != null) return Number(tbm[c]) || 0;
-                    }
-                }
-
-                // 2. Try monthly_targets
-                for (const c of cands) {
-                    const mt = monthlyTargets[c];
-                    if (mt && typeof mt === 'object') {
-                        const targetVal = mt[`${monthKey}-01`];
-                        if (targetVal != null) return Number(targetVal) || 0;
-                    }
-                }
-
-                // 3. Current month default
-                for (const c of cands) {
-                    if (targets[c] != null) return Number(targets[c]) || 0;
-                }
-                return 0;
-            };
-
-            Object.entries(emps).forEach(([empId, empStats]) => {
-                // Individual Target
+            emps.forEach(({ empId, name, totalSales }) => {
                 const empTarget = resolveTargetForMonth(empId);
-
-                const empAchievement = empTarget > 0 ? (empStats.sales / empTarget) * 100 : 0;
-
+                const empAchievement = empTarget > 0 ? (totalSales / empTarget) * 100 : 0;
                 const finalRate = (empAchievement / 100) * storeRate;
 
                 storeEmployees.push({
                     id: empId,
-                    name: empStats.name,
-                    totalSales: empStats.sales,
+                    name,
+                    totalSales,
                     target: empTarget,
                     achievement: empAchievement,
                     commissionRate: finalRate,
-                    commissionAmount: empStats.sales * (finalRate / 100)
+                    commissionAmount: totalSales * (finalRate / 100),
                 });
             });
 
-            results.push({
-                storeName: stats.name,
-                achievement: storeAchievement,
-                commissionRate: storeRate, // 2, 1, or 0.5
-                employees: storeEmployees.sort((a, b) => b.totalSales - a.totalSales)
-            });
+            if (storeEmployees.length > 0 || stats.sales > 0) {
+                results.push({
+                    storeName: stats.name,
+                    achievement: storeAchievement,
+                    commissionRate: storeRate,
+                    employees: storeEmployees.sort((a, b) => b.totalSales - a.totalSales),
+                });
+            }
         });
 
         return results.sort((a, b) => b.achievement - a.achievement);
