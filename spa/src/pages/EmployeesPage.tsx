@@ -839,6 +839,17 @@ export default function EmployeesPage() {
     }
   }, [period]);
 
+  // Close dropdown when clicking outside (must be before any conditional return)
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (excelDropdownRef.current && !excelDropdownRef.current.contains(e.target as Node)) {
+        setExcelDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   if (!empRaw || !mgmtRaw || !prodRaw) {
     return <DashboardSkeleton />;
   }
@@ -850,17 +861,6 @@ export default function EmployeesPage() {
       setSortDir(k === 'name' || k === 'storeName' ? 'asc' : 'desc');
     }
   };
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (excelDropdownRef.current && !excelDropdownRef.current.contains(e.target as Node)) {
-        setExcelDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   // Export current employee data to Excel
   const exportCurrentData = () => {

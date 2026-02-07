@@ -9,6 +9,10 @@ import * as XLSX from 'xlsx';
 
 type FilterMode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
 
+function isAdminOrAuditor(role?: string) {
+  return role === 'Admin' || role === 'Auditor';
+}
+
 function formatSAR(val: number) {
   return val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 }
@@ -95,6 +99,12 @@ export default function ReportsPage() {
     [filterMode, standardYear, standardMonth, customStart, customEnd]
   );
 
+  // Role enforcement: non-Admin/Auditor users are scoped to their own stores
+  const effectiveManager = useMemo(() => {
+    if (isAdminOrAuditor(user?.role)) return manager;
+    return user?.name || manager;
+  }, [manager, user?.name, user?.role]);
+
   const managers = useMemo(() => {
     if (!rawMgmt?.store_meta) return [];
     const set = new Set<string>();
@@ -106,26 +116,25 @@ export default function ReportsPage() {
     if (!rawMgmt?.store_meta) return [];
     const set = new Set<string>();
     Object.values(rawMgmt.store_meta).forEach((m: any) => {
-      // Filter cities based on selected manager
-      if (manager === 'all' || (m?.manager && m.manager === manager)) {
+      if (effectiveManager === 'all' || (m?.manager && m.manager === effectiveManager)) {
         if (m?.city) set.add(m.city);
       }
     });
     return Array.from(set).sort();
-  }, [rawMgmt, manager]);
+  }, [rawMgmt, effectiveManager]);
 
   const branches = useMemo(() => {
     if (!rawMgmt?.stores || !rawMgmt?.store_meta) return [];
     return Object.entries(rawMgmt.stores)
       .filter(([id]) => {
         const meta = (rawMgmt.store_meta as Record<string, { manager?: string; city?: string }>)[id];
-        if (manager !== 'all' && (meta?.manager || '') !== manager) return false;
+        if (effectiveManager !== 'all' && (meta?.manager || '') !== effectiveManager) return false;
         if (city !== 'all' && (meta?.city || '') !== city) return false;
         return true;
       })
       .map(([id, name]) => ({ id, name: (name as string) || id }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [rawMgmt, manager, city]);
+  }, [rawMgmt, effectiveManager, city]);
 
   if (!rawMgmt || !rawEmp) {
     return <DashboardSkeleton />;
@@ -134,7 +143,7 @@ export default function ReportsPage() {
   const passFilter = (storeId: string) => {
     if (branch !== 'all' && storeId !== branch) return false;
     const meta = rawMgmt?.store_meta?.[storeId] || {};
-    if (manager !== 'all' && meta.manager !== manager) return false;
+    if (effectiveManager !== 'all' && meta.manager !== effectiveManager) return false;
     if (city !== 'all' && meta.city !== city) return false;
     if (storeType !== 'all' && meta.type !== storeType) return false;
     return true;
@@ -678,7 +687,7 @@ export default function ReportsPage() {
 
 
 
-  const canExportEmployee = user?.role === 'Admin' || user?.name === 'Sales Manager';
+  const canExportEmployee = !!user;
 
   if (err) {
     return (
@@ -756,15 +765,17 @@ export default function ReportsPage() {
             )}
           </div>
           <div className="space-y-3 flex flex-wrap gap-x-4 gap-y-2 items-end">
-            <div>
-              <label className="block text-sm font-semibold text-neutral-700">مدير المنطقة</label>
-              <select className="input mt-1" value={manager} onChange={(e) => setManager(e.target.value)}>
-                <option value="all">الكل</option>
-                {managers.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
+            {isAdminOrAuditor(user?.role) && (
+              <div>
+                <label className="block text-sm font-semibold text-neutral-700">مدير المنطقة</label>
+                <select className="input mt-1" value={manager} onChange={(e) => setManager(e.target.value)}>
+                  <option value="all">الكل</option>
+                  {managers.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-semibold text-neutral-700">المدينة</label>
               <select className="input mt-1" value={city} onChange={(e) => setCity(e.target.value)}>
