@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 import { useCommissions, getStoreCommissionRate } from '../hooks/useCommissions';
 import { CommissionData } from '../types';
 import { CalendarIcon, ChevronDownIcon, ChevronUpIcon, UserGroupIcon, CalculatorIcon, XIcon } from '../components/Icons';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
+import { getCurrentUser } from '../auth/storage';
+
+function isAdminOrAuditor(role?: string) { return role === 'Admin' || role === 'Auditor'; }
 
 // Simulation Modal Component
 const SimulationModal = ({ isOpen, onClose, employeeName, storeRate }: { isOpen: boolean; onClose: () => void; employeeName: string; storeRate: number }) => {
@@ -139,11 +142,14 @@ const SimulationModal = ({ isOpen, onClose, employeeName, storeRate }: { isOpen:
 };
 
 export default function CommissionsPage() {
+    const user = getCurrentUser();
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<{ mgmt: any; emp: any } | null>(null);
     const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
     const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
     const [expandedStore, setExpandedStore] = useState<string | null>(null);
+    const [manager, setManager] = useState<string>('all');
+    const [storeFilter, setStoreFilter] = useState<string>('all');
 
     // Simulation State
     const [simModalOpen, setSimModalOpen] = useState(false);
@@ -157,16 +163,51 @@ export default function CommissionsPage() {
             .finally(() => setLoading(false));
     }, []);
 
+    const effectiveManager = useMemo(() => {
+        if (isAdminOrAuditor(user?.role)) return manager;
+        return user?.name || manager;
+    }, [manager, user?.name, user?.role]);
+
+    const { managers, storeOptions } = useMemo(() => {
+        const meta: Record<string, any> = data?.mgmt?.store_meta || {};
+        const stores = data?.mgmt?.stores || {};
+        const managersSet = new Set<string>();
+        Object.values(meta).forEach((m: any) => { if (m?.manager) managersSet.add(String(m.manager)); });
+        const managersList = Array.from(managersSet).sort((a, b) => a.localeCompare(b, 'ar'));
+        const storeList = Object.keys(stores)
+            .filter(sid => {
+                const m = meta[sid];
+                if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
+                return true;
+            })
+            .map(sid => ({ id: sid, name: stores[sid] || sid }))
+            .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+        return { managers: managersList, storeOptions: storeList };
+    }, [data?.mgmt, effectiveManager]);
+
     // Calculate Date Range for selected month
     const dateRange = React.useMemo(() => {
         const start = new Date(selectedYear, selectedMonth - 1, 1);
         const end = new Date(selectedYear, selectedMonth, 0);
-        // Format YYYY-MM-DD
         const fmt = (d: Date) => d.toISOString().split('T')[0];
         return { start: fmt(start), end: fmt(end) };
     }, [selectedYear, selectedMonth]);
 
     const commissionData = useCommissions(data?.mgmt, data?.emp, dateRange);
+
+    // Filter commission data by manager and store
+    const filteredCommissionData = useMemo(() => {
+        const meta: Record<string, any> = data?.mgmt?.store_meta || {};
+        const stores = data?.mgmt?.stores || {};
+        return commissionData.filter(store => {
+            // Find store ID by name
+            const sid = Object.keys(stores).find(k => stores[k] === store.storeName) || '';
+            const m = meta[sid];
+            if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
+            if (storeFilter !== 'all' && sid !== storeFilter) return false;
+            return true;
+        });
+    }, [commissionData, effectiveManager, storeFilter, data?.mgmt]);
 
     const handleOpenSim = (name: string, storeRate: number, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -185,46 +226,66 @@ export default function CommissionsPage() {
                 storeRate={simEmployee?.storeRate || 0}
             />
 
-            {/* Header & Filter */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-200 flex flex-col md:flex-row justify-between items-center gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-neutral-900 flex items-center gap-2">
-                        <span className="text-2xl">💰</span>
-                        تقرير العمولات (Commissions)
-                    </h1>
-                    <p className="text-neutral-500 text-sm mt-1">حساب العمولات بناءً على تحقيق الهدف للفرع والموظف</p>
+            {/* Header & Filters */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-200 space-y-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold text-neutral-900 flex items-center gap-2">
+                            تقرير العمولات
+                        </h1>
+                        <p className="text-neutral-500 text-sm mt-1">حساب العمولات بناءً على تحقيق الهدف للفرع والموظف</p>
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-neutral-50 p-2 rounded-xl border border-neutral-200">
+                        <CalendarIcon />
+                        <select
+                            value={selectedYear}
+                            onChange={(e) => setSelectedYear(Number(e.target.value))}
+                            className="bg-transparent font-bold text-neutral-700 outline-none"
+                        >
+                            {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                        <span className="text-neutral-300">|</span>
+                        <select
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                            className="bg-transparent font-bold text-neutral-700 outline-none"
+                        >
+                            {['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'].map((m, i) => (
+                                <option key={i} value={i + 1}>{m}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-2 bg-neutral-50 p-2 rounded-xl border border-neutral-200">
-                    <CalendarIcon />
-                    <select
-                        value={selectedYear}
-                        onChange={(e) => setSelectedYear(Number(e.target.value))}
-                        className="bg-transparent font-bold text-neutral-700 outline-none"
-                    >
-                        {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                    <span className="text-neutral-300">|</span>
-                    <select
-                        value={selectedMonth}
-                        onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                        className="bg-transparent font-bold text-neutral-700 outline-none"
-                    >
-                        {['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'].map((m, i) => (
-                            <option key={i} value={i + 1}>{m}</option>
-                        ))}
-                    </select>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {isAdminOrAuditor(user?.role) && (
+                        <div>
+                            <label className="block text-xs font-semibold text-neutral-500 mb-1">مدير المنطقة</label>
+                            <select className="input w-full" value={manager} onChange={(e) => setManager(e.target.value)}>
+                                <option value="all">الكل</option>
+                                {managers.map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                        </div>
+                    )}
+                    <div>
+                        <label className="block text-xs font-semibold text-neutral-500 mb-1">المعرض</label>
+                        <select className="input w-full" value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)}>
+                            <option value="all">كافة المعارض</option>
+                            {storeOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                    </div>
                 </div>
             </div>
 
             {/* Commission Cards */}
             <div className="grid gap-4">
-                {commissionData.length === 0 ? (
+                {filteredCommissionData.length === 0 ? (
                     <div className="text-center p-12 text-neutral-400 bg-white rounded-2xl border border-dashed border-neutral-300">
                         لا توجد بيانات لهذه الفترة
                     </div>
                 ) : (
-                    commissionData.map((store) => (
+                    filteredCommissionData.map((store) => (
                         <div key={store.storeName} className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden transition-all hover:shadow-md">
                             <div
                                 className="p-4 flex flex-col md:flex-row items-center justify-between cursor-pointer hover:bg-neutral-50"

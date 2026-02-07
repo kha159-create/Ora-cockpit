@@ -327,7 +327,7 @@ function StoreDetailsModal({
     const totalIAccum = rowsForTotal.reduce((s, r) => s + safeNum(r.i), 0);
     const avgItemsStore = totalTAccum > 0 ? totalIAccum / totalTAccum : 0;
 
-    const missedByEmployee = useMemo(() => {
+    const missedByEmployee = (() => {
       const agg: Record<string, number> = {};
       branchMissed.forEach((m: any) => {
         const empName = m.employee || m.emp_name || m.processed_by || '';
@@ -336,7 +336,7 @@ function StoreDetailsModal({
         }
       });
       return agg;
-    }, [branchMissed]);
+    })();
 
     return {
       rangeLabel,

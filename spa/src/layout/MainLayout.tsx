@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { clearCurrentUser, getCurrentUser } from '../auth/storage';
 import GlobalSearch from '../components/GlobalSearch';
 import {
+  CashIcon,
   ClipboardListIcon,
   CubeIcon,
   HomeIcon,
@@ -10,6 +11,7 @@ import {
   MenuIcon,
   OfficeBuildingIcon,
   PauseIcon,
+  SwitchHorizontalIcon,
   TagIcon,
   TargetIcon,
   UserGroupIcon,
@@ -24,8 +26,8 @@ const baseNavItems = [
   { to: '/stores', label: 'المعارض', icon: <OfficeBuildingIcon /> },
   { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
   { to: '/offers', label: 'تحليل العروض', icon: <TagIcon /> },
-  { to: '/commissions', label: 'العمولات', icon: <span className="text-xl">💰</span> }, // Added Commissions
-  { to: '/comparison', label: 'المقارنات', icon: <span className="text-xl">⚖️</span> },
+  { to: '/commissions', label: 'العمولات', icon: <CashIcon /> },
+  { to: '/comparison', label: 'المقارنات', icon: <SwitchHorizontalIcon /> },
 ] as const;
 
 const targetsNavItem = { to: '/targets', label: 'تحديد الأهداف', icon: <TargetIcon /> } as const;
