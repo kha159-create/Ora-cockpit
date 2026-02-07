@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { loadManagementData, loadProductAnalysisData, loadStagnantData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
+import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { CubeIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, XIcon } from '../components/Icons';
 
 type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest';
@@ -451,11 +452,9 @@ export default function ProductsPage() {
     return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
   }
   if (!derived) {
-    return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
-      </div>
-    );
+    if (!derived) {
+      return <DashboardSkeleton />;
+    }
   }
 
   const metricLabel = metric === 'qty' ? '📦 الكمية' : '💰 القيمة';

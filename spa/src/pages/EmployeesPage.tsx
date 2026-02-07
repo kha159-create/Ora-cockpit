@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
+import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UserGroupIcon } from '../components/Icons';
 
 type Period = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
@@ -427,6 +428,10 @@ export default function EmployeesPage() {
     if (isAdminOrAuditor(user?.role)) return manager;
     return user?.name || manager;
   }, [manager, user?.name, user?.role]);
+
+  if (!empRaw || !mgmtRaw || !prodRaw) {
+    return <DashboardSkeleton />;
+  }
 
   const monthsAr = useMemo(
     () => ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'],

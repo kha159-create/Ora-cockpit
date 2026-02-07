@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { generateGlobalSalesPDF, generateEmployeePerformancePDF, generateDailyReportPDF, generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 
@@ -84,6 +85,10 @@ export default function ReportsPage() {
       .catch((e) => setErr(e?.message || String(e)));
     loadEmployeesData().then(setRawEmp).catch(() => { });
   }, []);
+
+  if (!rawMgmt || !rawEmp) {
+    return <DashboardSkeleton />;
+  }
 
   const range = useMemo(
     () => getRange(filterMode, standardYear, standardMonth, customStart, customEnd),

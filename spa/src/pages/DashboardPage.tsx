@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { loadManagementData, loadEmployeesData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { KPICard, RankCard, GrowthTrajectoryChart, BarChart, ChartCard } from '../components/DashboardComponents';
-import { ChartPieIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, PauseIcon, OfficeBuildingIcon, XIcon, PrinterIcon, ExclamationIcon, CheckBadgeIcon, UserGroupIcon } from '../components/Icons';
+import { KPICard, RankCard, GrowthTrajectoryChart, ChartCard } from '../components/DashboardComponents';
+import { CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, OfficeBuildingIcon, XIcon, PrinterIcon, UserGroupIcon } from '../components/Icons';
 import { generateDailyReportPDF, generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
 
 function isAdminOrAuditor(role?: string) {
@@ -815,7 +815,7 @@ export default function DashboardPage() {
     if (!raw) return [];
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const currentYear = selYear || new Date().getFullYear();
-    const data: { name: string; Sales?: number; Target?: number; Current?: number; Previous?: number; CurrentVisitors?: number; PreviousVisitors?: number }[] = [];
+    const data: { name: string; Sales?: number; Target?: number; Current?: number; Previous?: number; CurrentVisitors?: number; PreviousVisitors?: number; Visitors?: number }[] = [];
 
     for (let m = 0; m < 12; m++) {
       const monthStart = new Date(currentYear, m, 1);
@@ -861,6 +861,8 @@ export default function DashboardPage() {
         entry.Current = visitors;
         entry.Previous = prevVisitors;
       }
+      entry.Sales = sales;
+      entry.Visitors = visitors;
       data.push(entry);
     }
 

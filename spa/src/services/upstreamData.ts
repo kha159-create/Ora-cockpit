@@ -12,28 +12,45 @@ function repoRootUrl(path: string) {
 
 const UPSTREAM_BASE = 'https://raw.githubusercontent.com/ALAAWF2/orange-dashboard/main';
 
+
+const CACHE: Record<string, Promise<any>> = {};
+
 async function fetchJson<T>(file: string): Promise<T> {
-  const ts = Date.now();
-  const upstreamUrl = `${UPSTREAM_BASE}/${file}?t=${ts}`;
-  const localUrl = repoRootUrl(`${file}?t=${ts}`);
+  // Return existing promise if already fetching (deduplicate requests)
+  if (CACHE[file]) return CACHE[file];
 
-  // القاعدة: جلب البيانات من الريبو الأصلي أولاً (يُحدَّث كل 15 دقيقة)
-  try {
-    const res = await fetch(upstreamUrl, { cache: 'no-store' });
-    if (res.ok) return (await res.json()) as T;
-  } catch {
-    // ignore
-  }
+  const promise = (async () => {
+    const ts = Date.now();
+    const upstreamUrl = `${UPSTREAM_BASE}/${file}?t=${ts}`;
+    const localUrl = repoRootUrl(`${file}?t=${ts}`);
 
-  // Fallback: من النسخة المحلية (مثلاً بعد المزامنة)
-  try {
-    const res2 = await fetch(localUrl, { cache: 'no-store' });
-    if (res2.ok) return (await res2.json()) as T;
-  } catch {
-    // ignore
-  }
+    // القاعدة: جلب البيانات من الريبو الأصلي أولاً (يُحدَّث كل 15 دقيقة)
+    try {
+      const res = await fetch(upstreamUrl, { cache: 'no-store' });
+      if (res.ok) return (await res.json()) as T;
+    } catch {
+      // ignore
+    }
 
-  throw new Error(`Failed to fetch ${file} (upstream + local): تحقق من الريبو الأصلي ALAAWF2/orange-dashboard`);
+    // Fallback: من النسخة المحلية (مثلاً بعد المزامنة)
+    try {
+      const res2 = await fetch(localUrl, { cache: 'no-store' });
+      if (res2.ok) return (await res2.json()) as T;
+    } catch {
+      // ignore
+    }
+
+    throw new Error(`Failed to fetch ${file} (upstream + local): تحقق من الريبو الأصلي ALAAWF2/orange-dashboard`);
+  })();
+
+  CACHE[file] = promise;
+
+  // Clear cache on error so we can retry
+  promise.catch(() => {
+    delete CACHE[file];
+  });
+
+  return promise;
 }
 
 export function loadManagementData() {

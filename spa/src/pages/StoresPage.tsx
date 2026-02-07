@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { ChartCard, KPICard, PieChart } from '../components/DashboardComponents';
+import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon } from '../components/Icons';
 import { runProductValueAnalysis, safeNum } from '../services/analysisHelpers';
 
@@ -569,6 +570,10 @@ export default function StoresPage() {
       })
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
+
+  if (!raw || !empRaw || !prodRaw) {
+    return <DashboardSkeleton />;
+  }
 
   useEffect(() => {
     if (mode === 'custom' && !customStart && !customEnd) {

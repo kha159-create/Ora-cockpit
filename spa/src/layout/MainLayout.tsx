@@ -22,7 +22,7 @@ const baseNavItems = [
   { to: '/stores', label: 'المعارض', icon: <OfficeBuildingIcon /> },
   { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
   { to: '/offers', label: 'تحليل العروض', icon: <TagIcon /> },
-
+  { to: '/commissions', label: 'العمولات', icon: <CurrencyDollarIcon /> }, // Added Commissions
 ] as const;
 
 const targetsNavItem = { to: '/targets', label: 'تحديد الأهداف', icon: <TargetIcon /> } as const;
@@ -59,6 +59,21 @@ export default function MainLayout() {
   const user = getCurrentUser();
   const loc = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false); // Added isSearchOpen state
+
+  // Global Keyboard Shortcut for Search (Ctrl+K or Cmd+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for Ctrl+K or Cmd+K
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const navItems = useMemo(() => {
     const canTargets = user?.role === 'Admin' || user?.name === 'Sales Manager';
@@ -73,6 +88,8 @@ export default function MainLayout() {
   const sidebarHidden = !isSidebarOpen;
   return (
     <div className="relative flex bg-neutral-50 min-h-screen">
+      <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+
       {isSidebarOpen && (
         <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
@@ -141,6 +158,14 @@ export default function MainLayout() {
             </div>
 
             <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => setIsSearchOpen(true)}
+                className="p-2 sm:p-2.5 rounded-xl text-neutral-500 hover:bg-neutral-100 hover:text-orange-600 transition-colors"
+                title="بحث (Ctrl+K)"
+              >
+                <SearchIcon />
+              </button>
+
               {isSidebarOpen && (
                 <button className="md:hidden p-2 rounded-lg hover:bg-neutral-100" onClick={() => setIsSidebarOpen(false)}>
                   <XIcon />
