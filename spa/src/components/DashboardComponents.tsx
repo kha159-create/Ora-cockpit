@@ -50,7 +50,7 @@ const Sparkline: React.FC<{ data: number[]; color?: string }> = ({ data, color }
 };
 
 // مكون شريط التقدم الدائري
-export const CircularProgress: React.FC<{ percentage: number; size?: number }> = ({ percentage, size = 60 }) => {
+export const CircularProgress: React.FC<{ percentage: number; size?: number }> = React.memo(({ percentage, size = 60 }) => {
   const radius = (size - 8) / 2;
   const circumference = 2 * Math.PI * radius;
   const strokeDasharray = circumference;
@@ -76,7 +76,7 @@ export const CircularProgress: React.FC<{ percentage: number; size?: number }> =
       <div className="circular-progress-text text-neutral-900 font-bold">{Math.round(percentage)}%</div>
     </div>
   );
-};
+});
 
 // مكون مؤشر الاتجاه
 const TrendIndicator: React.FC<{ trend: 'up' | 'down' | 'neutral'; value?: string }> = ({ trend, value }) => {
@@ -125,7 +125,7 @@ export const KPICard: React.FC<{
   trendValue?: string;
   subtitle?: string;
   compactTarget?: boolean;
-}> = ({
+}> = React.memo(({
   title,
   value,
   format,
@@ -234,7 +234,7 @@ export const KPICard: React.FC<{
         )}
       </button>
     );
-  };
+  });
 
 export const ChartCard: React.FC<{
   title: React.ReactNode;

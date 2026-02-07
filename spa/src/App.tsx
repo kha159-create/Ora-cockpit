@@ -5,6 +5,7 @@ import MainLayout from './layout/MainLayout';
 import LoginPage from './pages/LoginPage';
 import { Suspense } from 'react';
 import { DashboardSkeleton } from './components/SkeletonComponents';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Lazy Load Pages
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage'));
@@ -23,6 +24,14 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function PageWrap({ children }: { children: React.ReactNode }) {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<DashboardSkeleton />}>{children}</Suspense>
+    </ErrorBoundary>
+  );
+}
+
 export default function App() {
   return (
     <Routes>
@@ -36,16 +45,15 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<Suspense fallback={<DashboardSkeleton />}><DashboardPage /></Suspense>} />
-        <Route path="reports" element={<Suspense fallback={<DashboardSkeleton />}><ReportsPage /></Suspense>} />
-        <Route path="employees" element={<Suspense fallback={<DashboardSkeleton />}><EmployeesPage /></Suspense>} />
-        <Route path="stores" element={<Suspense fallback={<DashboardSkeleton />}><StoresPage /></Suspense>} />
-        <Route path="products" element={<Suspense fallback={<DashboardSkeleton />}><ProductsPage /></Suspense>} />
-        <Route path="offers" element={<Suspense fallback={<DashboardSkeleton />}><OffersPage /></Suspense>} />
-
-        <Route path="targets" element={<Suspense fallback={<DashboardSkeleton />}><TargetSettingPage /></Suspense>} />
-        <Route path="commissions" element={<Suspense fallback={<DashboardSkeleton />}><CommissionsPage /></Suspense>} />
-        <Route path="comparison" element={<Suspense fallback={<DashboardSkeleton />}><ComparisonPage /></Suspense>} />
+        <Route index element={<PageWrap><DashboardPage /></PageWrap>} />
+        <Route path="reports" element={<PageWrap><ReportsPage /></PageWrap>} />
+        <Route path="employees" element={<PageWrap><EmployeesPage /></PageWrap>} />
+        <Route path="stores" element={<PageWrap><StoresPage /></PageWrap>} />
+        <Route path="products" element={<PageWrap><ProductsPage /></PageWrap>} />
+        <Route path="offers" element={<PageWrap><OffersPage /></PageWrap>} />
+        <Route path="targets" element={<PageWrap><TargetSettingPage /></PageWrap>} />
+        <Route path="commissions" element={<PageWrap><CommissionsPage /></PageWrap>} />
+        <Route path="comparison" element={<PageWrap><ComparisonPage /></PageWrap>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

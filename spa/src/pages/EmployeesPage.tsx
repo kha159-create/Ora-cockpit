@@ -5,6 +5,7 @@ import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UserGroupIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
+import EmployeeCompareModal from '../components/EmployeeCompareModal';
 
 type Period = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
 type SortKey =
@@ -407,6 +408,7 @@ export default function EmployeesPage() {
   const [chartOrder, setChartOrder] = useState<'desc' | 'asc'>('desc');
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [showCompareModal, setShowCompareModal] = useState(false);
 
   // Excel export states
   const [excelDropdownOpen, setExcelDropdownOpen] = useState(false);
@@ -952,6 +954,13 @@ export default function EmployeesPage() {
     <div className="space-y-6 relative min-h-[400px]">
       {/* Header export bar */}
       <div className="flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => setShowCompareModal(true)}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-xl text-sm transition-colors"
+        >
+          <span>⚖️</span> مقارنة موظفين
+        </button>
         <div ref={excelDropdownRef} className="relative">
           <button
             type="button"
@@ -1299,6 +1308,13 @@ export default function EmployeesPage() {
           empRaw={empRaw}
         />
       )}
+
+      {/* Employee Comparison Modal */}
+      <EmployeeCompareModal
+        open={showCompareModal}
+        onClose={() => setShowCompareModal(false)}
+        employees={derived.employees}
+      />
 
       {/* Target Template Modal */}
       {showTargetModal && (

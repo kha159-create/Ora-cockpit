@@ -287,7 +287,7 @@ export default function CommissionsPage() {
                     </div>
                 ) : (
                     filteredCommissionData.map((store) => (
-                        <div key={store.storeName} className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden transition-all hover:shadow-md">
+                        <div key={store.storeName} className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-x-auto overflow-y-hidden transition-all hover:shadow-md">
                             <div
                                 className="p-4 flex flex-col md:flex-row items-center justify-between cursor-pointer hover:bg-neutral-50"
                                 onClick={() => setExpandedStore(expandedStore === store.storeName ? null : store.storeName)}
@@ -326,7 +326,8 @@ export default function CommissionsPage() {
                             {/* Employee Table */}
                             {expandedStore === store.storeName && (
                                 <div className="border-t border-neutral-100 bg-neutral-50/50 p-4 animate-in slide-in-from-top-2">
-                                    <table className="w-full text-sm">
+                                    <div className="overflow-x-auto -mx-4 px-4">
+                                    <table className="w-full min-w-[600px] text-sm">
                                         <thead>
                                             <tr className="text-neutral-500 border-b border-neutral-200">
                                                 <th className="font-normal p-2 text-right">الموظف</th>
@@ -372,6 +373,7 @@ export default function CommissionsPage() {
                                             ))}
                                         </tbody>
                                     </table>
+                                    </div>
                                 </div>
                             )}
                         </div>

@@ -5,6 +5,7 @@ import { ChartCard, KPICard, PieChart } from '../components/DashboardComponents'
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon } from '../components/Icons';
 import { runProductValueAnalysis, safeNum } from '../services/analysisHelpers';
+import StoreCompareModal from '../components/StoreCompareModal';
 
 type Mode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
 
@@ -558,6 +559,7 @@ export default function StoresPage() {
   const [branch, setBranch] = useState<string>('all');
 
   const [selectedSid, setSelectedSid] = useState<string | null>(null);
+  const [showStoreCompare, setShowStoreCompare] = useState(false);
   const [prodRaw, setProdRaw] = useState<any>(null);
   const [storeSortKey, setStoreSortKey] = useState<StoreSortKey>('val');
   const [storeSortDir, setStoreSortDir] = useState<'asc' | 'desc'>('desc');
@@ -865,6 +867,16 @@ export default function StoresPage() {
         </div>
       </div>
 
+      <div className="flex justify-end mb-2">
+        <button
+          type="button"
+          onClick={() => setShowStoreCompare(true)}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-xl text-sm transition-colors"
+        >
+          <span>⚖️</span> مقارنة معارض
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard title="إجمالي المبيعات" value={derived.totals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
         <KPICard title="إجمالي الفواتير" value={derived.totals.trans} format={v => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
@@ -937,6 +949,13 @@ export default function StoresPage() {
           prodRaw={prodRaw}
         />
       )}
+
+      {/* Store Comparison Modal */}
+      <StoreCompareModal
+        open={showStoreCompare}
+        onClose={() => setShowStoreCompare(false)}
+        stores={derived.list}
+      />
     </div>
   );
 }
