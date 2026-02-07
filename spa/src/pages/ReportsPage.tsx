@@ -76,6 +76,9 @@ export default function ReportsPage() {
   const [previewReport, setPreviewReport] = useState<{ type: string; data: any } | null>(null);
 
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
+  const [showTargetModal, setShowTargetModal] = useState(false);
+  const [targetEmpList, setTargetEmpList] = useState<any[]>([]);
+  const [targetSelected, setTargetSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadManagementData()
@@ -591,6 +594,81 @@ export default function ReportsPage() {
       setPreviewReport({ type: 'employee', data: storesData });
     }
   };
+  // ===== Target Template Modal Logic =====
+  const openTargetTemplateModal = () => {
+    if (!rawEmp || !rawMgmt) return;
+    const history = rawEmp.history || {};
+    const names = rawEmp.employee_names || {};
+    const targets = rawEmp.targets || {};
+    const storesMap = rawMgmt.stores || {};
+
+    const today = new Date();
+    const mtdStart = toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
+    const todayYMD = toYMD(today);
+
+    // Build employee list with MTD sales
+    const empMap: Record<string, any> = {};
+    Object.entries(history).forEach(([sid, recs]: [string, any]) => {
+      if (!passFilter(sid)) return;
+      (recs || []).forEach((rec: any[]) => {
+        const d = rec[0];
+        const rawId = String(rec[1] || '').split('-')[0].trim();
+        if (!rawId || rawId === 'مرتجع') return;
+        const id = rawId.padStart(4, '0');
+        const sales = Number(rec[2]) || 0;
+        const trans = Number(rec[3]) || 0;
+
+        if (!empMap[id]) {
+          empMap[id] = {
+            id,
+            name: names[id] || names[rawId] || rawId,
+            storeId: sid,
+            storeName: storesMap[sid] || sid,
+            mtdSales: 0,
+            mtdTrans: 0,
+            target: targets[id] || targets[rawId] || 0,
+            active: false,
+          };
+        }
+        if (d >= mtdStart && d <= todayYMD) {
+          empMap[id].mtdSales += sales;
+          empMap[id].mtdTrans += trans;
+          if (sales > 0) empMap[id].active = true;
+        }
+      });
+    });
+
+    const list = Object.values(empMap).sort((a: any, b: any) => b.mtdSales - a.mtdSales);
+    setTargetEmpList(list);
+    // Default: select active employees
+    setTargetSelected(new Set(list.filter((e: any) => e.active).map((e: any) => e.id)));
+    setShowTargetModal(true);
+  };
+
+  const exportTargetTemplate = () => {
+    const selectedEmps = targetEmpList.filter((e: any) => targetSelected.has(e.id));
+    if (selectedEmps.length === 0) { alert('الرجاء اختيار موظف واحد على الأقل'); return; }
+
+    const data = selectedEmps.map((e: any) => ({
+      'Employee ID': String(e.id).replace(/unknown/gi, '').replace(/unkown/gi, '').trim(),
+      'Employee Name': e.name,
+      'Store': e.storeName,
+      'Current Target': e.target || '',
+      'Target Amount': '', // Empty for user input
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = [{ wch: 15 }, { wch: 30 }, { wch: 20 }, { wch: 15 }, { wch: 15 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Targets Template');
+
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const monthName = nextMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    XLSX.writeFile(wb, `Target_Template_${monthName}.xlsx`);
+    setShowTargetModal(false);
+  };
+
   const openReportChoice = (type: 'pdf' | 'excel') => {
     setReportChoiceType(type);
     setShowReportChoiceModal(true);
@@ -796,6 +874,15 @@ export default function ReportsPage() {
               <h5 className="font-bold text-neutral-800 text-sm">تقرير أمس</h5>
               <p className="text-xs text-neutral-500 mt-1">PDF - مقارنة الأمس بالشهر</p>
             </button>
+            <button
+              type="button"
+              onClick={openTargetTemplateModal}
+              className="bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-emerald-400 transition-all group"
+            >
+              <div className="text-emerald-600 text-2xl mb-2">🎯</div>
+              <h5 className="font-bold text-neutral-800 text-sm">قالب تارجت الشهر القادم</h5>
+              <p className="text-xs text-neutral-500 mt-1">Excel - اختيار الموظفين وتصدير القالب</p>
+            </button>
           </div>
         </div>
       )}
@@ -904,6 +991,117 @@ export default function ReportsPage() {
               <button type="button" className="flex-1 btn-secondary py-2" onClick={() => setShowExcelModal(false)}>إلغاء</button>
               <button type="button" className="flex-1 bg-green-600 text-white font-bold py-2 rounded-xl hover:bg-green-700 disabled:opacity-50" onClick={runExcelExport} disabled={excelExporting}>
                 {excelExporting ? 'جاري التصدير...' : 'تصدير'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Target Template Modal */}
+      {showTargetModal && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4" onClick={() => setShowTargetModal(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-neutral-100 bg-neutral-50">
+              <h3 className="font-bold text-lg text-neutral-900 flex items-center gap-2">
+                🎯 اختيار الموظفين لقالب التارجت
+              </h3>
+              <p className="text-sm text-neutral-500 mt-1">اختر الموظفين الذين تريد تضمينهم في قالب الشهر القادم</p>
+            </div>
+
+            <div className="p-4 border-b border-neutral-100 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200"
+                  onClick={() => setTargetSelected(new Set(targetEmpList.map((e: any) => e.id)))}
+                >
+                  تحديد الكل
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                  onClick={() => setTargetSelected(new Set())}
+                >
+                  إلغاء الكل
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-100 text-green-700 hover:bg-green-200"
+                  onClick={() => setTargetSelected(new Set(targetEmpList.filter((e: any) => e.active).map((e: any) => e.id)))}
+                >
+                  النشطين فقط
+                </button>
+              </div>
+              <div className="text-sm text-neutral-500">
+                المحددين: <span className="font-bold text-neutral-800">{targetSelected.size}</span> من <span className="font-bold">{targetEmpList.length}</span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-neutral-800 text-white">
+                  <tr>
+                    <th className="p-2 text-center w-10">
+                      <input
+                        type="checkbox"
+                        checked={targetSelected.size === targetEmpList.length && targetEmpList.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) setTargetSelected(new Set(targetEmpList.map((emp: any) => emp.id)));
+                          else setTargetSelected(new Set());
+                        }}
+                      />
+                    </th>
+                    <th className="p-2 text-right">الموظف</th>
+                    <th className="p-2 text-right">الفرع</th>
+                    <th className="p-2 text-center">المبيعات (MTD)</th>
+                    <th className="p-2 text-center">التارجت الحالي</th>
+                    <th className="p-2 text-center">الحالة</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {targetEmpList.map((emp: any) => {
+                    const isSelected = targetSelected.has(emp.id);
+                    const bgClass = emp.active ? '' : 'bg-red-50';
+                    return (
+                      <tr
+                        key={emp.id}
+                        className={`hover:bg-neutral-50 cursor-pointer ${bgClass}`}
+                        onClick={() => {
+                          const next = new Set(targetSelected);
+                          if (next.has(emp.id)) next.delete(emp.id);
+                          else next.add(emp.id);
+                          setTargetSelected(next);
+                        }}
+                      >
+                        <td className="p-2 text-center">
+                          <input type="checkbox" checked={isSelected} readOnly />
+                        </td>
+                        <td className="p-2 font-medium text-neutral-800">{emp.name}</td>
+                        <td className="p-2 text-neutral-600">{emp.storeName}</td>
+                        <td className="p-2 text-center font-mono">{Math.round(emp.mtdSales).toLocaleString()}</td>
+                        <td className="p-2 text-center font-mono text-neutral-500">{emp.target ? Math.round(emp.target).toLocaleString() : '-'}</td>
+                        <td className="p-2 text-center">
+                          {emp.active ? (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">نشط</span>
+                          ) : (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-100 text-red-600">غير نشط</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-4 border-t border-neutral-100 flex justify-between items-center">
+              <button type="button" className="btn-secondary py-2 px-4" onClick={() => setShowTargetModal(false)}>إلغاء</button>
+              <button
+                type="button"
+                className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-xl transition-colors flex items-center gap-2"
+                onClick={exportTargetTemplate}
+              >
+                📥 تصدير المحددين ({targetSelected.size})
               </button>
             </div>
           </div>

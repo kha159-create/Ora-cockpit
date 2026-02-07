@@ -7,27 +7,36 @@
     font-size: 0.75rem;
   }
   .modern-kpi-card {
-    padding: 0.4rem;
+    padding: 0.5rem;
   }
   .identity-card h3 {
     font-size: 1rem;
   }
 }
 
-/* Base KPI card improvements */
+/* Premium KPI card */
 .modern-kpi-card {
   position: relative;
   overflow: hidden;
-  transition: all 0.3s ease;
-  border-radius: 1.5rem;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 1.25rem;
+  box-shadow:
+    0 1px 3px rgba(0,0,0,0.04),
+    0 4px 12px rgba(0,0,0,0.03);
   background: white;
+  backdrop-filter: blur(12px);
 }
 
 .modern-kpi-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(249, 115, 22, 0.1);
-  border-color: rgba(249, 115, 22, 0.3);
+  transform: translateY(-3px);
+  box-shadow:
+    0 8px 25px rgba(0,0,0,0.06),
+    0 2px 8px rgba(249, 115, 22, 0.08);
+  border-color: rgba(249, 115, 22, 0.2);
+}
+
+.modern-kpi-card:active {
+  transform: translateY(-1px);
 }
 
 .kpi-card-background {
@@ -36,7 +45,7 @@
   right: 0;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle at top right, rgba(249, 115, 22, 0.03), transparent);
+  background: radial-gradient(circle at top right, rgba(249, 115, 22, 0.02), transparent);
   pointer-events: none;
 }
 

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UserGroupIcon } from '../components/Icons';
+import * as XLSX from 'xlsx';
 
 type Period = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
 type SortKey =
@@ -406,6 +407,13 @@ export default function EmployeesPage() {
   const [chartOrder, setChartOrder] = useState<'desc' | 'asc'>('desc');
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+
+  // Excel export states
+  const [excelDropdownOpen, setExcelDropdownOpen] = useState(false);
+  const [showTargetModal, setShowTargetModal] = useState(false);
+  const [targetEmpList, setTargetEmpList] = useState<any[]>([]);
+  const [targetSelected, setTargetSelected] = useState<Set<string>>(new Set());
+  const excelDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     Promise.all([loadEmployeesData(), loadManagementData(), loadProductAnalysisData()])
@@ -843,6 +851,89 @@ export default function EmployeesPage() {
     }
   };
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (excelDropdownRef.current && !excelDropdownRef.current.contains(e.target as Node)) {
+        setExcelDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Export current employee data to Excel
+  const exportCurrentData = () => {
+    setExcelDropdownOpen(false);
+    const rows = derived.employees.map((emp: EmployeeAgg) => ({
+      'رقم الموظف': emp.id,
+      'اسم الموظف': emp.name,
+      'الفرع': emp.storeName,
+      'المدير': emp.manager,
+      'المبيعات': Math.round(emp.sales),
+      'الفواتير': emp.transactions,
+      'معدل الفاتورة': Math.round(emp.avg_ticket),
+      'أعلى فاتورة': Math.round(emp.max_ticket),
+      'متوسط القطع': Number(emp.items_per_inv.toFixed(1)),
+      'التارجت': Math.round(emp.target),
+      'نسبة التحقيق %': emp.target > 0 ? Number(((emp.sales / emp.target) * 100).toFixed(1)) : 0,
+      'المطلوب يومياً': Math.round(emp.dailyReq),
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 25 }, { wch: 20 }, { wch: 20 },
+      { wch: 15 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
+      { wch: 12 }, { wch: 15 }, { wch: 14 }, { wch: 14 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Employees Data');
+    XLSX.writeFile(wb, `employees_data_${toLocalYMD(new Date())}.xlsx`);
+  };
+
+  // Open target template modal
+  const openTargetTemplateModal = () => {
+    setExcelDropdownOpen(false);
+    const emps = derived.employees as EmployeeAgg[];
+    const list = emps.map((e) => ({
+      id: e.id,
+      name: e.name,
+      storeId: e.storeCode,
+      storeName: e.storeName,
+      mtdSales: e.sales,
+      target: e.target,
+      active: e.sales > 0,
+    }));
+    setTargetEmpList(list);
+    setTargetSelected(new Set(list.filter((e) => e.active).map((e) => e.id)));
+    setShowTargetModal(true);
+  };
+
+  // Export target template Excel
+  const exportTargetTemplate = () => {
+    const selectedEmps = targetEmpList.filter((e: any) => targetSelected.has(e.id));
+    if (selectedEmps.length === 0) { alert('الرجاء اختيار موظف واحد على الأقل'); return; }
+
+    const data = selectedEmps.map((e: any) => ({
+      'Employee ID': String(e.id).replace(/unknown/gi, '').replace(/unkown/gi, '').trim(),
+      'Employee Name': e.name,
+      'Store': e.storeName,
+      'Current Target': e.target || '',
+      'Target Amount': '',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = [{ wch: 15 }, { wch: 30 }, { wch: 20 }, { wch: 15 }, { wch: 15 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Targets Template');
+
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const monthName = nextMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    XLSX.writeFile(wb, `Target_Template_${monthName}.xlsx`);
+    setShowTargetModal(false);
+  };
+
   if (err) {
     return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
   }
@@ -859,6 +950,37 @@ export default function EmployeesPage() {
 
   return (
     <div className="space-y-6 relative min-h-[400px]">
+      {/* Header export bar */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <div ref={excelDropdownRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setExcelDropdownOpen(!excelDropdownOpen)}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-xl text-sm transition-colors"
+          >
+            <span>📊</span> تصدير Excel <span className="text-xs opacity-70">▼</span>
+          </button>
+          {excelDropdownOpen && (
+            <div className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-neutral-200 z-50 min-w-[220px] overflow-hidden">
+              <button
+                type="button"
+                onClick={exportCurrentData}
+                className="w-full text-right px-4 py-3 hover:bg-neutral-50 text-sm font-medium text-neutral-800 border-b border-neutral-100 flex items-center gap-2"
+              >
+                <span>📋</span> البيانات الحالية
+              </button>
+              <button
+                type="button"
+                onClick={openTargetTemplateModal}
+                className="w-full text-right px-4 py-3 hover:bg-neutral-50 text-sm font-medium text-neutral-800 flex items-center gap-2"
+              >
+                <span>🎯</span> قالب تارجت الشهر القادم
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4">
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
           <div className={`${isAdminOrAuditor(user?.role) ? '' : 'hidden'}`}>
@@ -1176,6 +1298,81 @@ export default function EmployeesPage() {
           prodRaw={prodRaw}
           empRaw={empRaw}
         />
+      )}
+
+      {/* Target Template Modal */}
+      {showTargetModal && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4" onClick={() => setShowTargetModal(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-neutral-100 bg-neutral-50">
+              <h3 className="font-bold text-lg text-neutral-900 flex items-center gap-2">
+                🎯 اختيار الموظفين لقالب التارجت
+              </h3>
+              <p className="text-sm text-neutral-500 mt-1">اختر الموظفين الذين تريد تضمينهم في قالب الشهر القادم</p>
+            </div>
+
+            <div className="p-4 border-b border-neutral-100 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex gap-2">
+                <button type="button" className="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200" onClick={() => setTargetSelected(new Set(targetEmpList.map((e: any) => e.id)))}>
+                  تحديد الكل
+                </button>
+                <button type="button" className="px-3 py-1.5 text-xs font-bold rounded-lg bg-neutral-100 text-neutral-700 hover:bg-neutral-200" onClick={() => setTargetSelected(new Set())}>
+                  إلغاء الكل
+                </button>
+                <button type="button" className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-100 text-green-700 hover:bg-green-200" onClick={() => setTargetSelected(new Set(targetEmpList.filter((e: any) => e.active).map((e: any) => e.id)))}>
+                  النشطين فقط
+                </button>
+              </div>
+              <div className="text-sm text-neutral-500">
+                المحددين: <span className="font-bold text-neutral-800">{targetSelected.size}</span> من <span className="font-bold">{targetEmpList.length}</span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-neutral-800 text-white">
+                  <tr>
+                    <th className="p-2 text-center w-10">
+                      <input type="checkbox" checked={targetSelected.size === targetEmpList.length && targetEmpList.length > 0} onChange={(e) => { if (e.target.checked) setTargetSelected(new Set(targetEmpList.map((emp: any) => emp.id))); else setTargetSelected(new Set()); }} />
+                    </th>
+                    <th className="p-2 text-right">الموظف</th>
+                    <th className="p-2 text-right">الفرع</th>
+                    <th className="p-2 text-center">المبيعات (MTD)</th>
+                    <th className="p-2 text-center">التارجت الحالي</th>
+                    <th className="p-2 text-center">الحالة</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {targetEmpList.map((emp: any) => {
+                    const isSelected = targetSelected.has(emp.id);
+                    return (
+                      <tr key={emp.id} className={`hover:bg-neutral-50 cursor-pointer ${emp.active ? '' : 'bg-red-50'}`} onClick={() => { const next = new Set(targetSelected); if (next.has(emp.id)) next.delete(emp.id); else next.add(emp.id); setTargetSelected(next); }}>
+                        <td className="p-2 text-center"><input type="checkbox" checked={isSelected} readOnly /></td>
+                        <td className="p-2 font-medium text-neutral-800">{emp.name}</td>
+                        <td className="p-2 text-neutral-600">{emp.storeName}</td>
+                        <td className="p-2 text-center font-mono">{Math.round(emp.mtdSales).toLocaleString()}</td>
+                        <td className="p-2 text-center font-mono text-neutral-500">{emp.target ? Math.round(emp.target).toLocaleString() : '-'}</td>
+                        <td className="p-2 text-center">
+                          {emp.active
+                            ? <span className="text-xs font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">نشط</span>
+                            : <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-100 text-red-600">غير نشط</span>
+                          }
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-4 border-t border-neutral-100 flex justify-between items-center">
+              <button type="button" className="btn-secondary py-2 px-4" onClick={() => setShowTargetModal(false)}>إلغاء</button>
+              <button type="button" className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-xl transition-colors flex items-center gap-2" onClick={exportTargetTemplate}>
+                📥 تصدير المحددين ({targetSelected.size})
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

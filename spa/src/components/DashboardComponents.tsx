@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './DashboardComponents.css';
 
 // --- Reusable UI Components ---
-const Sparkline: React.FC<{ data: number[] }> = ({ data }) => {
+const Sparkline: React.FC<{ data: number[]; color?: string }> = ({ data, color }) => {
   if (!data || data.length < 2) return null;
   const width = 100;
   const height = 30;
@@ -20,10 +20,31 @@ const Sparkline: React.FC<{ data: number[] }> = ({ data }) => {
     .join(' ');
 
   const isUpward = data.length > 1 && data[data.length - 1] > data[0];
+  const lineColor = color || (isUpward ? '#10b981' : '#ef4444');
+
+  // Build area path for gradient fill
+  const firstX = padding;
+  const lastX = (data.length - 1) / (data.length - 1) * (width - padding * 2) + padding;
+  const areaPath = `M ${firstX},${height} ` + data
+    .map((d, i) => {
+      const x = (i / (data.length - 1)) * (width - padding * 2) + padding;
+      const y = height - padding - ((d - minVal) / (range || 1)) * (height - padding * 2);
+      return `L ${x},${y}`;
+    })
+    .join(' ') + ` L ${lastX},${height} Z`;
+
+  const gradientId = `sparkGrad-${Math.random().toString(36).substring(2, 9)}`;
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-8">
-      <polyline fill="none" stroke={isUpward ? '#10b981' : '#ef4444'} strokeWidth="2" points={points} />
+      <defs>
+        <linearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor={lineColor} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#${gradientId})`} />
+      <polyline fill="none" stroke={lineColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
     </svg>
   );
 };
@@ -102,7 +123,7 @@ export const KPICard: React.FC<{
   progressValue?: number;
   trend?: 'up' | 'down' | 'neutral';
   trendValue?: string;
-  subtitle?: string; // New prop for secondary metric
+  subtitle?: string;
   compactTarget?: boolean;
 }> = ({
   title,
@@ -124,58 +145,57 @@ export const KPICard: React.FC<{
     const formattedValue =
       format && typeof value === 'number' ? format(value) : (value?.toLocaleString() || 0);
 
+    // Calculate change percentage for bottom bar
+    const changePct = comparisonValue !== undefined && comparisonValue > 0
+      ? ((value - comparisonValue) / comparisonValue) * 100
+      : 0;
+
     return (
       <button
         onClick={onClick}
         disabled={!onClick}
-        className="modern-kpi-card group p-2 sm:p-3 flex flex-col w-full h-full disabled:cursor-default text-right relative overflow-hidden"
+        className="modern-kpi-card group p-3 sm:p-4 flex flex-col w-full h-full disabled:cursor-default text-right relative overflow-hidden border border-neutral-100"
       >
-        {/* تأثير الخلفية المتحرك */}
-        <div className="kpi-card-background" />
+        {/* Subtle gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-bl from-white via-white to-orange-50/30 pointer-events-none" />
 
-        {/* المحتوى الرئيسي */}
+        {/* Content */}
         <div className="relative z-10 flex-1 flex flex-col justify-between">
-          {/* الرأس - العنوان */}
-          <div className="flex justify-between items-start mb-2">
-            <h3 className="kpi-title text-xs sm:text-sm text-neutral-500 font-semibold">{title}</h3>
-            {showProgress && trendValue && <TrendIndicator trend={trend} value={trendValue} />}
-          </div>
-
-          {/* الجسم - تقسيم: أيقونة يمين، قيمة يسار */}
-          <div className="flex items-center justify-between px-1">
-            {/* اليمين: الأيقونة */}
+          {/* Header */}
+          <div className="flex justify-between items-start mb-3">
+            <h3 className="text-[11px] sm:text-xs text-neutral-400 font-bold uppercase tracking-wider">{title}</h3>
             {icon && (
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-orange-50 border border-orange-100/50 text-orange-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300 shadow-sm">
-                <div className="w-5 h-5 sm:w-6 sm:h-6">{icon}</div>
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 text-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-200/50 group-hover:scale-110 group-hover:shadow-orange-300/60 transition-all duration-300">
+                <div className="w-4 h-4 sm:w-[18px] sm:h-[18px]">{icon}</div>
               </div>
             )}
-
-            {/* اليسار: القيمة */}
-            <div className="flex flex-col items-end justify-center flex-1 pl-3">
-              <div className="text-xl sm:text-3xl font-bold text-neutral-900 leading-tight dir-ltr font-mono tracking-tight">
-                {formattedValue}
-              </div>
-              {subtitle && <div className="text-[10px] text-neutral-400 font-medium">{subtitle}</div>}
-            </div>
           </div>
 
-          {/* التذييل comparison */}
-          <div className="mt-3 border-t border-neutral-100/50 pt-2 flex flex-col gap-1">
+          {/* Value */}
+          <div className="mb-1">
+            <div className="text-2xl sm:text-3xl font-extrabold text-neutral-900 leading-tight dir-ltr font-mono tracking-tight">
+              {formattedValue}
+            </div>
+            {subtitle && <div className="text-[10px] text-neutral-400 font-medium mt-0.5">{subtitle}</div>}
+          </div>
+
+          {/* Comparison footer */}
+          <div className="mt-auto pt-2 flex flex-col gap-1.5">
             {comparisonValue !== undefined && !showProgress && (
               <>
-                <div className={`text-xs font-bold flex items-center justify-end gap-1 dir-ltr ${isPositive ? 'text-green-600' : 'text-red-500'}`}>
-                  <span>{isPositive ? '▲' : '▼'}</span>
-                  <span>
-                    {(() => {
-                      const diff = value - comparisonValue;
-                      const pct = comparisonValue > 0 ? ((diff / comparisonValue) * 100) : 0;
-                      const diffFormatted = format ? format(Math.abs(diff)) : Math.abs(diff).toLocaleString();
-                      return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% (${diffFormatted})`;
-                    })()}
-                  </span>
+                <div className={`text-[11px] font-bold flex items-center justify-end gap-1.5 dir-ltr ${isPositive ? 'text-emerald-600' : 'text-red-500'}`}>
+                  <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] ${isPositive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                    <span className="text-[10px]">{isPositive ? '▲' : '▼'}</span>
+                    <span>
+                      {(() => {
+                        const pct = comparisonValue > 0 ? (((value - comparisonValue) / comparisonValue) * 100) : 0;
+                        return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+                      })()}
+                    </span>
+                  </div>
                 </div>
-                <div className="text-xs text-neutral-500 truncate mt-1">
-                  {comparisonLabel || 'السنة الماضية'}: <span className="dir-ltr inline-block font-bold text-neutral-700">{format ? format(comparisonValue) : comparisonValue.toLocaleString()}</span>
+                <div className="text-[10px] text-neutral-400 truncate">
+                  {comparisonLabel || 'السنة الماضية'}: <span className="dir-ltr inline-block font-bold text-neutral-500">{format ? format(comparisonValue) : comparisonValue.toLocaleString()}</span>
                 </div>
               </>
             )}
@@ -203,6 +223,15 @@ export const KPICard: React.FC<{
             )}
           </div>
         </div>
+
+        {/* Bottom trend bar - colored based on performance */}
+        {comparisonValue !== undefined && !showProgress && (
+          <div className="absolute bottom-0 left-0 right-0 h-[3px] z-20">
+            <div className={`h-full rounded-b-xl transition-all duration-500 ${isPositive ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' : 'bg-gradient-to-r from-red-400 to-red-500'}`}
+              style={{ width: `${Math.min(Math.abs(changePct), 100)}%`, minWidth: '15%' }}
+            />
+          </div>
+        )}
       </button>
     );
   };

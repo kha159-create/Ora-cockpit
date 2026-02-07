@@ -360,30 +360,41 @@ function StoreDetailsModal({
 
     const sid = store?.sid || '';
     // Catalog is Record<category_name, item[]>. Use the category keys for proper classification.
-    const categoryTotals: Record<string, number> = {};
+    const categoryTotals: Record<string, { amount: number; qty: number }> = {};
     let totalAmt = 0;
+    let totalQty = 0;
 
     Object.entries(details.catalog || {}).forEach(([catKey, catItems]: [string, any]) => {
       if (!Array.isArray(catItems)) return;
-      let catTotal = 0;
+      let catAmt = 0;
+      let catQty = 0;
       catItems.forEach((item: any) => {
         const storeData = item.stores?.[sid];
         const amt = storeData ? (Number(storeData.a) || 0) : (Number(item.amount) || 0);
-        if (amt > 0) catTotal += amt;
+        const qty = storeData ? (Number(storeData.q) || 0) : (Number(item.qty) || 0);
+        if (amt > 0 || qty > 0) {
+          catAmt += amt;
+          catQty += qty;
+        }
       });
-      if (catTotal > 0) {
-        categoryTotals[catKey] = (categoryTotals[catKey] || 0) + catTotal;
-        totalAmt += catTotal;
+      if (catAmt > 0 || catQty > 0) {
+        if (!categoryTotals[catKey]) categoryTotals[catKey] = { amount: 0, qty: 0 };
+        categoryTotals[catKey].amount += catAmt;
+        categoryTotals[catKey].qty += catQty;
+        totalAmt += catAmt;
+        totalQty += catQty;
       }
     });
 
-    if (totalAmt === 0) return [];
+    if (totalAmt === 0 && totalQty === 0) return [];
 
     return Object.entries(categoryTotals)
-      .map(([name, value]) => ({
+      .map(([name, data]) => ({
         name,
-        value,
-        percentage: (value / totalAmt) * 100,
+        value: data.amount,
+        qty: data.qty,
+        percentage: totalAmt > 0 ? (data.amount / totalAmt) * 100 : 0,
+        qtyPercentage: totalQty > 0 ? (data.qty / totalQty) * 100 : 0,
       }))
       .sort((a, b) => b.value - a.value);
 

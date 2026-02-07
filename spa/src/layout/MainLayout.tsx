@@ -107,8 +107,8 @@ export default function MainLayout() {
       >
         <div className="p-4 sm:p-6 border-b border-neutral-200">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg">
-              <span className="text-white font-bold text-lg">O</span>
+            <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-lg flex-shrink-0">
+              <img src="./icon-192.png" alt="Orange" className="w-full h-full object-cover" />
             </div>
             <div>
               <div className="text-xl font-bold text-neutral-900">COCKPIT</div>
@@ -144,6 +144,7 @@ export default function MainLayout() {
           >
             <LogoutIcon /> خروج
           </button>
+          <p className="text-[10px] text-neutral-400 text-center mt-3">Developed By Khaleel Alsani</p>
         </div>
       </aside>
 
