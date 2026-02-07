@@ -190,7 +190,12 @@ export default function ProductsPage() {
       const mgr = String(meta.manager || '');
       const cityVal = String(meta.city || '');
       if (mgr) managersSet.add(mgr);
-      if (cityVal) citiesSet.add(cityVal);
+
+      // Filter cities based on selected manager
+      if (effectiveManager === 'all' || mgr === effectiveManager) {
+        if (cityVal) citiesSet.add(cityVal);
+      }
+
       storeOptions.push({
         id: sid,
         name: analysis[sid]?.store_name || storesMap[sid] || meta.name || sid,

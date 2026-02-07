@@ -100,9 +100,14 @@ export default function ReportsPage() {
   const cities = useMemo(() => {
     if (!rawMgmt?.store_meta) return [];
     const set = new Set<string>();
-    Object.values(rawMgmt.store_meta).forEach((m: any) => m?.city && set.add(m.city));
+    Object.values(rawMgmt.store_meta).forEach((m: any) => {
+      // Filter cities based on selected manager
+      if (manager === 'all' || (m?.manager && m.manager === manager)) {
+        if (m?.city) set.add(m.city);
+      }
+    });
     return Array.from(set).sort();
-  }, [rawMgmt]);
+  }, [rawMgmt, manager]);
 
   const branches = useMemo(() => {
     if (!rawMgmt?.stores || !rawMgmt?.store_meta) return [];

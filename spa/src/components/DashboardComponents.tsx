@@ -788,6 +788,7 @@ export const LineChart: React.FC<{ data: { name: string;[key: string]: any }[] }
     Previous: '#3b82f6', // Blue for previous
     CurrentVisitors: '#10b981', // Green for current visitors
     PreviousVisitors: '#6366f1', // Indigo for previous visitors
+    'المبيعات': '#ea580c', // Orange for Sales (Arabic)
   };
 
   const width = 800;
@@ -808,7 +809,7 @@ export const LineChart: React.FC<{ data: { name: string;[key: string]: any }[] }
     return `M ${points.join(' L ')}`;
   };
 
-  const handleMouseMove = (e: React.MouseEvent<SVGRectElement>) => {
+  const handleMouseMove = (e: React.MouseEvent<SVGElement>) => {
     if (!containerRef.current) return;
     const svg = e.currentTarget;
     const point = new DOMPoint(e.clientX, e.clientY);

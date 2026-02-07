@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { AchievementBar, ChartCard, KPICard, LineChart, PieChart } from '../components/DashboardComponents';
+import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
 import { CurrencyDollarIcon, ReceiptTaxIcon, UserGroupIcon } from '../components/Icons';
 
 type Period = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
@@ -40,7 +40,6 @@ type EmployeeAgg = {
 };
 
 type BranchStats = Record<string, { current: number; prev: number; transactions: number; items: number }>;
-type EmployeeDailyMaps = Record<string, Record<string, { date: string; sales: number; inv: number; items: number }>>;
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
@@ -137,7 +136,7 @@ function EmployeeDetailModal({
   open,
   employee,
   branchStats,
-  dailyMaps,
+
   onClose,
   periodLabel,
   targetEnabled,
@@ -147,7 +146,7 @@ function EmployeeDetailModal({
   open: boolean;
   employee: EmployeeAgg | null;
   branchStats: BranchStats;
-  dailyMaps: EmployeeDailyMaps;
+
   periodLabel: string;
   targetEnabled: boolean;
   prodRaw: any;
@@ -209,11 +208,9 @@ function EmployeeDetailModal({
 
     // Convert to array and sort
     return Object.entries(dailyMap)
-      .map(([date, value]) => ({ name: date.substring(5), fullDate: date, value })) // name: MM-DD
+      .map(([date, value]) => ({ name: date.substring(5), fullDate: date, 'المبيعات': value })) // name: MM-DD
       .sort((a, b) => a.fullDate.localeCompare(b.fullDate));
   }, [empRaw, detail.id, detail.name, detail.storeCode]);
-
-
 
   // New Data Computations
   const storeId = detail.storeCode;
@@ -376,8 +373,6 @@ function EmployeeDetailModal({
               <div className="h-full w-full pt-4">
                 <LineChart
                   data={salesEvolution}
-                  xKey="name"
-                  series={[{ key: 'value', name: 'المبيعات', color: '#ea580c' }]}
                 />
               </div>
             )}
@@ -451,7 +446,11 @@ export default function EmployeesPage() {
     Object.values(storeMeta).forEach((m: any) => {
       const mgr = m?.manager;
       if (mgr && mgr !== 'online') managersSet.add(String(mgr));
-      if (m?.city) citiesSet.add(String(m.city));
+
+      // Filter cities based on selected manager
+      if (effectiveManager === 'all' || String(m?.manager) === effectiveManager) {
+        if (m?.city) citiesSet.add(String(m.city));
+      }
     });
     const managers = Array.from(managersSet).sort((a, b) => a.localeCompare(b, 'ar'));
     const cities = Array.from(citiesSet).sort((a, b) => a.localeCompare(b, 'ar'));
@@ -480,7 +479,6 @@ export default function EmployeesPage() {
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = toLocalYMD(yesterday);
-    const yesterdayDay = yesterday.getDate();
 
     const normDate = (s: unknown) => String(s || '').substring(0, 10);
 
@@ -607,7 +605,6 @@ export default function EmployeesPage() {
     };
 
     const branchStats: BranchStats = {};
-    const employeeDailyMaps: EmployeeDailyMaps = {};
 
     // Aggregate employee data
     const empAgg: Record<string, any> = {};
@@ -654,13 +651,7 @@ export default function EmployeesPage() {
 
         const key = empId;
 
-        if (pStatus === 1) {
-          if (!employeeDailyMaps[key]) employeeDailyMaps[key] = {};
-          if (!employeeDailyMaps[key][dNorm]) employeeDailyMaps[key][dNorm] = { date: dNorm, sales: 0, inv: 0, items: 0 };
-          employeeDailyMaps[key][dNorm].sales += sales;
-          employeeDailyMaps[key][dNorm].inv += trans;
-          employeeDailyMaps[key][dNorm].items += items;
-        }
+
 
         if (!empAgg[key]) {
           empAgg[key] = {
@@ -822,7 +813,6 @@ export default function EmployeesPage() {
       branches,
       cities,
       branchStats,
-      employeeDailyMaps,
       employees: sorted,
       byManager,
       totals: { totalSales, totalTarget, totalEmployees, topEmployee },
@@ -1206,7 +1196,7 @@ export default function EmployeesPage() {
           open={!!selectedEmployee}
           employee={selectedEmployee}
           branchStats={derived.branchStats}
-          dailyMaps={derived.employeeDailyMaps}
+
           onClose={() => setSelectedEmployeeId(null)}
           periodLabel={periodLabel}
           targetEnabled={targetEnabled}

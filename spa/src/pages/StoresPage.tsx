@@ -595,8 +595,13 @@ export default function StoresPage() {
     const citiesSet = new Set<string>();
     Object.values(meta).forEach((m: any) => {
       if (m?.manager) managersSet.add(String(m.manager));
-      if (m?.city) citiesSet.add(String(m.city));
+
+      // Filter cities based on selected manager
+      if (effectiveManager === 'all' || String(m?.manager) === effectiveManager) {
+        if (m?.city) citiesSet.add(String(m.city));
+      }
     });
+
     const managersList = Array.from(managersSet).sort((a, b) => a.localeCompare(b, 'ar'));
     const citiesList = Array.from(citiesSet).sort((a, b) => a.localeCompare(b, 'ar'));
 
