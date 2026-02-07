@@ -625,6 +625,7 @@ export default function ProductsPage() {
                 <th className="th">القسم</th>
                 <th className="th text-center">الكمية</th>
                 <th className="th text-center">القيمة</th>
+                <th className="th text-center">سعر الوحدة</th>
                 <th className="th">Trend</th>
               </tr>
             </thead>
@@ -650,6 +651,7 @@ export default function ProductsPage() {
                     <td className="td text-neutral-700">{p.category}</td>
                     <td className="td text-center">{Math.round(p.qty).toLocaleString()}</td>
                     <td className="td text-center font-bold text-green-700">{formatSAR(p.amount)}</td>
+                    <td className="td text-center font-medium text-neutral-600 dir-ltr">{p.qty > 0 ? formatSAR(p.amount / p.qty) : '-'}</td>
                     <td className="td text-neutral-600">
                       <div className={`inline-flex items-center gap-2 font-semibold ${p.trend === 'UP' ? 'text-green-700' : p.trend === 'DOWN' ? 'text-red-600' : 'text-neutral-600'}`}>
                         {p.trend || '-'}

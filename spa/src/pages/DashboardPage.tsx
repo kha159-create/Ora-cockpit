@@ -986,6 +986,10 @@ export default function DashboardPage() {
   const [topSellingPage, setTopSellingPage] = useState(1);
   const TOP_SELLING_PER_PAGE = 10;
 
+  // Pagination for Underperforming Stores Widget
+  const [riskPage, setRiskPage] = useState(1);
+  const RISK_ITEMS_PER_PAGE = 10;
+
   // Risk Analysis (Stores below expected achievement based on elapsed days)
   const riskAnalysis = useMemo(() => {
     if (!raw?.sales || !raw?.targets) return { count: 0, expectedPct: 0, totalStores: 0, atRiskStores: [] };
@@ -1051,14 +1055,14 @@ export default function DashboardPage() {
 
     return (
       <div className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden animate-fade-in-up mt-6">
-        <div className="bg-orange-50/50 p-4 border-b border-orange-100 flex items-center justify-between">
+        <div className="bg-red-50/50 p-4 border-b border-red-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="w-1 h-6 bg-orange-500 rounded-full" />
-            <h3 className="font-bold text-neutral-800 text-lg">التحليل المتقدم (Advanced Analysis)</h3>
+            <span className="w-1 h-6 bg-red-500 rounded-full" />
+            <h3 className="font-bold text-neutral-800 text-lg">معارض تحت الأداء (Underperforming Stores)</h3>
           </div>
-          <div className="flex items-center gap-2 text-sm font-medium text-orange-700 bg-orange-100/50 px-3 py-1 rounded-lg">
+          <div className="flex items-center gap-2 text-sm font-medium text-red-700 bg-red-100/50 px-3 py-1 rounded-lg">
             <ExclamationIcon className="w-4 h-4" />
-            الإنذار المبكر (Early Warning)
+            أقل من {riskAnalysis.expectedPct.toFixed(1)}%
           </div>
         </div>
 
@@ -1074,29 +1078,58 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-50">
-              {riskAnalysis.atRiskStores.slice(0, 10).map((st: any) => (
-                <tr key={st.sid} className="hover:bg-orange-50/10 transition-colors group">
-                  <td className="py-3 px-4 font-bold text-neutral-700">{st.name}</td>
-                  <td className="py-3 px-4 font-bold text-neutral-800 dir-ltr text-right">{st.ach.toFixed(1)}%</td>
-                  <td className="py-3 px-4 text-center">
-                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold border ${st.status === 'Critical'
-                      ? 'bg-red-100 text-red-700 border-red-200'
-                      : 'bg-yellow-100 text-yellow-700 border-yellow-200'
-                      }`}>
-                      {st.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-left font-medium text-neutral-600 dir-ltr">{formatSAR(st.sales)}</td>
-                  <td className="py-3 px-4 text-left font-medium text-neutral-500 dir-ltr">{formatSAR(st.target)}</td>
-                </tr>
-              ))}
+              {(() => {
+                const totalPages = Math.max(1, Math.ceil(riskAnalysis.atRiskStores.length / RISK_ITEMS_PER_PAGE));
+                const safePage = Math.min(riskPage, totalPages);
+                const start = (safePage - 1) * RISK_ITEMS_PER_PAGE;
+                const pageItems = riskAnalysis.atRiskStores.slice(start, start + RISK_ITEMS_PER_PAGE);
+
+                return pageItems.map((st: any) => (
+                  <tr key={st.sid} className="hover:bg-red-50/10 transition-colors group">
+                    <td className="py-3 px-4 font-bold text-neutral-700">{st.name}</td>
+                    <td className="py-3 px-4 font-bold text-neutral-800 dir-ltr text-right">{st.ach.toFixed(1)}%</td>
+                    <td className="py-3 px-4 text-center">
+                      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold border ${st.status === 'Critical'
+                        ? 'bg-red-100 text-red-700 border-red-200'
+                        : 'bg-yellow-100 text-yellow-700 border-yellow-200'
+                        }`}>
+                        {st.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-left font-medium text-neutral-600 dir-ltr">{formatSAR(st.sales)}</td>
+                    <td className="py-3 px-4 text-left font-medium text-neutral-500 dir-ltr">{formatSAR(st.target)}</td>
+                  </tr>
+                ));
+              })()}
             </tbody>
           </table>
-          {riskAnalysis.atRiskStores.length > 10 && (
-            <div className="p-3 text-center text-xs text-neutral-400 bg-neutral-50/30 border-t border-neutral-100">
-              عرض 10 من {riskAnalysis.atRiskStores.length} معرض
-            </div>
-          )}
+          {riskAnalysis.atRiskStores.length > RISK_ITEMS_PER_PAGE && (() => {
+            const totalPages = Math.ceil(riskAnalysis.atRiskStores.length / RISK_ITEMS_PER_PAGE);
+            const safePage = Math.min(riskPage, totalPages);
+            return (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-100 bg-neutral-50/30">
+                <div className="text-xs text-neutral-500">
+                  صفحة {safePage} من {totalPages} (إجمالي {riskAnalysis.atRiskStores.length} معرض)
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setRiskPage(p => Math.max(1, p - 1))}
+                    disabled={safePage <= 1}
+                    className="px-2 py-1 text-xs font-semibold border rounded hover:bg-white disabled:opacity-50"
+                  >
+                    السابق
+                  </button>
+                  <button
+                    onClick={() => setRiskPage(p => Math.min(totalPages, p + 1))}
+                    disabled={safePage >= totalPages}
+                    className="px-2 py-1 text-xs font-semibold border rounded hover:bg-white disabled:opacity-50"
+                  >
+                    التالي
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
     );
@@ -1245,15 +1278,14 @@ export default function DashboardPage() {
           icon={<UserGroupIcon />}
         />
         <KPICard
-          title="الهدف"
-          value={totals.sales}
-          comparisonValue={totals.target}
-          comparisonLabel="الهدف"
+          title="الهدف (Target)"
+          value={totals.target}
+          format={formatSAR}
+          comparisonValue={totals.sales}
+          comparisonLabel="المبيعات المحققة"
           icon={<CheckBadgeIcon />}
-          trendValue={`${totals.target > 0 ? (totals.sales / totals.target * 100).toFixed(1) : 0}%`}
-          showProgress={true}
-          trend={totals.target > 0 && (totals.sales / totals.target * 100) >= 100 ? 'up' : 'down'}
-          compactTarget={true}
+          trendValue={`${totals.target > 0 ? (totals.sales / totals.target * 100).toFixed(1) : 0}% تحقيق`}
+          trend={totals.target > 0 && (totals.sales / totals.target * 100) >= 100 ? 'up' : 'neutral'}
         />
       </div>
 
