@@ -571,10 +571,6 @@ export default function StoresPage() {
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
 
-  if (!mgmtRaw || !empRaw || !prodRaw) {
-    return <DashboardSkeleton />;
-  }
-
   useEffect(() => {
     if (mode === 'custom' && !customStart && !customEnd) {
       const today = new Date();
@@ -583,6 +579,10 @@ export default function StoresPage() {
       setCustomEnd(toLocalYMD(today));
     }
   }, [mode, customStart, customEnd]);
+
+  if (!mgmtRaw || !empRaw || !prodRaw) {
+    return <DashboardSkeleton />;
+  }
 
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;

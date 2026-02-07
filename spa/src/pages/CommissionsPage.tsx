@@ -26,19 +26,16 @@ const SimulationModal = ({ isOpen, onClose, employeeName, storeRate }: { isOpen:
 
     const getSimStoreRate = () => {
         let ach = storeAchMode === 'custom' ? customStoreAch : storeAchMode;
-        // Logic from useCommissions (simplified replication)
-        // >= 100% -> 0.75%, >= 90% -> 0.5%, >= 80% -> 0.25%, < 80% -> 0%
-        if (ach >= 100) return 0.75;
-        if (ach >= 90) return 0.5;
-        if (ach >= 80) return 0.25;
+        if (ach >= 100) return 2;
+        if (ach >= 90) return 1;
+        if (ach >= 80) return 0.5;
         return 0;
     };
 
     const simulatedStoreRate = getSimStoreRate();
-    // Commission Rate = Store Rate * (Employee Achievement / 100)
-    // Capped at 1000% achievement for safety if needed, or matching logic
-    const empFactor = Math.min(achievement, 1000) / 100;
-    const finalRate = simulatedStoreRate * empFactor;
+    // New Formula: (Personal Achievement % / 100) * Store Rate
+    // Example: Ach 150% -> 1.5 * StoreRate
+    const finalRate = (achievement / 100) * simulatedStoreRate;
     const commissionAmount = sales * (finalRate / 100);
 
     return (

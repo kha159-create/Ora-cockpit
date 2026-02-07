@@ -120,21 +120,48 @@ export function useCommissions(
             const storeEmployees: EmployeeCommission[] = [];
             const emps = employeesByStore[storeId] || {};
 
-            Object.entries(emps).forEach(([empId, empStats]) => {
-                // Get employee target
-                // Try exact ID or padded ID
-                const empTarget = targets[empId] || targets[empId.padStart(4, '0')] || 0;
+            const targetsByMonth = rawEmp.targets_by_month || {};
+            const monthlyTargets = rawEmp.monthly_targets || {};
+            const targets = rawEmp.targets || {};
 
-                // If range is full month, use full target. If partial, maybe prorate?
-                // For simplicity, we use the target as is, assuming date filter matches target period.
+            const resolveTargetForMonth = (empId: string) => {
+                const id = String(empId).trim();
+                const cands = [id, id.padStart(4, '0')];
+
+                // Get month key for the range (YYYY-MM)
+                const monthKey = start.substring(0, 7);
+
+                // 1. Try targets_by_month
+                const tbm = targetsByMonth[monthKey];
+                if (tbm) {
+                    for (const c of cands) {
+                        if (tbm[c] != null) return Number(tbm[c]) || 0;
+                    }
+                }
+
+                // 2. Try monthly_targets
+                for (const c of cands) {
+                    const mt = monthlyTargets[c];
+                    if (mt && typeof mt === 'object') {
+                        const targetVal = mt[`${monthKey}-01`];
+                        if (targetVal != null) return Number(targetVal) || 0;
+                    }
+                }
+
+                // 3. Current month default
+                for (const c of cands) {
+                    if (targets[c] != null) return Number(targets[c]) || 0;
+                }
+                return 0;
+            };
+
+            Object.entries(emps).forEach(([empId, empStats]) => {
+                // Individual Target
+                const empTarget = resolveTargetForMonth(empId);
 
                 const empAchievement = empTarget > 0 ? (empStats.sales / empTarget) * 100 : 0;
 
-                // Employee Commission Rate = Store Rate * Employee Achievement %
-                // Example: Store gets 2%, Employee achieves 50% of target -> Employee gets 1% (2 * 0.5)
-                // Wait, logic in reference: finalCommissionRate = (storeRate) * (employee.achievement / 100)
-                const finalRate = storeRate * (Math.min(empAchievement, 1000) / 100); // Cap achievement? usually not capped but rate scaling implies it.
-                // Actually, if achievement is 120%, they get 1.2 * StoreRate.
+                const finalRate = (empAchievement / 100) * storeRate;
 
                 storeEmployees.push({
                     id: empId,

@@ -155,15 +155,10 @@ function EmployeeDetailModal({
   onClose: () => void;
 }) {
   const detail = employee;
-  if (!open || !detail) return null;
 
-  const b = branchStats[detail.storeCode];
-  const bAvgTicket = b && b.transactions > 0 ? b.current / b.transactions : 0;
-  const bAvgUPT = b && b.transactions > 0 ? b.items / b.transactions : 0;
-
-  // Sales Evolution (Daily Sales)
+  // 1. Hook: Sales Evolution
   const salesEvolution = useMemo(() => {
-    if (!empRaw?.history) return [];
+    if (!open || !detail || !empRaw?.history) return [];
 
     const storeId = String(detail.storeCode || '');
     const storeHistory = empRaw.history[storeId] || [];
@@ -211,41 +206,31 @@ function EmployeeDetailModal({
     return Object.entries(dailyMap)
       .map(([date, value]) => ({ name: date.substring(5), fullDate: date, 'المبيعات': value })) // name: MM-DD
       .sort((a, b) => a.fullDate.localeCompare(b.fullDate));
-  }, [empRaw, detail.id, detail.name, detail.storeCode]);
+  }, [empRaw, detail, open]); // Added detail and open dependency
 
-  // New Data Computations
-  const storeId = detail.storeCode;
-
-  // Missed Opportunities (Employee Specific)
+  // 2. Hook: Missed Opportunities
   const missedOpportunities = useMemo(() => {
-    if (!prodRaw?.missed_opportunities) return [];
+    if (!open || !detail || !prodRaw?.missed_opportunities) return [];
 
+    const storeId = detail.storeCode;
     // Normalize store ID
-    // Some stores might be "Store 1" vs "1". Try strict first, then flexible.
     const sidVal = String(storeId || '').trim();
     const sidNum = Number(sidVal);
 
-    // Find matching store key in missed_opportunities
-    // Keys could be "29", " 29", "Store 29", etc.
     let targetStoreData: any[] = [];
 
-    // 1. Direct Access
     if (prodRaw.missed_opportunities[sidVal]) targetStoreData = prodRaw.missed_opportunities[sidVal];
     else if (!Number.isNaN(sidNum) && prodRaw.missed_opportunities[sidNum]) targetStoreData = prodRaw.missed_opportunities[sidNum];
 
-    // 2. Search if not found
     if (!targetStoreData || targetStoreData.length === 0) {
       const keys = Object.keys(prodRaw.missed_opportunities);
-      // Try to find a key that equals the ID
       const foundKey = keys.find(k => String(k).trim() === sidVal || Number(k) === sidNum);
       if (foundKey) targetStoreData = prodRaw.missed_opportunities[foundKey];
     }
 
     if (!Array.isArray(targetStoreData)) return [];
 
-    // Filter by Employee ID or Name (Relaxed Match)
     const empId = String(detail.id || '').trim();
-    // "Unknown 263" -> "263"
     const empIdClean = empId.replace(/^0+/, '');
     const empName = String(detail.name || '').trim();
 
@@ -254,15 +239,12 @@ function EmployeeDetailModal({
       const mIdClean = mId.replace(/^0+/, '');
       const mName = String(m.employee_name || '').trim();
 
-      // 1. ID Match (Loose)
-      // Check if mId contains empId or vice versa (e.g. "Unknown 263" vs "263")
       if (empIdClean && mIdClean) {
         if (mIdClean === empIdClean) return true;
         if (mIdClean.includes(empIdClean)) return true;
         if (empIdClean.includes(mIdClean)) return true;
       }
 
-      // 2. Name Match (Loose)
       if (mName === empName) return true;
       if (mName && empName) {
         if (mName.includes(empName) || empName.includes(mName)) return true;
@@ -272,9 +254,14 @@ function EmployeeDetailModal({
     });
 
     return empMissed.sort((a: any, b: any) => safeNum(b.total_count) - safeNum(a.total_count));
-  }, [prodRaw, storeId, detail.id, detail.name]);
+  }, [prodRaw, detail, open]);
 
-  // Product Mix Removed - Replaced by Sales Evolution above
+  // Early return NOW, after hooks
+  if (!open || !detail) return null;
+
+  const b = branchStats[detail.storeCode];
+  const bAvgTicket = b && b.transactions > 0 ? b.current / b.transactions : 0;
+  const bAvgUPT = b && b.transactions > 0 ? b.items / b.transactions : 0;
 
 
   return (
@@ -438,11 +425,9 @@ export default function EmployeesPage() {
 
   const derived = useMemo(() => {
     const historyData: Record<string, any[]> = empRaw?.history || {};
-    const targetsData: Record<string, number> = empRaw?.targets || {};
     const employeeNames: Record<string, string> = empRaw?.employee_names || {};
     const storeMeta: Record<string, any> = mgmtRaw?.store_meta || {};
     const storesData: Record<string, string> = mgmtRaw?.stores || {};
-    const targetsByMonth: Record<string, Record<string, number>> = normalizeTargetsByMonth(empRaw);
 
     const managersSet = new Set<string>();
     const citiesSet = new Set<string>();
@@ -555,55 +540,32 @@ export default function EmployeesPage() {
       return 0;
     };
 
-    const resolveTarget = (empId: string) => {
+
+
+    const targetsData: Record<string, number> = empRaw?.targets || {};
+    const targetsByMonth: Record<string, Record<string, number>> = normalizeTargetsByMonth(empRaw);
+
+    const resolveTargetForMonth = (empId: string) => {
       const id = String(empId || '').trim();
       if (!id) return 0;
       const candidates = [id, id.padStart(4, '0'), String(parseInt(id, 10))].filter(Boolean);
 
-      // For month filter, prefer that month target
-      if (period === 'month') {
-        if (selMonth === 0) {
-          // Yearly target? Sum of available months for this year?
-          // This is tricky if data is month-based.
-          // Let's summing up all months for this year.
-          let totalYearTarget = 0;
-          for (let m = 1; m <= 12; m++) {
-            const mKey = `${selYear}-${pad2(m)}`;
-            const tbm = targetsByMonth[mKey];
-            for (const c of candidates) {
-              if (tbm?.[c] != null) {
-                totalYearTarget += safeNum(tbm[c]);
-                break;
-              }
-            }
-          }
-          if (totalYearTarget > 0) return totalYearTarget;
-          // Fallback to defaults or return 0
-        } else {
-          const monthKey = `${selYear}-${pad2(selMonth)}`;
-          const tbm = targetsByMonth[monthKey];
-          for (const c of candidates) {
-            const v = tbm?.[c];
-            if (v != null) return safeNum(v);
-          }
+      const targetMonthKey = period === 'month' ? `${selYear}-${pad2(selMonth)}` : toLocalYMD(today).substring(0, 7);
+
+      // 1. Try targets_by_month for the selected/current month
+      const tbm = targetsByMonth[targetMonthKey];
+      if (tbm) {
+        for (const c of candidates) {
+          if (tbm[c] != null) return safeNum(tbm[c]);
         }
-        // If not found specific month/year, maybe return 0 to avoid wrong target
-        if (selMonth !== 0) return 0;
       }
 
-      // Default: current month target
+      // 2. Fallback to default targets
       for (const c of candidates) {
         const v = targetsData[c];
         if (v != null) return safeNum(v);
       }
 
-      // Fallback to current month in monthly targets
-      const curMonthKey = `${todayYear}-${pad2(todayMonth0 + 1)}`;
-      const tbm = targetsByMonth[curMonthKey];
-      for (const c of candidates) {
-        const v = tbm?.[c];
-        if (v != null) return safeNum(v);
-      }
       return 0;
     };
 
@@ -651,10 +613,7 @@ export default function EmployeesPage() {
         if (empName === 'مرتجع') continue;
 
         empName = resolveEmployeeName(empId, empName, employeeNames);
-
         const key = empId;
-
-
 
         if (!empAgg[key]) {
           empAgg[key] = {
@@ -667,7 +626,7 @@ export default function EmployeesPage() {
             transactions: 0,
             items: 0,
             max_ticket: 0,
-            target: resolveTarget(empId),
+            target: resolveTargetForMonth(empId),
             storeStats: {} as Record<string, number>,
             latestDates: {} as Record<string, string>,
           };
