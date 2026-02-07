@@ -11,7 +11,7 @@ import { LiveSalesModal } from '../components/dashboard/LiveSalesModal';
 import { DailyReportModal } from '../components/dashboard/DailyReportModal';
 import { StoreReportModal } from '../components/dashboard/StoreReportModal';
 import { EmployeeReportModal } from '../components/dashboard/EmployeeReportModal';
-import { CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon, TagIcon, OfficeBuildingIcon, XIcon, PrinterIcon, UserGroupIcon } from '../components/Icons';
+import { FireIcon, TagIcon, OfficeBuildingIcon, XIcon, PrinterIcon, UserGroupIcon } from '../components/Icons';
 import { generateDailyReportPDF, generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
 
 function isAdminOrAuditor(role?: string) {
