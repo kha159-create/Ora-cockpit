@@ -1030,8 +1030,14 @@ export default function DashboardPage() {
       if (st.target > 0) {
         total++;
         const ach = (st.sales / st.target) * 100;
-        // User logic: If store is below the percentage... it is at risk
-        if (ach < expectedPct) {
+        const gap = expectedPct - ach;
+
+        // User Logic:
+        // Gap <= 2%: Safe (Ignore)
+        // Gap > 2% and < 6%: Medium (Yellow)
+        // Gap >= 6%: Critical (Red)
+
+        if (gap > 2) {
           count++;
           atRiskStores.push({
             sid,
@@ -1039,8 +1045,8 @@ export default function DashboardPage() {
             sales: st.sales,
             target: st.target,
             ach,
-            gap: expectedPct - ach,
-            status: (expectedPct - ach) > 10 ? 'Critical' : 'Medium'
+            gap,
+            status: gap >= 6 ? 'Critical' : 'Medium'
           });
         }
       }
@@ -1277,16 +1283,55 @@ export default function DashboardPage() {
           comparisonLabel="السنة الماضية"
           icon={<UserGroupIcon />}
         />
-        <KPICard
-          title="الهدف (Target)"
-          value={totals.target}
-          format={formatSAR}
-          comparisonValue={totals.sales}
-          comparisonLabel="المبيعات المحققة"
-          icon={<CheckBadgeIcon />}
-          trendValue={`${totals.target > 0 ? (totals.sales / totals.target * 100).toFixed(1) : 0}% تحقيق`}
-          trend={totals.target > 0 && (totals.sales / totals.target * 100) >= 100 ? 'up' : 'neutral'}
-        />
+        {/* Custom Target Card */}
+        <div className="active:scale-[0.98] transition-transform select-none bg-white rounded-xl shadow-sm border border-neutral-200 p-3 sm:p-4 flex flex-col justify-between h-full relative overflow-hidden">
+
+          {/* Header */}
+          <div className="flex justify-center sm:justify-end mb-4">
+            <h3 className="text-sm sm:text-base font-semibold text-neutral-600">تحقيق الهدف (Target)</h3>
+          </div>
+
+          {/* Content: Donut & Big Value */}
+          <div className="flex items-center justify-between px-2">
+            {/* Donut Chart (Left) */}
+            <div className="relative w-12 h-12 sm:w-14 sm:h-14">
+              <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
+                <path
+                  className="text-gray-100"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3.5"
+                />
+                <path
+                  className={totals.target > 0 && (totals.sales / totals.target) >= 1 ? "text-green-500" : "text-orange-500"}
+                  strokeDasharray={`${Math.min((totals.sales / (totals.target || 1)) * 100, 100)}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+
+            {/* Big Percentage (Right) */}
+            <div className="text-right">
+              <div className="text-3xl sm:text-4xl font-bold text-neutral-900">
+                {totals.target > 0 ? (totals.sales / totals.target * 100).toFixed(1) : '0.0'}%
+              </div>
+            </div>
+          </div>
+
+          {/* Footer: Target Value */}
+          <div className="mt-4 text-center sm:text-right border-t border-neutral-50 pt-2">
+            <span className="text-xs text-neutral-400">Target: </span>
+            <span className="text-sm font-medium text-neutral-600 dir-ltr inline-block">{formatSAR(totals.target)}</span>
+          </div>
+
+          {/* Bottom Green Bar Decoration matching image */}
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-green-600 rounded-b-xl" />
+        </div>
       </div>
 
 
