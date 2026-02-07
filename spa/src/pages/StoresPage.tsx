@@ -298,6 +298,21 @@ function StoreDetailsModal({
       }
     }
 
+    // Add previous year visitors for LY column
+    visitorsData.forEach(([d, sid, v]: any[]) => {
+      if (sid !== store?.sid) return;
+      const dateStr = normDate(d);
+      if (dateStr && dateStr >= prevYearStartStr && dateStr <= prevYearEndStr) {
+        const currentDate = dateStr.split('-');
+        currentDate[0] = String(Number(currentDate[0]) + 1);
+        const currentDateStr = currentDate.join('-');
+        if (currentDateStr >= rangeStart && currentDateStr <= rangeEnd) {
+          if (!dailyBreakdown[currentDateStr]) dailyBreakdown[currentDateStr] = { sales: 0, trans: 0, visitors: 0, prevSales: 0, prevVisitors: 0 };
+          dailyBreakdown[currentDateStr].prevVisitors += safeNum(v);
+        }
+      }
+    });
+
     const dailyList = Object.entries(dailyBreakdown)
       .map(([date, stats]) => ({
         date,
@@ -898,9 +913,9 @@ export default function StoresPage() {
                   <td className="td text-center font-medium">{Math.round(s.trans).toLocaleString()}</td>
                   <td className={`td text-center font-bold ${s.ach >= 100 ? 'text-green-600' : s.ach >= 80 ? 'text-yellow-600' : 'text-red-500'}`}>{s.ach.toFixed(1)}%</td>
                   <td className="td text-center font-mono">{formatSAR(s.avgInv)}</td>
-                  <td className="td text-center font-bold text-orange-600">{s.conversion.toFixed(1)}%</td>
                   <td className="td text-center font-medium">{Math.round(s.visitors).toLocaleString()}</td>
                   <td className="td text-center text-neutral-400">{Math.round(s.prevVisitors).toLocaleString()}</td>
+                  <td className="td text-center font-bold text-orange-600">{s.conversion.toFixed(1)}%</td>
                   <td className="td text-center font-bold text-blue-600">{formatSAR(s.customerValue)}</td>
                 </tr>
               ))}
