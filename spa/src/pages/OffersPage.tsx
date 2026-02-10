@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { loadOffersData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { DownloadIcon, XIcon } from '../components/Icons';
+import { DownloadIcon, XIcon, TagIcon, SalesIcon, InvoicesIcon, PremiumTargetIcon, CustomerValueIcon, FireIcon } from '../components/Icons';
+import { KPICard } from '../components/DashboardComponents';
 import * as XLSX from 'xlsx';
 
 function formatSAR(val: number) {
@@ -85,36 +86,41 @@ export default function OffersPage() {
 
   // Compute date range based on period
   const dateRange = useMemo(() => {
-    const today = new Date();
-    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+    const now = new Date();
+    const todayYMD = toYMD(now);
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const yesterdayYMD = toYMD(yesterday);
     const ymd = (d: Date) => toYMD(d);
 
-    if (period === 'yest') return { start: ymd(yesterday), end: ymd(yesterday), label: 'أمس' };
+    if (period === 'yest') return { start: yesterdayYMD, end: yesterdayYMD, label: 'أمس' };
     if (period === '7d') {
-      const s = new Date(today); s.setDate(today.getDate() - 7);
-      return { start: ymd(s), end: ymd(yesterday), label: 'آخر 7 أيام' };
+      const s = new Date(now); s.setDate(now.getDate() - 7);
+      return { start: ymd(s), end: yesterdayYMD, label: 'آخر 7 أيام' };
     }
     if (period === '14d') {
-      const s = new Date(today); s.setDate(today.getDate() - 14);
-      return { start: ymd(s), end: ymd(yesterday), label: 'آخر 14 يوم' };
+      const s = new Date(now); s.setDate(now.getDate() - 14);
+      return { start: ymd(s), end: yesterdayYMD, label: 'آخر 14 يوم' };
     }
     if (period === '30d') {
-      const s = new Date(today); s.setDate(today.getDate() - 30);
-      return { start: ymd(s), end: ymd(yesterday), label: 'آخر 30 يوم' };
+      const s = new Date(now); s.setDate(now.getDate() - 30);
+      return { start: ymd(s), end: yesterdayYMD, label: 'آخر 30 يوم' };
     }
-    if (period === 'custom') {
-      const s = customStart || ymd(new Date(today.getFullYear(), today.getMonth(), 1));
-      const e = customEnd || ymd(yesterday);
-      return { start: s, end: e, label: `${s} → ${e}` };
+    if (period === 'mtd') {
+      const s = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { start: ymd(s), end: yesterdayYMD, label: 'من أول الشهر' };
     }
-    // mtd
-    const mtdStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    return { start: ymd(mtdStart), end: ymd(yesterday), label: 'الشهر الحالي' };
+    if (period === 'custom' && customStart && customEnd) {
+      return { start: customStart, end: customEnd, label: 'فترة مخصصة' };
+    }
+    return { start: todayYMD, end: todayYMD, label: 'اليوم' };
   }, [period, customStart, customEnd]);
 
   const offers = useMemo(() => {
     const { start, end } = dateRange;
-    const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const now = new Date();
+    const yesterdayDate = new Date(now);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     const yesterdayYMD = toYMD(yesterdayDate);
     const storesMap = mgmt?.stores || {};
 
@@ -375,14 +381,14 @@ export default function OffersPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
-        <KPIBox label="إجمالي العروض" value={String(stats.totalOffers)} color="#f97316" />
-        <KPIBox label="مبيعات أمس" value={formatSAR(stats.totalYest)} color="#10b981" />
-        <KPIBox label={`مبيعات (${dateRange.label})`} value={formatSAR(stats.totalPeriod)} color="#10b981" />
-        <KPIBox label={`عمليات (${dateRange.label})`} value={stats.totalPeriodOps.toLocaleString()} color="#3b82f6" />
-        <KPIBox label="كفاءة" value={`${stats.periodEff.toFixed(1)}%`} color="#8b5cf6" />
-        <KPIBox label="متوسط السلة" value={formatSAR(stats.periodAvgBasket)} color="#0ea5e9" />
-        <KPIBox label="إجمالي الخصم" value={formatSAR(stats.totalPeriodDisc)} color="#ef4444" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4">
+        <KPICard title="إجمالي العروض" value={stats.totalOffers} format={v => Math.round(v).toLocaleString()} icon={<TagIcon />} />
+        <KPICard title="مبيعات أمس" value={stats.totalYest} format={formatSAR} icon={<SalesIcon />} />
+        <KPICard title={`مبيعات (${period === 'mtd' ? 'الشهر' : 'الفترة'})`} value={stats.totalPeriod} format={formatSAR} icon={<SalesIcon />} />
+        <KPICard title="عمليات الفترة" value={stats.totalPeriodOps} format={v => Math.round(v).toLocaleString()} icon={<InvoicesIcon />} />
+        <KPICard title="كفاءة العروض" value={stats.periodEff} format={v => v.toFixed(1) + '%'} icon={<PremiumTargetIcon />} showProgress progressValue={stats.periodEff} />
+        <KPICard title="متوسط السلة" value={stats.periodAvgBasket} format={formatSAR} icon={<CustomerValueIcon />} />
+        <KPICard title="إجمالي الخصم" value={stats.totalPeriodDisc} format={formatSAR} icon={<FireIcon />} />
       </div>
 
       {/* Top 5 */}

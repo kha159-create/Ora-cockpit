@@ -29,13 +29,13 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4" onClick={onClose}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
-                <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-3 sm:p-4">
+                <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-3 sm:p-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <span className="text-2xl">📄</span>
+                            <span className="text-2xl">👤</span>
                             <div>
                                 <h2 className="text-lg font-bold">اختيار الموظفين (PDF)</h2>
-                                <p className="text-green-100 text-sm">اختر الموظفين للتقرير وازل المستقيلين</p>
+                                <p className="text-orange-100 text-sm">اختر الموظفين للتقرير وازل المستقيلين</p>
                             </div>
                         </div>
                         <button onClick={onClose} className="bg-white/20 hover:bg-white/30 p-2 rounded-lg">✕</button>
@@ -55,9 +55,9 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
                                         e.target.checked ? newSet.add('active') : newSet.delete('active');
                                         setEmpFilterStatus(newSet);
                                     }}
-                                    className="w-4 h-4 text-green-600 rounded"
+                                    className="w-4 h-4 text-orange-600 rounded"
                                 />
-                                <span className="text-green-600 font-medium">✓ موظف نشط</span>
+                                <span className="text-orange-600 font-medium">✓ موظف نشط</span>
                             </label>
                             <label className="flex items-center gap-2 text-sm">
                                 <input
@@ -95,13 +95,13 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
                     <div className="flex items-center gap-3 mt-3">
                         <button
                             onClick={() => setSelectedEmployees(new Set(employeeList.map(e => e.id)))}
-                            className="text-sm bg-green-100 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-200 transition-colors"
+                            className="text-sm bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg hover:bg-orange-200 transition-colors"
                         >
                             ✓ تحديد الكل
                         </button>
                         <button
                             onClick={() => setSelectedEmployees(new Set())}
-                            className="text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-colors"
+                            className="text-sm bg-neutral-100 text-neutral-700 px-3 py-1.5 rounded-lg hover:bg-neutral-200 transition-colors"
                         >
                             ✗ إلغاء الكل
                         </button>
@@ -164,7 +164,7 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
                                     <td className="p-3 text-gray-600 text-xs">{emp.storeName}</td>
                                     <td className="p-3 font-bold text-gray-800" dir="ltr">{Math.round(emp.sales).toLocaleString()}</td>
                                     <td className="p-3 text-center">
-                                        <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">نشط</span>
+                                        <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold">نشط</span>
                                     </td>
                                 </tr>
                             ))}
@@ -192,7 +192,7 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
                         </button>
                         <button
                             onClick={onGenerate}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                            className="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all shadow-md font-bold flex items-center gap-2"
                             disabled={selectedEmployees.size === 0}
                         >
                             📄 إنشاء التقرير

@@ -8,7 +8,7 @@ interface QuickAccessProps {
 
 export const QuickAccess: React.FC<QuickAccessProps> = ({ onOpenDailyReport }) => {
     return (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
             <button
                 type="button"
                 onClick={onOpenDailyReport}

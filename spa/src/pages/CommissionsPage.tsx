@@ -2,16 +2,15 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 import { useCommissions, getStoreCommissionRate } from '../hooks/useCommissions';
 import { CommissionData } from '../types';
-import { CalendarIcon, ChevronDownIcon, ChevronUpIcon, UserGroupIcon, CalculatorIcon, XIcon } from '../components/Icons';
+import { CalendarIcon, ChevronDownIcon, ChevronUpIcon, CalculatorIcon, XIcon } from '../components/Icons';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { getCurrentUser } from '../auth/storage';
 
 function isAdminOrAuditor(role?: string) { return role === 'Admin' || role === 'Auditor'; }
 
 // Simulation Modal Component
-const SimulationModal = ({ isOpen, onClose, employeeName, storeRate }: { isOpen: boolean; onClose: () => void; employeeName: string; storeRate: number }) => {
+const SimulationModal = ({ isOpen, onClose, employeeName, storeRate, target }: { isOpen: boolean; onClose: () => void; employeeName: string; storeRate: number; target: number }) => {
     const [sales, setSales] = useState<number>(0);
-    const [achievement, setAchievement] = useState<number>(0);
     const [storeAchMode, setStoreAchMode] = useState<number | 'custom'>(100);
     const [customStoreAch, setCustomStoreAch] = useState<number>(100);
 
@@ -19,7 +18,6 @@ const SimulationModal = ({ isOpen, onClose, employeeName, storeRate }: { isOpen:
     useEffect(() => {
         if (isOpen) {
             setSales(0);
-            setAchievement(0);
             setStoreAchMode(100);
             setCustomStoreAch(100);
         }
@@ -36,9 +34,11 @@ const SimulationModal = ({ isOpen, onClose, employeeName, storeRate }: { isOpen:
     };
 
     const simulatedStoreRate = getSimStoreRate();
+    // Calculate achievement based on entered sales and ACTUAL target
+    const simulatedAchievement = target > 0 ? (sales / target) * 100 : 0;
+
     // New Formula: (Personal Achievement % / 100) * Store Rate
-    // Example: Ach 150% -> 1.5 * StoreRate
-    const finalRate = (achievement / 100) * simulatedStoreRate;
+    const finalRate = (simulatedAchievement / 100) * simulatedStoreRate;
     const commissionAmount = sales * (finalRate / 100);
 
     return (
@@ -101,17 +101,10 @@ const SimulationModal = ({ isOpen, onClose, employeeName, storeRate }: { isOpen:
                             className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
                             placeholder="0"
                         />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-neutral-700 mb-1">نسبة التحقيق المتوقعة (%)</label>
-                        <input
-                            type="number"
-                            value={achievement}
-                            onChange={(e) => setAchievement(Number(e.target.value))}
-                            className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
-                            placeholder="0"
-                        />
+                        <div className="mt-1 flex justify-between px-1">
+                            <span className="text-[10px] text-neutral-400">الهدف الفعلي لهذا الموظف: {Math.round(target).toLocaleString()} SAR</span>
+                            <span className="text-[10px] font-bold text-orange-600">نسبة التحقيق: {simulatedAchievement.toFixed(1)}%</span>
+                        </div>
                     </div>
 
                     <div className="bg-neutral-50 p-4 rounded-xl space-y-2 mt-4">
@@ -153,7 +146,7 @@ export default function CommissionsPage() {
 
     // Simulation State
     const [simModalOpen, setSimModalOpen] = useState(false);
-    const [simEmployee, setSimEmployee] = useState<{ name: string; storeRate: number } | null>(null);
+    const [simEmployee, setSimEmployee] = useState<{ name: string; storeRate: number; target: number } | null>(null);
 
     useEffect(() => {
         Promise.all([loadManagementData(), loadEmployeesData()])
@@ -210,9 +203,9 @@ export default function CommissionsPage() {
         });
     }, [commissionData, effectiveManager, storeFilter, data?.mgmt]);
 
-    const handleOpenSim = (name: string, storeRate: number, e: React.MouseEvent) => {
+    const handleOpenSim = (name: string, storeRate: number, target: number, e: React.MouseEvent) => {
         e.stopPropagation();
-        setSimEmployee({ name, storeRate });
+        setSimEmployee({ name, storeRate, target });
         setSimModalOpen(true);
     };
 
@@ -225,6 +218,7 @@ export default function CommissionsPage() {
                 onClose={() => setSimModalOpen(false)}
                 employeeName={simEmployee?.name || ''}
                 storeRate={simEmployee?.storeRate || 0}
+                target={simEmployee?.target || 0}
             />
 
             {/* Header & Filters */}
@@ -327,52 +321,52 @@ export default function CommissionsPage() {
                             {expandedStore === store.storeName && (
                                 <div className="border-t border-neutral-100 bg-neutral-50/50 p-4 animate-in slide-in-from-top-2">
                                     <div className="overflow-x-auto -mx-4 px-4">
-                                    <table className="w-full min-w-[600px] text-sm">
-                                        <thead>
-                                            <tr className="text-neutral-500 border-b border-neutral-200">
-                                                <th className="font-normal p-2 text-right">الموظف</th>
-                                                <th className="font-normal p-2 text-right">المبيعات</th>
-                                                <th className="font-normal p-2 text-right">الهدف</th>
-                                                <th className="font-normal p-2 text-center">تحقيق</th>
-                                                <th className="font-normal p-2 text-center">نسبة</th>
-                                                <th className="font-normal p-2 text-left">العمولة</th>
-                                                <th className="font-normal p-2 text-center">محاكاة</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {store.employees.map((emp) => (
-                                                <tr key={emp.id} className="border-b border-neutral-100 last:border-0 hover:bg-white transition-colors">
-                                                    <td className="p-3 font-semibold text-neutral-700 flex items-center gap-2">
-                                                        <div className="w-8 h-8 rounded-full bg-neutral-200 flex items-center justify-center text-xs text-neutral-600">
-                                                            {emp.name.charAt(0)}
-                                                        </div>
-                                                        {emp.name}
-                                                    </td>
-                                                    <td className="p-3 font-mono text-neutral-600">{Math.round(emp.totalSales).toLocaleString()}</td>
-                                                    <td className="p-3 text-neutral-400">{Math.round(emp.target).toLocaleString()}</td>
-                                                    <td className="p-3 text-center">
-                                                        <span className={`px-2 py-1 rounded text-xs font-bold ${emp.achievement >= 100 ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-600'
-                                                            }`}>
-                                                            {emp.achievement.toFixed(1)}%
-                                                        </span>
-                                                    </td>
-                                                    <td className="p-3 text-center text-blue-600 font-bold">{emp.commissionRate.toFixed(2)}%</td>
-                                                    <td className="p-3 text-left font-bold text-green-600">
-                                                        {Math.round(emp.commissionAmount).toLocaleString()} SAR
-                                                    </td>
-                                                    <td className="p-3 text-center">
-                                                        <button
-                                                            onClick={(e) => handleOpenSim(emp.name, store.commissionRate, e)}
-                                                            className="p-2 hover:bg-orange-50 text-orange-600 rounded-lg transition-colors"
-                                                            title="محاكاة العمولة"
-                                                        >
-                                                            <CalculatorIcon />
-                                                        </button>
-                                                    </td>
+                                        <table className="w-full min-w-[600px] text-sm">
+                                            <thead>
+                                                <tr className="text-neutral-500 border-b border-neutral-200">
+                                                    <th className="font-normal p-2 text-right">الموظف</th>
+                                                    <th className="font-normal p-2 text-right">المبيعات</th>
+                                                    <th className="font-normal p-2 text-right">الهدف</th>
+                                                    <th className="font-normal p-2 text-center">تحقيق</th>
+                                                    <th className="font-normal p-2 text-center">نسبة</th>
+                                                    <th className="font-normal p-2 text-left">العمولة</th>
+                                                    <th className="font-normal p-2 text-center">محاكاة</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody>
+                                                {store.employees.map((emp) => (
+                                                    <tr key={emp.id} className="border-b border-neutral-100 last:border-0 hover:bg-white transition-colors">
+                                                        <td className="p-3 font-semibold text-neutral-700 flex items-center gap-2">
+                                                            <div className="w-8 h-8 rounded-full bg-neutral-200 flex items-center justify-center text-xs text-neutral-600">
+                                                                {emp.name.charAt(0)}
+                                                            </div>
+                                                            {emp.name}
+                                                        </td>
+                                                        <td className="p-3 font-mono text-neutral-600">{Math.round(emp.totalSales).toLocaleString()}</td>
+                                                        <td className="p-3 text-neutral-400">{Math.round(emp.target).toLocaleString()}</td>
+                                                        <td className="p-3 text-center">
+                                                            <span className={`px-2 py-1 rounded text-xs font-bold ${emp.achievement >= 100 ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-600'
+                                                                }`}>
+                                                                {emp.achievement.toFixed(1)}%
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-3 text-center text-blue-600 font-bold">{emp.commissionRate.toFixed(2)}%</td>
+                                                        <td className="p-3 text-left font-bold text-green-600">
+                                                            {Math.round(emp.commissionAmount).toLocaleString()} SAR
+                                                        </td>
+                                                        <td className="p-3 text-center">
+                                                            <button
+                                                                onClick={(e) => handleOpenSim(emp.name, store.commissionRate, emp.target, e)}
+                                                                className="p-2 hover:bg-orange-50 text-orange-600 rounded-lg transition-colors"
+                                                                title="محاكاة العمولة"
+                                                            >
+                                                                <CalculatorIcon />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             )}

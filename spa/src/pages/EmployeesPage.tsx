@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
-import { CurrencyDollarIcon, ReceiptTaxIcon, UserGroupIcon } from '../components/Icons';
+import { SalesIcon, PremiumTargetIcon, VisitorsIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
 import EmployeeCompareModal from '../components/EmployeeCompareModal';
 
@@ -427,6 +428,9 @@ export default function EmployeesPage() {
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const eidParam = searchParams.get('eid');
+
   // Role enforcement: non Admin/Auditor are scoped to their manager name
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -487,28 +491,28 @@ export default function EmployeesPage() {
 
     const normDate = (s: unknown) => String(s || '').substring(0, 10);
 
-    const rangeStart = period === 'custom' && customStart
-      ? customStart
-      : period === 'today'
-        ? todayStr
-        : period === 'yesterday'
-          ? yesterdayStr
-          : period === 'mtd'
-            ? toLocalYMD(new Date(todayYear, todayMonth0, 1))
-            : period === 'month'
-              ? `${selYear}-${pad2(selMonth)}-01`
-              : customStart || todayStr;
-    const rangeEnd = period === 'custom' && customEnd
-      ? customEnd
-      : period === 'today'
-        ? todayStr
-        : period === 'yesterday'
-          ? yesterdayStr
-          : period === 'mtd'
-            ? todayStr
-            : period === 'month'
-              ? toLocalYMD(new Date(selYear, selMonth, 0))
-              : customEnd || todayStr;
+    function getDefaultRange(mode: Period, selYear?: number, selMonth?: number) {
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      const startOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+      if (mode === 'today') return { start: toLocalYMD(today), end: toLocalYMD(today) };
+      if (mode === 'yesterday') return { start: toLocalYMD(yesterday), end: toLocalYMD(yesterday) };
+      if (mode === 'mtd') return { start: toLocalYMD(startOfCurrentMonth), end: toLocalYMD(yesterday) };
+      if (mode === 'month' && selYear && selMonth) {
+        const startOfMonth = new Date(selYear, selMonth - 1, 1);
+        const endOfMonth = new Date(selYear, selMonth, 0);
+        return { start: toLocalYMD(startOfMonth), end: toLocalYMD(endOfMonth) };
+      }
+      // Fallback for custom or other modes
+      return { start: toLocalYMD(today), end: toLocalYMD(today) };
+    }
+
+    const { start: defaultRangeStart, end: defaultRangeEnd } = getDefaultRange(period, selYear, selMonth);
+
+    const rangeStart = (period === 'custom' && customStart) ? customStart : defaultRangeStart;
+    const rangeEnd = (period === 'custom' && customEnd) ? customEnd : defaultRangeEnd;
 
     const checkPeriod = (d: Date, dateStr: string) => {
       const dNorm = normDate(dateStr);
@@ -799,24 +803,39 @@ export default function EmployeesPage() {
       labels: { todayStr, yesterdayStr },
     };
   }, [
-    branch,
-    chartMetric,
-    chartOrder,
-    city,
-    customEnd,
-    customStart,
-    effectiveManager,
     empRaw,
     mgmtRaw,
-    monthsAr,
+    effectiveManager,
+    city,
+    branch,
     period,
-    search,
-    selMonth,
     selYear,
-    sortDir,
+    selMonth,
+    customStart,
+    customEnd,
+    today,
+    search,
     sortKey,
-    user?.role,
+    sortDir,
+    chartMetric,
+    chartOrder,
   ]);
+
+  // Handle eid param from global search
+  useEffect(() => {
+    if (eidParam && derived.employees.length > 0) {
+      const targetEmp = derived.employees.find(e => e.id === eidParam);
+      if (targetEmp) {
+        setSelectedEmployeeId(targetEmp.id);
+        // Clean up URL
+        setSearchParams(prev => {
+          const next = new URLSearchParams(prev);
+          next.delete('eid');
+          return next;
+        }, { replace: true });
+      }
+    }
+  }, [eidParam, derived.employees, setSearchParams]);
 
   const selectedEmployee = useMemo(() => {
     if (!selectedEmployeeId) return null;
@@ -1118,19 +1137,19 @@ export default function EmployeesPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KPICard title="إجمالي الموظفين" value={totals.totalEmployees} format={(v) => Math.round(v).toLocaleString()} icon={<UserGroupIcon />} />
-        <KPICard title="إجمالي المبيعات" value={totals.totalSales} format={formatSAR} icon={<CurrencyDollarIcon />} />
+        <KPICard title="إجمالي الموظفين" value={totals.totalEmployees} format={(v) => Math.round(v).toLocaleString()} icon={<VisitorsIcon />} />
+        <KPICard title="إجمالي المبيعات" value={totals.totalSales} format={formatSAR} icon={<SalesIcon />} />
         <KPICard
           title={targetEnabled && totals.totalTarget > 0 ? 'نسبة تحقيق الهدف' : 'متوسط مبيعات/موظف'}
           value={targetEnabled && totals.totalTarget > 0 ? totalAch : totals.totalEmployees > 0 ? totals.totalSales / totals.totalEmployees : 0}
           format={(v) => (targetEnabled && totals.totalTarget > 0 ? `${v.toFixed(1)}%` : formatSAR(v))}
-          icon={<ReceiptTaxIcon />}
+          icon={<PremiumTargetIcon />}
         />
         <KPICard
           title="أعلى موظف"
           value={totals.topEmployee?.sales || 0}
           format={(v) => `${totals.topEmployee?.name || '-'} · ${formatSAR(v)}`}
-          icon={<CurrencyDollarIcon />}
+          icon={<SalesIcon />}
         />
       </div>
 
@@ -1266,9 +1285,20 @@ export default function EmployeesPage() {
                             <td className="td text-center">{targetEnabled ? formatSAR(e.target) : '-'}</td>
                             <td className="td text-center">
                               {targetEnabled && e.target > 0 ? (
-                                <span className={`font-bold ${e.achievement >= 100 ? 'text-green-700' : e.achievement >= 80 ? 'text-amber-700' : 'text-red-600'}`}>
-                                  {e.achievement.toFixed(1)}%
-                                </span>
+                                <div className="w-[85px] mx-auto flex flex-col items-center">
+                                  <div className="w-full bg-neutral-100 rounded-full h-1.5 overflow-hidden">
+                                    <div
+                                      className={`h-full bg-gradient-to-r transition-all duration-500 ${e.achievement >= 100
+                                        ? 'from-emerald-500 to-emerald-400'
+                                        : e.achievement >= 50
+                                          ? 'from-amber-500 to-amber-400'
+                                          : 'from-red-500 to-red-400'
+                                        }`}
+                                      style={{ width: `${Math.min(100, Math.max(0, e.achievement))}%` }}
+                                    />
+                                  </div>
+                                  <div className="text-[10px] font-bold text-neutral-600 mt-1">{e.achievement.toFixed(1)}%</div>
+                                </div>
                               ) : (
                                 <span className="text-neutral-400">-</span>
                               )}

@@ -3,7 +3,7 @@ import { loadManagementData, loadProductAnalysisData, loadStagnantData } from '.
 import { getCurrentUser } from '../auth/storage';
 import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
-import { CubeIcon, CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, XIcon } from '../components/Icons';
+import { CubeIcon, SalesIcon, InvoicesIcon, VisitorsIcon, XIcon } from '../components/Icons';
 
 type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest';
 type Metric = 'qty' | 'val';
@@ -35,6 +35,8 @@ type CategoryRow = {
 type CatalogItem = {
   id: string;
   name: string;
+  alias?: string;
+  old_code?: string;
   category: string;
   qty: number;
   amount: number;
@@ -305,7 +307,9 @@ export default function ProductsPage() {
         if (qty === 0 && amount === 0) continue;
         catalogRows.push({
           id,
-          name,
+          name: name,
+          alias: String(it?.alias || ''),
+          old_code: String(it?.old_code || ''),
           category: String(catName),
           qty,
           amount,
@@ -319,7 +323,14 @@ export default function ProductsPage() {
     const catFilter = selectedCategory;
     let filteredCatalog = catalogRows;
     if (catFilter !== 'all') filteredCatalog = filteredCatalog.filter((r) => r.category === catFilter);
-    if (q) filteredCatalog = filteredCatalog.filter((r) => r.id.toLowerCase().includes(q) || r.name.toLowerCase().includes(q));
+    if (q) {
+      filteredCatalog = filteredCatalog.filter((r) =>
+        r.id.toLowerCase().includes(q) ||
+        r.name.toLowerCase().includes(q) ||
+        String(r.alias || '').toLowerCase().includes(q) ||
+        String(r.old_code || '').toLowerCase().includes(q)
+      );
+    }
     filteredCatalog.sort((a, b) => (metric === 'qty' ? b.qty - a.qty : b.amount - a.amount));
 
     // ===== Market basket =====
@@ -529,8 +540,12 @@ export default function ProductsPage() {
               >
                 💰 القيمة
               </button>
-              <button type="button" className="btn-primary py-2 px-3 ms-auto" onClick={() => setCatalogOpen(true)}>
-                📂 تصفح الأقسام
+              <button
+                type="button"
+                className="btn-secondary py-2 px-3 flex items-center gap-2"
+                onClick={() => setCatalogOpen(true)}
+              >
+                <CubeIcon className="h-4 w-4" /> تصفح الأقسام
               </button>
             </div>
           </div>
@@ -544,10 +559,10 @@ export default function ProductsPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KPICard title="عدد المعارض في النطاق" value={derived.totals.totalStores} format={(v) => Math.round(v).toLocaleString()} icon={<UsersIcon />} />
+        <KPICard title="عدد المعارض في النطاق" value={derived.totals.totalStores} format={(v) => Math.round(v).toLocaleString()} icon={<VisitorsIcon />} />
         <KPICard title="إجمالي الكمية" value={derived.totals.totalQty} format={(v) => Math.round(v).toLocaleString()} icon={<CubeIcon />} />
-        <KPICard title="إجمالي القيمة" value={derived.totals.totalAmt} format={formatSAR} icon={<CurrencyDollarIcon />} />
-        <KPICard title="عدد المنتجات (بعد الفلترة)" value={derived.totals.productsCount} format={(v) => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
+        <KPICard title="إجمالي القيمة" value={derived.totals.totalAmt} format={formatSAR} icon={<SalesIcon />} />
+        <KPICard title="عدد المنتجات (بعد الفلترة)" value={derived.totals.productsCount} format={(v) => Math.round(v).toLocaleString()} icon={<InvoicesIcon />} />
       </div>
 
 
@@ -563,7 +578,6 @@ export default function ProductsPage() {
             <span className="text-xs text-neutral-500 bg-white border border-neutral-200 px-2 py-1 rounded-lg">
               {(() => {
                 if (!stagnantRaw?.data) return 0;
-                const list = (stagnantRaw.data[store] || []); // If specific store selected
                 // This logic is tentative, real logic is below in variable definition
                 return '...';
               })() && ''}
@@ -790,8 +804,17 @@ export default function ProductsPage() {
                     }}
                   >
                     <td className="td">
-                      <div className="font-mono text-xs text-neutral-500">{p.id}</div>
-                      <div className="font-semibold text-neutral-900">{p.name}</div>
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs text-neutral-500 bg-neutral-100 px-1 rounded">{p.id}</span>
+                          {(p.alias || p.old_code) && (
+                            <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
+                              {p.alias || p.old_code}
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-semibold text-neutral-900 mt-0.5">{p.name}</div>
+                      </div>
                     </td>
                     <td className="td text-neutral-700">{p.category}</td>
                     <td className="td text-center">{Math.round(p.qty).toLocaleString()}</td>
@@ -879,7 +902,6 @@ export default function ProductsPage() {
             <tbody>
               {(() => {
                 const list = derived.basket;
-                const pageCount = Math.ceil(list.length / BASKET_PER_PAGE);
                 const start = (basketPage - 1) * BASKET_PER_PAGE;
                 const visibleItems = list.slice(start, start + BASKET_PER_PAGE);
 
@@ -972,7 +994,6 @@ export default function ProductsPage() {
             <tbody>
               {(() => {
                 const list = derived.missedList;
-                const pageCount = Math.ceil(list.length / MISSED_PER_PAGE);
                 const start = (missedPage - 1) * MISSED_PER_PAGE;
                 const visibleItems = list.slice(start, start + MISSED_PER_PAGE);
 
@@ -1143,9 +1164,9 @@ export default function ProductsPage() {
           <div className="space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <KPICard title="Total Qty" value={productKpis.totalQty} format={(v) => Math.round(v).toLocaleString()} icon={<CubeIcon />} />
-              <KPICard title="Total Amount" value={productKpis.totalAmt} format={formatSAR} icon={<CurrencyDollarIcon />} />
-              <KPICard title="Avg / Day" value={productKpis.avgAmt} format={formatSAR} icon={<ReceiptTaxIcon />} />
-              <KPICard title="Zero Days" value={productKpis.zeroDays} format={(v) => Math.round(v).toLocaleString()} icon={<UsersIcon />} />
+              <KPICard title="Total Amount" value={productKpis.totalAmt} format={formatSAR} icon={<SalesIcon />} />
+              <KPICard title="Avg / Day" value={productKpis.avgAmt} format={formatSAR} icon={<InvoicesIcon />} />
+              <KPICard title="Zero Days" value={productKpis.zeroDays} format={(v) => Math.round(v).toLocaleString()} icon={<VisitorsIcon />} />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

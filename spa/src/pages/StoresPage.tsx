@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { ChartCard, KPICard, PieChart } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
-import { CurrencyDollarIcon, ReceiptTaxIcon, UsersIcon, FireIcon } from '../components/Icons';
+import { SalesIcon, InvoicesIcon, VisitorsIcon, FireIcon, CustomerValueIcon } from '../components/Icons';
 import { runProductValueAnalysis, safeNum } from '../services/analysisHelpers';
 import StoreCompareModal from '../components/StoreCompareModal';
 import { getPrevYearRange, getPrevYearDate } from '../utils/seasons';
@@ -86,7 +87,11 @@ function normDate(s: unknown) {
 }
 
 function getRange(mode: Mode, standardYear: number, standardMonth: string, customStart: string, customEnd: string) {
-  const today = new Date();
+  const now = new Date();
+  const today = new Date(now);
+  if (now.getHours() < 1) {
+    today.setDate(now.getDate() - 1);
+  }
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
 
@@ -95,7 +100,7 @@ function getRange(mode: Mode, standardYear: number, standardMonth: string, custo
 
   if (mode === 'mtd') {
     currStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0);
-    currEnd = new Date(yesterday);
+    currEnd = new Date(yesterday); // Standardize MTD to end at yesterday
     currEnd.setHours(23, 59, 59, 999);
   } else if (mode === 'yesterday') {
     currStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0);
@@ -107,7 +112,7 @@ function getRange(mode: Mode, standardYear: number, standardMonth: string, custo
     currEnd.setHours(23, 59, 59, 999);
   } else if (mode === 'custom') {
     currStart = customStart ? new Date(customStart) : new Date(today.getFullYear(), today.getMonth(), 1);
-    currEnd = customEnd ? new Date(customEnd) : yesterday;
+    currEnd = customEnd ? new Date(customEnd) : today;
     currStart.setHours(0, 0, 0, 0);
     currEnd.setHours(23, 59, 59, 999);
   } else {
@@ -435,8 +440,8 @@ function StoreDetailsModal({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <KPICard title="المبيعات" value={store.val} format={formatSAR} icon={<CurrencyDollarIcon />} />
-            <KPICard title="الفواتير" value={store.trans} format={(v) => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
+            <KPICard title="المبيعات" value={store.val} format={formatSAR} icon={<SalesIcon />} />
+            <KPICard title="الفواتير" value={store.trans} format={(v) => Math.round(v).toLocaleString()} icon={<InvoicesIcon />} />
             <KPICard
               title="التحويل %"
               value={store.conversion}
@@ -449,7 +454,7 @@ function StoreDetailsModal({
               title="قيمة العميل"
               value={store.customerValue}
               format={(v) => formatSAR(v)}
-              icon={<UsersIcon />} // Reusing UsersIcon or creating a new one? UsersIcon is fine for now or maybe Currency?
+              icon={<CustomerValueIcon />}
             />
           </div>
 
@@ -582,6 +587,8 @@ export default function StoresPage() {
       })
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
+
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     if (mode === 'custom' && !customStart && !customEnd) {
@@ -749,6 +756,14 @@ export default function StoresPage() {
     return { managers: managersList, cities: citiesList, branches: branchesList, list, totals: totalsValues, achTotal, rangeLabel: range.startYMD === range.endYMD ? range.startYMD : `${range.startYMD} → ${range.endYMD} ` };
   }, [branch, city, effectiveManager, manager, mgmtRaw, range, type, user?.name, user?.role]);
 
+  useEffect(() => {
+    const sid = searchParams.get('sid');
+    if (sid && derived?.list.some(s => s.sid === sid)) {
+      setSelectedSid(sid);
+      // Optional: Clear param after opening? Usually better to keep for refresh.
+    }
+  }, [searchParams, derived?.list]);
+
   const selectedStore = useMemo(() => {
     if (!derived || !selectedSid) return null;
     return derived.list.find((s) => s.sid === selectedSid) || null;
@@ -876,11 +891,19 @@ export default function StoresPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="إجمالي المبيعات" value={derived.totals.sales} format={formatSAR} icon={<CurrencyDollarIcon />} />
-        <KPICard title="إجمالي الفواتير" value={derived.totals.trans} format={v => Math.round(v).toLocaleString()} icon={<ReceiptTaxIcon />} />
-        <KPICard title="إجمالي الزوار" value={derived.totals.visitors} format={v => Math.round(v).toLocaleString()} icon={<UsersIcon />} />
-        <KPICard title="متوسط الإنجاز" value={derived.achTotal} format={v => `${v.toFixed(1)}% `} progressValue={derived.achTotal} showProgress />
+      {/* Top 4 Store-level KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <KPICard title="المبيعات" value={derived.totals.sales} format={formatSAR} icon={<SalesIcon />} />
+        <KPICard title="الفواتير" value={derived.totals.trans} format={(v) => Math.round(v).toLocaleString()} icon={<InvoicesIcon />} />
+        <KPICard title="الزوار" value={derived.totals.visitors} format={(v) => Math.round(v).toLocaleString()} icon={<VisitorsIcon />} />
+        <KPICard
+          title="نسبة التحويل"
+          value={derived.totals.visitors > 0 ? (derived.totals.trans / derived.totals.visitors) * 100 : 0}
+          format={(v) => v.toFixed(1) + '%'}
+          icon={<FireIcon />}
+          showProgress
+          progressValue={derived.totals.visitors > 0 ? (derived.totals.trans / derived.totals.visitors) * 100 : 0}
+        />
       </div>
 
       <ChartCard title={`أداء الفروع(${derived.rangeLabel})`}>
@@ -922,7 +945,22 @@ export default function StoresPage() {
                   </td>
                   <td className="td text-center font-bold text-blue-600 font-mono">{formatSAR(s.dailyReq)}</td>
                   <td className="td text-center font-medium">{Math.round(s.trans).toLocaleString()}</td>
-                  <td className={`td text-center font-bold ${s.ach >= 100 ? 'text-green-600' : s.ach >= 80 ? 'text-yellow-600' : 'text-red-500'}`}>{s.ach.toFixed(1)}%</td>
+                  <td className="td text-center">
+                    <div className="w-[85px] mx-auto flex flex-col items-center">
+                      <div className="w-full bg-neutral-100 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className={`h-full bg-gradient-to-r transition-all duration-500 ${s.ach >= 100
+                            ? 'from-emerald-500 to-emerald-400'
+                            : s.ach >= 50
+                              ? 'from-amber-500 to-amber-400'
+                              : 'from-red-500 to-red-400'
+                            }`}
+                          style={{ width: `${Math.min(100, Math.max(0, s.ach))}%` }}
+                        />
+                      </div>
+                      <div className="text-[10px] font-bold text-neutral-600 mt-1">{s.ach.toFixed(1)}%</div>
+                    </div>
+                  </td>
                   <td className="td text-center font-mono">{formatSAR(s.avgInv)}</td>
                   <td className="td text-center font-medium">{Math.round(s.visitors).toLocaleString()}</td>
                   <td className="td text-center text-neutral-400">{Math.round(s.prevVisitors).toLocaleString()}</td>

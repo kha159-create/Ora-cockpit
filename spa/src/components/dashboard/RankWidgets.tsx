@@ -1,5 +1,6 @@
 import React from 'react';
 import { RankCard } from '../DashboardComponents';
+import { UsersIcon, OfficeBuildingIcon } from '../Icons';
 
 interface RankWidgetsProps {
     topEmployees: any[];
@@ -12,6 +13,7 @@ export const RankWidgets: React.FC<RankWidgetsProps> = ({ topEmployees, topStore
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <RankCard
                 title="أعلى الموظفين (Top Employees)"
+                icon={<UsersIcon />}
                 metrics={[
                     { key: 'avg_inv', label: 'معدل فاتورة' },
                     { key: 'sales', label: 'بيع' },
@@ -23,6 +25,7 @@ export const RankWidgets: React.FC<RankWidgetsProps> = ({ topEmployees, topStore
             />
             <RankCard
                 title="أعلى الفروع (Top Stores)"
+                icon={<OfficeBuildingIcon />}
                 metrics={[
                     { key: 'avg_inv', label: 'معدل فاتورة' },
                     { key: 'visitors', label: 'زوار' },

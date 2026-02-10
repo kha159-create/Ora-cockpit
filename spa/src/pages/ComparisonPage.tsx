@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { loadManagementData } from '../services/upstreamData';
 import { useComparison, ComparisonMetric } from '../hooks/useComparison';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
@@ -22,7 +22,7 @@ const getRange = (mode: RangeMode, stdYear: number, stdMonth: string, customStar
     if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
     if (mode === 'mtd') {
         const start = new Date(today.getFullYear(), today.getMonth(), 1);
-        return { start: toYMD(start), end: toYMD(today) };
+        return { start: toYMD(start), end: toYMD(yesterday) };
     }
     if (mode === 'last_month') {
         const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
@@ -87,7 +87,7 @@ export default function ComparisonPage() {
     const [loading, setLoading] = useState(true);
     const [mgmtData, setMgmtData] = useState<any>(null);
     const [rangeMode, setRangeMode] = useState<RangeMode>('mtd');
-    const [activeMetric, setActiveMetric] = useState<'sales' | 'visitors' | 'transactions' | 'atv' | 'conversion'>('sales');
+    const [activeMetric, setActiveMetric] = useState<'sales' | 'visitors' | 'transactions' | 'atv' | 'conversion' | 'customer_value'>('sales');
 
     // New filter states
     const [manager, setManager] = useState('all');
@@ -159,7 +159,7 @@ export default function ComparisonPage() {
 
     const dateRange = useMemo(() => getRange(rangeMode, stdYear, stdMonth, customStart, customEnd), [rangeMode, stdYear, stdMonth, customStart, customEnd]);
 
-    const chartType = (activeMetric === 'atv' || activeMetric === 'conversion') ? 'sales' : activeMetric;
+    const chartType = (activeMetric === 'atv' || activeMetric === 'conversion' || activeMetric === 'customer_value') ? 'sales' : activeMetric;
     const { metrics, chartData } = useComparison(filteredMgmt, dateRange, chartType);
 
     // Detailed Comparison Table data
@@ -295,7 +295,7 @@ export default function ComparisonPage() {
             </div>
 
             {/* Metrics Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 {metrics.map((m) => (
                     <ComparisonCard
                         key={m.key}
@@ -355,7 +355,7 @@ export default function ComparisonPage() {
                             <Tooltip
                                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                 itemStyle={{ color: '#1f2937' }}
-                                formatter={(value: number) => [Math.round(value).toLocaleString(), undefined]}
+                                formatter={(value: any) => [Math.round(Number(value) || 0).toLocaleString(), '']}
                                 labelFormatter={(label) => label}
                             />
                             <Area

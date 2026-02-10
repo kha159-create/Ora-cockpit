@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { getPrevYearRange } from '../utils/seasons';
 
 export interface ComparisonMetric {
     key: string;
@@ -28,21 +29,20 @@ export function useComparison(
         const startDate = new Date(start);
         const endDate = new Date(end);
 
-        // Determine Previous Year Range
-        const prevStart = new Date(startDate);
-        prevStart.setFullYear(startDate.getFullYear() - 1);
-        const prevEnd = new Date(endDate);
-        prevEnd.setFullYear(endDate.getFullYear() - 1);
+        // Determine Previous Year Range using season-aware logic
+        const { start: prevStartStr, end: prevEndStr } = getPrevYearRange(start, end);
 
-        // Auto-adjust leap year or slight shifts if needed, but simple FullYear-1 is usually fine for retail LFL unless day-of-week matching is strict.
-        // For simplicity, we stick to date-matching (e.g. 1st Jan vs 1st Jan).
+        const prevStart = new Date(prevStartStr);
 
-        const fmt = (d: Date) => d.toISOString().split('T')[0];
-        const prevStartStr = fmt(prevStart);
-        const prevEndStr = fmt(prevEnd);
+        const fmt = (d: Date) => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        };
 
         // Helpers
-        const getVal = (row: any[], t: string) => {
+        const getVal = (row: any[]) => {
             // raw structure:
             // sales: [date, storeId, value]
             // visitors: [date, storeId, value]
@@ -53,7 +53,7 @@ export function useComparison(
         const filterSum = (rows: any[], s: string, e: string) => {
             return rows.reduce((sum, row) => {
                 const d = String(row[0]).substring(0, 10);
-                if (d >= s && d <= e) return sum + getVal(row, type);
+                if (d >= s && d <= e) return sum + getVal(row);
                 return sum;
             }, 0);
         };
@@ -79,6 +79,9 @@ export function useComparison(
 
         const currentConv = currentVisitors > 0 ? (currentTrans / currentVisitors) * 100 : 0;
         const prevConv = prevVisitors > 0 ? (prevTrans / prevVisitors) * 100 : 0;
+
+        const currentCV = currentVisitors > 0 ? currentSales / currentVisitors : 0;
+        const prevCV = prevVisitors > 0 ? prevSales / prevVisitors : 0;
 
         // 2. Metrics Object
         const metrics: ComparisonMetric[] = [
@@ -106,6 +109,11 @@ export function useComparison(
                 key: 'conversion', title: 'معدل التحويل',
                 current: currentConv, previous: prevConv,
                 growth: calcGrowth(currentConv, prevConv), isPercentage: true
+            },
+            {
+                key: 'customer_value', title: 'قيمة العميل',
+                current: currentCV, previous: prevCV,
+                growth: calcGrowth(currentCV, prevCV), isCurrency: true
             },
         ];
 

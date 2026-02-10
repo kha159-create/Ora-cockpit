@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
-import { CubeIcon, OfficeBuildingIcon, SearchIcon, UserGroupIcon, XIcon } from './Icons';
+import { CubeIcon, OfficeBuildingIcon, SearchIcon, UserGroupIcon } from './Icons';
 
 interface SearchResult {
     id: string;
@@ -49,26 +49,23 @@ export default function GlobalSearch({ isOpen, onClose }: { isOpen: boolean; onC
                         type: 'store',
                         title: String(name),
                         subtitle: `Store ID: ${id}`,
-                        url: `/stores?id=${id}`, // We might need to handle this query param in StoresPage
+                        url: `/stores?sid=${id}`,
                     });
                 }
             });
         }
 
         // 2. Employees Array match
-        // Employees raw data structure: { history: {...}, employee_names: {...} }
         if (data.employees?.employee_names) {
             Object.entries(data.employees.employee_names).forEach(([id, name]: [string, any]) => {
                 const eName = String(name).toLowerCase();
                 if (eName.includes(q) || id.includes(q)) {
-                    // Find which store they belong to? access history maybe? Too heavy.
-                    // Just link to employees page
                     res.push({
                         id,
                         type: 'employee',
                         title: String(name),
                         subtitle: `Employee ID: ${id}`,
-                        url: `/employees?id=${id}`,
+                        url: `/employees?eid=${id}`,
                     });
                 }
             });
@@ -163,8 +160,8 @@ export default function GlobalSearch({ isOpen, onClose }: { isOpen: boolean; onC
                                     onMouseEnter={() => setSelectedIndex(idx)}
                                 >
                                     <div className={`p-2 rounded-lg ${item.type === 'store' ? 'bg-blue-100 text-blue-600' :
-                                            item.type === 'employee' ? 'bg-green-100 text-green-600' :
-                                                'bg-purple-100 text-purple-600'
+                                        item.type === 'employee' ? 'bg-green-100 text-green-600' :
+                                            'bg-purple-100 text-purple-600'
                                         }`}>
                                         {item.type === 'store' && <OfficeBuildingIcon className="w-5 h-5" />}
                                         {item.type === 'employee' && <UserGroupIcon className="w-5 h-5" />}

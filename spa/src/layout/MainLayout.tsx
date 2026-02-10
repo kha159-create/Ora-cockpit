@@ -11,24 +11,25 @@ import {
   LogoutIcon,
   MenuIcon,
   OfficeBuildingIcon,
-  PauseIcon,
   SwitchHorizontalIcon,
   TagIcon,
   TargetIcon,
   UserGroupIcon,
   SearchIcon,
-  XIcon,
 } from '../components/Icons';
+import { loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
+import { ProductInquiryModal } from '../components/products/ProductInquiryModal';
+import { formatSAR } from '../utils/formatting';
 
 const baseNavItems = [
   { to: '/', label: 'لوحة التحكم', icon: <HomeIcon /> },
-  { to: '/reports', label: 'التقارير', icon: <ClipboardListIcon /> },
-  { to: '/employees', label: 'الموظفين', icon: <UserGroupIcon /> },
   { to: '/stores', label: 'المعارض', icon: <OfficeBuildingIcon /> },
-  { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
-  { to: '/offers', label: 'تحليل العروض', icon: <TagIcon /> },
-  { to: '/commissions', label: 'العمولات', icon: <CashIcon /> },
   { to: '/comparison', label: 'المقارنات', icon: <SwitchHorizontalIcon /> },
+  { to: '/employees', label: 'الموظفين', icon: <UserGroupIcon /> },
+  { to: '/commissions', label: 'العمولات', icon: <CashIcon /> },
+  { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
+  { to: '/offers', label: 'قائمة العروض', icon: <TagIcon /> },
+  { to: '/reports', label: 'التقارير', icon: <ClipboardListIcon /> },
 ] as const;
 
 const targetsNavItem = { to: '/targets', label: 'تحديد الأهداف', icon: <TargetIcon /> } as const;
@@ -65,7 +66,11 @@ export default function MainLayout() {
   const user = getCurrentUser();
   const loc = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSearchOpen, setIsSearchOpen] = useState(false); // Added isSearchOpen state
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isInquiryOpen, setIsInquiryOpen] = useState(false);
+  const [globalProducts, setGlobalProducts] = useState<any[]>([]);
+  const [globalHistory, setGlobalHistory] = useState<Record<string, any[]>>({});
+  const [globalMeta, setGlobalMeta] = useState<any>(null);
 
   // Global Keyboard Shortcut for Search (Ctrl+K or Cmd+K)
   useEffect(() => {
@@ -85,11 +90,52 @@ export default function MainLayout() {
     const canTargets = user?.role === 'Admin' || user?.name === 'Sales Manager';
     return canTargets ? [...baseNavItems, targetsNavItem] : baseNavItems;
   }, [user?.role, user?.name]);
-
   const activeLabel = useMemo(() => {
     const hit = navItems.find((i) => i.to === loc.pathname);
     return hit?.label ?? 'لوحة التحكم';
   }, [loc.pathname, navItems]);
+
+  const openInquiry = async () => {
+    setIsInquiryOpen(true);
+    if (globalProducts.length > 0) return;
+
+    try {
+      const [mgmtRaw, prodRaw] = await Promise.all([loadManagementData(), loadProductAnalysisData()]);
+      setGlobalMeta(mgmtRaw);
+      const pData = prodRaw.periods?.['mtd'] || null;
+      if (!pData) return;
+
+      const history = prodRaw.product_daily_history || {};
+      setGlobalHistory(history);
+
+      const catalog: Record<string, any[]> = (pData?.catalog || {}) as any;
+      const rows: any[] = [];
+      Object.entries(catalog).forEach(([catName, items]) => {
+        if (!Array.isArray(items)) return;
+        for (const it of items) {
+          const id = String(it?.id || '');
+          const name = String(it?.name || id);
+          const alias = String(it?.alias || '');
+          const stores = it?.stores || {};
+          let qty = 0;
+          let amount = 0;
+          const salesByStore: Record<string, { q: number; a: number }> = {};
+          for (const [sid, stData] of Object.entries(stores)) {
+            qty += Number((stData as any)?.q) || 0;
+            amount += Number((stData as any)?.a) || 0;
+            salesByStore[sid] = {
+              q: Number((stData as any)?.q) || 0,
+              a: Number((stData as any)?.a) || 0
+            };
+          }
+          rows.push({ id, name, alias: String(alias), category: String(catName), qty, amount, salesByStore });
+        }
+      });
+      setGlobalProducts(rows);
+    } catch (err) {
+      console.error('Failed to load inquiry data:', err);
+    }
+  };
 
   const sidebarHidden = !isSidebarOpen;
   return (
@@ -106,7 +152,7 @@ export default function MainLayout() {
           ${sidebarHidden ? 'main-layout-sidebar--closed' : ''}
         `}
       >
-        <div className="p-4 sm:p-6 border-b border-neutral-200">
+        <div className="p-4 sm:p-6 border-b border-neutral-200" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1rem)' }}>
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-lg flex-shrink-0">
               <img src="./icon-192.png" alt="Orange" className="w-full h-full object-cover" />
@@ -150,8 +196,8 @@ export default function MainLayout() {
       </aside>
 
       <main className="main-layout-main p-2 sm:p-4 md:p-6 bg-neutral-50 pt-safe">
-        <header className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-3 sm:p-6 mb-3 sm:mb-6">
-          <div className="flex justify-between items-center flex-wrap gap-3">
+        <header className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-3 sm:p-5 mb-3 sm:mb-6">
+          <div className="flex justify-between items-center flex-wrap gap-4">
             <div className="flex items-center gap-4 min-w-0">
               <button
                 className="md:hidden p-3 text-neutral-600 hover:bg-neutral-100 rounded-xl transition-all duration-200"
@@ -164,32 +210,48 @@ export default function MainLayout() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                onClick={() => setIsSearchOpen(true)}
-                className="p-2 sm:p-2.5 rounded-xl text-neutral-500 hover:bg-neutral-100 hover:text-orange-600 transition-colors"
-                title="بحث (Ctrl+K)"
-              >
-                <SearchIcon />
-              </button>
-
-              {isSidebarOpen && (
-                <button className="md:hidden p-2 rounded-lg hover:bg-neutral-100" onClick={() => setIsSidebarOpen(false)}>
-                  <XIcon />
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <div className="flex bg-neutral-100 p-1 rounded-2xl gap-1">
+                <button
+                  onClick={() => setIsSearchOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-neutral-600 hover:bg-white hover:text-orange-600 hover:shadow-sm transition-all group border border-transparent"
+                  title="بحث النظام (Ctrl+K)"
+                >
+                  <SearchIcon className="h-5 w-5" />
+                  <span className="hidden lg:inline font-bold text-sm">بحث النظام</span>
                 </button>
-              )}
+
+                <button
+                  onClick={openInquiry}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-neutral-600 hover:bg-white hover:text-orange-600 hover:shadow-sm transition-all group border border-transparent"
+                >
+                  <CubeIcon className="h-5 w-5" />
+                  <span className="hidden lg:inline font-bold text-sm">استعلام منتج</span>
+                </button>
+              </div>
+
               <button
-                className="btn-secondary py-2 px-4"
+                className="btn-secondary py-2.5 px-5 flex items-center gap-2"
                 onClick={() => {
                   clearCurrentUser();
                   nav('/login');
                 }}
               >
-                خروج
+                <LogoutIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">خروج</span>
               </button>
             </div>
           </div>
         </header>
+
+        <ProductInquiryModal
+          isOpen={isInquiryOpen}
+          onClose={() => setIsInquiryOpen(false)}
+          products={globalProducts}
+          history={globalHistory}
+          formatSAR={formatSAR}
+          mgmtData={globalMeta}
+        />
 
         <SeasonBanner />
 

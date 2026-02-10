@@ -9,6 +9,17 @@ const IconWrapper: React.FC<{ children: React.ReactNode; className?: string }> =
   </svg>
 );
 
+const CustomIconWrapper: React.FC<{ children: React.ReactNode; className?: string; viewBox?: string; strokeWidth?: string | number }> = ({
+  children,
+  className = 'h-6 w-6',
+  viewBox = '0 0 24 24',
+  strokeWidth = '1.8',
+}) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox={viewBox} stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+    {children}
+  </svg>
+);
+
 export const HomeIcon = () => (
   <IconWrapper>
     <path
@@ -29,8 +40,8 @@ export const OfficeBuildingIcon = ({ className }: { className?: string }) => (
     />
   </IconWrapper>
 );
-export const UserGroupIcon = () => (
-  <IconWrapper>
+export const UserGroupIcon = ({ className }: { className?: string }) => (
+  <IconWrapper className={className}>
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -39,8 +50,8 @@ export const UserGroupIcon = () => (
     />
   </IconWrapper>
 );
-export const CubeIcon = () => (
-  <IconWrapper>
+export const CubeIcon = ({ className }: { className?: string }) => (
+  <IconWrapper className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m8 4v10M4 7v10l8 4" />
   </IconWrapper>
 );
@@ -125,18 +136,18 @@ export const ArrowLeftIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
   </IconWrapper>
 );
-export const MenuIcon = () => (
-  <IconWrapper>
+export const MenuIcon = ({ className }: { className?: string }) => (
+  <IconWrapper className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
   </IconWrapper>
 );
-export const XIcon = () => (
-  <IconWrapper>
+export const XIcon = ({ className }: { className?: string }) => (
+  <IconWrapper className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
   </IconWrapper>
 );
-export const LogoutIcon = () => (
-  <IconWrapper className="h-5 w-5">
+export const LogoutIcon = ({ className }: { className?: string }) => (
+  <IconWrapper className={className || 'h-5 w-5'}>
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -327,4 +338,47 @@ export const SwitchHorizontalIcon = () => (
   <IconWrapper>
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
   </IconWrapper>
+);
+
+// --- Premium Dashboard Icons ---
+export const SalesIcon = ({ className }: { className?: string }) => (
+  <CustomIconWrapper className={className}>
+    <path d="M2 20h20" />
+    <path d="M5 20V10l4-6 4 4 4-7 4 3v16" />
+  </CustomIconWrapper>
+);
+
+export const InvoicesIcon = ({ className }: { className?: string }) => (
+  <CustomIconWrapper className={className}>
+    <rect x="5" y="2" width="14" height="20" rx="2" />
+    <path d="M9 6h6" />
+    <path d="M9 10h6" />
+    <path d="M9 14h4" />
+    <path d="M9 18h2" />
+  </CustomIconWrapper>
+);
+
+export const VisitorsIcon = ({ className }: { className?: string }) => (
+  <CustomIconWrapper className={className}>
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </CustomIconWrapper>
+);
+
+export const CustomerValueIcon = ({ className }: { className?: string }) => (
+  <CustomIconWrapper className={className}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 6v12" />
+    <path d="M15 9.5c0-1.38-1.34-2.5-3-2.5s-3 1.12-3 2.5 1.34 2.5 3 2.5 3 1.12 3 2.5-1.34 2.5-3 2.5" />
+  </CustomIconWrapper>
+);
+
+export const PremiumTargetIcon = ({ className }: { className?: string }) => (
+  <CustomIconWrapper className={className} strokeWidth="2">
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="12" r="6" />
+    <circle cx="12" cy="12" r="2" />
+  </CustomIconWrapper>
 );
