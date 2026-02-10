@@ -187,6 +187,7 @@ export default function LivePage() {
       <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
         <h3 className="text-lg font-bold text-neutral-900">متابعة مبيعات اليوم — لايف</h3>
         <p className="text-sm text-neutral-600 mt-1">تاريخ اليوم: {today}</p>
+        <span className="hidden">v2.1-split-layout</span>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
