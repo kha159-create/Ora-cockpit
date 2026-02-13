@@ -1,0 +1,5 @@
+Reading external products from C:\Users\Orange1\Downloads\Compressed\catalog-main\catalog-main\products.json...
+Loaded 11591 existing records from C:\Users\Orange1\Desktop\Ora-cockpit\spa\public\product_mapping.json
+External data has 6077 items.
+Found 0 new records from external source.
+Successfully merged. Total records: 11591

@@ -16,9 +16,13 @@ import {
   TargetIcon,
   UserGroupIcon,
   SearchIcon,
+  FireIcon, // Added
+  XIcon, // For modal close if needed
 } from '../components/Icons';
-import { loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
+import { loadManagementData, loadProductAnalysisData, loadStockData } from '../services/upstreamData';
 import { ProductInquiryModal } from '../components/products/ProductInquiryModal';
+import { LiveSalesModal } from '../components/dashboard/LiveSalesModal'; // Added
+import { useLiveSalesData } from '../hooks/useLiveSalesData'; // Added
 import { formatSAR } from '../utils/formatting';
 
 const baseNavItems = [
@@ -72,6 +76,17 @@ export default function MainLayout() {
   const [globalHistory, setGlobalHistory] = useState<Record<string, any[]>>({});
   const [globalMeta, setGlobalMeta] = useState<any>(null);
 
+  // Live Sales Data Hook
+  const { calculateLiveData, isAdminOrAuditor: isUserAdmin } = useLiveSalesData();
+  const [liveModalOpen, setLiveModalOpen] = useState(false);
+  const [liveManager, setLiveManager] = useState('all');
+
+  // Memoize live data based on current manager filter
+  const { liveData, managersList } = useMemo(() => {
+    return calculateLiveData(liveManager);
+  }, [calculateLiveData, liveManager]);
+
+
   // Global Keyboard Shortcut for Search (Ctrl+K or Cmd+K)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -95,18 +110,88 @@ export default function MainLayout() {
     return hit?.label ?? 'لوحة التحكم';
   }, [loc.pathname, navItems]);
 
-  const openInquiry = async () => {
-    setIsInquiryOpen(true);
-    if (globalProducts.length > 0) return;
-
+  // Helper to load/refresh data
+  const loadInquiryData = async () => {
     try {
-      const [mgmtRaw, prodRaw] = await Promise.all([loadManagementData(), loadProductAnalysisData()]);
+      const [mgmtRaw, prodRaw, stockRaw] = await Promise.all([
+        loadManagementData(),
+        loadProductAnalysisData(),
+        loadStockData()
+      ]);
       setGlobalMeta(mgmtRaw);
       const pData = prodRaw.periods?.['mtd'] || null;
       if (!pData) return;
 
       const history = prodRaw.product_daily_history || {};
       setGlobalHistory(history);
+
+      // --- STOCK PROCESSING LOGIC ---
+      const storesMap: Record<string, string> = mgmtRaw.stores || {};
+      // Invert storesMap for Name -> ID lookup
+      const storeNameTokId: Record<string, string> = {};
+      Object.entries(storesMap).forEach(([id, name]) => {
+        if (name) storeNameTokId[name.trim().toLowerCase()] = id;
+      });
+
+      // [NEW] Explicit Mappings for data consistency
+      storeNameTokId['warehouse riyadh'] = '0'; // Map Riyadh Warehouse to Main Warehouse (ID 0)
+      storeNameTokId['transit'] = '0';          // Map Transit to Main Warehouse or ignore
+      storeNameTokId['warehouse'] = '0';        // Ensure generic Warehouse is mapped
+
+      const stockMap = new Map<string, { total: number; byStore: Record<string, number> }>();
+      const safeNum = (x: any) => { const n = Number(x); return Number.isFinite(n) ? n : 0; };
+
+      if (Array.isArray(stockRaw)) {
+        stockRaw.forEach((item: any) => {
+          const code = String(item.code || '').trim();
+          const alias = String(item.alias || '').trim();
+          const totalQty = safeNum(item.stock);
+
+          if (!code && !alias) return;
+
+          let entry = (code ? stockMap.get(code) : undefined) || (alias ? stockMap.get(alias) : undefined);
+          if (!entry) {
+            entry = { total: 0, byStore: {} };
+            if (code) stockMap.set(code, entry);
+            if (alias) stockMap.set(alias, entry);
+          } else {
+            if (code && !stockMap.has(code)) stockMap.set(code, entry);
+            if (alias && !stockMap.has(alias)) stockMap.set(alias, entry);
+          }
+
+          // Update Total
+          entry.total += totalQty;
+
+          // Process Branches
+          if (item.branches && typeof item.branches === 'object') {
+            Object.entries(item.branches).forEach(([brName, brQty]) => {
+              const qty = safeNum(brQty);
+              if (qty !== 0) {
+                const cleanName = brName.trim();
+                const normalizedParams = cleanName.toLowerCase();
+                const sid = storeNameTokId[normalizedParams] || storeNameTokId[cleanName] || null;
+
+                // If we found a store ID, map it. 
+                if (sid) {
+                  entry.byStore[sid] = (entry.byStore[sid] || 0) + qty;
+                } else {
+                  // Fallback: If no ID found, keep name as key (though UI might not show it)
+                  // useful for debugging or future features
+                  entry.byStore[cleanName] = (entry.byStore[cleanName] || 0) + qty;
+                }
+              }
+            });
+          } else {
+            // Fallback for flat structure if branches is missing 
+            const outlet = String(item.outlet || '').trim();
+            const sid = storeNameTokId[outlet] || outlet;
+            if (totalQty !== 0 && sid) {
+              entry.byStore[sid] = (entry.byStore[sid] || 0) + totalQty;
+            }
+          }
+        });
+      }
+      // -----------------------------
 
       const catalog: Record<string, any[]> = (pData?.catalog || {}) as any;
       const rows: any[] = [];
@@ -115,20 +200,36 @@ export default function MainLayout() {
         for (const it of items) {
           const id = String(it?.id || '');
           const name = String(it?.name || id);
-          const alias = String(it?.alias || '');
+          const alias = String(it?.alias || '').trim();
+          const dCode = String(it?.dCode || '').trim(); // dCode usually matches code in stock
           const stores = it?.stores || {};
           let qty = 0;
           let amount = 0;
           const salesByStore: Record<string, { q: number; a: number }> = {};
+
           for (const [sid, stData] of Object.entries(stores)) {
-            qty += Number((stData as any)?.q) || 0;
-            amount += Number((stData as any)?.a) || 0;
-            salesByStore[sid] = {
-              q: Number((stData as any)?.q) || 0,
-              a: Number((stData as any)?.a) || 0
-            };
+            const q = Number((stData as any)?.q) || 0;
+            const a = Number((stData as any)?.a) || 0;
+            qty += q;
+            amount += a;
+            salesByStore[sid] = { q, a };
           }
-          rows.push({ id, name, alias: String(alias), category: String(catName), qty, amount, salesByStore });
+
+          // Stock Lookup
+          // Try Alias or dCode (ID) or just ID
+          let stockEntry = stockMap.get(alias) || stockMap.get(dCode) || stockMap.get(id);
+
+          rows.push({
+            id,
+            name,
+            alias,
+            category: String(catName),
+            qty,
+            amount,
+            salesByStore,
+            stockByStore: stockEntry?.byStore || {},
+            stock: stockEntry?.total || 0
+          });
         }
       });
       setGlobalProducts(rows);
@@ -137,10 +238,29 @@ export default function MainLayout() {
     }
   };
 
+  // Auto-refresh inquiry data every 15 minutes
+  useEffect(() => {
+    // Initial load if empty? No, let's wait for user to open first or load in bg?
+    // User requested "automatic update every 15 mins".
+    // We'll set interval.
+    const interval = setInterval(() => {
+      loadInquiryData();
+    }, 15 * 60 * 1000); // 15 minutes
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const openInquiry = async () => {
+    setIsInquiryOpen(true);
+    if (globalProducts.length === 0) {
+      await loadInquiryData();
+    }
+  };
+
   const sidebarHidden = !isSidebarOpen;
   return (
     <div className="relative flex bg-neutral-50 min-h-screen">
-      <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+      <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} user={user} mgmtData={globalMeta} />
 
       {isSidebarOpen && (
         <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={() => setIsSidebarOpen(false)} />
@@ -163,6 +283,9 @@ export default function MainLayout() {
             </div>
           </div>
         </div>
+
+        {/* Today's Sales Button (Global) */}
+
 
         <nav className="flex-grow overflow-y-auto p-3 sm:p-4">
           <ul className="space-y-2">
@@ -211,6 +334,14 @@ export default function MainLayout() {
             </div>
 
             <div className="flex items-center gap-3 flex-shrink-0">
+              <button
+                onClick={() => setLiveModalOpen(true)}
+                className="flex bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-md items-center gap-2 animate-pulse hover:scale-105 transition-transform border border-orange-400"
+              >
+                <div className="w-5 h-5"><FireIcon /></div>
+                <span className="font-bold text-xs sm:text-sm whitespace-nowrap">مبيعات اليوم</span>
+              </button>
+
               <div className="flex bg-neutral-100 p-1 rounded-2xl gap-1">
                 <button
                   onClick={() => setIsSearchOpen(true)}
@@ -251,12 +382,25 @@ export default function MainLayout() {
           history={globalHistory}
           formatSAR={formatSAR}
           mgmtData={globalMeta}
+          user={user}
         />
 
         <SeasonBanner />
 
         <Outlet />
       </main>
+
+      {/* Global Live Sales Modal */}
+      <LiveSalesModal
+        isOpen={liveModalOpen}
+        onClose={() => setLiveModalOpen(false)}
+        liveData={liveData}
+        formatSAR={formatSAR}
+        isAdminOrAuditor={isUserAdmin}
+        manager={liveManager}
+        setManager={setLiveManager}
+        managers={managersList}
+      />
     </div>
   );
 }

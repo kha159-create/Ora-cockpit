@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { loadManagementData, loadProductAnalysisData, loadStagnantData } from '../services/upstreamData';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { loadManagementData, loadProductAnalysisData, loadStagnantData, loadStockData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
@@ -7,6 +8,12 @@ import { CubeIcon, SalesIcon, InvoicesIcon, VisitorsIcon, XIcon } from '../compo
 
 type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest';
 type Metric = 'qty' | 'val';
+
+const BASKET_PER_PAGE = 10;
+const MISSED_PER_PAGE = 10;
+const STAGNANT_PER_PAGE = 10;
+const CAT_SHARE_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 10;
 
 function safeNum(x: unknown) {
   const n = Number(x);
@@ -42,6 +49,9 @@ type CatalogItem = {
   amount: number;
   trend?: string;
   trendReason?: string;
+  salesByStore?: Record<string, { q: number; a: number }>;
+  stockByStore?: Record<string, number>;
+  totalStock?: number;
 };
 
 function PeriodButton({
@@ -101,6 +111,8 @@ function Modal({
 export default function ProductsPage() {
   const user = getCurrentUser();
   const [raw, setRaw] = useState<any>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [mgmt, setMgmt] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -115,39 +127,42 @@ export default function ProductsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [catalogOpen, setCatalogOpen] = useState(false);
 
-
-  // Stagnant Data State
-  const [stagnantRaw, setStagnantRaw] = useState<any>(null);
-
-  const [stagnantPage, setStagnantPage] = useState(1);
-  const STAGNANT_PER_PAGE = 10;
-  // Category Share Pagination
-  const [catSharePage, setCatSharePage] = useState(1);
-  const CAT_SHARE_PER_PAGE = 10;
-  const [productOpen, setProductOpen] = useState(false);
+  // State Definitions moved up to avoid hoisting/TDZ issues
   const [productId, setProductId] = useState<string | null>(null);
+  const [productOpen, setProductOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
-
+  const [basketPage, setBasketPage] = useState(1);
+  const [missedPage, setMissedPage] = useState(1);
+  const [stagnantPage, setStagnantPage] = useState(1);
+  const [catSharePage, setCatSharePage] = useState(1);
   const [missedOpen, setMissedOpen] = useState(false);
   const [missedRow, setMissedRow] = useState<any>(null);
 
-  // Pagination for new sections
-  const [basketPage, setBasketPage] = useState(1);
-  const [missedPage, setMissedPage] = useState(1);
-  const BASKET_PER_PAGE = 10;
-  const MISSED_PER_PAGE = 10;
+  // Stock Data State
+  const [stagnantRaw, setStagnantRaw] = useState<any>(null);
+  const [stockRaw, setStockRaw] = useState<any>(null);
+
+  // Handle URL param for direct product view
+  useEffect(() => {
+    const pid = searchParams.get('pid');
+    if (pid) {
+      setProductId(pid);
+      setProductOpen(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     Promise.all([
       loadProductAnalysisData(),
       loadManagementData(),
       loadStagnantData(),
+      loadStockData(),
     ])
-      .then(([p, m, s]) => {
+      .then(([p, m, stag, stock]) => {
         setRaw(p);
         setMgmt(m);
-        setStagnantRaw(s);
+        setStagnantRaw(stag);
+        setStockRaw(stock);
       })
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
@@ -165,6 +180,61 @@ export default function ProductsPage() {
 
     const storeMeta: Record<string, any> = mgmt.store_meta || {};
     const storesMap: Record<string, string> = mgmt.stores || {};
+
+    // Invert storesMap for Name -> ID lookup (needed for stock mapping)
+    const storeNameTokId: Record<string, string> = {};
+    Object.entries(storesMap).forEach(([id, name]) => {
+      if (name) storeNameTokId[name.trim()] = id;
+    });
+
+    // Pre-process Stock Data for fast lookup
+    // The products_stock.json is a flat list of items per outlet.
+    const stockMap = new Map<string, { total: number; byStore: Record<string, number> }>();
+    if (Array.isArray(stockRaw)) {
+      stockRaw.forEach((item: any) => {
+        const code = String(item.code || '').trim();
+        const alias = String(item.alias || '').trim();
+        const totalQty = safeNum(item.stock);
+
+        if (!code && !alias) return;
+
+        // Use an existing accumulator if either code or alias is already mapped
+        let entry = (code ? stockMap.get(code) : undefined) || (alias ? stockMap.get(alias) : undefined);
+
+        if (!entry) {
+          entry = { total: 0, byStore: {} };
+          if (code) stockMap.set(code, entry);
+          if (alias) stockMap.set(alias, entry);
+        } else {
+          // Cross-link keys to the same entry object
+          if (code && !stockMap.has(code)) stockMap.set(code, entry);
+          if (alias && !stockMap.has(alias)) stockMap.set(alias, entry);
+        }
+
+        entry.total += totalQty;
+
+        // Process Branches
+        if (item.branches && typeof item.branches === 'object') {
+          Object.entries(item.branches).forEach(([brName, brQty]) => {
+            const qty = safeNum(brQty);
+            if (qty !== 0) {
+              const cleanName = brName.trim();
+              const sid = storeNameTokId[cleanName] || cleanName;
+              if (sid) {
+                entry.byStore[sid] = (entry.byStore[sid] || 0) + qty;
+              }
+            }
+          });
+        } else {
+          // Fallback
+          const outlet = String(item.outlet || '').trim();
+          const sid = storeNameTokId[outlet] || outlet;
+          if (totalQty !== 0 && sid) {
+            entry.byStore[sid] = (entry.byStore[sid] || 0) + totalQty;
+          }
+        }
+      });
+    }
 
     const pData = raw.periods?.[mode] || null;
     const analysis: Record<string, any> = (pData?.analysis || {}) as any;
@@ -238,8 +308,12 @@ export default function ProductsPage() {
       const categories: any[] = storeObj?.categories || [];
       categories.forEach((c) => {
         const catName = String(c.category || 'Uncategorized');
+
         const qty = safeNum(c.qty);
         const amount = safeNum(c.amount);
+        // The original totalQty and totalAmt accumulators are outside this inner loop.
+        // The instruction snippet defined new local variables, which is incorrect for global accumulation.
+        // Reverting to original accumulation logic for totalQty and totalAmt.
         totalQty += qty;
         totalAmt += amount;
 
@@ -288,7 +362,13 @@ export default function ProductsPage() {
       for (const it of items) {
         const id = String(it?.id || '');
         const name = String(it?.name || id);
+        const alias = String(it?.alias || '').trim();
+        const dCode = String(it?.dCode || '').trim();
         const stores = it?.stores || {};
+
+        // Find Stock Data
+        // Priority: Alias -> dCode (which matches 'code' in stock file)
+        let stockEntry = stockMap.get(alias) || stockMap.get(dCode);
 
         let qty = 0;
         let amount = 0;
@@ -308,13 +388,16 @@ export default function ProductsPage() {
         catalogRows.push({
           id,
           name: name,
-          alias: String(it?.alias || ''),
+          alias: alias,
           old_code: String(it?.old_code || ''),
           category: String(catName),
           qty,
           amount,
           trend: it?.trend,
           trendReason: it?.trend_reason,
+          salesByStore: stores as any,
+          stockByStore: stockEntry?.byStore,
+          totalStock: stockEntry?.total
         });
       }
     });
@@ -459,13 +542,8 @@ export default function ProductsPage() {
     return { best, worst, zeroDays, totalQty, totalAmt, avgAmt, chart };
   }, [derived, productId]);
 
-  if (err) {
-    return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
-  }
   if (!derived) {
-    if (!derived) {
-      return <DashboardSkeleton />;
-    }
+    return <DashboardSkeleton />;
   }
 
   const metricLabel = metric === 'qty' ? '📦 الكمية' : '💰 القيمة';

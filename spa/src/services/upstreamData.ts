@@ -66,7 +66,7 @@ async function fetchJson<T>(file: string, forceRefresh = false): Promise<T> {
 
   // Return existing in-flight promise if still pending
   if (CACHE[file]?.promise && !CACHE[file]?.resolvedAt && !forceRefresh) {
-    return CACHE[file].promise;
+    return CACHE[file].promise!;
   }
 
   const promise = (async () => {
@@ -132,6 +132,18 @@ export function loadOffersData(forceRefresh = false) {
 
 export function loadStagnantData(forceRefresh = false) {
   return fetchJson<any>('stagnant_data.json', forceRefresh);
+}
+
+// Load Stock Data (New)
+export function loadStockData(forceRefresh = false) {
+  return fetchJson<any>('products_stock.json', forceRefresh);
+}
+
+export function loadProductMapping() {
+  // Use local ONLY to avoid 404s from upstream (since upstream doesn't have it yet)
+  const ts = Date.now();
+  const localUrl = repoRootUrl(`product_mapping.json?t=${ts}`);
+  return fetchWithRetry(localUrl, 1, 500).then(res => res.json()).catch(() => []);
 }
 
 /** Refresh all cached data */

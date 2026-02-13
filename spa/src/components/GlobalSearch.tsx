@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
+import { loadEmployeesData, loadManagementData, loadProductAnalysisData, loadProductMapping } from '../services/upstreamData';
 import { CubeIcon, OfficeBuildingIcon, SearchIcon, UserGroupIcon } from './Icons';
 
 interface SearchResult {
@@ -11,23 +11,72 @@ interface SearchResult {
     url: string;
 }
 
-export default function GlobalSearch({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+export default function GlobalSearch({ isOpen, onClose, user, mgmtData }: { isOpen: boolean; onClose: () => void; user?: any; mgmtData?: any }) {
     const navigate = useNavigate();
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<SearchResult[]>([]);
     const [selectedIndex, setSelectedIndex] = useState(0);
-    const [data, setData] = useState<{ stores: any; employees: any; products: any } | null>(null);
+    const [data, setData] = useState<{ stores: any; employees: any; products: any; mapping: any[] } | null>(null);
 
     // Load data on mount (using cached promises from upstreamData)
     useEffect(() => {
         if (isOpen && !data) {
-            Promise.all([loadManagementData(), loadEmployeesData(), loadProductAnalysisData()])
-                .then(([mgmt, emp, prod]) => {
-                    setData({ stores: mgmt, employees: emp, products: prod });
+            Promise.all([loadManagementData(), loadEmployeesData(), loadProductAnalysisData(), loadProductMapping()])
+                .then(([mgmt, emp, prod, map]) => {
+                    setData({ stores: mgmt, employees: emp, products: prod, mapping: map || [] });
                 })
                 .catch(console.error);
         }
     }, [isOpen, data]);
+
+    // Pre-process product names for faster lookup
+    const productNames = useMemo(() => {
+        if (!data?.products) return {};
+        const names: Record<string, string> = {};
+        // Try to source names from multiple places in analysis data
+        const periods = ['mtd', 'yest', '30d'];
+        periods.forEach(p => {
+            const catalog = data.products.periods?.[p]?.catalog || {};
+            Object.values(catalog).forEach((storeItems: any[]) => {
+                if (Array.isArray(storeItems)) {
+                    storeItems.forEach(item => {
+                        if (item.id && item.name) names[item.id] = item.name;
+                    });
+                }
+            });
+        });
+        return names;
+    }, [data?.products]);
+
+    // Permissions: Allowed store IDs for the current user
+    const allowedStoreIds = useMemo(() => {
+        if (!mgmtData?.store_meta) return null;
+        const meta: Record<string, any> = mgmtData.store_meta;
+        const isManager = user?.role === 'Manager' || (user?.role !== 'Admin' && user?.role !== 'Auditor' && user?.name && user?.name !== 'Sales Manager');
+        if (!isManager) return null; // Admin/Auditor can see everything
+
+        const allowed = new Set<string>();
+        Object.entries(meta).forEach(([sid, m]) => {
+            if (m?.manager === user.name) allowed.add(sid);
+        });
+        return allowed;
+    }, [mgmtData, user]);
+
+    // Map: Employee ID -> Set of Store IDs they are linked to (from history)
+    const empToStores = useMemo(() => {
+        if (!data?.employees?.history) return {};
+        const map: Record<string, Set<string>> = {};
+        Object.entries(data.employees.history).forEach(([sid, entries]: [string, any]) => {
+            if (!Array.isArray(entries)) return;
+            entries.forEach((row: any[]) => {
+                let eid = String(row[1] || '').split('-')[0].trim();
+                if (!eid) return;
+                if (!map[eid]) map[eid] = new Set();
+                map[eid].add(sid);
+            });
+        });
+        return map;
+    }, [data?.employees?.history]);
 
     // Search Logic
     useEffect(() => {
@@ -42,6 +91,8 @@ export default function GlobalSearch({ isOpen, onClose }: { isOpen: boolean; onC
         // 1. Stores
         if (data.stores?.stores) {
             Object.entries(data.stores.stores).forEach(([id, name]: [string, any]) => {
+                if (allowedStoreIds && !allowedStoreIds.has(id)) return; // Filter by permission
+
                 const sName = String(name).toLowerCase();
                 if (sName.includes(q) || id.includes(q)) {
                     res.push({
@@ -58,6 +109,18 @@ export default function GlobalSearch({ isOpen, onClose }: { isOpen: boolean; onC
         // 2. Employees Array match
         if (data.employees?.employee_names) {
             Object.entries(data.employees.employee_names).forEach(([id, name]: [string, any]) => {
+                // Permission Check: Does this employee belong to any of the manager's stores?
+                if (allowedStoreIds) {
+                    const linkedStores = empToStores[id];
+                    let isAllowed = false;
+                    if (linkedStores) {
+                        for (const sid of Array.from(linkedStores)) {
+                            if (allowedStoreIds.has(sid)) { isAllowed = true; break; }
+                        }
+                    }
+                    if (!isAllowed) return;
+                }
+
                 const eName = String(name).toLowerCase();
                 if (eName.includes(q) || id.includes(q)) {
                     res.push({
@@ -71,25 +134,35 @@ export default function GlobalSearch({ isOpen, onClose }: { isOpen: boolean; onC
             });
         }
 
-        // 3. Products
-        // Products raw: { product_names: {...}, products: {...} } ?
-        // Need to check structure. Assuming product_names map exists or iterating analysis
-        // Usually product analysis has `top_selling` etc.
-        // Let's assume we can search available products from product analysis if available, 
-        // or maybe management data has product list?
-        // Looking at previous DashboardPage code: loadProductAnalysisData returns `p`.
-        // Let's check `p` structure if possible. For now, let's assume `product_names` or similar.
-        // Actually, usually we have `meta` or similar.
-        // Let's use what we can find. If product names aren't easily available global list, skip or infer.
-        // DashboardPage logic for products doesn't show global list easily.
-        // ProductsPage uses `useMemo` to derive products.
-        // We'll skip products for now if we lack a master list, OR try to find one.
-        // Let's rely on `data.products?.names` if it exists (common pattern).
+        // 3. Products (Alias/Dynamic Code/ID)
+        if (data.mapping) {
+            // Filter mapping
+            const matches = data.mapping.filter(m =>
+                (m.alias && String(m.alias).includes(q)) ||
+                (m.dCode && String(m.dCode).includes(q)) ||
+                (m.id && String(m.id).includes(q))
+            ).slice(0, 10); // Limit matches source
 
-        setResults(res.slice(0, 10)); // Limit to 10
+            matches.forEach(m => {
+                const name = productNames[m.id] || m.name || m.cat || 'Unknown Product';
+                // Avoid duplicates if already added (unlikely with just mapping source)
+                // But we might match same product via alias AND id
+                if (!res.find(r => r.type === 'product' && r.id === m.id)) {
+                    res.push({
+                        id: m.id,
+                        type: 'product',
+                        title: name,
+                        subtitle: `${m.cat ? m.cat + ' | ' : ''}ID: ${m.id} ${m.alias ? `| Alias: ${m.alias}` : ''} ${m.dCode ? `| DC: ${m.dCode}` : ''}`,
+                        url: `/products?pid=${m.id}`,
+                    });
+                }
+            });
+        }
+
+        setResults(res.slice(0, 20)); // Limit to 20 total
         setSelectedIndex(0);
 
-    }, [query, data]);
+    }, [query, data, productNames, allowedStoreIds, empToStores]);
 
     // Keyboard navigation
     useEffect(() => {
@@ -134,7 +207,7 @@ export default function GlobalSearch({ isOpen, onClose }: { isOpen: boolean; onC
                     <input
                         autoFocus
                         type="text"
-                        placeholder="Search stores, employees..."
+                        placeholder="Search stores, employees, products..."
                         className="flex-1 text-lg outline-none placeholder:text-neutral-400 text-neutral-900 bg-transparent"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}

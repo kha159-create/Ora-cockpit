@@ -6,11 +6,10 @@ import { SalesChart } from '../components/dashboard/SalesChart';
 import { QuickAccess } from '../components/dashboard/QuickAccess';
 import { RankWidgets } from '../components/dashboard/RankWidgets';
 import { TopSellingWidget } from '../components/dashboard/TopSellingWidget';
-import { LiveSalesModal } from '../components/dashboard/LiveSalesModal';
 import { DailyReportModal } from '../components/dashboard/DailyReportModal';
 import { StoreReportModal } from '../components/dashboard/StoreReportModal';
 import { EmployeeReportModal } from '../components/dashboard/EmployeeReportModal';
-import { FireIcon } from '../components/Icons';
+
 import { generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
 import { getPrevYearRange, getPrevYearDate } from '../utils/seasons';
 
@@ -76,7 +75,6 @@ export default function DashboardPage() {
   const [city, setCity] = useState<string>('all');
   const [selYear, setSelYear] = useState<number>(() => new Date().getFullYear());
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1);
-  const [liveModalOpen, setLiveModalOpen] = useState(false);
   const [dailyReportModalOpen, setDailyReportModalOpen] = useState(false);
   const [chartMode, setChartMode] = useState<'SALES' | 'VISITORS' | 'TARGET'>('SALES');
   const [topSellingMetric, setTopSellingMetric] = useState<'qty' | 'val'>('qty');
@@ -567,8 +565,6 @@ export default function DashboardPage() {
     return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
   }
   // Move calculations before early returns to satisfy React Hook rules
-  // Live data (today only) - 1 AM persistence
-  const todayStr = toYMD(getEffectiveDate());
   // Daily Report data (yesterday vs last year) - Standard
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
@@ -630,140 +626,6 @@ export default function DashboardPage() {
 
     return Object.values(empData).sort((a, b) => b.sales - a.sales);
   }, [empRaw, raw, yesterdayStr, allowedStoreIds]);
-
-  const liveData = useMemo(() => {
-    if (!raw || !empRaw) return { totals: { sales: 0, trans: 0, target: 0 }, stores: [] };
-    const meta = raw.store_meta || {};
-    const storesMap = raw.stores || {};
-    const historyData: Record<string, any[]> = empRaw.history || {};
-    const names: Record<string, string> = empRaw.employee_names || {};
-    const byStore: Record<string, {
-      sales: number;
-      trans: number;
-      visitors: number;
-      target: number;
-      monthSales: number;
-      monthTarget: number;
-      dailyReq: number;
-      remainingDays: number;
-      employees: Record<string, { sales: number; trans: number; name: string }>
-    }> = {};
-
-    const now = new Date();
-    const currentMonthKey = todayStr.substring(0, 7); // "YYYY-MM"
-    const startOfMonthStr = `${currentMonthKey}-01`;
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const remainingDays = daysInMonth - now.getDate() + 1;
-
-    (raw.sales || []).forEach(([d, sid, v]: any[]) => {
-      if (String(d).startsWith(todayStr)) {
-        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, target: 0, monthSales: 0, monthTarget: 0, dailyReq: 0, remainingDays, employees: {} };
-        byStore[sid].sales += v || 0;
-      }
-    });
-    (raw.targets || []).forEach(([d, sid, v]: any[]) => {
-      if (String(d).startsWith(todayStr)) {
-        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, target: 0, monthSales: 0, monthTarget: 0, dailyReq: 0, remainingDays, employees: {} };
-        byStore[sid].target += v || 0;
-      }
-    });
-    (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
-      if (String(d).startsWith(todayStr)) {
-        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, target: 0, monthSales: 0, monthTarget: 0, dailyReq: 0, remainingDays, employees: {} };
-        byStore[sid].trans += v || 0;
-      }
-    });
-    (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
-      if (String(d).startsWith(todayStr)) {
-        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, target: 0, monthSales: 0, monthTarget: 0, dailyReq: 0, remainingDays, employees: {} };
-        byStore[sid].visitors += v || 0;
-      }
-    });
-
-    // Calculate MTD Sales and Monthly Targets
-    (raw.sales || []).forEach(([d, sid, v]: any[]) => {
-      const dateStr = String(d).substring(0, 10);
-      if (dateStr >= startOfMonthStr && dateStr <= todayStr) {
-        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, target: 0, monthSales: 0, monthTarget: 0, dailyReq: 0, remainingDays, employees: {} };
-        byStore[sid].monthSales += v || 0;
-      }
-    });
-
-    (raw.targets || []).forEach(([d, sid, v]: any[]) => {
-      const dateStr = String(d).substring(0, 10);
-      if (dateStr.startsWith(currentMonthKey)) {
-        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, target: 0, monthSales: 0, monthTarget: 0, dailyReq: 0, remainingDays, employees: {} };
-        byStore[sid].monthTarget += v || 0;
-      }
-    });
-
-    // Calculate daily required for each store
-    Object.values(byStore).forEach(s => {
-      const monthSalesUntilYesterday = s.monthSales - s.sales;
-      const remainingForMonth = Math.max(0, s.monthTarget - monthSalesUntilYesterday);
-      s.dailyReq = remainingDays > 0 ? remainingForMonth / remainingDays : 0;
-    });
-
-    Object.entries(historyData).forEach(([storeCode, records]) => {
-      if (!byStore[storeCode]) byStore[storeCode] = { sales: 0, trans: 0, visitors: 0, target: 0, monthSales: 0, monthTarget: 0, dailyReq: 0, remainingDays, employees: {} };
-      for (const rec of records || []) {
-        const date = rec?.[0];
-        if (!String(date).startsWith(todayStr)) continue;
-        const rawId = rec?.[1];
-        const sales = Number(rec?.[2]) || 0;
-        const trans = Number(rec?.[3]) || 0;
-        let id = String(rawId || '').trim();
-        let name = id;
-        if (id.includes('-')) {
-          const [a, b] = id.split('-');
-          id = (a || '').trim();
-          name = (b || id).trim();
-        }
-        if (!id || name === 'مرتجع') continue;
-        name = names[id] || names[id.padStart(4, '0')] || name;
-        if (!byStore[storeCode].employees[id]) byStore[storeCode].employees[id] = { sales: 0, trans: 0, name };
-        byStore[storeCode].employees[id].sales += sales;
-        byStore[storeCode].employees[id].trans += trans;
-      }
-    });
-
-    const storeList = Object.entries(byStore)
-      .filter(([sid]) => {
-        // تصفية حسب المعارض المسموح بها
-        if (!allowedStoreIds.has(sid)) return false;
-        const m = meta[sid];
-        if (effectiveManager !== 'all' && (!m || String(m.manager) !== effectiveManager)) return false;
-        return (byStore[sid].sales > 0 || byStore[sid].trans > 0);
-      })
-      .map(([sid, v]) => ({
-        sid,
-        name: storesMap[sid] || sid,
-        sales: v.sales,
-        trans: v.trans,
-        visitors: v.visitors,
-        target: v.target,
-        monthSales: v.monthSales,
-        monthTarget: v.monthTarget,
-        dailyReq: v.dailyReq,
-        remainingDays: v.remainingDays,
-        employees: Object.entries(v.employees)
-          .map(([id, e]) => ({
-            id,
-            name: e.name,
-            sales: e.sales,
-            trans: e.trans,
-            avgInv: e.trans > 0 ? e.sales / e.trans : 0,
-          }))
-          .sort((a, b) => b.sales - a.sales),
-      }))
-      .sort((a, b) => b.sales - a.sales);
-
-    const totalSales = storeList.reduce((s, st) => s + st.sales, 0);
-    const totalTrans = storeList.reduce((s, st) => s + st.trans, 0);
-    const totalTarget = storeList.reduce((s, st) => s + st.target, 0);
-
-    return { totals: { sales: totalSales, trans: totalTrans, target: totalTarget }, stores: storeList };
-  }, [raw, empRaw, todayStr, effectiveManager, allowedStoreIds]);
 
   const lastYearYesterdayStr = getPrevYearDate(yesterdayStr);
 
@@ -1146,16 +1008,6 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setLiveModalOpen(true)}
-              className={`py-2 px-4 text-sm font-semibold rounded-xl transition-all ${liveModalOpen
-                ? 'bg-orange-500 text-white shadow-md'
-                : 'bg-white text-orange-600 border border-orange-300 hover:bg-orange-50'
-                }`}
-            >
-              مبيعات اليوم
-            </button>
-            <button
-              type="button"
               onClick={loadData}
               disabled={refreshing}
               className="btn-secondary py-2 px-4 text-sm"
@@ -1261,25 +1113,12 @@ export default function DashboardPage() {
       />
 
       {/* أعلى الموظفين / أعلى الفروع — هوية برتقالي وأسود */}
+      {/* أعلى الموظفين / أعلى الفروع — هوية برتقالي وأسود */}
       <RankWidgets
         topEmployees={topEmployeesRank}
         topStores={topStoresRank}
         formatSAR={formatSAR}
       />
-
-      {/* نافذة مبيعات اليوم */}
-      {
-        <LiveSalesModal
-          isOpen={liveModalOpen}
-          onClose={() => setLiveModalOpen(false)}
-          liveData={liveData}
-          formatSAR={formatSAR}
-          isAdminOrAuditor={isAdminOrAuditor(user?.role)}
-          manager={manager}
-          setManager={setManager}
-          managers={managers}
-        />
-      }
 
       {/* نافذة التقرير اليومي */}
       {

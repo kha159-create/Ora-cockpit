@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { SearchIcon, XIcon, CubeIcon, SalesIcon, CubeIcon as QtyIcon } from '../Icons';
+import React, { useState, useMemo, useEffect } from 'react';
+import { SearchIcon, XIcon, CubeIcon, SalesIcon, CubeIcon as QtyIcon, InvoicesIcon } from '../Icons';
 
 interface Product {
     id: string;
@@ -10,6 +10,8 @@ interface Product {
     alias?: string;
     old_code?: string;
     salesByStore?: Record<string, { q: number; a: number }>;
+    stockByStore?: Record<string, number>;
+    totalStock?: number;
     [key: string]: any;
 }
 
@@ -20,109 +22,41 @@ interface ProductInquiryModalProps {
     history: Record<string, any[]>;
     formatSAR: (val: number) => string;
     mgmtData?: any;
+    user?: any;
 }
 
-export const ProductInquiryModal: React.FC<ProductInquiryModalProps> = ({ isOpen, onClose, products, history, formatSAR, mgmtData }) => {
+export const ProductInquiryModal: React.FC<ProductInquiryModalProps> = ({ isOpen, onClose, products, history, formatSAR, mgmtData, user }) => {
     const [search, setSearch] = useState('');
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [period, setPeriod] = useState<'yesterday' | '7d' | 'mtd' | '30d' | 'last_month'>('mtd');
 
     // Filter states
     const [manager, setManager] = useState('all');
-    const [city, setCity] = useState('all');
     const [branch, setBranch] = useState('all');
 
-    // Derived Filter Options
-    const { filterOptions, allowedStoreIds } = useMemo(() => {
-        const meta: Record<string, any> = mgmtData?.store_meta || {};
-        const stores = mgmtData?.stores || {};
-        const mgrs = new Set<string>();
-        const cts = new Set<string>();
+    // Product Mapping State
+    const [mapping, setMapping] = useState<Record<string, { alias?: string; dCode?: string; name?: string }>>({});
 
-        Object.values(meta).forEach((m: any) => {
-            if (m?.manager) mgrs.add(String(m.manager));
-            if (manager === 'all' || String(m?.manager) === manager) {
-                if (m?.city) cts.add(String(m.city));
-            }
-        });
-
-        const brList = Object.keys(stores)
-            .filter(sid => {
-                const m = meta[sid];
-                if (manager !== 'all' && String(m?.manager || '') !== manager) return false;
-                if (city !== 'all' && String(m?.city || '') !== city) return false;
-                return true;
-            })
-            .map(sid => ({ id: sid, name: stores[sid] || sid }))
-            .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-
-        const allowed = new Set<string>();
-        Object.keys(meta).forEach(sid => {
-            const m = meta[sid];
-            if (manager !== 'all' && String(m?.manager || '') !== manager) return;
-            if (city !== 'all' && String(m?.city || '') !== city) return;
-            if (branch !== 'all' && sid !== branch) return;
-            allowed.add(sid);
-        });
-
-        return {
-            filterOptions: {
-                managers: Array.from(mgrs).sort((a, b) => a.localeCompare(b, 'ar')),
-                cities: Array.from(cts).sort((a, b) => a.localeCompare(b, 'ar')),
-                branches: brList
-            },
-            allowedStoreIds: allowed
-        };
-    }, [mgmtData, manager, city, branch]);
-
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return [];
-
-        const isFilteringStores = manager !== 'all' || city !== 'all' || branch !== 'all';
-
-        return products.map(p => {
-            if (!isFilteringStores) return p;
-
-            // Re-calculate totals based on allowed stores
-            let qTotal = 0;
-            let aTotal = 0;
-            const sMap = p.salesByStore || {};
-
-            allowedStoreIds.forEach(sid => {
-                const sData = sMap[sid];
-                if (sData) {
-                    qTotal += sData.q;
-                    aTotal += sData.a;
+    useEffect(() => {
+        import('../../services/upstreamData').then(({ loadProductMapping }) => {
+            loadProductMapping().then((data) => {
+                if (data) {
+                    const map: Record<string, any> = {};
+                    data.forEach((item: any) => {
+                        map[item.id] = item;
+                    });
+                    setMapping(map);
                 }
             });
+        });
+    }, []);
 
-            return { ...p, qty: qTotal, amount: aTotal };
-        }).filter((p) => {
-            const id = (p.id || '').toLowerCase();
-            const name = (p.name || '').toLowerCase();
-            const alias = (p.alias || '').toLowerCase();
-            const oldCode = (p.old_code || '').toLowerCase();
-            const qLower = q.toLowerCase();
+    const [selectedStore, setSelectedStore] = useState<string | null>(null);
+    const [filteredPeriod, setFilteredPeriod] = useState<'today' | 'yesterday' | '7d' | '30d' | 'mtd' | 'last_month'>('mtd');
+    const [isFamilyMode, setIsFamilyMode] = useState(false);
 
-            // Search across ALL identifiers
-            return id.includes(qLower) ||
-                name.includes(qLower) ||
-                alias.includes(qLower) ||
-                oldCode.includes(qLower) ||
-                (p.id && String(p.id).includes(qLower));
-        }).slice(0, 100);
-    }, [search, products, manager, city, branch, allowedStoreIds]);
-
-    const selectedProduct = useMemo(() => {
-        if (!selectedId) return null;
-        return products.find(p => p.id === selectedId) || null;
-    }, [selectedId, products]);
-
-    const productStats = useMemo(() => {
-        if (!selectedId || !history[selectedId]) return null;
-        const hist = history[selectedId];
-
+    // Helper to get date range for filtering
+    const getDateRange = (p: string) => {
         const today = new Date();
         const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
         const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -131,35 +65,326 @@ export const ProductInquiryModal: React.FC<ProductInquiryModalProps> = ({ isOpen
         let startStr = '';
         let endStr = toYMD(today);
 
-        if (period === 'yesterday') {
+        if (p === 'today') {
+            startStr = toYMD(today);
+            endStr = toYMD(today);
+        } else if (p === 'yesterday') {
             startStr = toYMD(yesterday);
             endStr = toYMD(yesterday);
-        } else if (period === '7d') {
+        } else if (p === '7d') {
             const d = new Date(today); d.setDate(today.getDate() - 7);
             startStr = toYMD(d);
-        } else if (period === 'mtd') {
-            const d = new Date(today.getFullYear(), today.getMonth(), 1);
-            startStr = toYMD(d);
-        } else if (period === '30d') {
+        } else if (p === '30d') {
             const d = new Date(today); d.setDate(today.getDate() - 30);
             startStr = toYMD(d);
-        } else if (period === 'last_month') {
+        } else if (p === 'mtd') {
+            const d = new Date(today.getFullYear(), today.getMonth(), 1);
+            startStr = toYMD(d);
+        } else if (p === 'last_month') {
             const dStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
             const dEnd = new Date(today.getFullYear(), today.getMonth(), 0);
             startStr = toYMD(dStart);
             endStr = toYMD(dEnd);
         }
+        return { startStr, endStr };
+    };
 
-        const periodHist = hist.filter(h => {
-            const d = String(h.date);
-            return d >= startStr && d <= endStr;
+    // Derived Filter Options (Internal to Detail View now)
+    const { filterOptions, allowedStoreIds, storeNameMap } = useMemo(() => {
+        const meta: Record<string, any> = mgmtData?.store_meta || {};
+        const stores = mgmtData?.stores || {};
+        const mgrs = new Set<string>();
+
+        Object.values(meta).forEach((m: any) => {
+            if (m?.manager) mgrs.add(String(m.manager));
         });
 
-        const totalQty = periodHist.reduce((s, h) => s + (Number(h.qty) || 0), 0);
-        const totalAmt = periodHist.reduce((s, h) => s + (Number(h.amount) || 0), 0);
-        const sorted = [...periodHist].sort((a, b) => String(b.date).localeCompare(String(a.date)));
-        return { totalQty, totalAmt, recent: sorted, start: startStr, end: endStr };
-    }, [selectedId, history, period]);
+        const isManager = user?.role === 'Manager' || (user?.role !== 'Admin' && user?.role !== 'Auditor' && user?.name && user?.name !== 'Sales Manager');
+        const effectiveManager = isManager ? user.name : manager;
+
+        // Current scope stores (for dropdowns)
+        const brList = Object.keys(stores)
+            .filter(sid => {
+                const m = meta[sid];
+                if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
+                return true;
+            })
+            .map(sid => ({ id: sid, name: stores[sid] || sid }))
+            .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+
+        // Allowed IDs for data filtering
+        const allowed = new Set<string>();
+        Object.keys(meta).forEach(sid => {
+            const m = meta[sid];
+            if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return;
+            if (branch !== 'all' && sid !== branch) return;
+            allowed.add(sid);
+        });
+
+        return {
+            filterOptions: {
+                managers: isManager ? [user.name] : Array.from(mgrs).sort((a, b) => a.localeCompare(b, 'ar')),
+                branches: brList
+            },
+            allowedStoreIds: allowed,
+            storeNameMap: stores
+        };
+    }, [mgmtData, manager, branch, user]);
+
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return [];
+        return products.map(p => {
+            const m = mapping[p.id];
+            const merged = { ...p };
+            if (m) {
+                if (m.alias) merged.alias = m.alias;
+                if (m.dCode) merged.dCode = m.dCode;
+            }
+            return merged;
+        }).filter((p) => {
+            const id = (p.id || '').toLowerCase();
+            const name = (p.name || '').toLowerCase();
+            const alias = (p.alias || '').toLowerCase();
+            const oldCode = (p.old_code || '').toLowerCase();
+            const dCode = (p.dCode || '').toLowerCase();
+            const qLower = q.toLowerCase();
+
+            return id.includes(qLower) ||
+                name.includes(qLower) ||
+                alias.includes(qLower) ||
+                oldCode.includes(qLower) ||
+                dCode.includes(qLower) ||
+                (p.id && String(p.id).includes(qLower));
+        }).slice(0, 100);
+    }, [search, products, mapping]);
+
+    const selectedProduct = useMemo(() => {
+        if (!selectedId) return null;
+        return products.find(p => p.id === selectedId) || null;
+    }, [selectedId, products]);
+
+    // MASTER VIEW DATA: Branch List (Dynamic Calculation)
+    const pidToAliasMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        products.forEach(p => { map[p.id] = p.alias || ""; });
+        Object.entries(mapping).forEach(([id, m]) => {
+            if (m.alias) map[id] = m.alias;
+        });
+        return map;
+    }, [products, mapping]);
+
+    const branchList = useMemo(() => {
+        if (!selectedProduct) return [];
+        const list: { id: string; name: string; qty: number; amount: number; stock: number }[] = [];
+        const stMap = selectedProduct.stockByStore || {};
+
+        // Calculate Sales from History based on filteredPeriod
+        const salesMap: Record<string, { q: number; a: number }> = {};
+        const { startStr, endStr } = getDateRange(filteredPeriod);
+
+        // ALIAS PREFIX LOGIC for Family Tree
+        const targetAlias = selectedProduct.alias || mapping[selectedProduct.id]?.alias || "";
+        // NEW LOGIC: Alias minus last 2 chars (e.g. 4489610 -> 44896)
+        const prefix = (isFamilyMode && targetAlias && targetAlias.length > 2)
+            ? targetAlias.slice(0, -2)
+            : (isFamilyMode ? targetAlias : "");
+
+        Object.entries(history).forEach(([pid, hist]) => {
+            if (isFamilyMode && prefix) {
+                const currentAlias = pidToAliasMap[pid] || "";
+                if (!currentAlias.startsWith(prefix)) return;
+            } else {
+                if (pid !== selectedProduct.id) return;
+            }
+
+            hist.forEach(h => {
+                const d = String(h.date);
+                if (d >= startStr && d <= endStr) {
+                    const sid = String(h.store_id || h.store);
+                    if (!salesMap[sid]) salesMap[sid] = { q: 0, a: 0 };
+                    salesMap[sid].q += Number(h.qty) || 0;
+                    salesMap[sid].a += Number(h.amount) || 0;
+                }
+            });
+        });
+
+        // Combine Sales and Stock keys
+        const allStoreIds = new Set([...Object.keys(salesMap), ...Object.keys(stMap)]);
+
+        allStoreIds.forEach(sid => {
+            if (!allowedStoreIds.has(sid)) return; // Apply filters
+
+            const sales = salesMap[sid] || { q: 0, a: 0 };
+            const stock = stMap[sid] || 0;
+
+            if (sales.q > 0 || sales.a > 0 || stock > 0) {
+                list.push({
+                    id: sid,
+                    name: storeNameMap[sid] || sid,
+                    qty: sales.q,
+                    amount: sales.a,
+                    stock: stock
+                });
+            }
+        });
+        return list.sort((a, b) => b.qty - a.qty);
+    }, [selectedProduct, allowedStoreIds, storeNameMap, history, filteredPeriod, isFamilyMode, pidToAliasMap]);
+
+    const handleExport = async () => {
+        if (!selectedProduct) return;
+
+        try {
+            const XLSX = await import('xlsx');
+
+            const headers = ['المعرض', 'المنطقة', 'المخزون', 'الكمية المباعة', 'قيمة المبيعات'];
+
+            // Prepare data with formatting
+            const data = branchList.map(b => {
+                const meta = mgmtData?.store_meta?.[b.id] || {};
+                const region = meta.manager || '-';
+
+                return [
+                    b.name,
+                    region,
+                    b.stock,
+                    b.qty,
+                    Number(b.amount.toFixed(2))
+                ];
+            });
+
+            // Add totals
+            const totStock = branchList.reduce((a, c) => a + c.stock, 0);
+            const totQty = branchList.reduce((a, c) => a + c.qty, 0);
+            const totAmt = branchList.reduce((a, c) => a + c.amount, 0);
+
+            data.push(['الإجمالي', '--', totStock, totQty, Number(totAmt.toFixed(2))]);
+            data.push(['الفترة:', filteredPeriod === 'today' ? 'اليوم' :
+                filteredPeriod === 'yesterday' ? 'أمس' :
+                    filteredPeriod === '7d' ? 'آخر 7 أيام' :
+                        filteredPeriod === '30d' ? 'آخر 30 يوم' :
+                            filteredPeriod === 'mtd' ? 'الشهر الحالي' : 'الشهر الماضي', '', '', '']);
+
+            // Create worksheet
+            const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+
+            // Apply column widths (approximate)
+            ws['!cols'] = [
+                { wch: 20 }, // Store
+                { wch: 15 }, // Region
+                { wch: 10 }, // Stock
+                { wch: 12 }, // Qty
+                { wch: 15 }, // Amount
+            ];
+
+            // Create workbook and download
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "تقرير المنتج");
+            XLSX.writeFile(wb, `Product_Report_${selectedProduct.id}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+
+        } catch (e) {
+            console.error("Export failed:", e);
+            alert("حدث خطأ أثناء التصدير. يرجى المحاولة مرة أخرى.");
+        }
+    };
+
+    // DETAIL VIEW DATA: Store Variant Breakdown (Tree Mode) OR Daily History (Single Mode)
+    const storeDetailView = useMemo(() => {
+        if (!selectedId || !selectedStore) return null;
+        const { startStr, endStr } = getDateRange(period);
+        const targetAlias = selectedProduct?.alias || mapping[selectedId]?.alias || "";
+
+        // Tree Mode Prefix
+        const prefix = (isFamilyMode && targetAlias && targetAlias.length > 2)
+            ? targetAlias.slice(0, -2)
+            : (isFamilyMode ? targetAlias : "");
+
+        // 1. If Tree Mode: Aggregate distinct products (variants)
+        if (isFamilyMode && prefix) {
+            const variantMap = new Map<string, { name: string; alias: string; qty: number; amount: number; dates: Set<string> }>();
+
+            Object.entries(history).forEach(([pid, hist]) => {
+                const currentAlias = pidToAliasMap[pid] || "";
+                if (!currentAlias.startsWith(prefix)) return;
+
+                // Filter for THIS store
+                const storeHist = hist.filter(h => {
+                    const sid = String(h.store_id || h.store);
+                    const d = String(h.date);
+                    return sid === selectedStore && d >= startStr && d <= endStr;
+                });
+
+                if (storeHist.length > 0) {
+                    let vEntry = variantMap.get(pid);
+                    if (!vEntry) {
+                        try {
+                            const pName = products.find(np => String(np.id) === String(pid))?.name || `Product ${pid}`;
+                            vEntry = { name: pName, alias: currentAlias, qty: 0, amount: 0, dates: new Set() };
+                            variantMap.set(pid, vEntry);
+                        } catch (e) { console.warn(e); }
+                    }
+                    if (vEntry) {
+                        storeHist.forEach(h => {
+                            vEntry!.qty += Number(h.qty) || 0;
+                            vEntry!.amount += Number(h.amount) || 0;
+                            vEntry!.dates.add(h.date);
+                        });
+                    }
+                }
+            });
+
+            const variants = Array.from(variantMap.entries()).map(([pid, data]) => {
+                // Lookup stock for this specific PID in the selected store
+                // We need to find the product object first
+                const pObj = products.find(p => p.id === pid);
+                const stockVal = pObj?.stockByStore?.[selectedStore] || 0;
+
+                return {
+                    id: pid,
+                    ...data,
+                    dateCount: data.dates.size,
+                    stock: stockVal
+                };
+            }).sort((a, b) => b.qty - a.qty);
+
+            const totalQty = variants.reduce((acc, v) => acc + v.qty, 0);
+            const totalAmt = variants.reduce((acc, v) => acc + v.amount, 0);
+
+            return {
+                mode: 'tree',
+                variants,
+                totalQty,
+                totalAmt,
+                start: startStr,
+                end: endStr,
+                storeName: storeNameMap[selectedStore] || selectedStore
+            };
+        }
+
+        // 2. If Single Mode: Daily History for ONE product
+        else {
+            const hist = history[selectedId] || [];
+            const storeHist = hist.filter(h => {
+                if (String(h.store_id) !== selectedStore && String(h.store) !== selectedStore) return false;
+                const d = String(h.date);
+                return d >= startStr && d <= endStr;
+            });
+
+            const totalQty = storeHist.reduce((s, h) => s + (Number(h.qty) || 0), 0);
+            const totalAmt = storeHist.reduce((s, h) => s + (Number(h.amount) || 0), 0);
+            const sorted = [...storeHist].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+
+            return {
+                mode: 'daily',
+                recent: sorted,
+                totalQty,
+                totalAmt,
+                start: startStr,
+                end: endStr,
+                storeName: storeNameMap[selectedStore] || selectedStore
+            };
+        }
+    }, [selectedId, selectedStore, history, period, isFamilyMode, products, pidToAliasMap, storeNameMap]);
 
     if (!isOpen) return null;
 
@@ -177,7 +402,7 @@ export const ProductInquiryModal: React.FC<ProductInquiryModalProps> = ({ isOpen
                         </div>
                         <div>
                             <h2 className="text-xl font-bold text-neutral-900">
-                                {selectedId ? 'تفاصيل المنتج' : 'استعلام عن منتج'}
+                                {selectedStore ? `تفاصيل الفرع: ${storeDetailView?.storeName}` : selectedId ? 'تفاصيل المنتج (بالفروع)' : 'استعلام عن منتج'}
                             </h2>
                             <p className="text-xs text-neutral-500">
                                 {selectedId ? selectedProduct?.name : 'البحث بالاسم، الكود الجديد، أو الكود القديم'}
@@ -185,14 +410,21 @@ export const ProductInquiryModal: React.FC<ProductInquiryModalProps> = ({ isOpen
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        {selectedId && (
+                        {selectedStore ? (
                             <button
-                                onClick={() => setSelectedId(null)}
+                                onClick={() => setSelectedStore(null)}
+                                className="px-3 py-1.5 text-sm font-bold text-neutral-600 hover:bg-neutral-200 rounded-lg transition-colors"
+                            >
+                                عودة للقائمة
+                            </button>
+                        ) : selectedId ? (
+                            <button
+                                onClick={() => { setSelectedId(null); setManager('all'); setBranch('all'); }}
                                 className="px-3 py-1.5 text-sm font-bold text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
                             >
                                 عودة للبحث
                             </button>
-                        )}
+                        ) : null}
                         <button
                             onClick={onClose}
                             className="p-2 hover:bg-neutral-200 rounded-lg transition-colors text-neutral-400"
@@ -204,45 +436,6 @@ export const ProductInquiryModal: React.FC<ProductInquiryModalProps> = ({ isOpen
 
                 {!selectedId ? (
                     <>
-                        {/* Filters Row */}
-                        {mgmtData && (
-                            <div className="px-4 pb-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div>
-                                    <label className="block text-[10px] font-bold text-neutral-400 mb-1">مدير المنطقة</label>
-                                    <select
-                                        className="w-full text-xs font-bold bg-neutral-100 border-none rounded-lg p-2 outline-none focus:ring-1 focus:ring-orange-500"
-                                        value={manager}
-                                        onChange={(e) => { setManager(e.target.value); setCity('all'); setBranch('all'); }}
-                                    >
-                                        <option value="all">الكل</option>
-                                        {filterOptions.managers.map(m => <option key={m} value={m}>{m}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-neutral-400 mb-1">المدينة</label>
-                                    <select
-                                        className="w-full text-xs font-bold bg-neutral-100 border-none rounded-lg p-2 outline-none focus:ring-1 focus:ring-orange-500"
-                                        value={city}
-                                        onChange={(e) => { setCity(e.target.value); setBranch('all'); }}
-                                    >
-                                        <option value="all">الكل</option>
-                                        {filterOptions.cities.map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-neutral-400 mb-1">المعرض</label>
-                                    <select
-                                        className="w-full text-xs font-bold bg-neutral-100 border-none rounded-lg p-2 outline-none focus:ring-1 focus:ring-orange-500"
-                                        value={branch}
-                                        onChange={(e) => setBranch(e.target.value)}
-                                    >
-                                        <option value="all">الكل</option>
-                                        {filterOptions.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                        )}
-
                         {/* Search Input */}
                         <div className="p-4 bg-white sticky top-0 z-10 flex-shrink-0">
                             <div className="relative">
@@ -298,6 +491,11 @@ export const ProductInquiryModal: React.FC<ProductInquiryModalProps> = ({ isOpen
                                                                     قديم: {product.alias || product.old_code}
                                                                 </span>
                                                             )}
+                                                            {product.dCode && (
+                                                                <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded">
+                                                                    DC: {product.dCode}
+                                                                </span>
+                                                            )}
                                                             <span className="text-[10px] text-neutral-400">{product.category}</span>
                                                         </div>
                                                     </div>
@@ -315,8 +513,151 @@ export const ProductInquiryModal: React.FC<ProductInquiryModalProps> = ({ isOpen
                             )}
                         </div>
                     </>
+                ) : !selectedStore ? (
+                    /* MASTER VIEW: Branch List */
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        {/* Filters */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pb-2 border-b border-neutral-100">
+                            <div>
+                                <label className="block text-[10px] font-bold text-neutral-400 mb-1">مدير المنطقة</label>
+                                <select
+                                    className="w-full text-xs font-bold bg-neutral-100 border-none rounded-lg p-2 outline-none focus:ring-1 focus:ring-orange-500"
+                                    value={manager}
+                                    onChange={(e) => { setManager(e.target.value); setBranch('all'); }}
+                                >
+                                    <option value="all">الكل</option>
+                                    {filterOptions.managers.map(m => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-neutral-400 mb-1">المعرض</label>
+                                <select
+                                    className="w-full text-xs font-bold bg-neutral-100 border-none rounded-lg p-2 outline-none focus:ring-1 focus:ring-orange-500"
+                                    value={branch}
+                                    onChange={(e) => setBranch(e.target.value)}
+                                >
+                                    <option value="all">الكل</option>
+                                    {filterOptions.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-neutral-400 mb-1">الفترة الزمنية</label>
+                                <select
+                                    className="w-full text-xs font-bold bg-neutral-100 border-none rounded-lg p-2 outline-none focus:ring-1 focus:ring-orange-500"
+                                    value={filteredPeriod}
+                                    onChange={(e) => setFilteredPeriod(e.target.value as any)}
+                                >
+                                    <option value="today">اليوم</option>
+                                    <option value="yesterday">أمس</option>
+                                    <option value="7d">آخر 7 أيام</option>
+                                    <option value="30d">آخر 30 يوم</option>
+                                    <option value="mtd">الشهر الحالي</option>
+                                    <option value="last_month">الشهر الماضي</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Export & Family Toggle */}
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setIsFamilyMode(!isFamilyMode)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${isFamilyMode
+                                        ? 'bg-orange-500 text-white border-orange-500'
+                                        : 'bg-white text-neutral-600 border-neutral-200 hover:bg-orange-50'
+                                        }`}
+                                >
+                                    {isFamilyMode ? '✨ عرض مبيعات الصنف فقط' : '🌴 عرض مبيعات الشجرة كاملة'}
+                                </button>
+                                {isFamilyMode && (
+                                    <span className="text-[10px] text-orange-600 font-bold bg-orange-50 px-2 py-1 rounded">
+                                        يتم عرض المنتجات في الشجرة: {(selectedProduct?.alias || selectedId || '').length > 2 ? (selectedProduct?.alias || selectedId || '').slice(0, -2) : (selectedProduct?.alias || selectedId || '')}
+                                    </span>
+                                )}
+                            </div>
+                            <button
+                                onClick={handleExport}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold transition-colors"
+                            >
+                                <InvoicesIcon className="h-4 w-4" /> تصدير تقرير (XLSX)
+                            </button>
+                        </div>
+
+                        {/* Totals Summary */}
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="bg-orange-50 p-3 rounded-xl border border-orange-100">
+                                <div className="flex items-center gap-2 mb-1 text-orange-600">
+                                    <SalesIcon className="h-4 w-4" />
+                                    <span className="text-xs font-bold">إجمالي المبيعات</span>
+                                </div>
+                                <div className="text-lg font-black text-orange-700" dir="ltr">
+                                    {formatSAR(branchList.reduce((acc, curr) => acc + curr.amount, 0))}
+                                </div>
+                            </div>
+                            <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
+                                <div className="flex items-center gap-2 mb-1 text-blue-600">
+                                    <QtyIcon className="h-4 w-4" />
+                                    <span className="text-xs font-bold">إجمالي الكمية</span>
+                                </div>
+                                <div className="text-lg font-black text-blue-700" dir="ltr">
+                                    {branchList.reduce((acc, curr) => acc + curr.qty, 0).toLocaleString()} <span className="text-[10px]">قطعة</span>
+                                </div>
+                            </div>
+                            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
+                                <div className="flex items-center gap-2 mb-1 text-emerald-600">
+                                    <CubeIcon className="h-4 w-4" />
+                                    <span className="text-xs font-bold">إجمالي المخزون</span>
+                                </div>
+                                <div className="text-lg font-black text-emerald-700" dir="ltr">
+                                    {branchList.reduce((acc, curr) => acc + curr.stock, 0).toLocaleString()} <span className="text-[10px]">قطعة</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* List */}
+                        <div className="space-y-2">
+                            <div className="text-xs text-neutral-400 font-semibold mb-2">اضغط على الفرع لعرض التفاصيل</div>
+                            {branchList.length === 0 ? (
+                                <div className="text-center py-10 text-neutral-400">
+                                    لا توجد مبيعات لهذا المنتج في النطاق المحدد.
+                                </div>
+                            ) : (
+                                branchList.map(b => (
+                                    <button
+                                        key={b.id}
+                                        onClick={() => setSelectedStore(b.id)}
+                                        className="w-full flex items-center justify-between p-3 rounded-xl border border-neutral-100 hover:bg-orange-50 hover:border-orange-200 transition-all group"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-neutral-100 text-neutral-500 flex items-center justify-center font-bold text-xs group-hover:bg-white group-hover:text-orange-600">
+                                                {b.name.charAt(0)}
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="font-bold text-neutral-900 group-hover:text-orange-800">{b.name}</div>
+                                                <div className="text-[10px] text-neutral-400">ID: {b.id}</div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-6 text-left">
+                                            <div>
+                                                <div className="text-sm font-bold text-emerald-600">{b.stock}</div>
+                                                <div className="text-[10px] text-neutral-400">مخزون</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-sm font-bold text-neutral-900">{b.qty}</div>
+                                                <div className="text-[10px] text-neutral-400">مباع</div>
+                                            </div>
+                                            <div className="min-w-[70px]">
+                                                <div className="text-sm font-bold text-orange-600">{formatSAR(b.amount)}</div>
+                                                <div className="text-[10px] text-neutral-400">القيمة</div>
+                                            </div>
+                                        </div>
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </div>
                 ) : (
-                    /* Details View */
+                    /* DETAIL VIEW: Daily History OR Variant Breakdown */
                     <div className="flex-1 overflow-y-auto p-4 space-y-6">
                         {/* Period Selection */}
                         <div className="flex flex-wrap gap-1 bg-neutral-100 p-1 rounded-xl">
@@ -345,57 +686,101 @@ export const ProductInquiryModal: React.FC<ProductInquiryModalProps> = ({ isOpen
                             <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100">
                                 <div className="flex items-center gap-2 mb-2 text-orange-600">
                                     <SalesIcon className="h-5 w-5" />
-                                    <span className="text-sm font-bold">إجمالي المبيعات</span>
+                                    <span className="text-sm font-bold">مبيعات الفرع</span>
                                 </div>
                                 <div className="text-2xl font-black text-orange-700" dir="ltr">
-                                    {formatSAR(productStats?.totalAmt || 0)}
+                                    {formatSAR(storeDetailView?.totalAmt || 0)}
                                 </div>
                                 <div className="text-[10px] text-orange-400 mt-1 font-bold">
-                                    للفترة من {productStats?.start} إلى {productStats?.end}
+                                    للفترة من {storeDetailView?.start} إلى {storeDetailView?.end}
                                 </div>
                             </div>
                             <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
                                 <div className="flex items-center gap-2 mb-2 text-blue-600">
                                     <QtyIcon className="h-5 w-5" />
-                                    <span className="text-sm font-bold">إجمالي الكمية</span>
+                                    <span className="text-sm font-bold">الكمية المباعة</span>
                                 </div>
                                 <div className="text-2xl font-black text-blue-700" dir="ltr">
-                                    {(productStats?.totalQty || 0).toLocaleString()} <span className="text-xs">قطعة</span>
+                                    {(storeDetailView?.totalQty || 0).toLocaleString()} <span className="text-xs">قطعة</span>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Recent History Table */}
+                        {/* Recent History Table OR Variant Breakdown */}
                         <div>
-                            <h3 className="text-sm font-bold text-neutral-700 mb-3 flex items-center gap-2">
-                                <span>📈</span> تفاصيل المبيعات خلال الفترة الاختيارية
-                            </h3>
-                            <div className="overflow-hidden border border-neutral-100 rounded-xl">
-                                <table className="w-full text-sm">
-                                    <thead className="bg-neutral-50 text-neutral-500">
-                                        <tr className="border-b border-neutral-100">
-                                            <th className="py-2 px-3 text-right">التاريخ</th>
-                                            <th className="py-2 px-3 text-center">الكمية</th>
-                                            <th className="py-2 px-3 text-left">المبلغ</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-neutral-50">
-                                        {productStats?.recent.length === 0 ? (
-                                            <tr>
-                                                <td colSpan={3} className="py-8 text-center text-neutral-400">لا توجد حركات مبيعات مسجلة في هذه الفترة</td>
-                                            </tr>
-                                        ) : (
-                                            productStats?.recent.map((h, i) => (
-                                                <tr key={i} className="hover:bg-neutral-50">
-                                                    <td className="py-2 px-3 font-mono text-neutral-600">{h.date}</td>
-                                                    <td className="py-2 px-3 text-center font-bold text-neutral-900">{h.qty}</td>
-                                                    <td className="py-2 px-3 text-left font-bold text-orange-600" dir="ltr">{formatSAR(h.amount)}</td>
+                            {storeDetailView?.mode === 'tree' ? (
+                                <>
+                                    <h3 className="text-sm font-bold text-neutral-700 mb-3 flex items-center gap-2">
+                                        <span>🌴</span> تحليل أصناف الشجرة
+                                    </h3>
+                                    <div className="overflow-hidden border border-neutral-100 rounded-xl">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-neutral-50 text-neutral-500">
+                                                <tr className="border-b border-neutral-100">
+                                                    <th className="py-2 px-3 text-right">الصنف</th>
+                                                    <th className="py-2 px-3 text-center">المخزون</th>
+                                                    <th className="py-2 px-3 text-center">الكمية</th>
+                                                    <th className="py-2 px-3 text-left">المبلغ</th>
                                                 </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
+                                            </thead>
+                                            <tbody className="divide-y divide-neutral-50">
+                                                {(storeDetailView.variants || []).length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={4} className="py-8 text-center text-neutral-400">لا توجد حركات مبيعات للشجرة في هذا الفرع</td>
+                                                    </tr>
+                                                ) : (
+                                                    (storeDetailView.variants || []).map((v: any, i: number) => (
+                                                        <tr key={i} className="hover:bg-neutral-50">
+                                                            <td className="py-2 px-3">
+                                                                <div className="font-bold text-neutral-800">{v.name}</div>
+                                                                <div className="flex gap-2 text-xs text-neutral-400 font-mono">
+                                                                    <span>#{v.id}</span>
+                                                                    <span>• {v.alias}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="py-2 px-3 text-center font-bold text-emerald-600 dir-ltr">{v.stock}</td>
+                                                            <td className="py-2 px-3 text-center font-bold text-neutral-900">{v.qty}</td>
+                                                            <td className="py-2 px-3 text-left font-bold text-orange-600" dir="ltr">{formatSAR(v.amount)}</td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <h3 className="text-sm font-bold text-neutral-700 mb-3 flex items-center gap-2">
+                                        <span>📈</span> سجل المبيعات اليومي
+                                    </h3>
+                                    <div className="overflow-hidden border border-neutral-100 rounded-xl">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-neutral-50 text-neutral-500">
+                                                <tr className="border-b border-neutral-100">
+                                                    <th className="py-2 px-3 text-right">التاريخ</th>
+                                                    <th className="py-2 px-3 text-center">الكمية</th>
+                                                    <th className="py-2 px-3 text-left">المبلغ</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-neutral-50">
+                                                {(storeDetailView?.recent || []).length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={3} className="py-8 text-center text-neutral-400">لا توجد حركات مبيعات مسجلة في هذه الفترة</td>
+                                                    </tr>
+                                                ) : (
+                                                    (storeDetailView?.recent || []).map((h: any, i: number) => (
+                                                        <tr key={i} className="hover:bg-neutral-50">
+                                                            <td className="py-2 px-3 font-mono text-neutral-600">{h.date}</td>
+                                                            <td className="py-2 px-3 text-center font-bold text-neutral-900">{h.qty}</td>
+                                                            <td className="py-2 px-3 text-left font-bold text-orange-600" dir="ltr">{formatSAR(h.amount)}</td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 )}

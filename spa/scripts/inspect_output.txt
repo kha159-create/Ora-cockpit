@@ -1,0 +1,7 @@
+Reading C:/Users/Orange1/Downloads/mapping.xlsx...
+Columns: ['Item code', 'dynamic code', 'alias', 'Category', 'english name']
+Row 0: [10144, 100010113, 4155, 'لحافات كينغ', '*CALEETIS 8 PCS KING - 10144']
+Row 1: [10400, 110030064, 5108, 'كويلتات', 'QUILT FULL AUDREY 3PCS']
+Row 2: [10454, 110010017, 5201, 'كويلتات', 'QUILT KING DASH 3PCS']
+Row 3: [10478, 110010018, 5227, 'كويلتات', 'QUILT KING PIERCE 3PCS']
+Row 4: [10497, 120020001, 6004, 'شراشف', 'SHEET QUEEN 4 PCS']

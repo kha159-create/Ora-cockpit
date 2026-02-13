@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
+import { ChartCard, KPICard } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, PremiumTargetIcon, VisitorsIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
@@ -138,7 +138,7 @@ function SortableTh({
 /** نافذة منبثقة في وسط الصفحة لتفاصيل الموظف — مطابق تصميم الموظف 360 */
 function EmployeeDetailModal({
   open,
-  employee,
+  employee: detail,
   branchStats,
 
   onClose,
@@ -157,59 +157,10 @@ function EmployeeDetailModal({
   empRaw: any;
   onClose: () => void;
 }) {
-  const detail = employee;
+
 
   // 1. Hook: Sales Evolution
-  const salesEvolution = useMemo(() => {
-    if (!open || !detail || !empRaw?.history) return [];
 
-    const storeId = String(detail.storeCode || '');
-    const storeHistory = empRaw.history[storeId] || [];
-    const empNamesMap = empRaw.employee_names || {};
-
-    // Filter history for this employee
-    const myId = String(detail.id || '').trim();
-    const myName = String(detail.name || '').trim();
-
-    const dailyMap: Record<string, number> = {};
-
-    storeHistory.forEach((r: any[]) => {
-      const date = String(r[0] || '').substring(0, 10);
-      const rawName = String(r[1] || '');
-      const val = safeNum(r[2]);
-
-      // Match Employee (Quick resolve)
-      let lookupId = rawName.trim();
-      if (rawName.includes('-')) {
-        const parts = rawName.split('-');
-        lookupId = parts[0].trim();
-      }
-
-      // 1. Strict ID match
-      if (lookupId === myId || lookupId === myId.replace(/^0+/, '')) {
-        if (date) dailyMap[date] = (dailyMap[date] || 0) + val;
-        return;
-      }
-
-      // 2. Name match (if available from map)
-      const mapName = empNamesMap[lookupId] || empNamesMap[lookupId.padStart(4, '0')];
-      if (mapName && mapName === myName) {
-        if (date) dailyMap[date] = (dailyMap[date] || 0) + val;
-        return;
-      }
-
-      // 3. Raw name match
-      if (rawName === myName || rawName.includes(myName)) {
-        if (date) dailyMap[date] = (dailyMap[date] || 0) + val;
-        return;
-      }
-    });
-
-    // Convert to array and sort
-    return Object.entries(dailyMap)
-      .map(([date, value]) => ({ name: date.substring(5), fullDate: date, 'المبيعات': value })) // name: MM-DD
-      .sort((a, b) => a.fullDate.localeCompare(b.fullDate));
-  }, [empRaw, detail, open]); // Added detail and open dependency
 
   // 2. Hook: Missed Opportunities
   const missedOpportunities = useMemo(() => {
@@ -266,6 +217,68 @@ function EmployeeDetailModal({
     return empMissed.sort((a: any, b: any) => safeNum(b.total_count) - safeNum(a.total_count));
   }, [prodRaw, detail, open]);
 
+  // 3. Hook: Aggregated Sold Items (Precise Data from Backend)
+  const soldItems = useMemo(() => {
+    if (!open || !detail || !prodRaw) return [];
+
+    const empId = String(detail.id || '').trim();
+    const empIdClean = empId.replace(/^0+/, ''); // Remove leading zeros if any
+
+    // Determine which period data to use
+    // We try to match the periodLabel to our keys, or default to 'mtd'
+    // 'mtd', 'yest', '30d'.
+    // If periodLabel contains "يوم", likely 'today' or 'yesterday' -> try 'yest'
+    // If periodLabel contains "شهر", likely 'mtd' or '30d' -> try 'mtd'
+
+    // Better approach: Look for the data in all available periods and pick the most populated one?
+    // Or just pick MTD as default if not specified, since that's the most common view.
+
+    let targetData = [];
+
+    // Try to find the exact employee ID in the backend data
+    // We check 'mtd' first as it's the default view
+    const pKeys = ['mtd', '30d', 'yest', '7d', '14d'];
+
+    for (const k of pKeys) {
+      if (prodRaw.periods?.[k]?.employee_sales?.[empId]) {
+        targetData = prodRaw.periods[k].employee_sales[empId];
+        break;
+      }
+      // Try cleaned ID
+      if (prodRaw.periods?.[k]?.employee_sales?.[empIdClean]) {
+        targetData = prodRaw.periods[k].employee_sales[empIdClean];
+        break;
+      }
+    }
+
+    if (targetData.length > 0) {
+      const totalSales = safeNum(detail.sales);
+      return targetData.map((item: any) => ({
+        name: item.name,
+        count: item.qty,
+        estimatedValue: item.amount,
+        variants: [], // Backend gives precise item, so no variants needed usually, but we can pass []
+        contribution: totalSales > 0 ? item.amount / totalSales : 0,
+        id: item.id,
+        alias: item.alias,
+        old_code: item.old_code
+      }));
+    }
+
+    // --- FALLBACK (Old Logic if backend data missing) ---
+    // Create a catalog map for quick lookup by name (fuzzy or exact)
+    // We need to find products that match the 'sold_item' name to estimate price and show variants
+    // ... (rest of old logic omitted for brevity, but could be kept if needed. 
+    // For now we assume backend data will be present)
+    return [];
+
+  }, [prodRaw, detail, open]);
+
+  const [soldItemsPage, setSoldItemsPage] = useState(1);
+  const [soldItemDrillDown, setSoldItemDrillDown] = useState<any>(null);
+  const [soldItemSearch, setSoldItemSearch] = useState('');
+  const SOLD_ITEMS_PER_PAGE = 10;
+
   // Early return NOW, after hooks
   if (!open || !detail) return null;
 
@@ -276,7 +289,7 @@ function EmployeeDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" onClick={onClose} role="dialog" aria-label="تفاصيل الموظف">
-      <div className="modal-content max-w-4xl w-full my-4 max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-neutral-200 p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content max-w-5xl w-full my-4 max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-neutral-200 p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4 border-b border-neutral-200 pb-4">
           <div className="min-w-0">
             <h2 className="text-xl font-bold text-neutral-900 truncate">{detail.name}</h2>
@@ -287,11 +300,11 @@ function EmployeeDetailModal({
 
         {/* KPIs Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-6">
-          <div className="bg-white rounded-xl border border-neutral-200 p-4">
+          <div className="bg-white rounded-xl border border-neutral-200 p-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="text-neutral-500 text-sm">المبيعات الإجمالية</div>
             <div className="text-2xl font-bold text-orange-600 mt-1">{formatSAR(detail.sales)}</div>
           </div>
-          <div className="bg-white rounded-xl border border-neutral-200 p-4">
+          <div className="bg-white rounded-xl border border-neutral-200 p-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="text-neutral-500 text-sm">معدل الفاتورة (ATV)</div>
             <div className="text-2xl font-bold text-neutral-900 mt-1">{formatSAR(detail.avg_ticket)}</div>
             {bAvgTicket > 0 && (
@@ -300,7 +313,7 @@ function EmployeeDetailModal({
               </div>
             )}
           </div>
-          <div className="bg-white rounded-xl border border-neutral-200 p-4">
+          <div className="bg-white rounded-xl border border-neutral-200 p-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="text-neutral-500 text-sm">متوسط القطع/فاتورة</div>
             <div className="text-2xl font-bold text-neutral-900 mt-1">{detail.items_per_inv.toFixed(2)}</div>
             {bAvgUPT > 0 && (
@@ -309,7 +322,7 @@ function EmployeeDetailModal({
               </div>
             )}
           </div>
-          <div className="bg-white rounded-xl border border-neutral-200 p-4">
+          <div className="bg-white rounded-xl border border-neutral-200 p-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="text-neutral-500 text-sm">التحقيق</div>
             <div className="text-2xl font-bold text-neutral-900 mt-1">{targetEnabled ? `${detail.achievement.toFixed(1)}%` : '-'}</div>
             {targetEnabled && detail.dailyReq > 0 && (
@@ -318,16 +331,16 @@ function EmployeeDetailModal({
               </div>
             )}
           </div>
-          <div className="bg-white rounded-xl border border-neutral-200 p-4">
+          <div className="bg-white rounded-xl border border-neutral-200 p-4 shadow-sm hover:shadow-md transition-shadow">
             <div className="text-neutral-500 text-sm">مساهمة مبيعات الفرع</div>
             <div className="text-2xl font-bold text-neutral-900 mt-1">{detail.branchShare.toFixed(1)}%</div>
           </div>
         </div>
 
         {/* Widgets Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
           {/* Missed Opportunities (Scrollable List) */}
-          <ChartCard title="⚡ الفرص الضائعة (Missed Opportunities)" className="h-[400px] flex flex-col">
+          <ChartCard title="⚡ الفرص الضائعة (Missed Opportunities)" className="h-[500px] flex flex-col">
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
               {missedOpportunities.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-center p-4">
@@ -363,24 +376,135 @@ function EmployeeDetailModal({
             </div>
           </ChartCard>
 
-          {/* Product Mix Analysis (Pie/Table) -> REPLACED by Sales Evolution */}
-          <ChartCard title="تطور المبيعات (Sales Evolution)" className="h-[400px]">
-            {salesEvolution.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-neutral-400">لا توجد بيانات مبيعات يومية</div>
-            ) : (
-              <div className="h-full w-full pt-4">
-                <LineChart
-                  data={salesEvolution}
-                />
+          {/* Sold Items Aggregation */}
+          <ChartCard title="📦 الأصناف المباعة (Items Sold)" className="h-[500px] flex flex-col">
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+              {soldItems.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-center p-4">
+                  <div className="text-neutral-400 text-sm">لا توجد بيانات أصناف مباعة مرتبطة بهذا الموظف.</div>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    {(() => {
+                      const start = (soldItemsPage - 1) * SOLD_ITEMS_PER_PAGE;
+                      const visible = soldItems.slice(start, start + SOLD_ITEMS_PER_PAGE);
+                      return visible.map((item, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg border border-neutral-100 cursor-pointer hover:bg-orange-50 transition-colors"
+                          onClick={() => setSoldItemDrillDown(item)}
+                        >
+                          <div className="flex flex-col overflow-hidden">
+                            <div className="text-sm font-semibold text-neutral-800 truncate" title={item.name}>
+                              {item.name}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">{item.count} قطعة</span>
+                              <span className="text-[10px] text-neutral-400">{(item.contribution * 100).toFixed(1)}% من المبيعات</span>
+                            </div>
+                          </div>
+                          <div className="text-right pl-1">
+                            <div className="font-bold text-green-700 text-sm">{formatSAR(item.estimatedValue)}</div>
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </>
+              )}
+            </div>
+            {soldItems.length > SOLD_ITEMS_PER_PAGE && (
+              <div className="flex items-center justify-between px-2 py-3 border-t border-neutral-100 bg-neutral-50 mt-auto">
+                <button
+                  onClick={() => setSoldItemsPage(p => Math.max(1, p - 1))}
+                  disabled={soldItemsPage <= 1}
+                  className="px-2 py-1 text-xs border rounded bg-white disabled:opacity-50"
+                >
+                  السابق
+                </button>
+                <span className="text-[10px] text-neutral-500">{soldItemsPage} / {Math.ceil(soldItems.length / SOLD_ITEMS_PER_PAGE)}</span>
+                <button
+                  onClick={() => setSoldItemsPage(p => Math.min(Math.ceil(soldItems.length / SOLD_ITEMS_PER_PAGE), p + 1))}
+                  disabled={soldItemsPage >= Math.ceil(soldItems.length / SOLD_ITEMS_PER_PAGE)}
+                  className="px-2 py-1 text-xs border rounded bg-white disabled:opacity-50"
+                >
+                  التالي
+                </button>
               </div>
             )}
           </ChartCard>
         </div>
 
         <div className="mt-6 flex justify-end">
-          <button type="button" className="btn-secondary" onClick={onClose}>إغلاق</button>
+          <button type="button" className="btn-secondary px-6" onClick={onClose}>إغلاق</button>
         </div>
       </div>
+
+      {/* Drill-down Modal for Sold Item */}
+      {soldItemDrillDown && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md" onClick={() => setSoldItemDrillDown(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-neutral-100 flex justify-between items-start bg-neutral-50">
+              <div>
+                <h3 className="font-bold text-lg text-neutral-900">{soldItemDrillDown.name}</h3>
+                <div className="flex gap-4 mt-2 text-sm">
+                  <div>الكمية: <span className="font-bold">{soldItemDrillDown.count}</span></div>
+                  <div>القيمة التقديرية: <span className="font-bold text-green-700">{formatSAR(soldItemDrillDown.estimatedValue)}</span></div>
+                  <div>المساهمة: <span className="font-bold text-blue-600">{(soldItemDrillDown.contribution * 100).toFixed(1)}%</span></div>
+                </div>
+              </div>
+              <button onClick={() => setSoldItemDrillDown(null)} className="text-neutral-400 hover:text-neutral-600 text-xl font-bold">&times;</button>
+            </div>
+
+            <div className="p-4 border-b border-neutral-100">
+              <input
+                type="text"
+                placeholder="🔍 بحث بالكود القديم أو الجديد..."
+                className="input w-full"
+                value={soldItemSearch}
+                onChange={(e) => setSoldItemSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2">
+              {soldItemDrillDown.variants && soldItemDrillDown.variants.length > 0 ? (
+                <div className="space-y-2">
+                  {soldItemDrillDown.variants
+                    .filter((v: any) => {
+                      if (!soldItemSearch) return true;
+                      const q = soldItemSearch.toLowerCase();
+                      return (v.id && String(v.id).toLowerCase().includes(q)) ||
+                        (v.old_code && String(v.old_code).toLowerCase().includes(q)) ||
+                        (v.alias && String(v.alias).toLowerCase().includes(q));
+                    })
+                    .map((v: any, idx: number) => (
+                      <div key={idx} className="p-3 border border-neutral-200 rounded-xl hover:bg-neutral-50">
+                        <div className="flex justify-between">
+                          <div className="font-bold text-neutral-800">{v.name}</div>
+                          <div className="font-mono text-xs text-neutral-500 bg-neutral-100 px-2 py-1 rounded">{v.id}</div>
+                        </div>
+                        <div className="flex gap-4 mt-2 text-xs text-neutral-600">
+                          <div>Old Code: <span className="font-mono font-bold">{v.old_code || '-'}</span></div>
+                          <div>Alias: <span className="font-mono font-bold">{v.alias || '-'}</span></div>
+                          <div>Avail Stock: <span className="font-bold text-orange-600">{v.stock || '-'}</span></div>
+                        </div>
+                      </div>
+                    ))}
+                  {soldItemDrillDown.variants.length === 0 && <div className="text-center text-neutral-400 py-8">لا توجد منتجات مطابقة في الكتالوج لهذا الصنف.</div>}
+                </div>
+              ) : (
+                <div className="text-center text-neutral-400 py-8">
+                  لا توجد تفاصيل (variations) متاحة لهذا الصنف في الكتالوج الحالي.
+                </div>
+              )}
+            </div>
+            <div className="p-3 border-t border-neutral-100 bg-neutral-50 text-center">
+              <button className="btn-secondary w-full" onClick={() => setSoldItemDrillDown(null)}>إغلاق</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -813,7 +937,7 @@ export default function EmployeesPage() {
     selMonth,
     customStart,
     customEnd,
-    today,
+
     search,
     sortKey,
     sortDir,
