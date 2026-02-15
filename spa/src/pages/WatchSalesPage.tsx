@@ -6,7 +6,6 @@ export default function WatchSalesPage() {
     const { calculateLiveData } = useLiveSalesData();
     const [selectedManager, setSelectedManager] = useState('all');
 
-    // Auto-refresh every 60s
     const [tick, setTick] = useState(0);
     useEffect(() => {
         const t = setInterval(() => setTick(n => n + 1), 60000);
@@ -17,11 +16,10 @@ export default function WatchSalesPage() {
         return calculateLiveData(selectedManager);
     }, [calculateLiveData, selectedManager, tick]);
 
-    const { sales, trans } = liveData.totals;
-    // Calculate Average Basket Value (ABV)
+    const { sales, trans, visitors } = liveData.totals;
     const avgBasket = trans > 0 ? sales / trans : 0;
+    const conversionRate = visitors > 0 ? (trans / visitors) * 100 : 0;
 
-    // Sort stores by Sales (descending)
     const sortedStores = useMemo(() => {
         return [...liveData.stores].sort((a, b) => b.sales - a.sales);
     }, [liveData.stores]);
@@ -54,17 +52,26 @@ export default function WatchSalesPage() {
                 <span className="text-orange-500 text-[10px] font-bold">SAR</span>
             </div>
 
-            {/* Secondary Metrics: Trans & Avg Basket */}
-            <div className="grid grid-cols-2 gap-2 w-full mb-4">
+            {/* Secondary Metrics: Trans, Basket, CR */}
+            <div className="grid grid-cols-3 gap-2 w-full mb-4">
                 <div className="bg-neutral-900 rounded-lg p-2 flex flex-col items-center">
                     <span className="text-neutral-500 text-[9px]">Trans</span>
                     <span className="text-lg font-bold">{trans}</span>
                 </div>
                 <div className="bg-neutral-900 rounded-lg p-2 flex flex-col items-center">
-                    <span className="text-neutral-500 text-[9px]">Avg Basket</span>
+                    <span className="text-neutral-500 text-[9px]">Basket</span>
                     <span className="text-lg font-bold text-blue-400">
                         {avgBasket.toFixed(0)}
                     </span>
+                </div>
+                <div className="bg-neutral-900 rounded-lg p-2 flex flex-col items-center">
+                    <span className="text-neutral-500 text-[9px]">Conv. %</span>
+                    <div className="flex items-end gap-0.5">
+                        <span className={`text-lg font-bold ${conversionRate >= 10 ? 'text-green-500' : 'text-yellow-500'}`}>
+                            {conversionRate.toFixed(1)}
+                        </span>
+                        <span className="text-[10px] text-neutral-500 mb-1">%</span>
+                    </div>
                 </div>
             </div>
 
@@ -73,11 +80,15 @@ export default function WatchSalesPage() {
                 <div className="text-[10px] text-neutral-500 font-semibold mb-1 px-1">STORES PERFORMANCE</div>
                 {sortedStores.map(store => {
                     const sBasket = store.trans > 0 ? store.sales / store.trans : 0;
+                    const sConv = store.visitors > 0 ? (store.trans / store.visitors) * 100 : 0;
                     return (
                         <div key={store.id} className="bg-neutral-900/50 rounded-lg p-2 flex justify-between items-center border border-neutral-800">
                             <div className="flex flex-col">
                                 <span className="text-xs font-bold text-white mb-0.5">{store.name}</span>
-                                <span className="text-[9px] text-neutral-500">{store.trans} Trans</span>
+                                <div className="flex gap-2">
+                                    <span className="text-[9px] text-neutral-500">{store.trans} Trans</span>
+                                    <span className="text-[9px] text-yellow-600/80">CR: {sConv.toFixed(1)}%</span>
+                                </div>
                             </div>
                             <div className="flex flex-col items-end">
                                 <span className="text-sm font-bold text-white">{formatSAR(store.sales).replace('SAR', '')}</span>

@@ -251,10 +251,11 @@ export function useLiveSalesData() {
 
         const totalSales = storeList.reduce((s, st) => s + st.sales, 0);
         const totalTrans = storeList.reduce((s, st) => s + st.trans, 0);
+        const totalVisitors = storeList.reduce((s, st) => s + st.visitors, 0);
         const totalTarget = storeList.reduce((s, st) => s + st.target, 0);
 
         return {
-            liveData: { totals: { sales: totalSales, trans: totalTrans, target: totalTarget }, stores: storeList },
+            liveData: { totals: { sales: totalSales, trans: totalTrans, visitors: totalVisitors, target: totalTarget }, stores: storeList },
             managersList
         };
 
