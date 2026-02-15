@@ -11,6 +11,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage'));
 const ReportsPage = React.lazy(() => import('./pages/ReportsPage'));
 const EmployeesPage = React.lazy(() => import('./pages/EmployeesPage'));
+const WatchSalesPage = React.lazy(() => import('./pages/WatchSalesPage'));
 const StoresPage = React.lazy(() => import('./pages/StoresPage'));
 const ProductsPage = React.lazy(() => import('./pages/ProductsPage'));
 const OffersPage = React.lazy(() => import('./pages/OffersPage'));
@@ -36,6 +37,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/watch" element={<PageWrap><WatchSalesPage /></PageWrap>} />
 
       <Route
         path="/"
