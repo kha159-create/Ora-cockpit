@@ -124,7 +124,7 @@ export default function OffersPage() {
     const yesterdayYMD = toYMD(yesterdayDate);
     const storesMap = mgmt?.stores || {};
 
-    return rawOffers.map((o: any) => {
+    let processedOffers = rawOffers.map((o: any) => {
       let yestSales = 0, yestDisc = 0, yestOps = 0;
       let periodSales = 0, periodDisc = 0, periodOps = 0;
 
@@ -200,22 +200,47 @@ export default function OffersPage() {
       });
       const aggregatedItems = Object.values(itemAgg).sort((a, b) => b.qty - a.qty);
 
+      const periodEff = periodSales > 0 ? (periodSales / (periodSales + periodDisc)) * 100 : 100;
+      const periodAvgBasket = periodOps > 0 ? periodSales / periodOps : 0;
+
+      // Smart Score Calculation
+      // Sales (40%), Efficiency (40%), Volume (20%) - Adjusted roughly
+      // Normalize? For now, raw score: (Sales/1000 * 0.4) + (Eff * 0.4) + (Ops * 0.2)
+      // Using a base of 1000 for sales to make it comparable to Eff (0-100) and Ops (can be large)
+      const scoreSales = (periodSales / 1000) * 0.4;
+      const scoreEff = periodEff * 0.4;
+      const scoreOps = (periodOps / 10) * 0.2; // Assuming average ops are in tens/hundreds, adjust divisor as needed
+
+      const smartScore = scoreSales + scoreEff + scoreOps;
+
       return {
         ...o,
         yestSales, yestDisc, yestOps,
         periodSales, periodDisc, periodOps,
         yestEff: yestSales > 0 ? (yestSales / (yestSales + yestDisc)) * 100 : 100,
-        periodEff: periodSales > 0 ? (periodSales / (periodSales + periodDisc)) * 100 : 100,
-        periodAvgBasket: periodOps > 0 ? periodSales / periodOps : 0,
+        periodEff,
+        periodAvgBasket,
         storeBreakdown,
         aggregatedItems,
+        smartScore,
       };
     }).filter((o: any) => {
       if (statusFilter === 'Enabled' && (o.status === 'Disabled' || o.enabled === false)) return false;
       if (statusFilter === 'Disabled' && (o.status !== 'Disabled' && o.enabled !== false)) return false;
       return o.periodSales > 0 || o.periodOps > 0 || o.yestSales > 0;
     });
-  }, [rawOffers, allowedStoreIds, dateRange, statusFilter, mgmt]);
+
+    // Apply sorting based on sortMode
+    if (sortMode === 'smart') {
+      processedOffers.sort((a: any, b: any) => b.smartScore - a.smartScore);
+    } else if (sortMode === 'eff') {
+      processedOffers.sort((a: any, b: any) => b.periodEff - a.periodEff);
+    } else { // Default to 'sales'
+      processedOffers.sort((a: any, b: any) => b.periodSales - a.periodSales);
+    }
+
+    return processedOffers;
+  }, [rawOffers, allowedStoreIds, dateRange, statusFilter, mgmt, sortMode]);
 
   const stats = useMemo(() => {
     const res = offers.reduce((acc: any, o: any) => {
@@ -304,20 +329,110 @@ export default function OffersPage() {
     );
   }
 
+  // -- [NEW] View Mode State --
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+  // -- [NEW] Comparison & Copy Logic --
+  const [compareList, setCompareList] = useState<any[]>([]);
+  const [showCompareModal, setShowCompareModal] = useState(false);
+
+  const toggleCompare = (offer: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (compareList.find(o => o.id === offer.id)) {
+      setCompareList(prev => prev.filter(o => o.id !== offer.id));
+    } else {
+      if (compareList.length >= 3) {
+        alert('يمكنك مقارنة 3 عروض كحد أقصى.');
+        return;
+      }
+      setCompareList(prev => [...prev, offer]);
+    }
+  };
+
+  const copyOfferDetails = (offer: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const text = `
+*${offer.name || offer.offer_name}*
+📊 المبيعات: ${formatSAR(offer.periodSales)}
+📉 الخصم: ${formatSAR(offer.periodDisc)}
+🎯 الكفاءة: ${offer.periodEff.toFixed(1)}%
+🛒 العمليات: ${offer.periodOps}
+ متوسط السلة: ${formatSAR(offer.periodAvgBasket)}
+`.trim();
+    navigator.clipboard.writeText(text).then(() => {
+      alert('تم نسخ تفاصيل العرض!');
+    });
+  };
+
+  // -- [NEW] Badges Logic --
+  const getBadges = (o: any) => {
+    const badges = [];
+    // Hot: Top 10% in Sales
+    const isTop10Sales = top5.some((t: any) => t.id === o.id); // Simple approximation
+    if (isTop10Sales) badges.push({ label: '🔥 Hot', color: 'bg-orange-100 text-orange-700' });
+
+    // New: If start date is recent (last 7 days) - assuming we had a start date. 
+    // Fallback: Recent high growth? Or valid start_date field if exists. 
+    // Let's use efficiency > 90% as "Star" for now or just manually check if New.
+    // We don't have start_date in data sample, skipping 'New' for now or using random? No random.
+
+    // Expiring: If end_date is close.
+    if (o.end_date) {
+      const end = new Date(o.end_date);
+      const now = new Date();
+      const diff = (end.getTime() - now.getTime()) / (1000 * 3600 * 24);
+      if (diff > 0 && diff <= 3) badges.push({ label: '⚠️ Expiring', color: 'bg-red-100 text-red-700' });
+    }
+
+    // High Eff
+    if (o.periodEff >= 95) badges.push({ label: '⭐ Top Eff', color: 'bg-green-100 text-green-700' });
+
+    return badges;
+  };
+
+  if (err) return <div className="p-6 bg-white rounded-2xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center h-[40vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500" />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      <header className="flex justify-between items-center">
+    <div className="space-y-6 pb-24 relative"> {/* Added relative & padding for FAB */}
+      <header className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-neutral-900">تحليل العروض</h1>
           <p className="text-neutral-500 mt-1">أداء العروض والخصومات حسب الفترة والمعرض</p>
         </div>
-        <button
-          onClick={exportToExcel}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all font-bold shadow-md"
-        >
-          <DownloadIcon />
-          تصدير Excel
-        </button>
+        <div className="flex items-center gap-3">
+          {/* View Toggle */}
+          <div className="bg-neutral-100 p-1 rounded-lg flex items-center">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow text-orange-600' : 'text-neutral-500 hover:text-neutral-700'}`}
+              title="شبكة"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow text-orange-600' : 'text-neutral-500 hover:text-neutral-700'}`}
+              title="قائمة"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+            </button>
+          </div>
+
+          <button
+            onClick={exportToExcel}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all font-bold shadow-md text-sm"
+          >
+            <DownloadIcon />
+            <span className="hidden sm:inline">تصدير Excel</span>
+          </button>
+        </div>
       </header>
 
       {/* Filters */}
@@ -391,242 +506,250 @@ export default function OffersPage() {
         <KPICard title="إجمالي الخصم" value={stats.totalPeriodDisc} format={formatSAR} icon={<FireIcon />} />
       </div>
 
-      {/* Top 5 */}
-      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
-        <h2 className="text-lg font-bold text-neutral-900 mb-4 border-r-4 border-orange-500 pr-2">أفضل 5 عروض</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          {top5.length === 0 ? (
-            <p className="text-neutral-500 col-span-full">لا توجد عروض لعرضها.</p>
-          ) : (
-            top5.map((o: any, i: number) => {
-              const pct = stats.totalPeriod > 0 ? (o.periodSales / stats.totalPeriod) * 100 : 0;
-              return (
-                <div
-                  key={i}
-                  className="rounded-xl border border-neutral-200 p-4 border-r-4 border-r-orange-500 bg-neutral-50/50 hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => setSelectedOffer(o)}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-xs font-bold text-orange-600">#{i + 1}</span>
-                    <span className="text-sm font-bold text-neutral-700">{pct.toFixed(1)}%</span>
-                  </div>
-                  <div className="font-semibold text-neutral-900 text-sm mb-3 line-clamp-2">{o.name || o.offer_name || o.id || '-'}</div>
-                  <div className="text-xs space-y-1 text-neutral-600">
-                    <div>المبيعات: {formatSAR(o.periodSales)}</div>
-                    <div>أمس: {formatSAR(o.yestSales)}</div>
-                    <div>العمليات: {o.periodOps.toLocaleString()}</div>
-                    <div>المنتجات: {o.aggregatedItems?.length || 0}</div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* Weak Offers */}
-      {weakOffers.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
-          <h2 className="text-lg font-bold text-neutral-900 mb-4 border-r-4 border-red-500 pr-2">عروض ضعيفة الأداء</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {weakOffers.map((o: any, i: number) => (
-              <div
-                key={i}
-                className="rounded-xl border border-red-200 p-4 bg-red-50/50 hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => setSelectedOffer(o)}
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-bold text-red-600">#{i + 1}</span>
-                  <span className="text-sm font-bold text-red-700">{o.periodEff.toFixed(1)}%</span>
-                </div>
-                <div className="font-semibold text-neutral-900 text-sm mb-3 line-clamp-2">{o.name || o.offer_name || o.id || '-'}</div>
-                <div className="text-xs space-y-1 text-neutral-600">
-                  <div>المبيعات: {formatSAR(o.periodSales)}</div>
-                  <div>الخصم: {formatSAR(o.periodDisc)}</div>
-                  <div>العمليات: {o.periodOps.toLocaleString()}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Efficiency Summary */}
+      {/* Offers List / Grid */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
-        <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-purple-50 to-white">
-          <h3 className="text-lg font-bold text-neutral-900">ملخص الكفاءة</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-neutral-800 text-white">
-                <th className="py-3 px-4 text-right">#</th>
-                <th className="py-3 px-4 text-right">اسم العرض</th>
-                <th className="py-3 px-4 text-center">كفاءة %</th>
-                <th className="py-3 px-4 text-center">متوسط السلة</th>
-                <th className="py-3 px-4 text-center">المبيعات</th>
-                <th className="py-3 px-4 text-center">العمليات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {efficiencySummary.map((o, i) => (
-                <tr key={i} className="border-b border-neutral-100 hover:bg-purple-50 transition-colors">
-                  <td className="py-3 px-4 text-neutral-500">{i + 1}</td>
-                  <td className="py-3 px-4 font-bold text-neutral-900">{o.name}</td>
-                  <td className={`py-3 px-4 text-center font-bold ${o.periodEff >= 80 ? 'text-green-600' : o.periodEff >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{o.periodEff.toFixed(1)}%</td>
-                  <td className="py-3 px-4 text-center font-semibold text-blue-700">{formatSAR(o.periodAvgBasket)}</td>
-                  <td className="py-3 px-4 text-center">{formatSAR(o.periodSales)}</td>
-                  <td className="py-3 px-4 text-center">{o.periodOps.toLocaleString()}</td>
-                </tr>
-              ))}
-              {efficiencySummary.length === 0 && (
-                <tr><td colSpan={6} className="py-6 text-center text-neutral-500">لا توجد بيانات كافية.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Top Products */}
-      {topProducts.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
-          <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-green-50 to-white">
-            <h3 className="text-lg font-bold text-neutral-900">أكثر المنتجات مبيعاً في العروض</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-neutral-800 text-white">
-                  <th className="py-3 px-4 text-right">#</th>
-                  <th className="py-3 px-4 text-right">المنتج</th>
-                  <th className="py-3 px-4 text-center">الكمية</th>
-                  <th className="py-3 px-4 text-center">عدد العروض</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topProducts.map((p, i) => (
-                  <tr key={p.id} className="border-b border-neutral-100 hover:bg-green-50 transition-colors">
-                    <td className="py-3 px-4 text-neutral-500">{i + 1}</td>
-                    <td className="py-3 px-4">
-                      <div className="font-mono text-xs text-neutral-500">{p.id}</div>
-                      <div className="font-semibold text-neutral-900">{p.name}</div>
-                    </td>
-                    <td className="py-3 px-4 text-center font-bold text-green-700">{Math.round(p.qty).toLocaleString()}</td>
-                    <td className="py-3 px-4 text-center font-bold text-orange-600">{p.offerCount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Offers List */}
-      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
-        <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white">
+        <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white flex justify-between items-center">
           <h3 className="text-lg font-bold text-neutral-900">قائمة العروض ({offers.length})</h3>
         </div>
-        <div className="overflow-x-auto">
-          {offers.length === 0 ? (
-            <div className="p-8 text-center text-neutral-500">لا توجد عروض بعد تطبيق الفلاتر.</div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-neutral-800 text-white">
-                  <th className="py-3 px-4 text-right">#</th>
-                  <th className="py-3 px-4 text-right">اسم العرض</th>
-                  <th className="py-3 px-4 text-center bg-neutral-700/50">أمس</th>
-                  <th className="py-3 px-4 text-center bg-neutral-700/50">فواتير أمس</th>
-                  <th className="py-3 px-4 text-center">المبيعات</th>
-                  <th className="py-3 px-4 text-center">الفواتير</th>
-                  <th className="py-3 px-4 text-center">الخصم</th>
-                  <th className="py-3 px-4 text-center">كفاءة</th>
-                  <th className="py-3 px-4 text-center">م. السلة</th>
-                  <th className="py-3 px-4 text-center">منتجات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {offers.slice(0, 100).map((o: any, i: number) => (
-                  <tr
-                    key={i}
-                    className="border-b border-neutral-100 hover:bg-orange-50 transition-colors cursor-pointer"
-                    onClick={() => setSelectedOffer(o)}
-                  >
-                    <td className="py-3 px-4 text-neutral-500">{i + 1}</td>
-                    <td className="py-3 px-4 font-bold text-neutral-900">{o.name || o.offer_name || o.id || '-'}</td>
-                    <td className="py-3 px-4 text-center font-bold text-green-600 bg-green-50/30">{formatSAR(o.yestSales)}</td>
-                    <td className="py-3 px-4 text-center text-neutral-600 bg-green-50/30">{o.yestOps.toLocaleString()}</td>
-                    <td className="py-3 px-4 text-center font-bold text-blue-700">{formatSAR(o.periodSales)}</td>
-                    <td className="py-3 px-4 text-center font-medium">{o.periodOps.toLocaleString()}</td>
-                    <td className="py-3 px-4 text-center text-red-500 font-mono">{o.periodDisc.toLocaleString()}</td>
-                    <td className="py-3 px-4 text-center font-black text-orange-600">{o.periodEff.toFixed(1)}%</td>
-                    <td className="py-3 px-4 text-center text-sky-700 font-semibold">{formatSAR(o.periodAvgBasket)}</td>
-                    <td className="py-3 px-4 text-center text-neutral-600">{o.aggregatedItems?.length || 0}</td>
+
+        {viewMode === 'list' ? (
+          <div className="overflow-x-auto">
+            {offers.length === 0 ? (
+              <div className="p-8 text-center text-neutral-500">لا توجد عروض بعد تطبيق الفلاتر.</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-neutral-800 text-white">
+                    <th className="py-3 px-4 w-10"></th> {/* Checkbox Col */}
+                    <th className="py-3 px-4 text-right">#</th>
+                    <th className="py-3 px-4 text-right">اسم العرض</th>
+                    <th className="py-3 px-4 text-center bg-neutral-700/50">أمس</th>
+                    <th className="py-3 px-4 text-center bg-neutral-700/50">فواتير أمس</th>
+                    <th className="py-3 px-4 text-center">المبيعات</th>
+                    <th className="py-3 px-4 text-center">الفواتير</th>
+                    <th className="py-3 px-4 text-center">الخصم</th>
+                    <th className="py-3 px-4 text-center">كفاءة</th>
+                    <th className="py-3 px-4 text-center">م. السلة</th>
+                    <th className="py-3 px-4 text-center">منتجات</th>
+                    <th className="py-3 px-4 text-center w-10">نسخ</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+                </thead>
+                <tbody>
+                  {offers.slice(0, 100).map((o: any, i: number) => {
+                    const isSelected = !!compareList.find(c => c.id === o.id);
+                    return (
+                      <tr
+                        key={i}
+                        className={`border-b border-neutral-100 transition-colors cursor-pointer ${isSelected ? 'bg-blue-50' : 'hover:bg-orange-50'}`}
+                        onClick={() => setSelectedOffer(o)}
+                      >
+                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => toggleCompare(o, e as any)}
+                            className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500 cursor-pointer"
+                          />
+                        </td>
+                        <td className="py-3 px-4 text-neutral-500">{i + 1}</td>
+                        <td className="py-3 px-4 font-bold text-neutral-900">
+                          {o.name || o.offer_name || o.id || '-'}
+                          <div className="flex gap-1 mt-1">
+                            {getBadges(o).map((b, idx) => (
+                              <span key={idx} className={`text-[10px] px-1.5 py-0.5 rounded-full ${b.color}`}>{b.label}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center font-bold text-green-600 bg-green-50/30">{formatSAR(o.yestSales)}</td>
+                        <td className="py-3 px-4 text-center text-neutral-600 bg-green-50/30">{o.yestOps.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-center font-bold text-blue-700">{formatSAR(o.periodSales)}</td>
+                        <td className="py-3 px-4 text-center font-medium">{o.periodOps.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-center text-red-500 font-mono">{o.periodDisc.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-center font-black text-orange-600">{o.periodEff.toFixed(1)}%</td>
+                        <td className="py-3 px-4 text-center text-sky-700 font-semibold">{formatSAR(o.periodAvgBasket)}</td>
+                        <td className="py-3 px-4 text-center text-neutral-600">{o.aggregatedItems?.length || 0}</td>
+                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button onClick={(e) => copyOfferDetails(o, e)} className="p-1.5 hover:bg-neutral-200 rounded text-neutral-500 hover:text-neutral-800" title="نسخ">
+                            <ClipboardIcon className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        ) : (
+          /* GRID VIEW */
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 bg-neutral-50">
+            {offers.length === 0 ? (
+              <div className="p-8 text-center text-neutral-500 col-span-full">لا توجد عروض بعد تطبيق الفلاتر.</div>
+            ) : (
+              offers.slice(0, 100).map((o: any, i: number) => (
+                <OfferCard
+                  key={i}
+                  offer={o}
+                  onClick={() => setSelectedOffer(o)}
+                  badges={getBadges(o)}
+                  isSelected={!!compareList.find(c => c.id === o.id)}
+                  onToggle={(e: any) => toggleCompare(o, e)}
+                  onCopy={(e: any) => copyOfferDetails(o, e)}
+                />
+              ))
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Floating Compare Action Bar */}
+      {compareList.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-neutral-900/90 text-white backdrop-blur-md px-6 py-3 rounded-full shadow-2xl z-40 flex items-center gap-4 anim-scale-in">
+          <span className="font-bold text-sm bg-orange-600 px-2 py-0.5 rounded-full">{compareList.length}</span>
+          <span className="text-sm font-medium">عروض للمقارنة</span>
+          <div className="h-4 w-[1px] bg-neutral-700 mx-1"></div>
+          <button
+            onClick={() => setShowCompareModal(true)}
+            className="text-sm font-bold hover:text-orange-400 transition-colors flex items-center gap-1"
+          >
+            <div /* icon placeholder */ /> مقارنة الآن
+          </button>
+          <button
+            onClick={() => setCompareList([])}
+            className="text-neutral-400 hover:text-white transition-colors"
+            title="إلغاء التحديد"
+          >
+            <XIcon />
+          </button>
+        </div>
+      )}
+
+      {/* Comparison Modal */}
+      {showCompareModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setShowCompareModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-neutral-200 flex justify-between items-center sticky top-0 bg-white z-10">
+              <h2 className="text-xl font-bold text-neutral-900">مقارنة العروض</h2>
+              <button onClick={() => setShowCompareModal(false)} className="p-2 hover:bg-neutral-100 rounded-lg"><XIcon /></button>
+            </div>
+            <div className="p-6 overflow-x-auto">
+              <div className="flex gap-4 min-w-[600px]">
+                {/* Labels Column */}
+                <div className="w-1/4 pt-16 space-y-6 text-sm font-semibold text-neutral-500 text-right">
+                  <div className="h-8">المبيعات</div>
+                  <div className="h-8 border-t border-neutral-100 pt-2">الخصم</div>
+                  <div className="h-8 border-t border-neutral-100 pt-2">الكفاءة</div>
+                  <div className="h-8 border-t border-neutral-100 pt-2">عدد العمليات</div>
+                  <div className="h-8 border-t border-neutral-100 pt-2">متوسط السلة</div>
+                  <div className="h-8 border-t border-neutral-100 pt-2">عدد المنتجات</div>
+                </div>
+                {/* Offers Columns */}
+                {compareList.map((o, i) => (
+                  <div key={i} className="flex-1 bg-neutral-50 rounded-xl p-4 border border-neutral-200 relative">
+                    <button
+                      onClick={() => setCompareList(prev => prev.filter(c => c.id !== o.id))}
+                      className="absolute top-2 left-2 text-neutral-400 hover:text-red-500"
+                    >
+                      <XIcon />
+                    </button>
+                    <h3 className="font-bold text-neutral-900 text-center mb-4 min-h-[3em] flex items-center justify-center">{o.name}</h3>
+                    <div className="space-y-6 text-center text-sm font-bold text-neutral-800">
+                      <div className="h-8 text-green-700 text-lg">{formatSAR(o.periodSales)}</div>
+                      <div className="h-8 border-t border-neutral-200 pt-2 text-red-600">{formatSAR(o.periodDisc)}</div>
+                      <div className="h-8 border-t border-neutral-200 pt-2 text-orange-600 text-lg">{o.periodEff.toFixed(1)}%</div>
+                      <div className="h-8 border-t border-neutral-200 pt-2">{o.periodOps}</div>
+                      <div className="h-8 border-t border-neutral-200 pt-2 text-blue-600">{formatSAR(o.periodAvgBasket)}</div>
+                      <div className="h-8 border-t border-neutral-200 pt-2 text-neutral-500">{o.aggregatedItems?.length || 0}</div>
+                    </div>
+                  </div>
+                ))}
+                {/* Empty Placeholder if < 3 */}
+                {Array.from({ length: 3 - compareList.length }).map((_, i) => (
+                  <div key={i} className="flex-1 border-2 border-dashed border-neutral-200 rounded-xl flex items-center justify-center text-neutral-400 text-sm">
+                    اختر عرضاً للمقارنة
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Offer Detail Modal */}
       {selectedOffer && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setSelectedOffer(null)}>
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto anim-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 bg-white border-b border-neutral-200 p-4 flex items-center justify-between rounded-t-2xl z-10">
+            <div className="sticky top-0 bg-white border-b border-neutral-200 p-4 flex items-center justify-between rounded-t-2xl z-10 shadow-sm">
               <div>
                 <h2 className="text-lg font-bold text-neutral-900">{selectedOffer.name || selectedOffer.offer_name || '-'}</h2>
-                <div className="text-xs text-neutral-500 mt-1">{selectedOffer.id || ''} | {selectedOffer.status || ''} | {dateRange.label}</div>
+                <div className="text-xs text-neutral-500 mt-1 flex gap-2 items-center">
+                  <span>{selectedOffer.id || ''}</span>
+                  <span>|</span>
+                  <span className={`px-2 py-0.5 rounded-full ${selectedOffer.status === 'Enabled' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {selectedOffer.status}
+                  </span>
+                  <span>|</span>
+                  <span>{dateRange.label}</span>
+                </div>
               </div>
-              <button onClick={() => setSelectedOffer(null)} className="p-2 hover:bg-neutral-100 rounded-lg"><XIcon /></button>
+              <div className="flex gap-2">
+                <button onClick={(e) => copyOfferDetails(selectedOffer, e)} className="p-2 bg-neutral-100 hover:bg-neutral-200 rounded-lg text-neutral-600 font-bold text-xs flex items-center gap-1">
+                  <ClipboardIcon className="w-4 h-4" /> نسخ
+                </button>
+                <button onClick={() => setSelectedOffer(null)} className="p-2 hover:bg-neutral-100 rounded-lg text-neutral-500 hover:text-red-500 transition-colors"><XIcon /></button>
+              </div>
             </div>
 
             <div className="p-6 space-y-6">
               {/* Offer KPIs */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <div className="bg-green-50 rounded-xl p-3 text-center">
-                  <div className="text-xs text-neutral-500 font-semibold">المبيعات</div>
-                  <div className="text-lg font-bold text-green-700">{formatSAR(selectedOffer.periodSales)}</div>
+                <div className="bg-green-50 rounded-xl p-3 text-center border border-green-100">
+                  <div className="text-xs text-neutral-500 font-semibold mb-1">المبيعات</div>
+                  <div className="text-xl font-black text-green-700">{formatSAR(selectedOffer.periodSales)}</div>
                 </div>
-                <div className="bg-red-50 rounded-xl p-3 text-center">
-                  <div className="text-xs text-neutral-500 font-semibold">الخصم</div>
-                  <div className="text-lg font-bold text-red-600">{formatSAR(selectedOffer.periodDisc)}</div>
+                <div className="bg-red-50 rounded-xl p-3 text-center border border-red-100">
+                  <div className="text-xs text-neutral-500 font-semibold mb-1">الخصم</div>
+                  <div className="text-xl font-black text-red-600">{formatSAR(selectedOffer.periodDisc)}</div>
                 </div>
-                <div className="bg-orange-50 rounded-xl p-3 text-center">
-                  <div className="text-xs text-neutral-500 font-semibold">كفاءة %</div>
-                  <div className="text-lg font-bold text-orange-700">{selectedOffer.periodEff.toFixed(1)}%</div>
+                <div className="bg-orange-50 rounded-xl p-3 text-center border border-orange-100 relative overflow-hidden">
+                  <div className="text-xs text-neutral-500 font-semibold mb-1">كفاءة %</div>
+                  <div className="text-xl font-black text-orange-700 relative z-10">{selectedOffer.periodEff.toFixed(1)}%</div>
+                  {/* Mini Progress */}
+                  <div className="absolute bottom-0 left-0 h-1 bg-orange-200 w-full"><div className="h-full bg-orange-500" style={{ width: `${selectedOffer.periodEff}%` }} /></div>
                 </div>
-                <div className="bg-blue-50 rounded-xl p-3 text-center">
-                  <div className="text-xs text-neutral-500 font-semibold">متوسط السلة</div>
-                  <div className="text-lg font-bold text-blue-700">{formatSAR(selectedOffer.periodAvgBasket)}</div>
+                <div className="bg-blue-50 rounded-xl p-3 text-center border border-blue-100">
+                  <div className="text-xs text-neutral-500 font-semibold mb-1">متوسط السلة</div>
+                  <div className="text-xl font-black text-blue-700">{formatSAR(selectedOffer.periodAvgBasket)}</div>
                 </div>
-                <div className="bg-purple-50 rounded-xl p-3 text-center">
-                  <div className="text-xs text-neutral-500 font-semibold">العمليات</div>
-                  <div className="text-lg font-bold text-purple-700">{selectedOffer.periodOps.toLocaleString()}</div>
+                <div className="bg-purple-50 rounded-xl p-3 text-center border border-purple-100">
+                  <div className="text-xs text-neutral-500 font-semibold mb-1">العمليات</div>
+                  <div className="text-xl font-black text-purple-700">{selectedOffer.periodOps.toLocaleString()}</div>
                 </div>
               </div>
 
               {/* Products Breakdown */}
               {selectedOffer.aggregatedItems && selectedOffer.aggregatedItems.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-bold text-neutral-700 mb-2 border-r-4 border-orange-400 pr-2">منتجات العرض ({selectedOffer.aggregatedItems.length})</h3>
-                  <div className="overflow-x-auto rounded-lg border border-neutral-200 max-h-[300px] overflow-y-auto">
+                  <h3 className="text-sm font-bold text-neutral-700 mb-3 border-r-4 border-orange-400 pr-2 flex items-center gap-2">
+                    <CubeIcon className="w-4 h-4 text-orange-500" />
+                    منتجات العرض ({selectedOffer.aggregatedItems.length})
+                  </h3>
+                  <div className="overflow-x-auto rounded-xl border border-neutral-200 max-h-[300px] overflow-y-auto">
                     <table className="w-full text-sm">
-                      <thead className="sticky top-0 bg-neutral-100">
+                      <thead className="sticky top-0 bg-neutral-50 shadow-sm z-10">
                         <tr>
-                          <th className="py-2 px-3 text-right">#</th>
-                          <th className="py-2 px-3 text-right">كود</th>
-                          <th className="py-2 px-3 text-right">المنتج</th>
-                          <th className="py-2 px-3 text-center">الكمية</th>
+                          <th className="py-2 px-3 text-right text-xs font-semibold text-neutral-500">#</th>
+                          <th className="py-2 px-3 text-right text-xs font-semibold text-neutral-500">كود</th>
+                          <th className="py-2 px-3 text-right text-xs font-semibold text-neutral-500">المنتج</th>
+                          <th className="py-2 px-3 text-center text-xs font-semibold text-neutral-500">الكمية</th>
                         </tr>
                       </thead>
                       <tbody>
                         {selectedOffer.aggregatedItems.map((it: any, idx: number) => (
-                          <tr key={idx} className="border-t border-neutral-100 hover:bg-orange-50">
+                          <tr key={idx} className="border-t border-neutral-100 hover:bg-orange-50 transition-colors">
                             <td className="py-2 px-3 text-neutral-400 text-xs">{idx + 1}</td>
                             <td className="py-2 px-3 font-mono text-xs text-neutral-500">{it.id}</td>
                             <td className="py-2 px-3 font-semibold text-neutral-900 text-sm">{it.name}</td>
@@ -641,22 +764,25 @@ export default function OffersPage() {
 
               {/* No items message */}
               {(!selectedOffer.aggregatedItems || selectedOffer.aggregatedItems.length === 0) && (
-                <div className="text-center p-6 bg-neutral-50 rounded-xl text-neutral-500 text-sm">لا توجد بيانات منتجات لهذا العرض في الفترة المحددة.</div>
+                <div className="text-center p-6 bg-neutral-50 rounded-xl text-neutral-500 text-sm border-dashed border-2 border-neutral-200">لا توجد بيانات منتجات لهذا العرض في الفترة المحددة.</div>
               )}
 
               {/* Per-Store Breakdown */}
               {selectedOffer.storeBreakdown && Object.keys(selectedOffer.storeBreakdown).length > 0 && (
                 <div>
-                  <h3 className="text-sm font-bold text-neutral-700 mb-2 border-r-4 border-blue-400 pr-2">أداء العرض حسب المعرض ({Object.keys(selectedOffer.storeBreakdown).length})</h3>
-                  <div className="overflow-x-auto rounded-lg border border-neutral-200">
+                  <h3 className="text-sm font-bold text-neutral-700 mb-3 border-r-4 border-blue-400 pr-2 flex items-center gap-2">
+                    <OfficeBuildingIcon className="w-4 h-4 text-blue-500" />
+                    أداء العرض حسب المعرض ({Object.keys(selectedOffer.storeBreakdown).length})
+                  </h3>
+                  <div className="overflow-x-auto rounded-xl border border-neutral-200">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="bg-neutral-100">
-                          <th className="py-2 px-3 text-right">المعرض</th>
-                          <th className="py-2 px-3 text-center">المبيعات</th>
-                          <th className="py-2 px-3 text-center">الخصم</th>
-                          <th className="py-2 px-3 text-center">العمليات</th>
-                          <th className="py-2 px-3 text-center">كفاءة %</th>
+                        <tr className="bg-neutral-50">
+                          <th className="py-2 px-3 text-right text-xs font-semibold text-neutral-500">المعرض</th>
+                          <th className="py-2 px-3 text-center text-xs font-semibold text-neutral-500">المبيعات</th>
+                          <th className="py-2 px-3 text-center text-xs font-semibold text-neutral-500">الخصم</th>
+                          <th className="py-2 px-3 text-center text-xs font-semibold text-neutral-500">العمليات</th>
+                          <th className="py-2 px-3 text-center text-xs font-semibold text-neutral-500">كفاءة %</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -665,7 +791,7 @@ export default function OffersPage() {
                           .map(([sid, s]: [string, any]) => {
                             const eff = s.sales > 0 ? (s.sales / (s.sales + s.disc)) * 100 : 0;
                             return (
-                              <tr key={sid} className="border-t border-neutral-100 hover:bg-blue-50">
+                              <tr key={sid} className="border-t border-neutral-100 hover:bg-blue-50 transition-colors">
                                 <td className="py-2 px-3 font-semibold text-neutral-900">{s.name}</td>
                                 <td className="py-2 px-3 text-center font-bold text-green-700">{formatSAR(s.sales)}</td>
                                 <td className="py-2 px-3 text-center text-red-500">{formatSAR(s.disc)}</td>
@@ -683,6 +809,68 @@ export default function OffersPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// --- Components ---
+
+function OfferCard({ offer, onClick, badges, isSelected, onToggle, onCopy }: { offer: any; onClick: () => void; badges: any[]; isSelected: boolean; onToggle: (e: any) => void; onCopy: (e: any) => void }) {
+  return (
+    <div
+      className={`bg-white rounded-xl shadow-sm border transition-all cursor-pointer flex flex-col group relative overflow-hidden ${isSelected ? 'border-orange-500 ring-2 ring-orange-200' : 'border-neutral-200 hover:shadow-lg hover:border-orange-300'}`}
+      onClick={onClick}
+    >
+      <div className="absolute top-2 right-2 z-10">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={onToggle}
+          onClick={(e) => e.stopPropagation()}
+          className="w-5 h-5 text-orange-600 rounded bg-white/80 backdrop-blur-sm border-neutral-300 focus:ring-orange-500 cursor-pointer shadow-sm hover:scale-110 transition-transform"
+        />
+      </div>
+
+      <div className="p-4 flex-1 pt-8"> {/* Added padding top for checkbox space */}
+        <div className="flex justify-between items-start mb-2">
+          <div className="flex flex-wrap gap-1">
+            {badges.map((b, i) => (
+              <span key={i} className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${b.color}`}>{b.label}</span>
+            ))}
+          </div>
+          {/* Copy Button */}
+          <button onClick={onCopy} className="text-neutral-300 hover:text-neutral-600 transition-colors" title="نسخ" >
+            <ClipboardIcon className="w-4 h-4" />
+          </button>
+        </div>
+
+        <h3 className="font-bold text-neutral-900 text-sm mb-3 line-clamp-2 min-h-[2.5em] group-hover:text-orange-600 transition-colors">
+          {offer.name || offer.offer_name || offer.id || '-'}
+        </h3>
+
+        <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-xs">
+          <div>
+            <span className="block text-neutral-500 mb-0.5">المبيعات</span>
+            <span className="font-bold text-neutral-900 text-sm">{formatSAR(offer.periodSales)}</span>
+          </div>
+          <div>
+            <span className="block text-neutral-500 mb-0.5">الكفاءة</span>
+            <span className={`font-bold text-sm ${offer.periodEff >= 80 ? 'text-green-600' : 'text-orange-600'}`}>
+              {offer.periodEff.toFixed(1)}%
+            </span>
+          </div>
+          <div className="col-span-2 flex items-center justify-between border-t border-neutral-100 pt-2 mt-1">
+            <span className="text-neutral-500">العمليات: <b className="text-neutral-800">{offer.periodOps}</b></span>
+            <span className="text-neutral-500">الخصم: <b className="text-red-500">{formatSAR(offer.periodDisc).replace('SAR', '')}</b></span>
+          </div>
+        </div>
+      </div>
+      {/* Hover Action Strip */}
+      <div className="bg-orange-50 p-2 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+        <span className="text-xs font-bold text-orange-600 flex items-center gap-1">
+          عرض التفاصيل <CubeIcon className="w-3 h-3" />
+        </span>
+      </div>
     </div>
   );
 }
@@ -705,4 +893,17 @@ function PeriodButton({ active, label, onClick }: { active: boolean; label: stri
       {label}
     </button>
   );
+}
+
+function ClipboardIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>;
+}
+
+// Icons needed that might be missing in imports?
+function OfficeBuildingIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>;
+}
+
+function CubeIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>;
 }
