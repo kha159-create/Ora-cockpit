@@ -559,7 +559,12 @@ export default function ProductsPage() {
     const totalAmt = hist.reduce((s, h) => s + h.amount, 0);
     const avgAmt = hist.length ? totalAmt / hist.length : 0;
     const chart = hist.map((h) => ({ name: h.date.substring(5), Qty: h.qty, Amount: h.amount }));
-    return { best, worst, zeroDays, totalQty, totalAmt, avgAmt, chart };
+
+    // Find stock from derived catalog
+    const prod = derived.filteredCatalog.find(p => String(p.id) === String(productId));
+    const totalStock = prod?.totalStock || 0;
+
+    return { best, worst, zeroDays, totalQty, totalAmt, avgAmt, chart, totalStock };
   }, [derived, productId]);
 
   if (!derived) {
@@ -1283,23 +1288,68 @@ export default function ProductsPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <ChartCard title="📈 التاريخ اليومي">
-                <div className="h-[320px]">
-                  <LineChart data={productKpis.chart} />
+              <ChartCard title="📊 تحليل حركة المخزون (Sell-Through)">
+                <div className="space-y-6 py-2">
+                  <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+                    <div className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Inventory Health</div>
+                    {(() => {
+                      const stVal = productKpis.totalStock || 0;
+                      const health = stVal === 0 ? { l: 'Out of Stock', c: 'text-red-600', b: 'bg-red-50' } :
+                        stVal < 20 ? { l: 'Critical Stock', c: 'text-orange-600', b: 'bg-orange-50' } :
+                          stVal > 500 ? { l: 'High Inventory', c: 'text-blue-600', b: 'bg-blue-50' } :
+                            { l: 'Optimal Stock', c: 'text-emerald-600', b: 'bg-emerald-50' };
+                      return <div className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${health.b} ${health.c}`}>{health.l}</div>;
+                    })()}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-100">
+                      <div className="text-[10px] text-neutral-400 font-bold mb-1">Sell-Through %</div>
+                      {(() => {
+                        const sls = productKpis.totalQty || 0;
+                        const st = productKpis.totalStock || 0;
+                        const total = sls + st;
+                        const ratio = total > 0 ? (sls / total) * 100 : 0;
+                        return (
+                          <>
+                            <div className="text-2xl font-black text-neutral-800">{ratio.toFixed(1)}%</div>
+                            <div className="mt-2 w-full bg-neutral-200 h-1.5 rounded-full overflow-hidden">
+                              <div className="h-full bg-orange-500 rounded-full transition-all duration-500" style={{ width: `${ratio}%` }} />
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                    <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-100">
+                      <div className="text-[10px] text-neutral-400 font-bold mb-1">Stock On Hand</div>
+                      <div className="text-2xl font-black text-neutral-800">{(productKpis.totalStock || 0).toLocaleString()}</div>
+                      <div className="text-[10px] text-neutral-400 mt-1 truncate">Current across all stores</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <div className="flex justify-between items-center text-xs pb-2 border-b border-neutral-50">
+                      <span className="text-neutral-500 font-bold">Sales Velocity</span>
+                      {(() => {
+                        const days = productKpis.chart?.length || 1;
+                        return <span className="text-neutral-800 font-black">{(productKpis.totalQty / days).toFixed(2)} pcs / day</span>;
+                      })()}
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-neutral-500 font-bold">Days to Empty (Est)</span>
+                      {(() => {
+                        const velocity = productKpis.totalQty / (productKpis.chart?.length || 1);
+                        const dte = velocity > 0 ? Math.ceil(productKpis.totalStock / velocity) : '∞';
+                        return <span className={`font-black ${Number(dte) < 7 ? 'text-red-600' : 'text-neutral-800'}`}>{dte} days</span>;
+                      })()}
+                    </div>
+                  </div>
                 </div>
               </ChartCard>
-              <ChartCard title="أفضل/أسوأ يوم">
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl border border-neutral-200 bg-neutral-50">
-                    <div className="text-xs text-neutral-500 mb-1">أفضل يوم</div>
-                    <div className="font-bold text-neutral-900">{productKpis.best?.date || '-'}</div>
-                    <div className="font-extrabold text-green-700">{formatSAR(productKpis.best?.amount || 0)}</div>
-                  </div>
-                  <div className="p-4 rounded-xl border border-neutral-200 bg-neutral-50">
-                    <div className="text-xs text-neutral-500 mb-1">أسوأ يوم</div>
-                    <div className="font-bold text-neutral-900">{productKpis.worst?.date || '-'}</div>
-                    <div className="font-extrabold text-red-600">{formatSAR(productKpis.worst?.amount || 0)}</div>
-                  </div>
+
+              <ChartCard title="📉 التاريخ اليومي">
+                <div className="h-[280px]">
+                  <LineChart data={productKpis.chart} />
                 </div>
               </ChartCard>
               <ChartCard title="🧺 منتجات مرتبطة (Market Basket)">

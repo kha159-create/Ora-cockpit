@@ -76,9 +76,14 @@ export const specificStoreCoords: Record<string, [number, number]> = {
     '1801': [27.5020, 41.7150], // Hail Othaim Mall
     '1901': [18.2323, 42.5310], // Abha Al_Rashid
     '1902': [18.3150, 42.7410], // Khamis Avenue
+    '1903': [18.2778, 42.7667], // Mujan Park (Khamis Mushait)
+    '1904': [20.0129, 41.4677], // Al_Baha Mall
+    '1906': [20.0200, 41.4700], // LAVANDA PARK (Al Bahah)
     '2001': [28.3840, 36.5740], // Tabuk Park
     '2201': [27.0250, 49.6380], // Jubail Mall
-    '2401': [26.3533, 43.9458]  // Al-Nakheel Plaza Buraidah
+    '2301': [29.9678, 40.2015], // Al-Jouf Center
+    '2401': [26.3533, 43.9458], // Al-Nakheel Plaza Buraidah
+    '1701': [30.9833, 41.0167], // Arar Othaim Mall
 };
 
 export function getStoreLocation(storeId: string, city: string): [number, number] {
