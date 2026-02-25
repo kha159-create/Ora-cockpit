@@ -5,6 +5,7 @@ import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { ChartBarIcon } from '../components/Icons';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { getCurrentUser } from '../auth/storage';
+import { getAvailableSeasonsList, getSeasonDateRange } from '../utils/seasons';
 import * as XLSX from 'xlsx';
 
 function isAdminOrAuditor(role?: string) { return role === 'Admin' || role === 'Auditor'; }
@@ -12,9 +13,9 @@ function isAdminOrAuditor(role?: string) { return role === 'Admin' || role === '
 function pad2(n: number) { return String(n).padStart(2, '0'); }
 function toYMD(d: Date) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 
-type RangeMode = 'today' | 'yesterday' | 'mtd' | 'last_month' | 'standard' | 'custom';
+type RangeMode = 'today' | 'yesterday' | 'mtd' | 'last_month' | 'standard' | 'custom' | 'seasons';
 
-const getRange = (mode: RangeMode, stdYear: number, stdMonth: string, customStart: string, customEnd: string) => {
+const getRange = (mode: RangeMode, stdYear: number, stdMonth: string, customStart: string, customEnd: string, selectedSeason: string) => {
     const today = new Date();
     const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
 
@@ -44,6 +45,13 @@ const getRange = (mode: RangeMode, stdYear: number, stdMonth: string, customStar
         const start = customStart || toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
         const end = customEnd || toYMD(yesterday);
         return { start, end };
+    }
+    if (mode === 'seasons') {
+        if (selectedSeason) {
+            const range = getSeasonDateRange(selectedSeason, stdYear || today.getFullYear());
+            if (range) return range;
+        }
+        return { start: toYMD(today), end: toYMD(today) };
     }
     return { start: toYMD(today), end: toYMD(today) };
 };
@@ -97,6 +105,14 @@ export default function ComparisonPage() {
     const [stdMonth, setStdMonth] = useState('all');
     const [customStart, setCustomStart] = useState('');
     const [customEnd, setCustomEnd] = useState('');
+    const [selectedSeason, setSelectedSeason] = useState('');
+    const availableSeasons = useMemo(() => getAvailableSeasonsList(), []);
+
+    useEffect(() => {
+        if (availableSeasons.length > 0 && !selectedSeason) {
+            setSelectedSeason(availableSeasons[0].id);
+        }
+    }, [availableSeasons, selectedSeason]);
 
     useEffect(() => {
         loadManagementData()
@@ -157,10 +173,11 @@ export default function ComparisonPage() {
         };
     }, [mgmtData, effectiveManager, city, branch]);
 
-    const dateRange = useMemo(() => getRange(rangeMode, stdYear, stdMonth, customStart, customEnd), [rangeMode, stdYear, stdMonth, customStart, customEnd]);
+    const dateRange = useMemo(() => getRange(rangeMode, stdYear, stdMonth, customStart, customEnd, selectedSeason), [rangeMode, stdYear, stdMonth, customStart, customEnd, selectedSeason]);
 
+    const isHijriSeasonSelected = rangeMode === 'seasons' && selectedSeason.startsWith('hijri_');
     const chartType = (activeMetric === 'atv' || activeMetric === 'conversion' || activeMetric === 'customer_value') ? 'sales' : activeMetric;
-    const { metrics, chartData } = useComparison(filteredMgmt, dateRange, chartType);
+    const { metrics, chartData } = useComparison(filteredMgmt, dateRange, chartType, { isHijriSeason: isHijriSeasonSelected });
 
     // Detailed Comparison Table data
     const detailedTable = useMemo(() => {
@@ -233,6 +250,7 @@ export default function ComparisonPage() {
                                 { id: 'last_month', label: 'الشهر الماضي' },
                                 { id: 'standard', label: 'شهر محدد' },
                                 { id: 'custom', label: 'فترة مخصصة' },
+                                { id: 'seasons', label: 'المواسم' },
                             ].map((mode) => (
                                 <button
                                     key={mode.id}
@@ -261,6 +279,18 @@ export default function ComparisonPage() {
                             <div className="flex gap-2 flex-wrap">
                                 <input type="date" className="input" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
                                 <input type="date" className="input" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+                            </div>
+                        )}
+                        {rangeMode === 'seasons' && (
+                            <div className="flex gap-2 flex-wrap">
+                                <select className="input" value={selectedSeason} onChange={(e) => setSelectedSeason(e.target.value)}>
+                                    {availableSeasons.map(s => (
+                                        <option key={s.id} value={s.id}>{s.icon} {s.nameAr}</option>
+                                    ))}
+                                </select>
+                                <select className="input" value={stdYear} onChange={(e) => setStdYear(Number(e.target.value))}>
+                                    {[2026, 2025, 2024].map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
                             </div>
                         )}
                     </div>

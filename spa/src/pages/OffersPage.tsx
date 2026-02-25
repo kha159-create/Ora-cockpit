@@ -31,6 +31,13 @@ export default function OffersPage() {
   const [selectedOffer, setSelectedOffer] = useState<any>(null);
   const [customStart, setCustomStart] = useState<string>('');
   const [customEnd, setCustomEnd] = useState<string>('');
+  const [sortMode, setSortMode] = useState<'sales' | 'smart' | 'eff'>('sales');
+
+  // -- [NEW] View Mode State --
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  // -- [NEW] Comparison & Copy Logic --
+  const [compareList, setCompareList] = useState<any[]>([]);
+  const [showCompareModal, setShowCompareModal] = useState(false);
 
   useEffect(() => {
     loadOffersData()
@@ -329,12 +336,9 @@ export default function OffersPage() {
     );
   }
 
-  // -- [NEW] View Mode State --
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-
   // -- [NEW] Comparison & Copy Logic --
-  const [compareList, setCompareList] = useState<any[]>([]);
-  const [showCompareModal, setShowCompareModal] = useState(false);
+  // Moved state to top
+
 
   const toggleCompare = (offer: any, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -490,6 +494,14 @@ export default function OffersPage() {
               <option value="all">الكل</option>
               <option value="Enabled">فعال (Enabled)</option>
               <option value="Disabled">معطل (Disabled)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-neutral-500 mb-1">الترتيب</label>
+            <select className="input w-full" value={sortMode} onChange={(e) => setSortMode(e.target.value as any)}>
+              <option value="sales">المبيعات (الأعلى)</option>
+              <option value="smart">ذكاء اصطناعي (Smart Sort)</option>
+              <option value="eff">الكفاءة (الأعلى)</option>
             </select>
           </div>
         </div>

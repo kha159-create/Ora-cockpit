@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { getPrevYearRange } from '../utils/seasons';
+import { getPrevYearRange, getSeasonalPrevRange } from '../utils/seasons';
 
 export interface ComparisonMetric {
     key: string;
@@ -20,7 +20,8 @@ export interface DailyComparison {
 export function useComparison(
     rawMgmt: any,
     dateRange: { start: string; end: string }, // Current Year Range
-    type: 'sales' | 'visitors' | 'transactions' = 'sales'
+    type: 'sales' | 'visitors' | 'transactions' = 'sales',
+    options?: { isHijriSeason?: boolean }
 ) {
     return useMemo(() => {
         if (!rawMgmt?.sales) return { metrics: [], chartData: [] };
@@ -30,7 +31,16 @@ export function useComparison(
         const endDate = new Date(end);
 
         // Determine Previous Year Range using season-aware logic
-        const { start: prevStartStr, end: prevEndStr } = getPrevYearRange(start, end);
+        let prevStartStr, prevEndStr;
+        if (options?.isHijriSeason) {
+            const { start: ps, end: pe } = getSeasonalPrevRange(start, end);
+            prevStartStr = ps;
+            prevEndStr = pe;
+        } else {
+            const { start: ps, end: pe } = getPrevYearRange(start, end);
+            prevStartStr = ps;
+            prevEndStr = pe;
+        }
 
         const prevStart = new Date(prevStartStr);
 
@@ -158,5 +168,5 @@ export function useComparison(
 
         return { metrics, chartData };
 
-    }, [rawMgmt, dateRange, type]);
+    }, [rawMgmt, dateRange, type, options?.isHijriSeason]);
 }

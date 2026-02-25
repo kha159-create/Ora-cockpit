@@ -32,15 +32,15 @@ interface GregorianSeason {
 }
 
 const HIJRI_SEASONS: HijriSeason[] = [
-  { name: 'Shaaban',    nameAr: 'شعبان',       icon: '🌙', hijriMonth: 8,  startDay: 1,  endDay: 29 },
-  { name: 'Ramadan',    nameAr: 'رمضان',       icon: '🌙', hijriMonth: 9,  startDay: 1,  endDay: 30 },
-  { name: 'Eid al-Fitr', nameAr: 'عيد الفطر', icon: '🎉', hijriMonth: 10, startDay: 1,  endDay: 6 },
-  { name: 'Eid al-Adha', nameAr: 'عيد الأضحى', icon: '🎉', hijriMonth: 12, startDay: 8,  endDay: 13 },
+  { name: 'Shaaban', nameAr: 'شعبان', icon: '🌙', hijriMonth: 8, startDay: 1, endDay: 29 },
+  { name: 'Ramadan', nameAr: 'رمضان', icon: '🌙', hijriMonth: 9, startDay: 1, endDay: 30 },
+  { name: 'Eid al-Fitr', nameAr: 'عيد الفطر', icon: '🎉', hijriMonth: 10, startDay: 1, endDay: 6 },
+  { name: 'Eid al-Adha', nameAr: 'عيد الأضحى', icon: '🎉', hijriMonth: 12, startDay: 8, endDay: 13 },
 ];
 
 const GREGORIAN_SEASONS: GregorianSeason[] = [
   { name: 'National Day', nameAr: 'اليوم الوطني', icon: '🇸🇦', startMonth: 9, startDay: 18, endMonth: 9, endDay: 28 },
-  { name: 'Black Friday', nameAr: 'بلاك فرايدي',  icon: '🏷️', startMonth: 11, startDay: 20, endMonth: 12, endDay: 5 },
+  { name: 'Black Friday', nameAr: 'بلاك فرايدي', icon: '🏷️', startMonth: 11, startDay: 20, endMonth: 12, endDay: 5 },
 ];
 
 // ===== Season Detection =====
@@ -205,4 +205,88 @@ export function getCurrentHijriDisplay(date?: Date): string {
   } catch {
     return '';
   }
+}
+
+// ===== Season List & Range Helpers =====
+
+export interface SeasonListItem {
+  id: string;
+  name: string;
+  nameAr: string;
+  icon: string;
+  isHijri: boolean;
+}
+
+/**
+ * Returns a list of all defined seasons (Hijri and Gregorian) to be used in dropdowns.
+ */
+export function getAvailableSeasonsList(): SeasonListItem[] {
+  const list: SeasonListItem[] = [];
+
+  HIJRI_SEASONS.forEach(s => {
+    list.push({ id: `hijri_${s.name}`, name: s.name, nameAr: s.nameAr, icon: s.icon, isHijri: true });
+  });
+
+  GREGORIAN_SEASONS.forEach(s => {
+    list.push({ id: `greg_${s.name}`, name: s.name, nameAr: s.nameAr, icon: s.icon, isHijri: false });
+  });
+
+  return list;
+}
+
+/**
+ * Calculates the start and end dates (YYYY-MM-DD) for a specific season in the current year.
+ */
+export function getSeasonDateRange(seasonId: string, currentGregorianYear?: number): { start: string; end: string } | null {
+  const year = currentGregorianYear || new Date().getFullYear();
+
+  if (seasonId.startsWith('hijri_')) {
+    const name = seasonId.replace('hijri_', '');
+    const season = HIJRI_SEASONS.find(s => s.name === name);
+    if (!season) return null;
+
+    try {
+      // Find current Hijri year based on today's date
+      const today = new Date();
+      const todayHijri = gregorianToHijri({ year: today.getFullYear(), month: today.getMonth() + 1, day: today.getDate() });
+      const currentHijriYear = todayHijri.year;
+
+      const startGreg = hijriToGregorian({ year: currentHijriYear, month: season.hijriMonth, day: season.startDay });
+
+      let endGreg;
+      try {
+        endGreg = hijriToGregorian({ year: currentHijriYear, month: season.hijriMonth, day: season.endDay });
+      } catch {
+        // Fallback for months that might be 29 days instead of 30
+        endGreg = hijriToGregorian({ year: currentHijriYear, month: season.hijriMonth, day: season.endDay - 1 });
+      }
+
+      return {
+        start: `${startGreg.year}-${pad(startGreg.month)}-${pad(startGreg.day)}`,
+        end: `${endGreg.year}-${pad(endGreg.month)}-${pad(endGreg.day)}`,
+      };
+    } catch (e) {
+      console.error("Error calculating Hijri season date", e);
+      return null;
+    }
+  }
+
+  if (seasonId.startsWith('greg_')) {
+    const name = seasonId.replace('greg_', '');
+    const season = GREGORIAN_SEASONS.find(s => s.name === name);
+    if (!season) return null;
+
+    let endYear = year;
+    // Handle cross-year seasons (e.g. November to January)
+    if (season.endMonth < season.startMonth) {
+      endYear = year + 1;
+    }
+
+    return {
+      start: `${year}-${pad(season.startMonth)}-${pad(season.startDay)}`,
+      end: `${endYear}-${pad(season.endMonth)}-${pad(season.endDay)}`,
+    };
+  }
+
+  return null;
 }
