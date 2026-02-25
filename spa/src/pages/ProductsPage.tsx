@@ -184,8 +184,13 @@ export default function ProductsPage() {
     // Invert storesMap for Name -> ID lookup (needed for stock mapping)
     const storeNameTokId: Record<string, string> = {};
     Object.entries(storesMap).forEach(([id, name]) => {
-      if (name) storeNameTokId[name.trim()] = id;
+      if (name) storeNameTokId[name.trim().toLowerCase()] = id;
     });
+
+    // Explicit Mappings for data consistency (Matching Product Inquiry)
+    storeNameTokId['warehouse riyadh'] = '0';
+    storeNameTokId['transit'] = '0';
+    storeNameTokId['warehouse'] = '0';
 
     // Pre-process Stock Data for fast lookup
     // The products_stock.json is a flat list of items per outlet.
@@ -219,9 +224,13 @@ export default function ProductsPage() {
             const qty = safeNum(brQty);
             if (qty !== 0) {
               const cleanName = brName.trim();
-              const sid = storeNameTokId[cleanName] || cleanName;
+              const normalizedParams = cleanName.toLowerCase();
+              const sid = storeNameTokId[normalizedParams] || storeNameTokId[cleanName] || null;
+
               if (sid) {
                 entry.byStore[sid] = (entry.byStore[sid] || 0) + qty;
+              } else {
+                entry.byStore[cleanName] = (entry.byStore[cleanName] || 0) + qty;
               }
             }
           });
@@ -367,21 +376,32 @@ export default function ProductsPage() {
         const stores = it?.stores || {};
 
         // Find Stock Data
-        // Priority: Alias -> dCode (which matches 'code' in stock file)
-        let stockEntry = stockMap.get(alias) || stockMap.get(dCode);
+        // Priority: Alias -> dCode (which matches 'code' in stock file) -> id
+        let stockEntry = stockMap.get(alias) || stockMap.get(dCode) || stockMap.get(id);
 
         let qty = 0;
         let amount = 0;
+        let computedStock = 0;
+
         if (activeStore === 'all') {
           for (const [sid, st] of Object.entries(stores)) {
             if (!storeInScope(String(sid))) continue;
             qty += safeNum((st as any)?.q);
             amount += safeNum((st as any)?.a);
           }
+          if (stockEntry && stockEntry.byStore) {
+            for (const [sid, stQty] of Object.entries(stockEntry.byStore)) {
+              // Include stock if the store is in scope, or if we want to include warehouse (0)
+              // Often warehouse stock is global, but if filtered by manager, maybe not. Let's include it if storeInScope or if warehouse.
+              if (!storeInScope(String(sid)) && sid !== '0') continue;
+              computedStock += safeNum(stQty);
+            }
+          }
         } else {
           const st = stores?.[activeStore];
           qty = safeNum(st?.q);
           amount = safeNum(st?.a);
+          computedStock = safeNum(stockEntry?.byStore?.[activeStore]);
         }
 
         if (qty === 0 && amount === 0) continue;
@@ -397,7 +417,7 @@ export default function ProductsPage() {
           trendReason: it?.trend_reason,
           salesByStore: stores as any,
           stockByStore: stockEntry?.byStore,
-          totalStock: stockEntry?.total
+          totalStock: computedStock
         });
       }
     });
