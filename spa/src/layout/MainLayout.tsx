@@ -335,7 +335,7 @@ export default function MainLayout() {
 
             <div className="flex items-center gap-3 flex-shrink-0">
               <button
-                onClick={() => window.open('/tv', '_blank')}
+                onClick={() => window.open('#/tv', '_blank')}
                 className="flex bg-slate-800 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-md items-center gap-2 hover:scale-105 transition-transform"
                 title="شاشة العرض (TV Mode)"
               >

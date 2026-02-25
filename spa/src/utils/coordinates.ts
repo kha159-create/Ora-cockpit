@@ -19,11 +19,75 @@ export const cityCoords: Record<string, [number, number]> = {
     'حفر الباطن': [28.4328, 45.9708]
 };
 
-// Generate a slightly randomized coordinate around the city center to spread markers
+// Exact known coordinates for major Ora stores in KSA
+export const specificStoreCoords: Record<string, [number, number]> = {
+    // Jeddah (10xx)
+    '1001': [21.5037, 39.2155], // Andalos Mall
+    '1002': [21.5169, 39.1824], // Haifa Mall
+    '1003': [21.6267, 39.1121], // Red Sea Mall
+    '1004': [21.6335, 39.1415], // Arab Mall
+    '1005': [21.4983, 39.2201], // Al-Salam Mall
+    '1006': [21.6033, 39.2017], // Al-Yasmin Mall
+    '1007': [21.5458, 39.1558], // Al_Khayyat Center
+    '1008': [21.5369, 39.1754], // Jeddah Park
+    '1009': [21.6111, 39.1492], // Al Basateen Mall
+    '1010': [21.5186, 39.1911], // THE VILLAGE / General
+    '1011': [21.5542, 39.1966], // Aziz Mall
+    '1012': [21.4900, 39.2400], // Sauq7
+
+    // Riyadh (11xx)
+    '1101': [24.7865, 46.7570], // Al_Hamra Mall
+    '1102': [24.7088, 46.8115], // Riyadh Othaim Mall (Khurais)
+    '1103': [24.6970, 46.7562], // Rabwa Othaim Mall
+    '1104': [24.7667, 46.7203], // Al Nakheel Mall Riyadh
+    '1105': [24.7828, 46.6667], // Tala Mall Riyadh
+    '1106': [24.8111, 46.7725], // Atyaf Mall Riyadh
+    '1107': [24.7554, 46.6269], // Riyadh Park
+    '1108': [24.5779, 46.6631], // Salam Mall Riyadh
+    '1109': [24.7431, 46.6622], // Hayat Mall
+    '1110': [24.7441, 46.6508], // Riyadh Gallery Mall
+    '1111': [24.7645, 46.7629], // Khaleej Mall
+    '1112': [24.7176, 46.6974], // Meem Plaza Riyadh
+    '1113': [24.8188, 46.7118], // Park Avenue Riyadh
+    '1114': [24.8322, 46.6114], // Malgha Mall
+    '1115': [24.8083, 46.6433], // Alrabie Mall
+
+    // Makkah (12xx)
+    '1201': [21.4011, 39.8828], // Makkah Mall
+    '1202': [21.4397, 39.8091], // Sitten Street
+    '1203': [21.4206, 39.8222], // Jabl Omar
+
+    // Taif (13xx)
+    '1301': [21.2829, 40.4542], // Jouri Mall
+    '1302': [21.2655, 40.4057], // Al Kamal Mall
+
+    // Madinah (14xx)
+    '1401': [24.4534, 39.5888], // Alia Mall
+    '1402': [24.5028, 39.5888], // Al-Noor Mall
+
+    // East Coast (21xx)
+    '2101': [26.3106, 50.1770], // Dhahran Mall khobar
+    '2102': [26.4340, 50.0888], // Al Nakheel Mall Dammam
+    '2103': [26.4673, 50.1030], // Dareen Mall Dammam
+
+    // Others
+    '1601': [25.3524, 49.5891], // Ehsa Othaim Mall
+    '1602': [25.3340, 49.5932], // AlAhsa Mall
+    '1801': [27.5020, 41.7150], // Hail Othaim Mall
+    '1901': [18.2323, 42.5310], // Abha Al_Rashid
+    '1902': [18.3150, 42.7410], // Khamis Avenue
+    '2001': [28.3840, 36.5740], // Tabuk Park
+    '2201': [27.0250, 49.6380], // Jubail Mall
+    '2401': [26.3533, 43.9458]  // Al-Nakheel Plaza Buraidah
+};
+
 export function getStoreLocation(storeId: string, city: string): [number, number] {
+    // 1. Direct hit with known coordinate
+    if (specificStoreCoords[storeId]) return specificStoreCoords[storeId];
+
+    // 2. City Center with deterministic offset if not explicitly mapped
     const center = cityCoords[city] || [23.8859, 45.0792]; // KSA center default
 
-    // Use storeId to make the scatter deterministic
     let hash = 0;
     const strId = String(storeId);
     for (let i = 0; i < strId.length; i++) {
@@ -31,9 +95,8 @@ export function getStoreLocation(storeId: string, city: string): [number, number
         hash |= 0;
     }
 
-    // Spread by roughly +/- 0.05 degrees (~5km)
-    const latOffset = ((Math.sin(hash) * 0.05));
-    const lngOffset = ((Math.cos(hash) * 0.05));
+    const latOffset = ((Math.sin(hash) * 0.03));
+    const lngOffset = ((Math.cos(hash) * 0.03));
 
     return [center[0] + latOffset, center[1] + lngOffset];
 }
