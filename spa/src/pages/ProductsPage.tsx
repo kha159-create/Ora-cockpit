@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { loadManagementData, loadProductAnalysisData, loadStagnantData, loadStockData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
@@ -111,10 +111,10 @@ function Modal({
 export default function ProductsPage() {
   const user = getCurrentUser();
   const [raw, setRaw] = useState<any>(null);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
 
   const [mgmt, setMgmt] = useState<any>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [, setErr] = useState<string | null>(null);
 
   const [mode, setMode] = useState<PeriodMode>('mtd');
   const [metric, setMetric] = useState<Metric>('qty');
@@ -863,6 +863,7 @@ export default function ProductsPage() {
                 <th className="th text-center">الكمية</th>
                 <th className="th text-center">القيمة</th>
                 <th className="th text-center">سعر الوحدة</th>
+                <th className="th text-center" title="نسبة المبيعات من إجمالي التوفر (مبيعات + مخزون)">Sell-Through</th>
                 <th className="th">Trend</th>
               </tr>
             </thead>
@@ -872,40 +873,54 @@ export default function ProductsPage() {
                 const safePage = Math.min(currentPage, totalPages);
                 const start = (safePage - 1) * ITEMS_PER_PAGE;
                 const pageItems = derived.filteredCatalog.slice(start, start + ITEMS_PER_PAGE);
-                return pageItems.map((p: any) => (
-                  <tr
-                    key={`${p.category}-${p.id}`}
-                    className="hover:bg-orange-50 cursor-pointer"
-                    onClick={() => {
-                      setProductId(p.id);
-                      setProductOpen(true);
-                    }}
-                  >
-                    <td className="td">
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs text-neutral-500 bg-neutral-100 px-1 rounded">{p.id}</span>
-                          {(p.alias || p.old_code) && (
-                            <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
-                              {p.alias || p.old_code}
-                            </span>
-                          )}
+                return pageItems.map((p: any) => {
+                  const stock = p.totalStock || 0;
+                  const stRate = (p.qty + stock > 0) ? (p.qty / (p.qty + stock)) * 100 : 0;
+                  const stColor = stRate >= 60 ? 'text-green-700 bg-green-100' : stRate <= 20 && p.qty > 0 ? 'text-red-700 bg-red-100' : 'text-orange-700 bg-orange-100';
+                  return (
+                    <tr
+                      key={`${p.category}-${p.id}`}
+                      className="hover:bg-orange-50 cursor-pointer"
+                      onClick={() => {
+                        setProductId(p.id);
+                        setProductOpen(true);
+                      }}
+                    >
+                      <td className="td">
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-neutral-500 bg-neutral-100 px-1 rounded">{p.id}</span>
+                            {(p.alias || p.old_code) && (
+                              <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">
+                                {p.alias || p.old_code}
+                              </span>
+                            )}
+                          </div>
+                          <div className="font-semibold text-neutral-900 mt-0.5">{p.name}</div>
                         </div>
-                        <div className="font-semibold text-neutral-900 mt-0.5">{p.name}</div>
-                      </div>
-                    </td>
-                    <td className="td text-neutral-700">{p.category}</td>
-                    <td className="td text-center">{Math.round(p.qty).toLocaleString()}</td>
-                    <td className="td text-center font-bold text-green-700">{formatSAR(p.amount)}</td>
-                    <td className="td text-center font-medium text-neutral-600 dir-ltr">{p.qty > 0 ? formatSAR(p.amount / p.qty) : '-'}</td>
-                    <td className="td text-neutral-600">
-                      <div className={`inline-flex items-center gap-2 font-semibold ${p.trend === 'UP' ? 'text-green-700' : p.trend === 'DOWN' ? 'text-red-600' : 'text-neutral-600'}`}>
-                        {p.trend || '-'}
-                        <span className="text-xs font-normal text-neutral-500">{p.trendReason || ''}</span>
-                      </div>
-                    </td>
-                  </tr>
-                ));
+                      </td>
+                      <td className="td text-neutral-700">{p.category}</td>
+                      <td className="td text-center">{Math.round(p.qty).toLocaleString()}</td>
+                      <td className="td text-center font-bold text-green-700">{formatSAR(p.amount)}</td>
+                      <td className="td text-center font-medium text-neutral-600 dir-ltr">{p.qty > 0 ? formatSAR(p.amount / p.qty) : '-'}</td>
+                      <td className="td text-center">
+                        {stock > 0 || p.qty > 0 ? (
+                          <div className={`inline-block px-2 text-[11px] py-1 rounded-full font-bold dir-ltr ${stColor}`} title={`Stock: ${stock}`}>
+                            {stRate.toFixed(1)}%
+                          </div>
+                        ) : (
+                          <span className="text-neutral-400">-</span>
+                        )}
+                      </td>
+                      <td className="td text-neutral-600">
+                        <div className={`inline-flex items-center gap-2 font-semibold ${p.trend === 'UP' ? 'text-green-700' : p.trend === 'DOWN' ? 'text-red-600' : 'text-neutral-600'}`}>
+                          {p.trend || '-'}
+                          <span className="text-xs font-normal text-neutral-500">{p.trendReason || ''}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                });
               })()}
               {derived.filteredCatalog.length === 0 && (
                 <tr>

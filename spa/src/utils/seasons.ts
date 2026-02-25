@@ -142,6 +142,17 @@ export function getSeasonalPrevDate(dateStr: string): string {
   }
 }
 
+export function formatHijriDate(dateStr: string): string {
+  try {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const hijri = gregorianToHijri({ year: y, month: m, day: d });
+    return `${hijri.day} / ${hijri.month} / ${hijri.year}`;
+  } catch {
+    return '';
+  }
+}
+
 /**
  * For a Gregorian date range, compute the corresponding previous-Hijri-year range.
  */
@@ -246,10 +257,11 @@ export function getSeasonDateRange(seasonId: string, currentGregorianYear?: numb
     if (!season) return null;
 
     try {
-      // Find current Hijri year based on today's date
-      const today = new Date();
-      const todayHijri = gregorianToHijri({ year: today.getFullYear(), month: today.getMonth() + 1, day: today.getDate() });
-      const currentHijriYear = todayHijri.year;
+      // Find the equivalent Hijri year by looking at the SAME time of year but in the target Gregorian year
+      const now = new Date();
+      const baseDate = new Date(year, now.getMonth(), now.getDate());
+      const baseHijri = gregorianToHijri({ year: baseDate.getFullYear(), month: baseDate.getMonth() + 1, day: baseDate.getDate() });
+      const currentHijriYear = baseHijri.year;
 
       const startGreg = hijriToGregorian({ year: currentHijriYear, month: season.hijriMonth, day: season.startDay });
 

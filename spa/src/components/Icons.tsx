@@ -198,8 +198,13 @@ export const ClipboardListIcon = () => (
 );
 
 // KPI Cards Icons
-export const CurrencyDollarIcon = () => (
-  <IconWrapper>
+export const LightningBoltIcon = ({ className }: { className?: string }) => (
+  <IconWrapper className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+  </IconWrapper>
+);
+export const CurrencyDollarIcon = ({ className }: { className?: string }) => (
+  <IconWrapper className={className}>
     <path
       strokeLinecap="round"
       strokeLinejoin="round"

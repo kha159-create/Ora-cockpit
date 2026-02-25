@@ -18,7 +18,7 @@ export default function WatchSalesPage() {
 
     const { sales, trans, visitors } = liveData.totals;
     const avgBasket = trans > 0 ? sales / trans : 0;
-    const conversionRate = visitors > 0 ? (trans / visitors) * 100 : 0;
+    const conversionRate = (visitors ?? 0) > 0 ? (trans / (visitors ?? 0)) * 100 : 0;
 
     const sortedStores = useMemo(() => {
         return [...liveData.stores].sort((a, b) => b.sales - a.sales);
@@ -80,9 +80,9 @@ export default function WatchSalesPage() {
                 <div className="text-[10px] text-neutral-500 font-semibold mb-1 px-1">STORES PERFORMANCE</div>
                 {sortedStores.map(store => {
                     const sBasket = store.trans > 0 ? store.sales / store.trans : 0;
-                    const sConv = store.visitors > 0 ? (store.trans / store.visitors) * 100 : 0;
+                    const sConv = (store.visitors ?? 0) > 0 ? (store.trans / (store.visitors ?? 0)) * 100 : 0;
                     return (
-                        <div key={store.id} className="bg-neutral-900/50 rounded-lg p-2 flex justify-between items-center border border-neutral-800">
+                        <div key={store.sid} className="bg-neutral-900/50 rounded-lg p-2 flex justify-between items-center border border-neutral-800">
                             <div className="flex flex-col">
                                 <span className="text-xs font-bold text-white mb-0.5">{store.name}</span>
                                 <div className="flex gap-2">

@@ -389,7 +389,7 @@ function EmployeeDetailModal({
                     {(() => {
                       const start = (soldItemsPage - 1) * SOLD_ITEMS_PER_PAGE;
                       const visible = soldItems.slice(start, start + SOLD_ITEMS_PER_PAGE);
-                      return visible.map((item, idx) => (
+                      return visible.map((item: any, idx: number) => (
                         <div
                           key={idx}
                           className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg border border-neutral-100 cursor-pointer hover:bg-orange-50 transition-colors"
@@ -693,19 +693,28 @@ export default function EmployeesPage() {
     const resolveTargetForMonth = (empId: string) => {
       const id = String(empId || '').trim();
       if (!id) return 0;
-      const candidates = [id, id.padStart(4, '0'), String(parseInt(id, 10))].filter(Boolean);
+      const unpadded = String(parseInt(id, 10));
+      const padded = id.padStart(4, '0');
+      const candidates = Array.from(new Set([id, padded, unpadded]));
 
       const targetMonthKey = period === 'month' ? `${selYear}-${pad2(selMonth)}` : toLocalYMD(today).substring(0, 7);
 
-      // 1. Try targets_by_month for the selected/current month
-      const tbm = targetsByMonth[targetMonthKey];
-      if (tbm) {
-        for (const c of candidates) {
-          if (tbm[c] != null) return safeNum(tbm[c]);
+      // Helper function to check candidates in a specific month
+      const checkTbm = (monthKey: string) => {
+        const tbm = targetsByMonth[monthKey];
+        if (tbm) {
+          for (const c of candidates) {
+            if (tbm[c] != null) return safeNum(tbm[c]);
+          }
         }
-      }
+        return null;
+      };
 
-      // 2. Fallback to default targets
+      // 1. Try targets_by_month for the selected/current month
+      let target = checkTbm(targetMonthKey);
+      if (target !== null) return target;
+
+      // 2. Fallback to default flat targets object
       for (const c of candidates) {
         const v = targetsData[c];
         if (v != null) return safeNum(v);

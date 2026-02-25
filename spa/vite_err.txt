@@ -1,0 +1,14 @@
+[31mx[39m Build failed in 3.08s
+[31merror during build:
+[31m[vite]: Rollup failed to resolve import "react-is" from "C:/Users/Orange1/Desktop/Ora-cockpit/spa/node_modules/recharts/es6/util/ReactUtils.js".
+This is most likely unintended because it can break your application at runtime.
+If you do want to externalize this module explicitly add it to
+`build.rollupOptions.external`[31m
+    at viteWarn (file:///C:/Users/Orange1/Desktop/Ora-cockpit/spa/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65855:17)
+    at onwarn (file:///C:/Users/Orange1/Desktop/Ora-cockpit/spa/node_modules/@vitejs/plugin-react/dist/index.js:90:7)
+    at onRollupWarning (file:///C:/Users/Orange1/Desktop/Ora-cockpit/spa/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65885:5)
+    at onwarn (file:///C:/Users/Orange1/Desktop/Ora-cockpit/spa/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65550:7)
+    at file:///C:/Users/Orange1/Desktop/Ora-cockpit/spa/node_modules/rollup/dist/es/shared/node-entry.js:20972:13
+    at Object.logger [as onLog] (file:///C:/Users/Orange1/Desktop/Ora-cockpit/spa/node_modules/rollup/dist/es/shared/node-entry.js:22945:9)
+    at ModuleLoader.handleInvalidResolvedId (file:///C:/Users/Orange1/Desktop/Ora-cockpit/spa/node_modules/rollup/dist/es/shared/node-entry.js:21689:26)
+    at file:///C:/Users/Orange1/Desktop/Ora-cockpit/spa/node_modules/rollup/dist/es/shared/node-entry.js:21647:26[39m

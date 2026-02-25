@@ -392,11 +392,12 @@ export const VerticalBarChart: React.FC<{
 };
 
 export const GrowthTrajectoryChart: React.FC<{
-  data: { name: string; Current: number; Previous: number }[];
+  data: { name: string; Current: number; Previous: number; fullDate?: string }[];
   mode: 'SALES' | 'VISITORS' | 'TARGET';
   onModeChange: (m: 'SALES' | 'VISITORS' | 'TARGET') => void;
   format?: (val: number) => string;
-}> = ({ data, mode, onModeChange, format }) => {
+  onBarClick?: (dateStr: string) => void;
+}> = ({ data, mode, onModeChange, format, onBarClick }) => {
   const maxVal = Math.max(...data.flatMap(d => [d.Current, d.Previous]), 1);
   const currentYear = new Date().getFullYear();
   const prevYear = currentYear - 1;
@@ -526,7 +527,7 @@ export const GrowthTrajectoryChart: React.FC<{
                     : (d.Previous > 0 ? ((d.Current - d.Previous) / d.Previous) * 100 : 0);
 
                   return (
-                    <div key={i} className="flex items-end gap-1.5 group/bar relative h-full w-full justify-center max-w-[80px]">
+                    <div key={i} onClick={() => d.fullDate && onBarClick && onBarClick(d.fullDate)} className="flex items-end gap-1.5 group/bar relative h-full w-full justify-center max-w-[80px] cursor-pointer hover:bg-neutral-50/50 rounded-t-xl transition-colors">
                       {/* Current Bar (Orange) */}
                       <div
                         className="w-3 md:w-4 bg-gradient-to-t from-orange-600 to-orange-400 rounded-t-lg transition-all duration-700 ease-out hover:brightness-110 cursor-pointer relative z-10 shadow-[0_-4px_12px_rgba(249,115,22,0.1)] group-hover/bar:scale-x-110"
@@ -852,7 +853,7 @@ export const LineChart: React.FC<{ data: { name: string;[key: string]: any }[] }
     if (!containerRef.current) return;
     const svg = e.currentTarget;
     const point = new DOMPoint(e.clientX, e.clientY);
-    const transformedPoint = point.matrixTransform((svg.getScreenCTM() as DOMMatrix).inverse());
+    const transformedPoint = point.matrixTransform(((svg as unknown as SVGSVGElement).getScreenCTM() as DOMMatrix).inverse());
 
     const index = Math.min(
       data.length - 1,

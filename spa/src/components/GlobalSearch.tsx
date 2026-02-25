@@ -37,9 +37,9 @@ export default function GlobalSearch({ isOpen, onClose, user, mgmtData }: { isOp
         const periods = ['mtd', 'yest', '30d'];
         periods.forEach(p => {
             const catalog = data.products.periods?.[p]?.catalog || {};
-            Object.values(catalog).forEach((storeItems: any[]) => {
+            Object.values(catalog).forEach((storeItems: any) => {
                 if (Array.isArray(storeItems)) {
-                    storeItems.forEach(item => {
+                    storeItems.forEach((item: any) => {
                         if (item.id && item.name) names[item.id] = item.name;
                     });
                 }

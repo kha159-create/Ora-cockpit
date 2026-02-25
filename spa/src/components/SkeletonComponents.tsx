@@ -1,7 +1,7 @@
 import React from 'react';
 
-export const SkeletonPulse = ({ className }: { className?: string }) => (
-    <div className={`animate-pulse bg-neutral-200 rounded ${className}`} />
+export const SkeletonPulse = ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+    <div className={`animate-pulse bg-neutral-200 rounded ${className}`} style={style} />
 );
 
 export const SkeletonCard = () => (

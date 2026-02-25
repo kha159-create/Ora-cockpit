@@ -1,0 +1,38 @@
+﻿src/components/DashboardComponents.tsx(82,7): error TS6133: 'TrendIndicator' is declared but its value is never read.
+src/components/DashboardComponents.tsx(139,3): error TS6133: 'trend' is declared but its value is never read.
+src/components/DashboardComponents.tsx(140,3): error TS6133: 'trendValue' is declared but its value is never read.
+src/components/DashboardComponents.tsx(856,57): error TS2339: Property 'getScreenCTM' does not exist on type 'EventTarget & SVGElement'.
+src/components/ErrorBoundary.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/components/GlobalSearch.tsx(40,44): error TS2345: Argument of type '(storeItems: any[]) => void' is not assignable to parameter of type '(value: unknown, index: number, array: unknown[]) => void'.
+  Types of parameters 'storeItems' and 'value' are incompatible.
+    Type 'unknown' is not assignable to type 'any[]'.
+src/components/SkeletonComponents.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/components/SkeletonComponents.tsx(26,74): error TS2322: Type '{ key: number; className: string; style: { height: string; }; }' is not assignable to type 'IntrinsicAttributes & { className?: string | undefined; }'.
+  Property 'style' does not exist on type 'IntrinsicAttributes & { className?: string | undefined; }'.
+src/layout/MainLayout.tsx(20,3): error TS6133: 'XIcon' is declared but its value is never read.
+src/pages/CommissionsPage.tsx(3,26): error TS6133: 'getStoreCommissionRate' is declared but its value is never read.
+src/pages/CommissionsPage.tsx(4,1): error TS6133: 'CommissionData' is declared but its value is never read.
+src/pages/CommissionsPage.tsx(12,59): error TS6133: 'storeRate' is declared but its value is never read.
+src/pages/DashboardPage.tsx(32,10): error TS6133: 'getEffectiveDate' is declared but its value is never read.
+src/pages/EmployeesPage.tsx(148,3): error TS6133: 'empRaw' is declared but its value is never read.
+src/pages/EmployeesPage.tsx(392,43): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/pages/EmployeesPage.tsx(392,49): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+src/pages/LoginPage.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/pages/OffersPage.tsx(271,9): error TS6133: 'topProducts' is declared but its value is never read.
+src/pages/OffersPage.tsx(287,9): error TS6133: 'efficiencySummary' is declared but its value is never read.
+src/pages/OffersPage.tsx(323,9): error TS6133: 'weakOffers' is declared but its value is never read.
+src/pages/OffersPage.tsx(890,10): error TS6133: 'KPIBox' is declared but its value is never read.
+src/pages/ReportsPage.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/pages/ReportsPage.tsx(4,90): error TS6133: 'generateStoreReportWithDaily' is declared but its value is never read.
+src/pages/ReportsPage.tsx(17,10): error TS6133: 'formatSAR' is declared but its value is never read.
+src/pages/ReportsPage.tsx(83,26): error TS6133: 'setSelectedEmpIds' is declared but its value is never read.
+src/pages/ReportsPage.tsx(412,9): error TS6133: 'title' is declared but its value is never read.
+src/pages/ReportsPage.tsx(680,9): error TS6133: 'openReportChoice' is declared but its value is never read.
+src/pages/ReportsPage.tsx(1137,29): error TS6133: 'today' is declared but its value is never read.
+src/pages/TargetSettingPage.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/pages/WatchSalesPage.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/pages/WatchSalesPage.tsx(21,28): error TS18048: 'visitors' is possibly 'undefined'.
+src/pages/WatchSalesPage.tsx(21,52): error TS18048: 'visitors' is possibly 'undefined'.
+src/pages/WatchSalesPage.tsx(85,41): error TS2339: Property 'id' does not exist on type '{ sid: string; name: any; sales: number; trans: number; visitors: number; target: number; monthSales: number; monthTarget: number; dailyReq: number; remainingDays: number; achievement: number; employees: { ...; }[]; }'.
+src/services/upstreamData.ts(68,7): error TS2801: This condition will always return true since this 'Promise<any>' is always defined.
+src/utils/auth.ts(1,1): error TS6133: 'UserRole' is declared but its value is never read.

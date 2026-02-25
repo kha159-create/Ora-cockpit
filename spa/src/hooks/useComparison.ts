@@ -166,7 +166,11 @@ export function useComparison(
             });
         }
 
-        return { metrics, chartData };
+        return {
+            metrics,
+            chartData,
+            prevDateRange: { start: prevStartStr, end: prevEndStr }
+        };
 
     }, [rawMgmt, dateRange, type, options?.isHijriSeason]);
 }

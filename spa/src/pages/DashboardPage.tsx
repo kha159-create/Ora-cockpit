@@ -9,6 +9,9 @@ import { TopSellingWidget } from '../components/dashboard/TopSellingWidget';
 import { DailyReportModal } from '../components/dashboard/DailyReportModal';
 import { StoreReportModal } from '../components/dashboard/StoreReportModal';
 import { EmployeeReportModal } from '../components/dashboard/EmployeeReportModal';
+import { DrillDownModal } from '../components/dashboard/DrillDownModal';
+import { BranchesMap } from '../components/dashboard/BranchesMap';
+import { getStoreLocation } from '../utils/coordinates';
 
 import { generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
 import { getPrevYearRange, getPrevYearDate } from '../utils/seasons';
@@ -76,6 +79,7 @@ export default function DashboardPage() {
   const [selYear, setSelYear] = useState<number>(() => new Date().getFullYear());
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [dailyReportModalOpen, setDailyReportModalOpen] = useState(false);
+  const [drillDownDate, setDrillDownDate] = useState<string | null>(null);
   const [chartMode, setChartMode] = useState<'SALES' | 'VISITORS' | 'TARGET'>('SALES');
   const [topSellingMetric, setTopSellingMetric] = useState<'qty' | 'val'>('qty');
   // Report modals state
@@ -510,6 +514,7 @@ export default function DashboardPage() {
       const achievement = v.target > 0 ? (v.sales / v.target) * 100 : 0;
       const avgInv = v.trans > 0 ? v.sales / v.trans : 0;
       return {
+        id: sid,
         name: raw.stores?.[sid] || sid,
         sales: v.sales,
         visitors: v.visitors,
@@ -560,6 +565,23 @@ export default function DashboardPage() {
       achievement: v.target > 0 ? (v.sales / v.target) * 100 : 0,
     }));
   }, [empRaw, range.start, range.end, allowedStoreIds, raw?.store_meta]);
+
+  const mapBranchesData = useMemo(() => {
+    return topStoresRank.map(store => {
+      const city = raw?.store_meta?.[store.id]?.city || 'الرياض';
+      const [lat, lng] = getStoreLocation(store.id, city);
+      return {
+        id: store.id,
+        name: store.name,
+        city,
+        lat,
+        lng,
+        sales: store.sales,
+        target: store.sales > 0 && store.achievement > 0 ? (store.sales / (store.achievement / 100)) : 0,
+        achievement: store.achievement
+      };
+    });
+  }, [topStoresRank, raw?.store_meta]);
 
   if (err) {
     return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
@@ -850,7 +872,7 @@ export default function DashboardPage() {
     return days.map(dt => {
       const r = dailyMap[dt];
       const dayLabel = dt.substring(5).replace('-', '/'); // "02/03"
-      const entry: any = { name: dayLabel };
+      const entry: any = { name: dayLabel, fullDate: dt };
       if (chartMode === 'TARGET') { entry.Current = r.sales; entry.Previous = r.target; }
       else if (chartMode === 'SALES') { entry.Current = r.sales; entry.Previous = r.prevSales; }
       else { entry.Current = r.visitors; entry.Previous = r.prevVisitors; }
@@ -1105,12 +1127,35 @@ export default function DashboardPage() {
         data={monthlyChartData as any}
         mode={chartMode}
         onModeChange={setChartMode}
+        onBarClick={setDrillDownDate}
+      />
+
+      <DrillDownModal
+        isOpen={!!drillDownDate}
+        onClose={() => setDrillDownDate(null)}
+        dateStr={drillDownDate}
+        raw={raw}
+        allowedStoreIds={allowedStoreIds}
+        formatSAR={formatSAR}
       />
 
       {/* بطاقات الوصول السريع */}
       <QuickAccess
         onOpenDailyReport={() => setDailyReportModalOpen(true)}
       />
+
+      {/* خريطة الفروع المباشرة */}
+      <div className="bg-white rounded-xl shadow-md border border-neutral-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            🗺️ خريطة الفروع المباشرة
+          </h2>
+          <div className="text-xs font-bold bg-emerald-50 text-emerald-600 px-2 py-1 rounded border border-emerald-100">
+            الذكاء الاصطناعي
+          </div>
+        </div>
+        <BranchesMap branches={mapBranchesData} formatSAR={formatSAR} />
+      </div>
 
       {/* أعلى الموظفين / أعلى الفروع — هوية برتقالي وأسود */}
       {/* أعلى الموظفين / أعلى الفروع — هوية برتقالي وأسود */}

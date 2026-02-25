@@ -18,6 +18,7 @@ const OffersPage = React.lazy(() => import('./pages/OffersPage'));
 const TargetSettingPage = React.lazy(() => import('./pages/TargetSettingPage'));
 const CommissionsPage = React.lazy(() => import('./pages/CommissionsPage'));
 const ComparisonPage = React.lazy(() => import('./pages/ComparisonPage'));
+const TVPage = React.lazy(() => import('./pages/TVPage'));
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const u = getCurrentUser();
@@ -38,6 +39,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/watch" element={<PageWrap><WatchSalesPage /></PageWrap>} />
+      <Route path="/tv" element={<RequireAuth><PageWrap><TVPage /></PageWrap></RequireAuth>} />
 
       <Route
         path="/"

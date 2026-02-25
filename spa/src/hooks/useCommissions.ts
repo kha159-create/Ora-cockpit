@@ -123,10 +123,14 @@ export function useCommissions(
         const monthlyTargets = rawEmp.monthly_targets || {};
         const flatTargets = rawEmp.targets || {};
         const monthKey = start.substring(0, 7); // YYYY-MM
+        const monthKeyFull = `${monthKey}-01`;
 
         const resolveTargetForMonth = (empId: string) => {
             const id = String(empId).trim();
-            const cands = [id, id.padStart(4, '0')];
+            // id can be '134', '0134', or name. Check unpadded and padded versions.
+            const unpadded = String(parseInt(id, 10));
+            const padded = id.padStart(4, '0');
+            const cands = Array.from(new Set([id, padded, unpadded]));
 
             // 1. Try targets_by_month[YYYY-MM][empId]
             const tbm = targetsByMonth[monthKey];
@@ -140,12 +144,12 @@ export function useCommissions(
             for (const c of cands) {
                 const mt = monthlyTargets[c];
                 if (mt && typeof mt === 'object') {
-                    const targetVal = mt[`${monthKey}-01`];
+                    const targetVal = mt[monthKeyFull];
                     if (targetVal != null) return Number(targetVal) || 0;
                 }
             }
 
-            // 3. Fallback to flat targets
+            // 3. Flat targets from targets object
             for (const c of cands) {
                 if (flatTargets[c] != null) return Number(flatTargets[c]) || 0;
             }
@@ -165,7 +169,10 @@ export function useCommissions(
             emps.forEach(({ empId, name, totalSales }) => {
                 const empTarget = resolveTargetForMonth(empId);
                 const empAchievement = empTarget > 0 ? (totalSales / empTarget) * 100 : 0;
-                const finalRate = (empAchievement / 100) * storeRate;
+
+                // If the employee has a target, multiply storeRate by their achievement %
+                // If they have NO target (0), they just get the store's base rate directly.
+                const finalRate = empTarget > 0 ? (empAchievement / 100) * storeRate : storeRate;
 
                 storeEmployees.push({
                     id: empId,

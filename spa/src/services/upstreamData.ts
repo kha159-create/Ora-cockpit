@@ -65,7 +65,7 @@ async function fetchJson<T>(file: string, forceRefresh = false): Promise<T> {
   }
 
   // Return existing in-flight promise if still pending
-  if (CACHE[file]?.promise && !CACHE[file]?.resolvedAt && !forceRefresh) {
+  if (CACHE[file] && !!CACHE[file].promise && !CACHE[file].resolvedAt && !forceRefresh) {
     return CACHE[file].promise!;
   }
 

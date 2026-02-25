@@ -5,8 +5,9 @@ import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { ChartBarIcon } from '../components/Icons';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { getCurrentUser } from '../auth/storage';
-import { getAvailableSeasonsList, getSeasonDateRange } from '../utils/seasons';
+import { getAvailableSeasonsList, getSeasonDateRange, formatHijriDate } from '../utils/seasons';
 import * as XLSX from 'xlsx';
+import { DrillDownModal } from '../components/dashboard/DrillDownModal';
 
 function isAdminOrAuditor(role?: string) { return role === 'Admin' || role === 'Auditor'; }
 
@@ -48,8 +49,22 @@ const getRange = (mode: RangeMode, stdYear: number, stdMonth: string, customStar
     }
     if (mode === 'seasons') {
         if (selectedSeason) {
-            const range = getSeasonDateRange(selectedSeason, stdYear || today.getFullYear());
-            if (range) return range;
+            const targetYear = stdYear && stdYear > 2000 ? stdYear : today.getFullYear();
+            const range = getSeasonDateRange(selectedSeason, targetYear);
+            if (range) {
+                const todayStr = toYMD(today);
+                // Cap to 'today' if the season is currently ongoing
+                if (range.start <= todayStr && range.end > todayStr) {
+                    range.end = todayStr;
+                }
+                // Also cap if the season hasn't started yet (prevent future dates)
+                if (range.start > todayStr) {
+                    // Usually handled by UI, but we can set it to today for safety
+                    range.start = todayStr;
+                    range.end = todayStr;
+                }
+                return range;
+            }
         }
         return { start: toYMD(today), end: toYMD(today) };
     }
@@ -96,6 +111,7 @@ export default function ComparisonPage() {
     const [mgmtData, setMgmtData] = useState<any>(null);
     const [rangeMode, setRangeMode] = useState<RangeMode>('mtd');
     const [activeMetric, setActiveMetric] = useState<'sales' | 'visitors' | 'transactions' | 'atv' | 'conversion' | 'customer_value'>('sales');
+    const [drillDownDate, setDrillDownDate] = useState<string | null>(null);
 
     // New filter states
     const [manager, setManager] = useState('all');
@@ -177,7 +193,7 @@ export default function ComparisonPage() {
 
     const isHijriSeasonSelected = rangeMode === 'seasons' && selectedSeason.startsWith('hijri_');
     const chartType = (activeMetric === 'atv' || activeMetric === 'conversion' || activeMetric === 'customer_value') ? 'sales' : activeMetric;
-    const { metrics, chartData } = useComparison(filteredMgmt, dateRange, chartType, { isHijriSeason: isHijriSeasonSelected });
+    const { metrics, chartData, prevDateRange } = useComparison(filteredMgmt, dateRange, chartType, { isHijriSeason: isHijriSeasonSelected });
 
     // Detailed Comparison Table data
     const detailedTable = useMemo(() => {
@@ -225,6 +241,14 @@ export default function ComparisonPage() {
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
+            <DrillDownModal
+                isOpen={!!drillDownDate}
+                onClose={() => setDrillDownDate(null)}
+                dateStr={drillDownDate}
+                raw={mgmtData}
+                allowedStoreIds={new Set(branches.map(b => b.id))}
+                formatSAR={(val) => `SAR ${Math.round(val).toLocaleString()}`}
+            />
             {/* Header & Controls */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
@@ -293,6 +317,20 @@ export default function ComparisonPage() {
                                 </select>
                             </div>
                         )}
+                        {rangeMode === 'seasons' && (
+                            <div className="text-xs text-neutral-500 mt-2 bg-neutral-50 p-2 rounded-lg border border-neutral-100 flex flex-col gap-1">
+                                <div>
+                                    <strong>الفترة الحالية (ميلادي):</strong> {dateRange.start} إلى {dateRange.end}
+                                    {' | '}
+                                    <strong>(هجري):</strong> {formatHijriDate(dateRange.start)} إلى {formatHijriDate(dateRange.end)}
+                                </div>
+                                <div>
+                                    <strong>فترة المقارنة (ميلادي):</strong> {prevDateRange?.start || ''} إلى {prevDateRange?.end || ''}
+                                    {' | '}
+                                    <strong>(هجري):</strong> {formatHijriDate(prevDateRange?.start || '')} إلى {formatHijriDate(prevDateRange?.end || '')}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Store Filters */}
@@ -356,7 +394,7 @@ export default function ComparisonPage() {
 
                 <div className="h-[300px] w-full" dir="ltr">
                     <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <AreaChart onClick={(e: any) => e?.activePayload?.[0]?.payload?.date && setDrillDownDate(e.activePayload[0].payload.date)} data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} style={{ cursor: 'pointer' }}>
                             <defs>
                                 <linearGradient id="colorCurr" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="5%" stopColor="#f97316" stopOpacity={0.2} />
