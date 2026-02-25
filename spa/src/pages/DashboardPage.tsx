@@ -517,7 +517,9 @@ export default function DashboardPage() {
         id: sid,
         name: raw.stores?.[sid] || sid,
         sales: v.sales,
+        trans: v.trans,
         visitors: v.visitors,
+        target: v.target,
         growth,
         achievement,
         avg_inv: avgInv,
@@ -577,7 +579,11 @@ export default function DashboardPage() {
         lat,
         lng,
         sales: store.sales,
-        target: store.sales > 0 && store.achievement > 0 ? (store.sales / (store.achievement / 100)) : 0,
+        trans: store.trans,
+        visitors: store.visitors,
+        target: store.target,
+        avg_inv: store.avg_inv,
+        growth: store.growth,
         achievement: store.achievement
       };
     });

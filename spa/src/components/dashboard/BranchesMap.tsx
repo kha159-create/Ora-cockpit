@@ -40,8 +40,12 @@ interface BranchMapData {
     lat: number;
     lng: number;
     sales: number;
+    trans: number;
+    visitors: number;
     target: number;
     achievement: number;
+    avg_inv: number;
+    growth: number;
 }
 
 interface BranchesMapProps {
@@ -69,16 +73,46 @@ const MapController = ({ branches }: { branches: BranchMapData[] }) => {
     return null;
 };
 
-// Extremely basic AI prompt simulator for demo
-const generateAIInsight = (branch: BranchMapData): string => {
-    if (branch.achievement > 100) {
-        return "✨ أداء ممتاز! مبيعات الفرع تتجاوز الهدف بشكل ملحوظ. يحافظ الفريق على زخم مبيعات عالي.";
-    } else if (branch.achievement >= 80) {
-        return "👍 أداء جيد. الفرع يسير بخطى ثابتة نحو تحقيق الهدف، يمكن تحسين معدل التحويل لزيادة المبيعات.";
-    } else if (branch.achievement > 0) {
-        return "⚠️ أداء يحتاج إلى تدخل. نسبة تحقيق الهدف منخفضة ويُنصح بعمل عروض ترويجية محلية لرفع المبيعات.";
+const KpiBox = ({ label, val, cls }: { label: string, val: string | number, cls: string }) => (
+    <div className="bg-slate-50/80 border border-slate-100/80 p-1.5 rounded-lg text-center shadow-sm">
+        <div className="text-[9px] text-slate-500 mb-0.5 font-bold">{label}</div>
+        <div className={`font-bold text-xs tabular-nums ${cls}`} dir="ltr">{val}</div>
+    </div>
+);
+
+const generateAIInsight = (branch: BranchMapData, allBranches: BranchMapData[], formatSAR: (v: number) => string): React.ReactNode => {
+    const peers = allBranches.filter(b => b.city === branch.city && b.id !== branch.id);
+    const conversion = branch.visitors > 0 ? (branch.trans / branch.visitors) * 100 : 0;
+
+    let peerConvAvg = 0, peerAchieveAvg = 0;
+    if (peers.length > 0) {
+        let totalPVis = 0, totalPTrans = 0, totalPAch = 0;
+        peers.forEach(p => { totalPVis += p.visitors; totalPTrans += p.trans; totalPAch += p.achievement; });
+        peerConvAvg = totalPVis > 0 ? (totalPTrans / totalPVis) * 100 : 0;
+        peerAchieveAvg = totalPAch / peers.length;
     }
-    return "لا تتوفر مبيعات كافية لتقييم الفرع حالياً.";
+
+    const tMiss = branch.target - branch.sales;
+    let text = `🎯 المطلوب لليوم: ${formatSAR(branch.target)}.\n`;
+
+    if (branch.achievement > 100) text += `✨ أداء مبهر! تجاوزت الهدف بقيمة ${formatSAR(-tMiss)}. `;
+    else if (branch.achievement >= 80) text += `👍 أداء جيد، استمر لتعويض ${formatSAR(tMiss)}. `;
+    else text += `⚠️ متأخر عن الهدف المُتوقع لليوم بـ ${formatSAR(tMiss)}. `;
+
+    if (peers.length > 0) {
+        text += branch.achievement > peerAchieveAvg
+            ? `أداؤك يتفوق على متوسط ${branch.city} (${peerAchieveAvg.toFixed(1)}%). `
+            : `الفروع المشابهة بـ ${branch.city} تتفوق بتحقيق (${peerAchieveAvg.toFixed(1)}%). `;
+
+        if (conversion < peerConvAvg && branch.visitors > 0) text += `\n🚨 نسبة التحويل لديك (${conversion.toFixed(1)}%) أقل من متوسط المدينة (${peerConvAvg.toFixed(1)}%)، ركز على اقناع الزوار.`;
+        else if (conversion > peerConvAvg) text += `\n🌟 استغلال ممتاز ومقنع للزوار بنسبة (${conversion.toFixed(1)}%).`;
+    }
+
+    return (
+        <div className="flex flex-col gap-1 text-[11px] font-medium text-indigo-950/80 leading-relaxed font-sans pt-1">
+            {text.split('\n').map((ln, i) => <span key={i}>{ln}</span>)}
+        </div>
+    );
 };
 
 export const BranchesMap: React.FC<BranchesMapProps> = ({ branches, formatSAR }) => {
@@ -117,38 +151,37 @@ export const BranchesMap: React.FC<BranchesMapProps> = ({ branches, formatSAR })
                                 position={[branch.lat, branch.lng]}
                                 icon={icon}
                             >
-                                <Popup className="branch-popup min-w-[260px]">
+                                <Popup className="branch-popup min-w-[340px]">
                                     <div className="text-right p-1" dir="rtl">
-                                        <div className="flex items-center gap-2 border-b border-slate-100 pb-2 mb-2">
-                                            <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center text-orange-500 font-bold shrink-0">
-                                                {branch.id}
+                                        <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-3">
+                                            <div className="flex gap-2">
+                                                <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 font-black flex items-center justify-center border border-orange-100">{branch.id}</div>
+                                                <div>
+                                                    <h3 className="font-bold text-slate-800 text-[13px] leading-tight max-w-[130px] truncate" title={branch.name}>{branch.name}</h3>
+                                                    <span className="text-[10px] text-slate-500 font-semibold">📍 {branch.city} | المركز: {[...branches].sort((a, b) => b.achievement - a.achievement).findIndex(b => b.id === branch.id) + 1}</span>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <h3 className="font-bold text-slate-800 text-sm leading-tight">{branch.name}</h3>
-                                                <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">📍 {branch.city}</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-2 mb-3">
-                                            <div className="bg-slate-50 p-2 rounded-lg">
-                                                <div className="text-[10px] text-slate-500 mb-0.5">المبيعات</div>
-                                                <div className="font-bold text-slate-800 text-sm tabular-nums" dir="ltr">{formatSAR(branch.sales)}</div>
-                                            </div>
-                                            <div className="bg-slate-50 p-2 rounded-lg">
-                                                <div className="text-[10px] text-slate-500 mb-0.5">التحقيق</div>
-                                                <div className={`font-bold text-sm tabular-nums flex items-center gap-1 ${status === 'excellent' ? 'text-emerald-600' : status === 'poor' ? 'text-red-500' : 'text-orange-600'}`} dir="ltr">
-                                                    {status === 'excellent' && '✨'}
-                                                    {(branch.achievement || 0).toFixed(1)}%
+                                            <div className="bg-slate-50 px-2 py-1.5 rounded-lg text-center border border-slate-100 shadow-sm">
+                                                <div className="text-[9px] text-slate-500 font-bold mb-0.5">التحقيق</div>
+                                                <div className={`font-black text-[13px] dir-ltr flex items-center gap-1 ${status === 'excellent' ? 'text-emerald-600' : status === 'poor' ? 'text-red-500' : 'text-orange-500'}`}>
+                                                    {status === 'excellent' && '✨'} {(branch.achievement || 0).toFixed(1)}%
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="bg-blue-50/50 p-2 rounded-lg border border-blue-100 relative">
-                                            <div className="absolute top-2 left-2 text-xl opacity-20">🤖</div>
-                                            <div className="text-[10px] font-bold text-blue-800 mb-1 flex items-center gap-1">المحرك الذكي:</div>
-                                            <p className="text-[11px] text-blue-900 leading-snug">
-                                                {generateAIInsight(branch)}
-                                            </p>
+                                        <div className="grid grid-cols-3 gap-2 mb-3">
+                                            <KpiBox label="المبيعات" val={formatSAR(branch.sales)} cls="text-emerald-600" />
+                                            <KpiBox label="الزوار" val={branch.visitors} cls="text-blue-600" />
+                                            <KpiBox label="التحويل" val={(branch.visitors > 0 ? (branch.trans / branch.visitors) * 100 : 0).toFixed(1) + '%'} cls="text-purple-600" />
+                                            <KpiBox label="م. الفاتورة" val={formatSAR(branch.avg_inv)} cls="text-amber-600" />
+                                            <KpiBox label="النمو" val={(branch.growth > 0 ? '+' : '') + branch.growth.toFixed(1) + '%'} cls={branch.growth > 0 ? 'text-emerald-600' : branch.growth < 0 ? 'text-red-500' : 'text-slate-600'} />
+                                        </div>
+
+                                        <div className="bg-gradient-to-br from-indigo-50 to-blue-50/30 p-2.5 rounded-xl border border-indigo-100/50 shadow-inner">
+                                            <div className="text-[11px] font-black text-indigo-800 mb-1 flex items-center gap-1.5">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div> المحرك الذكي:
+                                            </div>
+                                            {generateAIInsight(branch, branches, formatSAR)}
                                         </div>
                                     </div>
                                 </Popup>
