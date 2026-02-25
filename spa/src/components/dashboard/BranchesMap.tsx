@@ -89,7 +89,8 @@ export const BranchesMap: React.FC<BranchesMapProps> = ({ branches, formatSAR })
                 center={KSA_CENTER}
                 zoom={KSA_ZOOM}
                 scrollWheelZoom={false}
-                className="w-full h-full"
+                className="w-full h-full min-h-[400px]"
+                style={{ height: '100%', minHeight: '400px', width: '100%' }}
                 attributionControl={false}
             >
                 {/* Clean, fast, modern map tiles */}
