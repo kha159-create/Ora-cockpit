@@ -83,6 +83,7 @@ export const specificStoreCoords: Record<string, [number, number]> = {
     '2201': [27.0250, 49.6380], // Jubail Mall
     '2301': [29.9678, 40.2015], // Al-Jouf Center
     '2401': [26.3533, 43.9458], // Al-Nakheel Plaza Buraidah
+    '1501': [24.0826, 38.0600], // Yanbu Dana Mall
     '1701': [30.9833, 41.0167], // Arar Othaim Mall
 };
 

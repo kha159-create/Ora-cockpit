@@ -13,7 +13,7 @@ L.Icon.Default.mergeOptions({
 });
 
 // A custom SVG marker icon generator that colors the pin based on status
-const createCustomIcon = (status: 'excellent' | 'good' | 'poor') => {
+const createCustomIcon = (status: 'excellent' | 'good' | 'poor', isTop?: boolean) => {
     let color = '#f97316'; // orange default (good)
     if (status === 'excellent') color = '#10b981'; // green
     if (status === 'poor') color = '#ef4444'; // red
@@ -25,7 +25,7 @@ const createCustomIcon = (status: 'excellent' | 'good' | 'poor') => {
     </svg>`;
 
     return L.divIcon({
-        className: 'custom-leaflet-icon',
+        className: `custom-leaflet-icon ${isTop ? 'top-branch-pulse' : ''}`,
         html: `<div style="width: 30px; height: 30px; drop-shadow(0 4px 6px rgba(0,0,0,0.1));">${svgIcon}</div>`,
         iconSize: [30, 30],
         iconAnchor: [15, 30],
@@ -116,6 +116,27 @@ const generateAIInsight = (branch: BranchMapData, allBranches: BranchMapData[], 
 };
 
 export const BranchesMap: React.FC<BranchesMapProps> = ({ branches, formatSAR }) => {
+    // Filter out Warehouse and Online platforms
+    const filteredBranches = branches.filter(b =>
+        b.city.toLowerCase() !== 'online' &&
+        b.id !== '0' &&
+        b.id !== '1013' &&
+        !b.name.toLowerCase().includes('platforms')
+    );
+
+    // Find the store with the most invoices today for the pulsing effect
+    const topStoreId = React.useMemo(() => {
+        if (filteredBranches.length === 0) return null;
+        let maxTrans = -1;
+        let topId = null;
+        filteredBranches.forEach(b => {
+            if (b.trans > maxTrans) {
+                maxTrans = b.trans;
+                topId = b.id;
+            }
+        });
+        return topId;
+    }, [filteredBranches]);
 
     return (
         <div className="w-full h-full min-h-[400px] relative rounded-2xl overflow-hidden border border-neutral-200 shadow-sm z-0">
@@ -134,16 +155,17 @@ export const BranchesMap: React.FC<BranchesMapProps> = ({ branches, formatSAR })
                     maxZoom={19}
                 />
 
-                <MapController branches={branches} />
+                <MapController branches={filteredBranches} />
 
                 <MarkerClusterGroup
                     chunkedLoading
                     maxClusterRadius={40}
                 // Custome spiderfy options can be added here if needed to spread overlapping pins
                 >
-                    {branches.map(branch => {
+                    {filteredBranches.map(branch => {
                         const status = (branch.achievement || 0) >= 100 ? 'excellent' : (branch.achievement || 0) >= 80 ? 'good' : 'poor';
-                        const icon = createCustomIcon(status);
+                        const isTop = branch.id === topStoreId;
+                        const icon = createCustomIcon(status, isTop);
 
                         return (
                             <Marker
@@ -155,10 +177,15 @@ export const BranchesMap: React.FC<BranchesMapProps> = ({ branches, formatSAR })
                                     <div className="text-right p-1" dir="rtl">
                                         <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-3">
                                             <div className="flex gap-2">
-                                                <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 font-black flex items-center justify-center border border-orange-100">{branch.id}</div>
+                                                <div className={`w-10 h-10 rounded-xl ${isTop ? 'bg-indigo-600 text-white' : 'bg-orange-50 text-orange-600'} font-black flex items-center justify-center border ${isTop ? 'border-indigo-700 shadow-md' : 'border-orange-100'}`}>
+                                                    {isTop ? '👑' : branch.id}
+                                                </div>
                                                 <div>
-                                                    <h3 className="font-bold text-slate-800 text-[13px] leading-tight max-w-[130px] truncate" title={branch.name}>{branch.name}</h3>
-                                                    <span className="text-[10px] text-slate-500 font-semibold">📍 {branch.city} | المركز: {[...branches].sort((a, b) => b.achievement - a.achievement).findIndex(b => b.id === branch.id) + 1}</span>
+                                                    <h3 className="font-bold text-slate-800 text-[13px] leading-tight max-w-[130px] truncate" title={branch.name}>
+                                                        {branch.name}
+                                                        {isTop && <span className="mr-1 text-[10px] text-indigo-600">(الأكثر نشاطاً 🔥)</span>}
+                                                    </h3>
+                                                    <span className="text-[10px] text-slate-500 font-semibold">📍 {branch.city} | المركز: {[...filteredBranches].sort((a, b) => b.achievement - a.achievement).findIndex(b => b.id === branch.id) + 1}</span>
                                                 </div>
                                             </div>
                                             <div className="bg-slate-50 px-2 py-1.5 rounded-lg text-center border border-slate-100 shadow-sm">
@@ -181,7 +208,7 @@ export const BranchesMap: React.FC<BranchesMapProps> = ({ branches, formatSAR })
                                             <div className="text-[11px] font-black text-indigo-800 mb-1 flex items-center gap-1.5">
                                                 <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div> المحرك الذكي:
                                             </div>
-                                            {generateAIInsight(branch, branches, formatSAR)}
+                                            {generateAIInsight(branch, filteredBranches, formatSAR)}
                                         </div>
                                     </div>
                                 </Popup>
@@ -196,7 +223,25 @@ export const BranchesMap: React.FC<BranchesMapProps> = ({ branches, formatSAR })
                 <div className="flex items-center gap-2 justify-end"><span>أداء ممتاز (+100%)</span><div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm" /></div>
                 <div className="flex items-center gap-2 justify-end"><span>أداء جيد (+80%)</span><div className="w-3 h-3 rounded-full bg-orange-500 shadow-sm" /></div>
                 <div className="flex items-center gap-2 justify-end"><span>أداء ضعيف</span><div className="w-3 h-3 rounded-full bg-red-500 shadow-sm" /></div>
+                <div className="border-t border-slate-100 my-0.5" />
+                <div className="flex items-center gap-2 justify-end text-indigo-600"><span>الفرع الأكثر نشاطاً</span><div className="w-3 h-3 rounded-full bg-indigo-600 shadow-sm animate-pulse" /></div>
             </div>
+
+            <style>{`
+                @keyframes iconPulse {
+                    0% { transform: scale(1); filter: drop-shadow(0 0 0px rgba(79, 70, 229, 0)); }
+                    50% { transform: scale(1.2); filter: drop-shadow(0 0 15px rgba(79, 70, 229, 0.6)); }
+                    100% { transform: scale(1); filter: drop-shadow(0 0 0px rgba(79, 70, 229, 0)); }
+                }
+                .top-branch-pulse {
+                    animation: iconPulse 2s infinite ease-in-out;
+                    z-index: 1000 !important;
+                }
+                .top-branch-pulse svg {
+                    fill: #4f46e5 !important;
+                    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+                }
+            `}</style>
         </div>
     );
 };
