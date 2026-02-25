@@ -750,34 +750,59 @@ export const ProductInquiryModal: React.FC<ProductInquiryModalProps> = ({ isOpen
                                 </>
                             ) : (
                                 <>
-                                    <h3 className="text-sm font-bold text-neutral-700 mb-3 flex items-center gap-2">
-                                        <span>📈</span> سجل المبيعات اليومي
-                                    </h3>
-                                    <div className="overflow-hidden border border-neutral-100 rounded-xl">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-neutral-50 text-neutral-500">
-                                                <tr className="border-b border-neutral-100">
-                                                    <th className="py-2 px-3 text-right">التاريخ</th>
-                                                    <th className="py-2 px-3 text-center">الكمية</th>
-                                                    <th className="py-2 px-3 text-left">المبلغ</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-neutral-50">
-                                                {(storeDetailView?.recent || []).length === 0 ? (
-                                                    <tr>
-                                                        <td colSpan={3} className="py-8 text-center text-neutral-400">لا توجد حركات مبيعات مسجلة في هذه الفترة</td>
-                                                    </tr>
-                                                ) : (
-                                                    (storeDetailView?.recent || []).map((h: any, i: number) => (
-                                                        <tr key={i} className="hover:bg-neutral-50">
-                                                            <td className="py-2 px-3 font-mono text-neutral-600">{h.date}</td>
-                                                            <td className="py-2 px-3 text-center font-bold text-neutral-900">{h.qty}</td>
-                                                            <td className="py-2 px-3 text-left font-bold text-orange-600" dir="ltr">{formatSAR(h.amount)}</td>
-                                                        </tr>
-                                                    ))
-                                                )}
-                                            </tbody>
-                                        </table>
+                                    <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100 flex flex-col gap-5">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                                <span className="text-lg">📊</span> تحليل حركة المخزون (Sell-Through)
+                                            </h3>
+                                            {(() => {
+                                                const stVal = selectedProduct?.stockByStore?.[selectedStore!] || 0;
+                                                const health = stVal === 0 ? { l: 'نفذ المخزون', c: 'text-red-600', b: 'bg-red-50' } :
+                                                    stVal < 5 ? { l: 'مخزون حرج', c: 'text-orange-600', b: 'bg-orange-50' } :
+                                                        stVal > 50 ? { l: 'مخزون مرتفع', c: 'text-blue-600', b: 'bg-blue-50' } :
+                                                            { l: 'مخزون مستقر', c: 'text-emerald-600', b: 'bg-emerald-50' };
+                                                return <div className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase ${health.b} ${health.c}`}>{health.l}</div>;
+                                            })()}
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                                                <div className="text-[10px] text-slate-400 font-bold mb-1">نسبة المبيعات للمخزون</div>
+                                                {(() => {
+                                                    const sls = storeDetailView?.totalQty || 0;
+                                                    const st = selectedProduct?.stockByStore?.[selectedStore!] || 0;
+                                                    const total = sls + st;
+                                                    const ratio = total > 0 ? (sls / total) * 100 : 0;
+                                                    return (
+                                                        <>
+                                                            <div className="text-2xl font-black text-slate-800">{ratio.toFixed(1)}%</div>
+                                                            <div className="mt-2 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                                                <div className="h-full bg-orange-500 rounded-full" style={{ width: `${ratio}%` }} />
+                                                            </div>
+                                                        </>
+                                                    );
+                                                })()}\
+                                            </div>
+                                            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                                                <div className="text-[10px] text-slate-400 font-bold mb-1">المخزون الحالي</div>
+                                                <div className="text-2xl font-black text-slate-800">{(selectedProduct?.stockByStore?.[selectedStore!] || 0).toLocaleString()}</div>
+                                                <div className="text-[10px] text-slate-400 mt-1 truncate">متوفر في الفرع</div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2.5">
+                                            <div className="flex justify-between items-center text-xs border-b border-slate-50 pb-2">
+                                                <span className="text-slate-500 font-bold">سرعة البيع اليومية (MTD Velocity)</span>
+                                                {(() => {
+                                                    const days = Math.max(1, (new Date(storeDetailView?.end!).getTime() - new Date(storeDetailView?.start!).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                                                    return <span className="text-slate-800 font-black">{(storeDetailView?.totalQty! / days).toFixed(2)} قطعة / يوم</span>;
+                                                })()}
+                                            </div>
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="text-slate-500 font-bold">إجمالي التدفق (مبيعات + مخزون)</span>
+                                                <span className="text-slate-800 font-black">{(storeDetailView?.totalQty! + (selectedProduct?.stockByStore?.[selectedStore!] || 0)).toLocaleString()} قطعة</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </>
                             )}

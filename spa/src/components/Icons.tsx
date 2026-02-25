@@ -387,3 +387,9 @@ export const PremiumTargetIcon = ({ className }: { className?: string }) => (
     <circle cx="12" cy="12" r="2" />
   </CustomIconWrapper>
 );
+
+export const TrendingUpIcon = ({ className }: { className?: string }) => (
+  <IconWrapper className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+  </IconWrapper>
+);

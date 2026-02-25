@@ -31,7 +31,7 @@ export const specificStoreCoords: Record<string, [number, number]> = {
     '1007': [21.5458, 39.1558], // Al_Khayyat Center
     '1008': [21.5369, 39.1754], // Jeddah Park
     '1009': [21.6111, 39.1492], // Al Basateen Mall
-    '1010': [21.5186, 39.1911], // THE VILLAGE / General
+    '1010': [21.4633, 39.2285], // THE VILLAGE (Al Khumra area/South)
     '1011': [21.5542, 39.1966], // Aziz Mall
     '1012': [21.4900, 39.2400], // Sauq7
 
@@ -46,8 +46,8 @@ export const specificStoreCoords: Record<string, [number, number]> = {
     '1108': [24.5779, 46.6631], // Salam Mall Riyadh
     '1109': [24.7431, 46.6622], // Hayat Mall
     '1110': [24.7441, 46.6508], // Riyadh Gallery Mall
-    '1111': [24.7645, 46.7629], // Khaleej Mall
-    '1112': [24.7176, 46.6974], // Meem Plaza Riyadh
+    '1111': [24.7645, 46.7729], // Khaleej Mall
+    '1112': [24.7212, 46.6932], // Meem Plaza Riyadh
     '1113': [24.8188, 46.7118], // Park Avenue Riyadh
     '1114': [24.8322, 46.6114], // Malgha Mall
     '1115': [24.8083, 46.6433], // Alrabie Mall
