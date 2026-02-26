@@ -1034,7 +1034,7 @@ export default function DashboardPage() {
           <span className="text-sm text-neutral-500">
             آخر تحديث: {lastUpdate ?? '--:--:--'}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={loadData}
@@ -1042,6 +1042,14 @@ export default function DashboardPage() {
               className="btn-secondary py-2 px-4 text-sm"
             >
               {refreshing ? 'جاري التحديث...' : 'تحديث البيانات'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDailyReportModalOpen(true)}
+              className="px-4 py-2 bg-neutral-900 text-white rounded-lg text-sm font-bold shadow hover:bg-neutral-800 transition-colors flex items-center gap-2 border border-neutral-700 hover:border-orange-500"
+            >
+              <span>التقرير اليومي</span>
+              <span className="text-orange-400">🔥</span>
             </button>
           </div>
         </div>
@@ -1144,11 +1152,6 @@ export default function DashboardPage() {
         raw={raw}
         allowedStoreIds={allowedStoreIds}
         formatSAR={formatSAR}
-      />
-
-      {/* بطاقات الوصول السريع */}
-      <QuickAccess
-        onOpenDailyReport={() => setDailyReportModalOpen(true)}
       />
 
       <AITargetInsights stores={mapBranchesData} formatSAR={formatSAR} mode={mode} />

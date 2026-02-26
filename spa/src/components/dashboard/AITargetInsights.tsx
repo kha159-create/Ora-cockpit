@@ -13,6 +13,24 @@ const TargetIcon = () => (
     </svg>
 );
 
+const TrendIcon = ({ isUp, isDown }: { isUp?: boolean; isDown?: boolean }) => {
+    if (isUp) {
+        return (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-emerald-500">
+                <path fillRule="evenodd" d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z" clipRule="evenodd" />
+            </svg>
+        );
+    }
+    if (isDown) {
+        return (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-red-500">
+                <path fillRule="evenodd" d="M10 3a.75.75 0 01.75.75v10.638l3.96-4.158a.75.75 0 111.08 1.04l-5.25 5.5a.75.75 0 01-1.08 0l-5.25-5.5a.75.75 0 111.08-1.04l3.96 4.158V3.75A.75.75 0 0110 3z" clipRule="evenodd" />
+            </svg>
+        );
+    }
+    return null;
+}
+
 interface StoreData {
     id: string;
     name: string;
@@ -36,10 +54,12 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
         if (!stores || stores.length === 0) return [];
 
         const today = new Date();
-        const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+        const pdaysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+        const currentDayOfM = today.getDate();
+
         // If not looking at the current month/MTD, the insights are less actionable.
         // But let's fallback to assuming 1 day remaining to avoid div-by-zero if analyzing history.
-        let remDays = daysInMonth - today.getDate() + 1;
+        let remDays = pdaysInMonth - currentDayOfM + 1;
 
         // If the user selects a historical month, remDays shouldn't really apply for forecasting,
         // so we disable the "Required Daily" logic by zeroing it if mode != 'mtd' and mode != 'custom'
@@ -58,6 +78,11 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
             const currentAch = t100 > 0 ? (store.sales / t100) * 100 : 0;
             const conversion = store.visitors > 0 ? store.trans / store.visitors : 0.15; // fallback 15%
             const atv = store.trans > 0 ? store.sales / store.trans : 200; // fallback
+
+            // Daily Averages (Elapsed days)
+            const elapsedDays = Math.max(1, currentDayOfM - 1);
+            const avgDailySales = store.sales / elapsedDays;
+            const avgDailyVisitors = store.visitors / elapsedDays;
 
             // Skip stores that already hit 100% or have 0 target.
             if (t100 <= 0 || currentAch >= 100) return;
@@ -84,12 +109,11 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
 
             if (reqDailySales > 0) {
                 // AI prediction: How many visitors are needed if maintaining current Conversion & ATV?
-                // sales = visitors * conv * atv 
                 reqDailyVisitors = reqDailySales / (conversion * atv);
                 reqDailyTrans = reqDailySales / atv;
             }
 
-            // Generate an AI sentence score to rank the most "actionable" branches.
+            // Generate an AI distance score to rank the most "actionable" branches.
             // A branch very close to 90% or 100% is a "High Opportunity".
             let distanceToGoal = 100 - (store.sales / goalValue * 100);
 
@@ -103,6 +127,8 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
                 reqDailyTrans: Math.ceil(reqDailyTrans),
                 conversionPct: (conversion * 100).toFixed(1),
                 atvFormatted: atv,
+                avgDailySales,
+                avgDailyVisitors: Math.ceil(avgDailyVisitors),
                 type,
                 distanceToGoal,
                 currentAch
@@ -122,77 +148,100 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
     const displayInsights = expanded ? insights.slice(0, 10) : insights.slice(0, 3);
 
     return (
-        <div className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-purple-900 rounded-2xl shadow-xl border border-indigo-700 p-1 mb-6 relative overflow-hidden">
-            {/* Background effects */}
-            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-purple-500 rounded-full blur-3xl opacity-20 pointer-events-none" />
-            <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-40 h-40 bg-blue-500 rounded-full blur-3xl opacity-20 pointer-events-none" />
+        <div className="bg-white rounded-2xl shadow-xl border border-neutral-200 p-5 mb-6 relative overflow-hidden">
+            {/* ORA Branding Decorative Glow Overlay */}
+            <div className="absolute top-0 right-0 -mt-20 -mr-20 w-64 h-64 bg-orange-400 rounded-full blur-[80px] opacity-20 pointer-events-none" />
 
-            <div className="bg-[#111827]/40 backdrop-blur-sm rounded-[14px] p-4 relative z-10 w-full">
+            <div className="relative z-10 w-full">
 
-                <div className="flex items-center justify-between mb-4 border-b border-indigo-500/30 pb-3">
+                <div className="flex items-center justify-between mb-4 pb-4 border-b border-neutral-100">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white shadow-lg shadow-purple-500/30 animate-pulse">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white shadow-lg shadow-orange-500/30">
                             <SparklesIcon />
                         </div>
                         <div>
-                            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                            <h2 className="text-xl font-bold text-neutral-900 flex items-center gap-2">
                                 توصيات الذكاء الاصطناعي
-                                <span className="bg-indigo-500/30 text-indigo-200 text-[10px] px-2 py-0.5 rounded-full border border-indigo-400/30 font-bold uppercase tracking-widest">Live</span>
+                                <span className="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded-full border border-orange-200 font-bold uppercase tracking-widest animate-pulse">Live Insights</span>
                             </h2>
-                            <p className="text-indigo-200 text-xs mt-0.5">فرص تحقيق الأهداف وبناء التوقعات الذكية للفروع</p>
+                            <p className="text-neutral-500 text-sm mt-0.5">فرص الفروع للوصول للأهداف وكيفية تحقيقها خلال الأيام المتبقية 🎯</p>
                         </div>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {displayInsights.map((store, idx) => (
-                        <div key={store.id} className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-colors duration-300 relative group overflow-hidden flex flex-col">
+                        <div key={store.id} className="bg-neutral-50 border border-neutral-200 rounded-xl p-4 hover:shadow-md hover:border-orange-300 transition-all duration-300 relative group overflow-hidden flex flex-col">
                             {/* Decorative accent line */}
-                            <div className={`absolute top-0 right-0 left-0 h-1 ${store.type === 'success' ? 'bg-emerald-400' : store.type === 'warning' ? 'bg-amber-400' : 'bg-red-400'}`} />
+                            <div className={`absolute top-0 right-0 left-0 h-1 ${store.type === 'success' ? 'bg-emerald-500' : store.type === 'warning' ? 'bg-orange-500' : 'bg-red-500'}`} />
 
-                            <div className="flex justify-between items-start mb-3">
+                            <div className="flex justify-between items-start mb-3 mt-1">
                                 <div>
-                                    <div className="text-white font-bold text-base truncate pr-1">{store.name}</div>
+                                    <div className="text-neutral-900 font-bold text-lg truncate pr-1">{store.name}</div>
                                     <div className="flex items-center gap-1.5 mt-1">
                                         <TargetIcon />
-                                        <span className="text-xs text-indigo-200 font-semibold">{`الهدف القادم التنفيذي للفرع: ${store.goalLabel}`}</span>
+                                        <span className="text-xs text-neutral-500 font-semibold">{`الهدف القادم التنفيذي للفرع: `}<span className="text-orange-600 font-bold bg-orange-100 px-1 py-0.5 rounded">{store.goalLabel}</span></span>
                                     </div>
                                 </div>
-                                <div className={`px-2 py-1 rounded-lg text-xs font-bold border ${store.type === 'success' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
-                                        store.type === 'warning' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                                            'bg-red-500/20 text-red-300 border-red-500/30'
+                                <div className={`px-2 py-1.5 rounded-lg text-xs font-bold border ${store.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                    store.type === 'warning' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                        'bg-red-50 text-red-700 border-red-200'
                                     }`}>
                                     {store.currentAch.toFixed(1)}%
                                 </div>
                             </div>
 
-                            <div className="mb-2">
-                                <span className="text-white text-xl font-bold font-mono tracking-tight">{formatSAR(store.remSales)}</span>
-                                <span className="text-indigo-300 text-xs mr-1">متبقي</span>
+                            <div className="mb-4">
+                                <span className="text-neutral-900 text-2xl font-black font-mono tracking-tight">{formatSAR(store.remSales)}</span>
+                                <span className="text-neutral-400 text-xs mr-1 font-bold">متبقي كهدف مبيعات</span>
                             </div>
 
                             {store.reqDailySales > 0 ? (
-                                <div className="mt-auto bg-black/20 rounded-lg p-3 border border-white/5">
-                                    <div className="text-xs text-indigo-200 mb-2 font-medium">لكي يحقق الهدف، يحتاج الفرع يومياً إلى:</div>
+                                <div className="mt-auto bg-white rounded-lg p-3 border border-neutral-200 shadow-sm relative overflow-hidden">
+                                    <div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 to-white pointer-events-none" />
 
-                                    <div className="grid grid-cols-3 gap-2">
-                                        <div className="flex flex-col text-center">
-                                            <span className="text-[10px] text-indigo-400">مبيعات</span>
-                                            <span className="text-amber-300 font-bold font-mono text-xs">{formatSAR(store.reqDailySales)}</span>
+                                    <div className="text-xs text-neutral-600 mb-3 font-bold relative z-10 border-b border-neutral-100 pb-2">متطلبات يومية للوصول للهدف:</div>
+
+                                    <div className="grid grid-cols-3 gap-2 relative z-10">
+                                        <div className="flex flex-col mb-1 text-center">
+                                            <span className="text-[10px] font-bold text-neutral-500 bg-neutral-100 rounded-t py-1">مبيعات</span>
+                                            <span className="text-orange-600 font-black font-mono text-sm border-x border-b border-neutral-100 rounded-b py-1 object-center flex justify-center">{formatSAR(store.reqDailySales)}</span>
                                         </div>
-                                        <div className="flex flex-col text-center border-r border-l border-white/5 mx-1 px-1">
-                                            <span className="text-[10px] text-indigo-400">زوار</span>
-                                            <span className="text-emerald-300 font-bold font-mono text-xs">{store.reqDailyVisitors}</span>
+                                        <div className="flex flex-col mb-1 text-center">
+                                            <span className="text-[10px] font-bold text-neutral-500 bg-neutral-100 rounded-t py-1">زوار</span>
+                                            <span className="text-emerald-600 font-black font-mono text-sm border-x border-b border-neutral-100 rounded-b py-1 object-center flex justify-center">{store.reqDailyVisitors}</span>
                                         </div>
-                                        <div className="flex flex-col text-center">
-                                            <span className="text-[10px] text-indigo-400">متوسط فاتورة</span>
-                                            <span className="text-blue-300 font-bold font-mono text-xs">{Math.round(store.atvFormatted)}</span>
+                                        <div className="flex flex-col mb-1 text-center">
+                                            <span className="text-[10px] font-bold text-neutral-500 bg-neutral-100 rounded-t py-1">متوسط السلة</span>
+                                            <span className="text-blue-600 font-black font-mono text-sm border-x border-b border-neutral-100 rounded-b py-1 object-center flex justify-center">{formatSAR(store.atvFormatted)}</span>
+                                        </div>
+
+                                        {/* Averages Row */}
+                                        <div className="flex flex-col text-center mt-1">
+                                            <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 font-bold mb-0.5">المتوسط الحالي</div>
+                                            <div className="text-[11px] font-bold text-neutral-800 font-mono tracking-tighter flex justify-center items-center gap-1">
+                                                {formatSAR(store.avgDailySales)}
+                                                <TrendIcon isUp={store.avgDailySales >= store.reqDailySales} isDown={store.avgDailySales < store.reqDailySales} />
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col text-center mt-1">
+                                            <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 font-bold mb-0.5">المتوسط الحالي</div>
+                                            <div className="text-[11px] font-bold text-neutral-800 font-mono tracking-tighter flex justify-center items-center gap-1">
+                                                {store.avgDailyVisitors}
+                                                <TrendIcon isUp={store.avgDailyVisitors >= store.reqDailyVisitors} isDown={store.avgDailyVisitors < store.reqDailyVisitors} />
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col text-center mt-1">
+                                            <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 font-bold mb-0.5">المتوسط الحالي</div>
+                                            <div className="text-[11px] font-bold text-neutral-800 font-mono tracking-tighter flex justify-center items-center gap-1">
+                                                {formatSAR(store.atvFormatted)}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="mt-auto bg-black/20 rounded-lg p-3 border border-white/5 flex items-center justify-center text-xs text-indigo-300">
-                                    لا يتوفر بيانات يومية لهذه الفترة
+                                <div className="mt-auto bg-neutral-100 rounded-lg p-4 border border-neutral-200 flex items-center justify-center text-xs font-bold text-neutral-400">
+                                    لا يتوفر متطلبات يومية دقيقة لهذه الفترة
                                 </div>
                             )}
                         </div>
@@ -200,12 +249,12 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
                 </div>
 
                 {insights.length > 3 && (
-                    <div className="mt-4 flex justify-center">
+                    <div className="mt-5 flex justify-center">
                         <button
                             onClick={() => setExpanded(!expanded)}
-                            className="bg-white/5 hover:bg-white/10 text-indigo-200 text-xs font-bold py-1.5 px-6 rounded-full border border-white/10 transition-colors"
+                            className="bg-white hover:bg-orange-50 text-orange-600 text-sm font-bold py-2 px-8 rounded-full border border-orange-200 transition-colors shadow-sm"
                         >
-                            {expanded ? "عرض أقل" : `عرض المزيد من الفرص (${insights.length - 3})`}
+                            {expanded ? "عرض أقل" : `مشاهدة باقي الفروع (${insights.length - 3})`}
                         </button>
                     </div>
                 )}
