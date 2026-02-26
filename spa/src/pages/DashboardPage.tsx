@@ -573,48 +573,6 @@ export default function DashboardPage() {
   }, [empRaw, range.start, range.end, allowedStoreIds, raw?.store_meta]);
 
   const mapBranchesData = useMemo(() => {
-    // Generate an index of top employee per store
-    const storeBestEmployee: Record<string, string> = {};
-    if (empRaw?.history && empRaw?.employee_names) {
-      const names = empRaw.employee_names;
-      const aggByStore: Record<string, Record<string, number>> = {};
-
-      Object.entries(empRaw.history).forEach(([sid, records]) => {
-        if (!aggByStore[sid]) aggByStore[sid] = {};
-        for (const rec of (records as any[]) || []) {
-          const date = rec?.[0];
-          const rawId = rec?.[1];
-          const sales = Number(rec?.[2]) || 0;
-
-          if (!date || date < range.start || date > range.end) continue;
-          let id = String(rawId || '').trim();
-          let empName = id;
-          if (id.includes('-')) {
-            const [a, b] = id.split('-');
-            id = (a || '').trim();
-            empName = (b || id).trim();
-          }
-          if (!id || empName === 'مرتجع') continue;
-
-          aggByStore[sid][id] = (aggByStore[sid][id] || 0) + sales;
-        }
-
-        // Find best employee in this store
-        let bestId = null;
-        let maxSales = -1;
-        for (const [eid, sls] of Object.entries(aggByStore[sid])) {
-          if (sls > maxSales) {
-            maxSales = sls;
-            bestId = eid;
-          }
-        }
-        if (bestId) {
-          let n = names[bestId] || names[bestId.padStart(4, '0')] || bestId;
-          storeBestEmployee[sid] = n.split(' ')[0]; // Just first name to keep UI clean
-        }
-      });
-    }
-
     return topStoresRank.map(store => {
       const city = raw?.store_meta?.[store.id]?.city || 'الرياض';
       const [lat, lng] = getStoreLocation(store.id, city);
@@ -633,7 +591,7 @@ export default function DashboardPage() {
         achievement: store.achievement,
       };
     });
-  }, [topStoresRank, raw?.store_meta, empRaw, range]);
+  }, [topStoresRank, raw?.store_meta]);
 
   if (err) {
     return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
