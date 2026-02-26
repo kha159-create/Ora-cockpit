@@ -154,36 +154,44 @@ export const KPICard: React.FC<{
     <button
       onClick={onClick}
       disabled={!onClick}
-      className="modern-kpi-card group p-3 sm:p-4 flex flex-col w-full h-full disabled:cursor-default text-right relative overflow-hidden border border-neutral-100"
+      className={`bg-white p-4 rounded-xl border border-neutral-100 shadow-sm flex flex-col w-full h-full text-right relative overflow-hidden group transition-all duration-300 ${onClick ? 'hover:shadow-md hover:border-orange-200 cursor-pointer' : 'cursor-default'}`}
     >
-      {/* Subtle gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-bl from-white via-white to-orange-50/30 pointer-events-none" />
+      {/* Subtle brand gradient background */}
+      <div className="absolute inset-0 bg-gradient-to-bl from-white via-white to-orange-50/40 pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity duration-300" />
 
       {/* Content */}
-      <div className="relative z-10 flex-1 flex flex-col justify-between">
+      <div className="relative z-10 flex flex-col h-full w-full">
         {/* Header */}
-        <div className="flex justify-between items-start mb-3">
-          <h3 className="text-[11px] sm:text-xs text-neutral-400 font-bold uppercase tracking-wider">{title}</h3>
+        <div className="flex justify-between items-start mb-2 w-full">
+          <div className="text-sm font-semibold text-neutral-500 truncate mt-1">{title}</div>
           {icon && (
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 text-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-200/50 group-hover:scale-110 group-hover:shadow-orange-300/60 transition-all duration-300">
-              <div className="w-4 h-4 sm:w-[18px] sm:h-[18px]">{icon}</div>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-50 to-orange-100/50 text-orange-600 flex items-center justify-center flex-shrink-0 border border-orange-100 shadow-sm group-hover:scale-110 group-hover:bg-orange-500 group-hover:text-white transition-all duration-300">
+              <div className="w-5 h-5">{icon}</div>
             </div>
           )}
         </div>
 
         {/* Value */}
-        <div className="mb-1">
-          <div className="text-2xl sm:text-3xl font-extrabold text-neutral-900 leading-tight dir-ltr font-mono tracking-tight">
+        <div className="mb-2 flex-grow flex flex-col justify-center">
+          <div className="text-2xl sm:text-3xl font-bold text-neutral-900 leading-tight dir-ltr font-mono tracking-tight text-right pt-1">
             {formattedValue}
           </div>
-          {subtitle && <div className="text-[10px] text-neutral-400 font-medium mt-0.5">{subtitle}</div>}
         </div>
 
-        {/* Comparison footer */}
-        <div className="mt-auto pt-2 flex flex-col gap-1.5">
+        {/* Bottom Call-Outs & Helpers */}
+        <div className="mt-auto flex flex-col gap-1.5 w-full">
+          {subtitle && (
+            <div className="mt-1 text-[11px] sm:text-xs text-neutral-500 bg-neutral-50 px-3 py-2 rounded-lg border border-neutral-100 flex justify-between items-center group-hover:bg-orange-50/50 transition-colors duration-300 w-full">
+              <span className="font-medium truncate">{subtitle.split(':')[0]}:</span>
+              <span className={`font-bold truncate dir-ltr pr-1 ${subtitle.includes('100%') ? 'text-blue-600' : 'text-orange-600'}`}>
+                {subtitle.split(':')[1] || subtitle.split(':')[0]}
+              </span>
+            </div>
+          )}
+
           {comparisonValue !== undefined && !showProgress && (
             <>
-              <div className={`text-[11px] font-bold flex items-center justify-end gap-1.5 dir-ltr ${isPositive ? 'text-emerald-600' : 'text-red-500'}`}>
+              <div className={`text-[11px] font-bold flex items-center justify-end gap-1.5 dir-ltr mt-1 ${isPositive ? 'text-emerald-600' : 'text-red-500'}`}>
                 <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] ${isPositive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
                   <span className="text-[10px]">{isPositive ? '▲' : '▼'}</span>
                   <span>
@@ -194,14 +202,14 @@ export const KPICard: React.FC<{
                   </span>
                 </div>
               </div>
-              <div className="text-[10px] text-neutral-400 truncate">
+              <div className="text-[10px] text-neutral-400 truncate text-right w-full">
                 {comparisonLabel || 'السنة الماضية'}: <span className="dir-ltr inline-block font-bold text-neutral-500">{format ? format(comparisonValue) : comparisonValue.toLocaleString()}</span>
               </div>
             </>
           )}
 
           {showProgress && !compactTarget && (
-            <div className="flex items-center gap-3 justify-end">
+            <div className="flex items-center gap-3 justify-end mt-1">
               <CircularProgress percentage={progressValue} size={40} />
               <div className="text-xs font-bold text-neutral-900">
                 {comparisonValue !== undefined && (
@@ -212,12 +220,12 @@ export const KPICard: React.FC<{
           )}
 
           {showProgress && compactTarget && (
-            <div className="flex flex-col items-center justify-center">
+            <div className="flex flex-col items-center justify-center mt-1">
               <CircularProgress percentage={progressValue} size={50} />
             </div>
           )}
           {trendData && trendData.length > 1 && !showProgress && comparisonValue === undefined && (
-            <div className="mt-auto">
+            <div className="mt-1">
               <Sparkline data={trendData} />
             </div>
           )}

@@ -449,44 +449,34 @@ function StoreDetailsModal({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             {/* Target 100% Tracking */}
-            <div className="bg-white p-4 rounded-xl border border-neutral-100 shadow-sm flex flex-col">
-              <div className="text-sm font-semibold text-neutral-500 mb-1">المتبقي للـ 100%</div>
-              <div className="text-2xl font-bold text-neutral-900 mb-2">
-                {formatSAR(Math.max(0, (store.target || 0) - store.val))}
-              </div>
-              <div className="mt-auto text-sm text-neutral-500 bg-neutral-50 p-2 rounded-lg border border-neutral-100 flex justify-between">
-                <span>اليومية المطلوبة:</span>
-                <span className="font-bold text-blue-600">
-                  {formatSAR((() => {
-                    const todayNow = new Date();
-                    const daysInM = new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0).getDate();
-                    const remDays = daysInM - todayNow.getDate() + 1;
-                    const rem = Math.max(0, (store.target || 0) - store.val);
-                    return remDays > 0 ? rem / remDays : 0;
-                  })())}
-                </span>
-              </div>
-            </div>
+            <KPICard
+              title="المتبقي للـ 100%"
+              value={Math.max(0, (store.target || 0) - store.val)}
+              format={formatSAR}
+              icon={<FireIcon />}
+              subtitle={`اليومية المطلوبة: ${formatSAR((() => {
+                const todayNow = new Date();
+                const daysInM = new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0).getDate();
+                const remDays = daysInM - todayNow.getDate() + 1;
+                const rem = Math.max(0, (store.target || 0) - store.val);
+                return remDays > 0 ? rem / remDays : 0;
+              })())}`}
+            />
 
             {/* Target 90% Tracking */}
-            <div className="bg-white p-4 rounded-xl border border-neutral-100 shadow-sm flex flex-col">
-              <div className="text-sm font-semibold text-neutral-500 mb-1">المتبقي للـ 90%</div>
-              <div className="text-2xl font-bold text-neutral-900 mb-2">
-                {formatSAR(Math.max(0, ((store.target || 0) * 0.9) - store.val))}
-              </div>
-              <div className="mt-auto text-sm text-neutral-500 bg-neutral-50 p-2 rounded-lg border border-neutral-100 flex justify-between">
-                <span>اليومية المطلوبة:</span>
-                <span className="font-bold text-orange-600">
-                  {formatSAR((() => {
-                    const todayNow = new Date();
-                    const daysInM = new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0).getDate();
-                    const remDays = daysInM - todayNow.getDate() + 1;
-                    const rem = Math.max(0, ((store.target || 0) * 0.9) - store.val);
-                    return remDays > 0 ? rem / remDays : 0;
-                  })())}
-                </span>
-              </div>
-            </div>
+            <KPICard
+              title="المتبقي للـ 90%"
+              value={Math.max(0, ((store.target || 0) * 0.9) - store.val)}
+              format={formatSAR}
+              icon={<SalesIcon />}
+              subtitle={`اليومية المطلوبة: ${formatSAR((() => {
+                const todayNow = new Date();
+                const daysInM = new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0).getDate();
+                const remDays = daysInM - todayNow.getDate() + 1;
+                const rem = Math.max(0, ((store.target || 0) * 0.9) - store.val);
+                return remDays > 0 ? rem / remDays : 0;
+              })())}`}
+            />
           </div>
 
 
