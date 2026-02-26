@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { loadManagementData, loadEmployeesData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { KPIGrid } from '../components/dashboard/KPIGrid';
@@ -485,27 +486,29 @@ export default function DashboardPage() {
     if (!raw?.sales || !raw?.stores) return [];
     const allow = (sid: string) => allowedStoreIds.has(sid);
     const byStore: Record<string, { sales: number; trans: number; visitors: number; target: number; prevYearSales: number; prevYearVisitors: number }> = {};
+    const isOnlineStore = (sid: string) => raw?.store_meta?.[sid]?.type === 'online';
+
     (raw.sales || []).forEach(([d, s, v]: any[]) => {
-      if (!allow(s)) return;
+      if (!allow(s) || isOnlineStore(s)) return;
       if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevYearSales: 0, prevYearVisitors: 0 };
       if (inRange(d)) byStore[s].sales += v || 0;
       // مقارنة بنفس الفترة من السنة السابقة
       if (inPrevYearRange(d)) byStore[s].prevYearSales += v || 0;
     });
     (raw.transactions || []).forEach(([d, s, v]: any[]) => {
-      if (!allow(s)) return;
+      if (!allow(s) || isOnlineStore(s)) return;
       if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevYearSales: 0, prevYearVisitors: 0 };
       if (inRange(d)) byStore[s].trans += v || 0;
     });
     (raw.visitors || []).forEach(([d, s, v]: any[]) => {
-      if (!allow(s)) return;
+      if (!allow(s) || isOnlineStore(s)) return;
       if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevYearSales: 0, prevYearVisitors: 0 };
       if (inRange(d)) byStore[s].visitors += v || 0;
       // مقارنة زوار نفس الفترة من السنة السابقة
       if (inPrevYearRange(d)) byStore[s].prevYearVisitors += v || 0;
     });
     (raw.targets || []).forEach(([d, s, v]: any[]) => {
-      if (!allow(s)) return;
+      if (!allow(s) || isOnlineStore(s)) return;
       if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevYearSales: 0, prevYearVisitors: 0 };
       if (inRange(d)) byStore[s].target += v || 0;
     });
@@ -1043,14 +1046,6 @@ export default function DashboardPage() {
             >
               {refreshing ? 'جاري التحديث...' : 'تحديث البيانات'}
             </button>
-            <button
-              type="button"
-              onClick={() => setDailyReportModalOpen(true)}
-              className="px-4 py-2 bg-neutral-900 text-white rounded-lg text-sm font-bold shadow hover:bg-neutral-800 transition-colors flex items-center gap-2 border border-neutral-700 hover:border-orange-500"
-            >
-              <span>التقرير اليومي</span>
-              <span className="text-orange-400">🔥</span>
-            </button>
           </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
@@ -1153,6 +1148,19 @@ export default function DashboardPage() {
         allowedStoreIds={allowedStoreIds}
         formatSAR={formatSAR}
       />
+
+      {/* Portal the Daily Report Button to the MainLayout Header */}
+      {document.getElementById('daily-report-portal-target') && createPortal(
+        <button
+          type="button"
+          onClick={() => setDailyReportModalOpen(true)}
+          className="flex bg-gradient-to-r from-neutral-800 to-neutral-900 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-md items-center gap-2 hover:scale-105 transition-transform border border-neutral-700"
+        >
+          <span className="text-lg leading-none">📄</span>
+          <span className="hidden sm:inline font-bold text-xs sm:text-sm whitespace-nowrap">التقرير اليومي</span>
+        </button>,
+        document.getElementById('daily-report-portal-target')!
+      )}
 
       <AITargetInsights stores={mapBranchesData} formatSAR={formatSAR} mode={mode} />
 
