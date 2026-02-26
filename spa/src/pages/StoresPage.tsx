@@ -439,23 +439,54 @@ function StoreDetailsModal({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+            <KPICard title="الهدف" value={store.target} format={formatSAR} icon={<SalesIcon />} />
             <KPICard title="المبيعات" value={store.val} format={formatSAR} icon={<SalesIcon />} />
-            <KPICard title="الفواتير" value={store.trans} format={(v) => Math.round(v).toLocaleString()} icon={<InvoicesIcon />} />
-            <KPICard
-              title="التحويل %"
-              value={store.conversion}
-              format={(v) => `${v.toFixed(1)}% `}
-              icon={<FireIcon />}
-            />
             <KPICard title="تحقيق الهدف" value={store.ach} format={(v) => `${v.toFixed(1)}% `} showProgress progressValue={store.ach} />
-            {/* New KPI: Customer Value */}
-            <KPICard
-              title="قيمة العميل"
-              value={store.customerValue}
-              format={(v) => formatSAR(v)}
-              icon={<CustomerValueIcon />}
-            />
+            <KPICard title="قيمة العميل" value={store.customerValue} format={(v) => formatSAR(v)} icon={<CustomerValueIcon />} />
+            <KPICard title="التحويل %" value={store.conversion} format={(v) => `${v.toFixed(1)}% `} icon={<FireIcon />} />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            {/* Target 100% Tracking */}
+            <div className="bg-white p-4 rounded-xl border border-neutral-100 shadow-sm flex flex-col">
+              <div className="text-sm font-semibold text-neutral-500 mb-1">المتبقي للـ 100%</div>
+              <div className="text-2xl font-bold text-neutral-900 mb-2">
+                {formatSAR(Math.max(0, (store.target || 0) - store.val))}
+              </div>
+              <div className="mt-auto text-sm text-neutral-500 bg-neutral-50 p-2 rounded-lg border border-neutral-100 flex justify-between">
+                <span>اليومية المطلوبة:</span>
+                <span className="font-bold text-blue-600">
+                  {formatSAR((() => {
+                    const todayNow = new Date();
+                    const daysInM = new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0).getDate();
+                    const remDays = daysInM - todayNow.getDate() + 1;
+                    const rem = Math.max(0, (store.target || 0) - store.val);
+                    return remDays > 0 ? rem / remDays : 0;
+                  })())}
+                </span>
+              </div>
+            </div>
+
+            {/* Target 90% Tracking */}
+            <div className="bg-white p-4 rounded-xl border border-neutral-100 shadow-sm flex flex-col">
+              <div className="text-sm font-semibold text-neutral-500 mb-1">المتبقي للـ 90%</div>
+              <div className="text-2xl font-bold text-neutral-900 mb-2">
+                {formatSAR(Math.max(0, ((store.target || 0) * 0.9) - store.val))}
+              </div>
+              <div className="mt-auto text-sm text-neutral-500 bg-neutral-50 p-2 rounded-lg border border-neutral-100 flex justify-between">
+                <span>اليومية المطلوبة:</span>
+                <span className="font-bold text-orange-600">
+                  {formatSAR((() => {
+                    const todayNow = new Date();
+                    const daysInM = new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0).getDate();
+                    const remDays = daysInM - todayNow.getDate() + 1;
+                    const rem = Math.max(0, ((store.target || 0) * 0.9) - store.val);
+                    return remDays > 0 ? rem / remDays : 0;
+                  })())}
+                </span>
+              </div>
+            </div>
           </div>
 
 
@@ -913,6 +944,7 @@ export default function StoresPage() {
               <tr className="bg-neutral-50 text-neutral-500 uppercase text-[11px] tracking-wider">
                 <th className="th text-right">#</th>
                 <SortableTh label="الفرع" sortKey="name" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-right" />
+                <SortableTh label="الهدف" sortKey="target" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="المبيعات" sortKey="val" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="العام الماضي" sortKey="prevVal" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="النمو %" sortKey="growth" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
@@ -938,6 +970,7 @@ export default function StoresPage() {
                       {s.name}
                     </button>
                   </td>
+                  <td className="td text-center font-bold text-neutral-600 font-mono">{formatSAR(s.target)}</td>
                   <td className="td text-center font-bold text-green-700 font-mono">{formatSAR(s.val)}</td>
                   <td className="td text-center text-neutral-400 font-mono">{formatSAR(s.prevVal)}</td>
                   <td className={`td text-center font-bold font-mono ${s.growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
