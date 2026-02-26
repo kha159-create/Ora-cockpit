@@ -103,6 +103,14 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
             let type: 'critical' | 'attention' | 'golden' | 'success' = 'attention';
             let priorityScore = 0;
 
+            const remSales = Math.max(0, goalValue - store.sales);
+            let reqDailySales = remDays > 0 ? remSales / remDays : 0;
+
+            // AI Unachievable check: To consider a branch "realistic", they shouldn't need a massive surge 
+            // compared to their current average unless they're already very close.
+            // If they need to double their daily average (>200% surge) and have less than 15 days, it's impossible.
+            const requiredSurge = avgDailySales > 0 ? (reqDailySales / avgDailySales) : 0;
+
             if (currentAch >= 90) {
                 goalValue = t100;
                 goalLabel = "100%";
@@ -111,17 +119,16 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
             } else if (currentAch >= 80) {
                 type = 'golden'; // 80 to 90 is also an easy push to 90%.
                 priorityScore = 2;
-            } else if (currentAch < 50 && remDays < 15 && remDays > 0) {
-                // Critical state: Far behind and month is past half. Focus on realistic intermediate step or just survival.
+            } else if (remDays > 0 && (currentAch < 60 && (remDays < 15 || requiredSurge > 1.5))) {
+                // Critical state: Mathematically very difficult to achieve.
+                // Examples: <60% with less than 15 days left, OR requires >150% of their current daily average.
                 type = 'critical';
-                priorityScore = Math.max(10, 20 - remDays); // Highest priority to show as 'Critical Need'
+                priorityScore = 10;
             } else {
-                type = 'attention'; // Between 50 and 80 usually
+                type = 'attention'; // Between 60 and 80 usually, achievable.
                 priorityScore = 5;
             }
 
-            const remSales = Math.max(0, goalValue - store.sales);
-            let reqDailySales = remDays > 0 ? remSales / remDays : 0;
             let reqDailyVisitors = 0;
             let reqDailyTrans = 0;
 
@@ -131,7 +138,8 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
                 reqDailyTrans = reqDailySales / atv;
             }
 
-            // Filter out entirely unrealistic targets as requested ("اذا الفرع مستحيل يجيب اعرض الباقي لاء")
+            // FILTER: If it is completely unachievable (critical), do not even show it.
+            // "اذا الفرع واصل لحد 50% وضايل للشهر يويمن هاذا مستحيل يجيب اعرض الباقي لاء"
             if (type === 'critical') return;
 
             let textAdvice = "";
