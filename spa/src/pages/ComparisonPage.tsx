@@ -224,13 +224,12 @@ export default function ComparisonPage() {
 
     const formatVal = (val: number | undefined, fmt: string) => {
         const v = val || 0;
-        if (fmt === 'sar') return `SAR ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        if (fmt === 'pct') return `${v.toFixed(2)}%`;
+        if (fmt === 'sar') return `SAR ${Math.round(v).toLocaleString()}`;
+        if (fmt === 'pct') return `${Math.round(v)}%`;
         return Math.round(v).toLocaleString();
     };
 
     const exportDetailedExcel = () => {
-        // Prepare metadata for selected filters
         const activeManagerName = effectiveManager !== 'all' ? effectiveManager : 'كافة المدراء';
         const activeBranchName = branch !== 'all' ?
             (branches.find(b => b.id === branch)?.name || branch) :
@@ -243,36 +242,99 @@ export default function ComparisonPage() {
             periodDisplay = `${dateRange.start} إلى ${dateRange.end}`;
         }
 
-        // Export data structuring
-        const rows = [
+        const rows: any[] = [
             { 'A': 'تقرير تفاصيل المقارنة' },
             { 'A': `التاريخ/الفترة: ${periodDisplay}` },
             { 'A': `مدير المنطقة: ${activeManagerName}` },
             { 'A': `المعرض: ${activeBranchName}` },
-            {}, // Empty row for spacing
-            { 'A': 'المؤشر', 'B': 'الحالي', 'C': 'السابق', 'D': 'الفرق', 'E': 'التغير %' }
+            {} // Spacing
         ];
 
-        detailedTable.forEach(r => {
-            const curr = r.current || 0;
-            const prev = r.previous || 0;
-            const diff = curr - prev;
-            const change = r.growth || 0;
+        // Helper to calculate metrics for a specific subset of stores
+        const calcSubsetMetrics = (storeIds: string[]) => {
+            const sumRows = (data: any[], startStr: string, endStr: string) => {
+                return (data || []).reduce((acc, row) => {
+                    const sid = String(row[1]);
+                    if (storeIds.includes(sid)) {
+                        const d = String(row[0]).substring(0, 10);
+                        if (d >= startStr && d <= endStr) return acc + (Number(row[2]) || 0);
+                    }
+                    return acc;
+                }, 0);
+            };
 
-            rows.push({
-                'A': r.label,
-                'B': Number(curr.toFixed(2)),
-                'C': Number(prev.toFixed(2)),
-                'D': Number(diff.toFixed(2)),
-                'E': Number(change.toFixed(2)) // Export as raw number for excel formatting
-            } as any);
-        });
+            const sCurr = sumRows(filteredMgmt?.sales, dateRange.start, dateRange.end);
+            const sPrev = sumRows(filteredMgmt?.sales, prevDateRange?.start || '', prevDateRange?.end || '');
+
+            const vCurr = sumRows(filteredMgmt?.visitors, dateRange.start, dateRange.end);
+            const vPrev = sumRows(filteredMgmt?.visitors, prevDateRange?.start || '', prevDateRange?.end || '');
+
+            const tCurr = sumRows(filteredMgmt?.transactions, dateRange.start, dateRange.end);
+            const tPrev = sumRows(filteredMgmt?.transactions, prevDateRange?.start || '', prevDateRange?.end || '');
+
+            const atvCurr = tCurr > 0 ? sCurr / tCurr : 0;
+            const atvPrev = tPrev > 0 ? sPrev / tPrev : 0;
+
+            const convCurr = vCurr > 0 ? (tCurr / vCurr) * 100 : 0;
+            const convPrev = vPrev > 0 ? (tPrev / vPrev) * 100 : 0;
+
+            const spvCurr = vCurr > 0 ? sCurr / vCurr : 0;
+            const spvPrev = vPrev > 0 ? sPrev / vPrev : 0;
+
+            const growth = (curr: number, prev: number) => prev > 0 ? ((curr - prev) / prev) * 100 : 0;
+
+            return [
+                { label: 'المبيعات (Sales)', current: sCurr, previous: sPrev, diff: sCurr - sPrev, growth: growth(sCurr, sPrev) },
+                { label: 'الزوار (Visitors)', current: vCurr, previous: vPrev, diff: vCurr - vPrev, growth: growth(vCurr, vPrev) },
+                { label: 'قيمة العميل (Sales per Visitor)', current: spvCurr, previous: spvPrev, diff: spvCurr - spvPrev, growth: growth(spvCurr, spvPrev) },
+                { label: 'الاستحواذ (Acquisition / Conversion)', current: convCurr, previous: convPrev, diff: convCurr - convPrev, growth: growth(convCurr, convPrev) },
+                { label: 'متوسط الفاتورة (Average Ticket)', current: atvCurr, previous: atvPrev, diff: atvCurr - atvPrev, growth: growth(atvCurr, atvPrev) },
+                { label: 'الفواتير (Transactions)', current: tCurr, previous: tPrev, diff: tCurr - tPrev, growth: growth(tCurr, tPrev) },
+            ];
+        };
+
+        const generateSection = (title: string, storeIds: string[]) => {
+            rows.push({ 'A': `--- ${title} ---` });
+            rows.push({ 'A': 'المؤشر', 'B': 'الحالي', 'C': 'السابق', 'D': 'الفرق', 'E': 'التغير %' });
+            const metricsGroup = calcSubsetMetrics(storeIds);
+            metricsGroup.forEach(r => {
+                rows.push({
+                    'A': r.label,
+                    'B': Math.round(r.current).toLocaleString(),
+                    'C': Math.round(r.previous).toLocaleString(),
+                    'D': Math.round(r.diff).toLocaleString(),
+                    'E': `${Math.round(r.growth)}%`
+                });
+            });
+            rows.push({}); // Spacing after section
+        };
+
+        const meta = filteredMgmt?.store_meta || {};
+
+        if (effectiveManager === 'all') {
+            // Group by Manager
+            managers.forEach(mgr => {
+                const mgrStores = Object.keys(meta).filter(sid => String(meta[sid].manager) === mgr);
+                if (mgrStores.length > 0) {
+                    generateSection(`مدير المنطقة: ${mgr}`, mgrStores);
+                }
+            });
+        } else if (effectiveManager !== 'all' && branch === 'all') {
+            // Group by Branch under the Manager
+            branches.forEach(br => {
+                generateSection(`المعرض: ${br.name}`, [br.id]);
+            });
+        } else {
+            // Specific branch selected
+            const brName = branches.find(b => b.id === branch)?.name || branch;
+            generateSection(`المعرض: ${brName}`, [branch]);
+        }
 
         const ws = XLSX.utils.json_to_sheet(rows, { skipHeader: true });
 
         // Add custom widths
         ws['!cols'] = [
-            { wch: 35 }, // Metric
+            { wch: 40 }, // Metric
             { wch: 20 }, // Current
             { wch: 20 }, // Previous
             { wch: 20 }, // Difference
@@ -501,25 +563,28 @@ export default function ComparisonPage() {
 
             {/* Detailed Comparison Table */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-200">
-                <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4">
-                    <div>
+                <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
+                    <div className="flex-1">
                         <h3 className="font-bold text-lg text-neutral-800">تفاصيل المقارنة (Detailed Comparison)</h3>
-                        <div className="text-xs text-neutral-500 mt-1 flex gap-3">
-                            {effectiveManager !== 'all' && <span><span className="font-semibold">مدير المنطقة:</span> {effectiveManager}</span>}
-                            {branch !== 'all' ? (
-                                <span><span className="font-semibold">المعرض:</span> {branches.find(b => b.id === branch)?.name || branch}</span>
-                            ) : (
-                                effectiveManager !== 'all' && <span><span className="font-semibold">المعرض:</span> كافة الفروع التابعة للمدير</span>
-                            )}
-                        </div>
                     </div>
-                    <button
-                        type="button"
-                        onClick={exportDetailedExcel}
-                        className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-xl text-sm transition-colors flex items-center gap-2 shadow-sm"
-                    >
-                        <span>📊</span> تصدير تفاصيل المقارنة (Excel)
-                    </button>
+                    {/* Centered Orange Filters */}
+                    <div className="flex-1 flex justify-center text-sm text-orange-600 font-bold gap-4 bg-orange-50 px-4 py-2 rounded-xl border border-orange-100">
+                        {effectiveManager !== 'all' && <span>مدير المنطقة: {effectiveManager}</span>}
+                        {branch !== 'all' ? (
+                            <span>المعرض: {branches.find(b => b.id === branch)?.name || branch}</span>
+                        ) : (
+                            effectiveManager !== 'all' && <span>كافة الفروع التابعة للمدير</span>
+                        )}
+                    </div>
+                    <div className="flex-1 flex justify-end">
+                        <button
+                            type="button"
+                            onClick={exportDetailedExcel}
+                            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-xl text-sm transition-colors flex items-center gap-2 shadow-sm"
+                        >
+                            <span>📊</span> تصدير تفاصيل المقارنة
+                        </button>
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -534,10 +599,10 @@ export default function ComparisonPage() {
                         </thead>
                         <tbody>
                             {detailedTable.map((row, i) => {
-                                const curr = row.current || 0;
-                                const prev = row.previous || 0;
+                                const curr = Math.round(row.current || 0);
+                                const prev = Math.round(row.previous || 0);
                                 const diff = curr - prev;
-                                const change = row.growth || 0;
+                                const change = Math.round(row.growth || 0);
                                 const isNeg = change < 0;
                                 return (
                                     <tr key={i} className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors">
@@ -545,11 +610,11 @@ export default function ComparisonPage() {
                                         <td className="py-4 px-4 text-center font-medium text-neutral-800">{formatVal(curr, row.format || 'number')}</td>
                                         <td className="py-4 px-4 text-center text-neutral-500">{formatVal(prev, row.format || 'number')}</td>
                                         <td className={`py-4 px-4 text-center font-medium ${isNeg ? 'text-red-600' : 'text-green-600'}`}>
-                                            {isNeg ? '' : '+'}{row.format === 'sar' ? `SAR ${Math.round(diff).toLocaleString()}` : row.format === 'pct' ? `${diff.toFixed(2)}%` : Math.round(diff).toLocaleString()}
+                                            {isNeg ? '' : '+'}{row.format === 'sar' ? `SAR ${Math.round(diff).toLocaleString()}` : row.format === 'pct' ? `${Math.round(diff)}%` : Math.round(diff).toLocaleString()}
                                         </td>
                                         <td className="py-4 px-4 text-center">
                                             <span className={`inline-flex items-center gap-1 font-bold ${isNeg ? 'text-red-600' : 'text-green-600'}`}>
-                                                {isNeg ? '▼' : '▲'} {Math.abs(change).toFixed(2)}%
+                                                {isNeg ? '▼' : '▲'} {Math.abs(change)}%
                                             </span>
                                         </td>
                                     </tr>
