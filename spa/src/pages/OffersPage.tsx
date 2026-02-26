@@ -639,7 +639,7 @@ export default function OffersPage() {
       {/* Comparison Modal */}
       {showCompareModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setShowCompareModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[95vw] md:w-full max-w-5xl max-h-[90vh] overflow-y-auto flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-neutral-200 flex justify-between items-center sticky top-0 bg-white z-10">
               <h2 className="text-xl font-bold text-neutral-900">مقارنة العروض</h2>
               <button onClick={() => setShowCompareModal(false)} className="p-2 hover:bg-neutral-100 rounded-lg"><XIcon /></button>
@@ -691,7 +691,7 @@ export default function OffersPage() {
       {selectedOffer && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setSelectedOffer(null)}>
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto anim-scale-in"
+            className="bg-white rounded-2xl shadow-2xl w-[95vw] md:w-full max-w-4xl max-h-[90vh] overflow-y-auto anim-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="sticky top-0 bg-white border-b border-neutral-200 p-4 flex items-center justify-between rounded-t-2xl z-10 shadow-sm">

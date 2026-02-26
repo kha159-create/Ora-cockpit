@@ -93,7 +93,7 @@ function Modal({
   if (!open) return null;
   return (
     <div className="modal-center-screen" onClick={onClose}>
-      <div className={`modal-content ${maxWidthClass} my-4`} onClick={(e) => e.stopPropagation()}>
+      <div className={`modal-content w-[95vw] md:w-full max-h-[90vh] overflow-y-auto ${maxWidthClass} my-4`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-xl font-bold text-neutral-900 truncate">{title}</div>
