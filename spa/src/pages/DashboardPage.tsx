@@ -10,6 +10,7 @@ import { DailyReportModal } from '../components/dashboard/DailyReportModal';
 import { StoreReportModal } from '../components/dashboard/StoreReportModal';
 import { EmployeeReportModal } from '../components/dashboard/EmployeeReportModal';
 import { DrillDownModal } from '../components/dashboard/DrillDownModal';
+import { AITargetInsights } from '../components/dashboard/AITargetInsights';
 import { BranchesMap } from '../components/dashboard/BranchesMap';
 import { getStoreLocation } from '../utils/coordinates';
 
@@ -1150,6 +1151,8 @@ export default function DashboardPage() {
         onOpenDailyReport={() => setDailyReportModalOpen(true)}
       />
 
+      <AITargetInsights stores={mapBranchesData} formatSAR={formatSAR} mode={mode} />
+
       {/* خريطة الفروع المباشرة */}
       <div className="bg-white rounded-xl shadow-md border border-neutral-200 p-4">
         <div className="flex items-center justify-between mb-4">
@@ -1157,7 +1160,7 @@ export default function DashboardPage() {
             🗺️ خريطة الفروع المباشرة
           </h2>
           <div className="text-xs font-bold bg-emerald-50 text-emerald-600 px-2 py-1 rounded border border-emerald-100">
-            الذكاء الاصطناعي
+            أداء الفروع النشطة
           </div>
         </div>
         <BranchesMap branches={mapBranchesData} formatSAR={formatSAR} />
