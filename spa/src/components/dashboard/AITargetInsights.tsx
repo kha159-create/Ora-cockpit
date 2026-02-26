@@ -44,6 +44,7 @@ interface StoreData {
     target: number;
     visitors: number;
     trans: number;
+    top_employee?: string;
 }
 
 interface AITargetInsightsProps {
@@ -130,25 +131,29 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
                 reqDailyTrans = reqDailySales / atv;
             }
 
+            // Filter out entirely unrealistic targets as requested ("اذا الفرع مستحيل يجيب اعرض الباقي لاء")
+            if (type === 'critical') return;
+
             let textAdvice = "";
             let empAdvice = "";
+            let bestEmp = store.top_employee ? `(${store.top_employee})` : 'أقوى موظفي المبيعات';
 
             // Formulate Actionable AI Logic
             if (conversion < 0.10) {
                 textAdvice = "معدل تحويل الزوار منخفض جداً (أقل من ١٠٪). مبيعات تضيع بعد دخول العميل للفرع.";
-                empAdvice = "ينصح بجدولة أقوى موظفي المبيعات للإغلاق (Closers) وتجنب المهام الجانبية للتركيز الكامل على الزبائن.";
+                empAdvice = `ينصح بجدولة ${bestEmp} للإغلاق (Closers) وتجنب المهام الجانبية للتركيز الكامل على الزبائن.`;
             } else if (conversion >= 0.15 && atv < 180) { // Assuming 180 is a generic threshold for "low basket"
                 textAdvice = "الفرع يستقطب الزبائن بمعدل تحويل ممتاز، لكن متوسط الفاتورة قليل.";
-                empAdvice = "وجّه الموظفين فوراً لتفعيل عروض البيع المتقاطع (Cross-Selling) واقتراح منتج إضافي عند الكاشير.";
+                empAdvice = `وجّه ${bestEmp} وبقية الطاقم فوراً لتفعيل عروض البيع المتقاطع (Cross-Selling) عند الكاشير.`;
             } else if (avgDailyVisitors < 30) {
                 textAdvice = "حركة الأقدام والزبائن (Footfall) ضعيفة جداً ولا تكفي لتحقيق الأهداف بالوتيرة الحالية.";
-                empAdvice = "كلّف الموظفين باستغلال وقت الهدوء للتواصل الهاتفي مع العملاء السابقين (Clienteling) لاستقطابهم.";
+                empAdvice = `كلّف ${bestEmp} باستغلال وقت الهدوء للتواصل الهاتفي بمهارة مع العملاء السابقين (Clienteling).`;
             } else if (forecastAch >= 100) {
                 textAdvice = "الفرع يسير بوتيرة ممتازة لتجاوز الهدف قبل نهاية الشهر.";
-                empAdvice = "شجّع الموظفين للحفاظ على نفس الوتيرة لضمان تحقيق عمولات فائقة.";
+                empAdvice = `شجّع الطاقم بقيادة ${bestEmp} للحفاظ على نفس الوتيرة لضمان تحقيق عمولات فائقة.`;
             } else {
                 textAdvice = "يحتاج الفرع لدفعة بسيطة ورفع المبيعات اليومية بحوالي " + ((reqDailySales - avgDailySales) / avgDailySales * 100).toFixed(0) + "% لتجنب فقدان الهدف.";
-                empAdvice = "ركز المهام الإدارية خارج أوقات الذروة واجعل الموظفين متاحين للبيع 100%.";
+                empAdvice = `ركز المهام الإدارية خارج أوقات الذروة واجعل ${bestEmp} متاحاً للبيع 100%.`;
             }
 
             // Generate an AI distance score to rank the most "actionable" branches.
