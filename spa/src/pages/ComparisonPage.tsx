@@ -198,41 +198,90 @@ export default function ComparisonPage() {
     // Detailed Comparison Table data
     const detailedTable = useMemo(() => {
         if (!metrics.length) return [];
-        // Add derived metrics: Sales per Visitor
-        const salesM = metrics.find(m => m.key === 'sales');
-        const visitorsM = metrics.find(m => m.key === 'visitors');
-        const spv = (salesM && visitorsM && visitorsM.current > 0) ? salesM.current / visitorsM.current : 0;
-        const spvPrev = (salesM && visitorsM && visitorsM.previous > 0) ? salesM.previous / visitorsM.previous : 0;
+        // Extract specific metrics
+        const getMetric = (key: string) => metrics.find(m => m.key === key) || { current: 0, previous: 0, growth: 0 };
+
+        const salesM = getMetric('sales');
+        const visitorsM = getMetric('visitors');
+        const atvM = getMetric('atv');
+        const transM = getMetric('transactions');
+        const convM = getMetric('conversion');
+
+        // Customer Value: Sales / Visitors
+        const spv = (salesM.current > 0 && visitorsM.current > 0) ? salesM.current / visitorsM.current : 0;
+        const spvPrev = (salesM.previous > 0 && visitorsM.previous > 0) ? salesM.previous / visitorsM.previous : 0;
+        const spvGrowth = spvPrev > 0 ? ((spv - spvPrev) / spvPrev) * 100 : 0;
 
         return [
-            { label: 'الزوار (Visitors)', ...visitorsM, format: 'number' },
-            { label: 'معدل التحويل (Visitor Conversion Rate)', ...metrics.find(m => m.key === 'conversion'), format: 'pct' },
-            { label: 'الفواتير (Transactions)', ...metrics.find(m => m.key === 'transactions'), format: 'number' },
-            { label: 'قيمة العميل (Sales per Visitor)', current: spv, previous: spvPrev, growth: spvPrev > 0 ? ((spv - spvPrev) / spvPrev) * 100 : 0, format: 'sar' },
             { label: 'المبيعات (Sales)', ...salesM, format: 'sar' },
-            { label: 'متوسط الفاتورة (ATV)', ...metrics.find(m => m.key === 'atv'), format: 'sar' },
+            { label: 'الزوار (Visitors)', ...visitorsM, format: 'number' },
+            { label: 'قيمة العميل (Sales per Visitor)', current: spv, previous: spvPrev, growth: spvGrowth, format: 'sar' },
+            { label: 'الاستحواذ (Acquisition / Conversion)', ...convM, format: 'pct' },
+            { label: 'متوسط الفاتورة (Average Ticket)', ...atvM, format: 'sar' },
+            { label: 'الفواتير (Transactions)', ...transM, format: 'number' },
         ];
     }, [metrics]);
 
     const formatVal = (val: number | undefined, fmt: string) => {
         const v = val || 0;
-        if (fmt === 'sar') return `SAR ${Math.round(v).toLocaleString()}`;
+        if (fmt === 'sar') return `SAR ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         if (fmt === 'pct') return `${v.toFixed(2)}%`;
         return Math.round(v).toLocaleString();
     };
 
     const exportDetailedExcel = () => {
-        const rows = detailedTable.map(r => ({
-            'المؤشر': r.label,
-            'الحالي': r.current || 0,
-            'السابق': r.previous || 0,
-            'الفرق': (r.current || 0) - (r.previous || 0),
-            'التغير %': r.growth ? `${r.growth.toFixed(2)}%` : '0%',
-        }));
-        const ws = XLSX.utils.json_to_sheet(rows);
+        // Prepare metadata for selected filters
+        const activeManagerName = effectiveManager !== 'all' ? effectiveManager : 'كافة المدراء';
+        const activeBranchName = branch !== 'all' ?
+            (branches.find(b => b.id === branch)?.name || branch) :
+            (effectiveManager !== 'all' ? 'كافة المعارض التابعة للمدير' : 'كافة المعارض');
+
+        let periodDisplay = '';
+        if (rangeMode === 'seasons') {
+            periodDisplay = `${availableSeasons.find(s => s.id === selectedSeason)?.nameAr || selectedSeason} ${stdYear}`;
+        } else {
+            periodDisplay = `${dateRange.start} إلى ${dateRange.end}`;
+        }
+
+        // Export data structuring
+        const rows = [
+            { 'A': 'تقرير تفاصيل المقارنة' },
+            { 'A': `التاريخ/الفترة: ${periodDisplay}` },
+            { 'A': `مدير المنطقة: ${activeManagerName}` },
+            { 'A': `المعرض: ${activeBranchName}` },
+            {}, // Empty row for spacing
+            { 'A': 'المؤشر', 'B': 'الحالي', 'C': 'السابق', 'D': 'الفرق', 'E': 'التغير %' }
+        ];
+
+        detailedTable.forEach(r => {
+            const curr = r.current || 0;
+            const prev = r.previous || 0;
+            const diff = curr - prev;
+            const change = r.growth || 0;
+
+            rows.push({
+                'A': r.label,
+                'B': Number(curr.toFixed(2)),
+                'C': Number(prev.toFixed(2)),
+                'D': Number(diff.toFixed(2)),
+                'E': Number(change.toFixed(2)) // Export as raw number for excel formatting
+            } as any);
+        });
+
+        const ws = XLSX.utils.json_to_sheet(rows, { skipHeader: true });
+
+        // Add custom widths
+        ws['!cols'] = [
+            { wch: 35 }, // Metric
+            { wch: 20 }, // Current
+            { wch: 20 }, // Previous
+            { wch: 20 }, // Difference
+            { wch: 20 }  // Change %
+        ];
+
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Comparison');
-        XLSX.writeFile(wb, `Comparison_${dateRange.start}_${dateRange.end}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, 'Detailed Comparison');
+        XLSX.writeFile(wb, `Comparison_Export_${toYMD(new Date())}.xlsx`);
     };
 
     const months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
@@ -452,14 +501,24 @@ export default function ComparisonPage() {
 
             {/* Detailed Comparison Table */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-200">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="font-bold text-lg text-neutral-800">Detailed Comparison Table</h3>
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4">
+                    <div>
+                        <h3 className="font-bold text-lg text-neutral-800">تفاصيل المقارنة (Detailed Comparison)</h3>
+                        <div className="text-xs text-neutral-500 mt-1 flex gap-3">
+                            {effectiveManager !== 'all' && <span><span className="font-semibold">مدير المنطقة:</span> {effectiveManager}</span>}
+                            {branch !== 'all' ? (
+                                <span><span className="font-semibold">المعرض:</span> {branches.find(b => b.id === branch)?.name || branch}</span>
+                            ) : (
+                                effectiveManager !== 'all' && <span><span className="font-semibold">المعرض:</span> كافة الفروع التابعة للمدير</span>
+                            )}
+                        </div>
+                    </div>
                     <button
                         type="button"
                         onClick={exportDetailedExcel}
-                        className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-xl text-sm transition-colors flex items-center gap-2"
+                        className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-xl text-sm transition-colors flex items-center gap-2 shadow-sm"
                     >
-                        <span>📊</span> Export to Excel
+                        <span>📊</span> تصدير تفاصيل المقارنة (Excel)
                     </button>
                 </div>
                 <div className="overflow-x-auto">

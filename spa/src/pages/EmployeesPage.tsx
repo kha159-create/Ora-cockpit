@@ -697,14 +697,32 @@ export default function EmployeesPage() {
       const padded = id.padStart(4, '0');
       const candidates = Array.from(new Set([id, padded, unpadded]));
 
-      const targetMonthKey = period === 'month' ? `${selYear}-${pad2(selMonth)}` : toLocalYMD(today).substring(0, 7);
+      // Determine the month key to look up (YYYY-MM format)
+      // For 'today', 'yesterday', 'mtd', 'custom' it uses the current actual month or derived period start.
+      // We will prefer the view's selected standard year/month if "month" period is selected.
+      let targetMonthKey = '';
+      if (period === 'month') {
+        if (selMonth === 0) {
+          // If whole year is selected, just use the first month to grab *a* target or sum? 
+          // Usually, targets are per month so if whole year is selected, we might want to scale it.
+          // For now just grab standard current month format or return 0 to avoid massive skew.
+          targetMonthKey = `${selYear}-01`;
+        } else {
+          targetMonthKey = `${selYear}-${pad2(selMonth)}`;
+        }
+      } else if (period === 'custom' && customStart) {
+        targetMonthKey = customStart.substring(0, 7);
+      } else {
+        targetMonthKey = toLocalYMD(today).substring(0, 7);
+      }
+
 
       // Helper function to check candidates in a specific month
       const checkTbm = (monthKey: string) => {
         const tbm = targetsByMonth[monthKey];
         if (tbm) {
           for (const c of candidates) {
-            if (tbm[c] != null) return safeNum(tbm[c]);
+            if (tbm[c] != null && !isNaN(tbm[c])) return safeNum(tbm[c]);
           }
         }
         return null;
@@ -714,10 +732,10 @@ export default function EmployeesPage() {
       let target = checkTbm(targetMonthKey);
       if (target !== null) return target;
 
-      // 2. Fallback to default flat targets object
+      // 2. Fallback to default flat targets object if month-specific target is not found
       for (const c of candidates) {
         const v = targetsData[c];
-        if (v != null) return safeNum(v);
+        if (v != null && !isNaN(v)) return safeNum(v);
       }
 
       return 0;
