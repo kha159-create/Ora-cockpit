@@ -95,6 +95,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const transSet: Record<string, Set<string>> = {};
         const empAgg: Record<string, Record<string, { sales: number, trans_set: Set<string> }>> = {};
 
+        // --- Ramadan Shifts Aggregation ---
+        // shift1: 06:00 - 11:30
+        // shift2: 11:30 - 18:00
+        // shift3: 18:00 - 06:00 (Night)
+        const shiftAgg: Record<string, { morning: number, afternoon: number, night: number }> = {};
+
         for (const t of transactions) {
             if (t.transactionStatus === 'Voided') continue;
 
@@ -102,6 +108,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             let staff = t.SalesGroup || '';
             let amount = Math.abs(parseFloat(t.netAmountInclTax || t.NetAmount || '0.0'));
             let receipt = String(t.transactionId || t.ReceiptId || '');
+
+            // Get transaction time (Dynamics returns UTC, so we add 3 hours for KSA)
+            let txDateStr = t.ReceiptDateRequested || t.CreatedDateTime || t.TransactionDate;
+            let decimalTime = 0;
+            if (txDateStr) {
+                const dt = new Date(txDateStr);
+                const ksaHours = (dt.getUTCHours() + 3) % 24;
+                const ksaMinutes = dt.getUTCMinutes();
+                decimalTime = ksaHours + (ksaMinutes / 60);
+            }
 
             store = String(store).trim();
             staff = String(staff).trim();
@@ -124,6 +140,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 empAgg[store][staff].sales += amount;
                 if (receipt) empAgg[store][staff].trans_set.add(receipt);
             }
+
+            // Ramadan Shifts Check
+            if (!shiftAgg[store]) {
+                shiftAgg[store] = { morning: 0, afternoon: 0, night: 0 };
+            }
+            if (decimalTime >= 6 && decimalTime < 11.5) {
+                shiftAgg[store].morning += amount;
+            } else if (decimalTime >= 11.5 && decimalTime < 18) {
+                shiftAgg[store].afternoon += amount;
+            } else {
+                shiftAgg[store].night += amount;
+            }
         }
 
         // 4. Format Output
@@ -134,6 +162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             sales: Object.entries(salesAgg).map(([k, v]) => [targetDateStr, k, Number(v.toFixed(2))]),
             transactions: Object.entries(transSet).map(([k, set]) => [targetDateStr, k, set.size]),
             visitors: [],
+            shifts: shiftAgg, // <-- New Shifts Property for UI
             employee_history: {} as Record<string, any[]>
         };
 

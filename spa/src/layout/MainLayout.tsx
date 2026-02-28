@@ -21,8 +21,7 @@ import {
 } from '../components/Icons';
 import { loadManagementData, loadProductAnalysisData, loadStockData } from '../services/upstreamData';
 import { ProductInquiryModal } from '../components/products/ProductInquiryModal';
-import { LiveSalesModal } from '../components/dashboard/LiveSalesModal'; // Added
-import { useLiveSalesData } from '../hooks/useLiveSalesData'; // Added
+import { LiveSalesModal } from '../components/dashboard/LiveSalesModal';
 import { formatSAR } from '../utils/formatting';
 
 const baseNavItems = [
@@ -76,15 +75,8 @@ export default function MainLayout() {
   const [globalHistory, setGlobalHistory] = useState<Record<string, any[]>>({});
   const [globalMeta, setGlobalMeta] = useState<any>(null);
 
-  // Live Sales Data Hook
-  const { calculateLiveData, isAdminOrAuditor: isUserAdmin } = useLiveSalesData();
+  // Live Sales Modal State
   const [liveModalOpen, setLiveModalOpen] = useState(false);
-  const [liveManager, setLiveManager] = useState('all');
-
-  // Memoize live data based on current manager filter
-  const { liveData, managersList } = useMemo(() => {
-    return calculateLiveData(liveManager);
-  }, [calculateLiveData, liveManager]);
 
 
   // Global Keyboard Shortcut for Search (Ctrl+K or Cmd+K)
@@ -406,12 +398,7 @@ export default function MainLayout() {
       <LiveSalesModal
         isOpen={liveModalOpen}
         onClose={() => setLiveModalOpen(false)}
-        liveData={liveData}
         formatSAR={formatSAR}
-        isAdminOrAuditor={isUserAdmin}
-        manager={liveManager}
-        setManager={setLiveManager}
-        managers={managersList}
       />
     </div>
   );

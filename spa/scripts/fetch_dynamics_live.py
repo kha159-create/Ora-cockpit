@@ -124,6 +124,12 @@ def fetch_dynamics_live_data():
     trans_set = {} # store -> set(receiptId)
     emp_agg = {}   # store -> { emp -> { sales: 0, trans_set: set() } }
     
+    # --- Ramadan Shifts Aggregation ---
+    # shift1: 06:00 - 11:30 (Morning)
+    # shift2: 11:30 - 18:00 (Afternoon)
+    # shift3: 18:00 - 06:00 (Night)
+    shift_agg = {} # store -> { morning: 0, afternoon: 0, night: 0 }
+    
     for t in transactions:
         # Ignore Voided transactions like import_dynamics_raw.py does
         if t.get('transactionStatus') == 'Voided':
@@ -138,6 +144,21 @@ def fetch_dynamics_live_data():
         amount = abs(float(t.get('netAmountInclTax') or t.get('NetAmount') or 0.0))
         receipt = str(t.get('transactionId') or t.get('ReceiptId') or '')
         
+        # Shift Time parsing
+        tx_date_str = t.get('ReceiptDateRequested') or t.get('CreatedDateTime') or t.get('TransactionDate')
+        decimal_time = 0.0
+        if tx_date_str:
+            try:
+                # e.g., "2026-03-01T14:30:15Z"
+                dt = datetime.fromisoformat(tx_date_str.replace('Z', '+00:00'))
+                # Convert to UTC+3 (KSA)
+                ksa_dt = dt.astimezone(timezone.utc)
+                ksa_hours = (ksa_dt.hour + 3) % 24
+                ksa_minutes = ksa_dt.minute
+                decimal_time = ksa_hours + (ksa_minutes / 60.0)
+            except Exception:
+                pass
+
         if not store: continue
         
         store = str(store).strip()
@@ -161,6 +182,17 @@ def fetch_dynamics_live_data():
             emp_agg[store][staff]['sales'] += amount
             if receipt:
                 emp_agg[store][staff]['trans_set'].add(receipt)
+                
+        # Aggregate Ramadan Shifts
+        if store not in shift_agg:
+            shift_agg[store] = {'morning': 0.0, 'afternoon': 0.0, 'night': 0.0}
+            
+        if 6.0 <= decimal_time < 11.5:
+            shift_agg[store]['morning'] += amount
+        elif 11.5 <= decimal_time < 18.0:
+            shift_agg[store]['afternoon'] += amount
+        else:
+            shift_agg[store]['night'] += amount
     # 4. Format Output for Frontend
     output = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -168,6 +200,7 @@ def fetch_dynamics_live_data():
         "sales": [[today_str, k, round(v, 2)] for k, v in sales_agg.items()],
         "transactions": [[today_str, k, len(v)] for k, v in trans_set.items()],
         "visitors": [], # Dynamics might not have Visitors (footfall). We leave empty, frontend uses existing.
+        "shifts": shift_agg,
         "employee_history": {}
     }
     

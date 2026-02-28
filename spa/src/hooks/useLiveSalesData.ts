@@ -72,8 +72,11 @@ export function useLiveSalesData() {
 
 
     // Calculation Logic
-    const calculateLiveData = useCallback((manager: string = 'all', branch: string = 'all', city: string = 'all') => {
+    const calculateLiveData = useCallback((manager: string = 'all', branch: string = 'all', city: string = 'all', targetDateStr?: string) => {
         if (!raw || !empRaw) return { liveData: { totals: { sales: 0, trans: 0, target: 0 }, stores: [] }, managersList: [] };
+
+        const effectiveDateStr = targetDateStr || todayStr;
+        const isToday = effectiveDateStr === todayStr;
 
         const meta = raw.store_meta || {};
         const storesMap = raw.stores || {};
@@ -81,12 +84,8 @@ export function useLiveSalesData() {
         const names: Record<string, string> = empRaw.employee_names || {};
         const empTargets: Record<string, number> = empRaw.targets || {};
 
-        // Determine Allowed Stores Code from DashboardPage logic
-        // We need to replicate the `allowedStoreIds` logic (lines 390-427 of DashboardPage)
-        // Simplified version:
         const effectiveManager = isAdminOrAuditor(user?.role) ? manager : (user?.name || manager);
 
-        // 1. Filter Check
         const allowedStoreIds = new Set<string>();
         Object.keys(meta).forEach((sid) => {
             const m = meta[sid];
@@ -95,15 +94,11 @@ export function useLiveSalesData() {
             if (city !== 'all' && String(m?.city || '') !== city) return;
             allowedStoreIds.add(sid);
         });
-        // Fallback if no specific filter but we have access to some? 
-        // If Admin and all selected -> add all.
         if (allowedStoreIds.size === 0 && branch === 'all' && effectiveManager === 'all' && city === 'all') {
             Object.keys(storesMap).forEach((sid) => allowedStoreIds.add(sid));
         }
 
-        // 2. Managers List (for UI)
         const managersList = Array.from(new Set(Object.values(meta).map((m: any) => String(m?.manager)))).sort() as string[];
-
 
         const byStore: Record<string, {
             sales: number;
@@ -115,21 +110,21 @@ export function useLiveSalesData() {
             dailyReq: number;
             remainingDays: number;
             achievement: number;
+            shifts?: { morning: number, afternoon: number, night: number };
             employees: Record<string, { sales: number; trans: number; name: string; achievement: number; dailyTarget: number }>
         }> = {};
 
-        const now = new Date();
-        const currentMonthKey = todayStr.substring(0, 7);
+        const now = new Date(effectiveDateStr);
+        const currentMonthKey = effectiveDateStr.substring(0, 7);
         const startOfMonthStr = `${currentMonthKey}-01`;
         const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
         const remainingDays = daysInMonth - now.getDate() + 1;
 
-        // Pre-calculate MTD sales for employees
         const empMTDSales: Record<string, number> = {};
         Object.values(historyData).forEach((records) => {
             (records || []).forEach((rec: any) => {
                 const dt = rec?.[0];
-                if (dt < startOfMonthStr || dt > todayStr) return;
+                if (dt < startOfMonthStr || dt > effectiveDateStr) return;
                 const rawId = rec?.[1];
                 const sales = Number(rec?.[2]) || 0;
                 let id = String(rawId || '').trim().split('-')[0].trim();
@@ -142,46 +137,47 @@ export function useLiveSalesData() {
             if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, target: 0, monthSales: 0, monthTarget: 0, dailyReq: 0, remainingDays, achievement: 0, employees: {} };
         };
 
-        // Extract Dynamics Today Data if available
         const dynSalesMap = new Map();
         const dynTransMap = new Map();
+        const dynShiftsMap = new Map();
         const dynEmpMap: Record<string, any[]> = {};
 
-        if (dynamicsLiveData && !dynamicsLiveData.error) {
+        if (isToday && dynamicsLiveData && !dynamicsLiveData.error) {
             (dynamicsLiveData.sales || []).forEach((row: any[]) => dynSalesMap.set(String(row[1]), Number(row[2])));
             (dynamicsLiveData.transactions || []).forEach((row: any[]) => dynTransMap.set(String(row[1]), Number(row[2])));
+            Object.entries(dynamicsLiveData.shifts || {}).forEach(([sid, shiftsObj]) => dynShiftsMap.set(String(sid), shiftsObj));
 
             Object.entries(dynamicsLiveData.employee_history || {}).forEach(([sid, rows]) => {
                 dynEmpMap[sid] = rows as any[];
             });
         }
 
-        // Daily & Month Totals from Management Data
         (raw.sales || []).forEach(([d, sid, v]: any[]) => {
             const dateStr = String(d).substring(0, 10);
-            if (dateStr >= startOfMonthStr && dateStr <= todayStr) {
+            if (dateStr >= startOfMonthStr && dateStr <= effectiveDateStr) {
                 ensureStore(sid);
                 byStore[sid].monthSales += v || 0;
 
-                // If it is today, only use historical if no Dynamics data exists for this store
-                if (dateStr === todayStr) {
-                    if (!dynSalesMap.has(sid)) {
+                if (dateStr === effectiveDateStr) {
+                    if (!isToday || !dynSalesMap.has(sid)) {
                         byStore[sid].sales += v || 0;
                     }
                 }
             }
         });
 
-        // Apply Dynamics Live Sales if present
-        dynSalesMap.forEach((v, sid) => {
-            if (allowedStoreIds.has(sid)) {
-                ensureStore(sid);
-                byStore[sid].sales = v; // Override today's sales
-                // (Optional) We could add this to monthSales if the historical JSON doesn't include today yet.
-                // Assuming historical JSON stops at yesterday, we should add today'live dyn sales to the MTD total:
-                byStore[sid].monthSales += v;
-            }
-        });
+        if (isToday) {
+            dynSalesMap.forEach((v, sid) => {
+                if (allowedStoreIds.has(sid)) {
+                    ensureStore(sid);
+                    byStore[sid].sales = v;
+                    byStore[sid].monthSales += v;
+                    if (dynShiftsMap.has(sid)) {
+                        byStore[sid].shifts = dynShiftsMap.get(sid) as { morning: number, afternoon: number, night: number };
+                    }
+                }
+            });
+        }
 
         (raw.targets || []).forEach(([d, sid, v]: any[]) => {
             const dateStr = String(d).substring(0, 10);
@@ -192,45 +188,44 @@ export function useLiveSalesData() {
         });
 
         (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
-            if (String(d).startsWith(todayStr)) {
+            if (String(d).startsWith(effectiveDateStr)) {
                 ensureStore(sid);
-                if (!dynTransMap.has(sid)) {
+                if (!isToday || !dynTransMap.has(sid)) {
                     byStore[sid].trans += v || 0;
                 }
             }
         });
 
-        dynTransMap.forEach((v, sid) => {
-            if (allowedStoreIds.has(sid)) {
-                ensureStore(sid);
-                byStore[sid].trans = v;
-            }
-        });
+        if (isToday) {
+            dynTransMap.forEach((v, sid) => {
+                if (allowedStoreIds.has(sid)) {
+                    ensureStore(sid);
+                    byStore[sid].trans = v;
+                }
+            });
+        }
+
         (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
-            if (String(d).startsWith(todayStr)) {
+            if (String(d).startsWith(effectiveDateStr)) {
                 ensureStore(sid);
                 byStore[sid].visitors += v || 0;
             }
         });
 
-        // Store Calculations
         Object.values(byStore).forEach(s => {
-            const monthSalesUntilYesterday = s.monthSales - s.sales; // Approx
+            const monthSalesUntilYesterday = s.monthSales - s.sales;
             const remainingForMonth = Math.max(0, s.monthTarget - monthSalesUntilYesterday);
             s.dailyReq = remainingDays > 0 ? remainingForMonth / remainingDays : 0;
-
             s.achievement = s.dailyReq > 0 ? (s.sales / s.dailyReq) * 100 : 0;
         });
 
-        // Employee Data for Today
-        // Either use Dynamics live employee data OR fallback to historical JSON if Dynamics is unavailable
-        const empSource = Object.keys(dynEmpMap).length > 0 ? dynEmpMap : historyData;
+        const empSource = (isToday && Object.keys(dynEmpMap).length > 0) ? dynEmpMap : historyData;
 
         Object.entries(empSource).forEach(([storeCode, records]) => {
             ensureStore(storeCode);
             for (const rec of records || []) {
                 const date = rec?.[0];
-                if (!String(date).startsWith(todayStr)) continue;
+                if (!String(date).startsWith(effectiveDateStr)) continue;
                 const rawId = rec?.[1];
                 const sales = Number(rec?.[2]) || 0;
                 const trans = Number(rec?.[3]) || 0;
