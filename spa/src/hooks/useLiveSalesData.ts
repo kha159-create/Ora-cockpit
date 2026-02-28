@@ -10,13 +10,7 @@ function toYMD(d: Date) {
 }
 
 function getEffectiveDate() {
-    const now = new Date();
-    if (now.getHours() < 1) {
-        const d = new Date(now);
-        d.setDate(now.getDate() - 1);
-        return d;
-    }
-    return now;
+    return new Date();
 }
 
 function isAdminOrAuditor(role?: string) {

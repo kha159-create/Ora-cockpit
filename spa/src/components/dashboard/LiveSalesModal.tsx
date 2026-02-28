@@ -71,6 +71,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
 }) => {
     const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
     const [expandedEmpId, setExpandedEmpId] = useState<string | null>(null);
+    const [viewDate, setViewDate] = useState<'today' | 'yesterday'>('today');
 
     // Calculate totals on the fly if needed, or use passed totals
     // The passed totals might not exactly match the sum of displayed stores if filtering is complex upstream
@@ -90,6 +91,23 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
         visitors: liveData.stores.reduce((acc, s) => acc + (s.visitors || 0), 0)
     };
 
+    const handleRefresh = async (targetDate: 'today' | 'yesterday') => {
+        try {
+            let apiUrl = '/api/fetch-live-sales';
+            if (targetDate === 'yesterday') {
+                const d = new Date();
+                d.setDate(d.getDate() - 1);
+                const yStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                apiUrl += `?date=${yStr}`;
+            }
+            const res = await fetch(apiUrl);
+            if (!res.ok) throw new Error('API Error');
+            setTimeout(() => window.location.reload(), 500);
+        } catch (e) {
+            console.error("Failed to refresh live sales", e);
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -104,36 +122,41 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                         <div>
                             <h2 className="text-xl font-bold flex items-center gap-2">
                                 <span className="bg-white/20 text-white p-1.5 rounded-lg backdrop-blur-sm"><SalesIcon /></span>
-                                <span>مبيعات اليوم — لايف</span>
+                                <span>{viewDate === 'today' ? 'مبيعات اليوم' : 'مبيعات الأمس'} — لايف</span>
                             </h2>
                             <div className="flex items-center gap-3 mt-2">
-                                <p className="text-orange-100 text-xs">
-                                    🕒 آخر تحديث: {new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
-                                </p>
+                                <div className="flex bg-white/10 rounded-lg p-0.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setViewDate('today'); handleRefresh('today'); }}
+                                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${viewDate === 'today' ? 'bg-white text-orange-600 shadow-sm' : 'text-orange-100 hover:text-white'}`}
+                                    >
+                                        اليوم
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setViewDate('yesterday'); handleRefresh('yesterday'); }}
+                                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${viewDate === 'yesterday' ? 'bg-white text-orange-600 shadow-sm' : 'text-orange-100 hover:text-white'}`}
+                                    >
+                                        الأمس
+                                    </button>
+                                </div>
+
                                 <button
                                     type="button"
-                                    className="bg-white/20 hover:bg-white/30 text-white text-xs px-2 py-1 rounded flex items-center gap-1 transition-colors"
-                                    onClick={async () => {
-                                        try {
-                                            // Call Vercel serverless function to update the live json
-                                            const res = await fetch('/api/fetch-live-sales');
-                                            if (!res.ok) throw new Error('API Error');
-                                            // Wait a tiny bit for fs writes to settle on edge (if applicable) then reload UI
-                                            setTimeout(() => {
-                                                window.location.reload();
-                                            }, 500);
-                                        } catch (e) {
-                                            console.error("Failed to refresh live sales", e);
-                                        }
-                                    }}
+                                    className="bg-white/20 hover:bg-white/30 text-white text-xs px-2 py-1.5 rounded flex items-center gap-1 transition-colors ml-2"
+                                    onClick={() => handleRefresh(viewDate)}
                                 >
                                     <span>تحديث 🔄</span>
                                 </button>
+                                <p className="text-orange-100 text-xs hidden sm:block">
+                                    🕒 آخر تحديث: {new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
                             </div>
                         </div>
                         <button
                             type="button"
-                            className="bg-white/10 hover:bg-white/20 text-white p-2 rounded-xl transition-colors"
+                            className="bg-white/10 hover:bg-white/20 text-white p-2 rounded-xl transition-colors self-start"
                             onClick={onClose}
                         >
                             ✕

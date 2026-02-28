@@ -44,7 +44,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // 2. Query Retail Transactions
-        // Use the exact same logic as fetch_dynamics_live.py
         const todayFn = () => {
             const d = new Date();
             const year = d.getFullYear();
@@ -54,8 +53,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         };
         const todayStr = todayFn();
 
+        // Use requested date or default to today
+        let targetDateStr = todayStr;
+        if (req.query.date && typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)) {
+            targetDateStr = req.query.date;
+        }
+
         const apiUrl = `${RESOURCE}/data/RetailTransactionSalesTransBIEntities`;
-        const filterStr = `ReceiptDateRequested ge ${todayStr}T00:00:00Z and ReceiptDateRequested le ${todayStr}T23:59:59Z`;
+        const filterStr = `ReceiptDateRequested ge ${targetDateStr}T00:00:00Z and ReceiptDateRequested le ${targetDateStr}T23:59:59Z`;
 
         let reqUrl: string | null = `${apiUrl}?$filter=${filterStr}`;
         const headers = {
@@ -125,9 +130,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Format: [date, store or empId, sales, trans_count]
         const output = {
             timestamp: new Date().toISOString(),
-            date: todayStr,
-            sales: Object.entries(salesAgg).map(([k, v]) => [todayStr, k, Number(v.toFixed(2))]),
-            transactions: Object.entries(transSet).map(([k, set]) => [todayStr, k, set.size]),
+            date: targetDateStr,
+            sales: Object.entries(salesAgg).map(([k, v]) => [targetDateStr, k, Number(v.toFixed(2))]),
+            transactions: Object.entries(transSet).map(([k, set]) => [targetDateStr, k, set.size]),
             visitors: [],
             employee_history: {} as Record<string, any[]>
         };
@@ -135,7 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         for (const [st, emps] of Object.entries(empAgg)) {
             const records: any[] = [];
             for (const [empId, metrics] of Object.entries(emps)) {
-                records.push([todayStr, empId, Number(metrics.sales.toFixed(2)), metrics.trans_set.size]);
+                records.push([targetDateStr, empId, Number(metrics.sales.toFixed(2)), metrics.trans_set.size]);
             }
             output.employee_history[st] = records;
         }
