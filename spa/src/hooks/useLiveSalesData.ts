@@ -29,6 +29,7 @@ export function useLiveSalesData() {
     const [lastUpdate, setLastUpdate] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [dynamicsLiveData, setDynamicsLiveData] = useState<any>(null);
 
     const user = getCurrentUser();
     const todayStr = toYMD(getEffectiveDate());
@@ -49,14 +50,21 @@ export function useLiveSalesData() {
 
     const loadData = useCallback(() => {
         setRefreshing(true);
-        Promise.all([loadManagementData(), loadEmployeesData()])
-            .then(([m, e]) => {
+
+        // Fetch static historical files + the new live dynamic JSON
+        const pMgmt = loadManagementData();
+        const pEmp = loadEmployeesData();
+        const pLive = fetch('/data/live_dynamics.json').then(res => res.json()).catch(() => null);
+
+        Promise.all([pMgmt, pEmp, pLive])
+            .then(([m, e, liveData]) => {
                 setRaw(m);
                 setEmpRaw(e);
+                setDynamicsLiveData(liveData);
                 setLastUpdate(new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
                 setError(null);
             })
-            .catch((e) => setError(e?.message || String(e)))
+            .catch((err) => setError(err?.message || String(err)))
             .finally(() => setRefreshing(false));
     }, []);
 
@@ -140,13 +148,44 @@ export function useLiveSalesData() {
             if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, target: 0, monthSales: 0, monthTarget: 0, dailyReq: 0, remainingDays, achievement: 0, employees: {} };
         };
 
+        // Extract Dynamics Today Data if available
+        const dynSalesMap = new Map();
+        const dynTransMap = new Map();
+        const dynEmpMap: Record<string, any[]> = {};
+
+        if (dynamicsLiveData && !dynamicsLiveData.error) {
+            (dynamicsLiveData.sales || []).forEach((row: any[]) => dynSalesMap.set(String(row[1]), Number(row[2])));
+            (dynamicsLiveData.transactions || []).forEach((row: any[]) => dynTransMap.set(String(row[1]), Number(row[2])));
+
+            Object.entries(dynamicsLiveData.employee_history || {}).forEach(([sid, rows]) => {
+                dynEmpMap[sid] = rows as any[];
+            });
+        }
+
         // Daily & Month Totals from Management Data
         (raw.sales || []).forEach(([d, sid, v]: any[]) => {
             const dateStr = String(d).substring(0, 10);
             if (dateStr >= startOfMonthStr && dateStr <= todayStr) {
                 ensureStore(sid);
                 byStore[sid].monthSales += v || 0;
-                if (dateStr === todayStr) byStore[sid].sales += v || 0;
+
+                // If it is today, only use historical if no Dynamics data exists for this store
+                if (dateStr === todayStr) {
+                    if (!dynSalesMap.has(sid)) {
+                        byStore[sid].sales += v || 0;
+                    }
+                }
+            }
+        });
+
+        // Apply Dynamics Live Sales if present
+        dynSalesMap.forEach((v, sid) => {
+            if (allowedStoreIds.has(sid)) {
+                ensureStore(sid);
+                byStore[sid].sales = v; // Override today's sales
+                // (Optional) We could add this to monthSales if the historical JSON doesn't include today yet.
+                // Assuming historical JSON stops at yesterday, we should add today'live dyn sales to the MTD total:
+                byStore[sid].monthSales += v;
             }
         });
 
@@ -161,7 +200,16 @@ export function useLiveSalesData() {
         (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
             if (String(d).startsWith(todayStr)) {
                 ensureStore(sid);
-                byStore[sid].trans += v || 0;
+                if (!dynTransMap.has(sid)) {
+                    byStore[sid].trans += v || 0;
+                }
+            }
+        });
+
+        dynTransMap.forEach((v, sid) => {
+            if (allowedStoreIds.has(sid)) {
+                ensureStore(sid);
+                byStore[sid].trans = v;
             }
         });
         (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
@@ -181,7 +229,10 @@ export function useLiveSalesData() {
         });
 
         // Employee Data for Today
-        Object.entries(historyData).forEach(([storeCode, records]) => {
+        // Either use Dynamics live employee data OR fallback to historical JSON if Dynamics is unavailable
+        const empSource = Object.keys(dynEmpMap).length > 0 ? dynEmpMap : historyData;
+
+        Object.entries(empSource).forEach(([storeCode, records]) => {
             ensureStore(storeCode);
             for (const rec of records || []) {
                 const date = rec?.[0];
@@ -197,16 +248,7 @@ export function useLiveSalesData() {
                 const eMTDSales = empMTDSales[id] || 0;
                 // Remaining Daily Logic
                 const eDailyTarget = (eTarget > eMTDSales && remainingDays > 0) ? (eTarget - eMTDSales) / remainingDays : 0;
-                // const eAchievement = eDailyTarget > 0 ? (sales / eDailyTarget) * 100 : 0; // Achievement against Today's requirement?
-                // Dashboard used: eTarget > 0 ? (eMTDSales / eTarget) * 100 : 0; -> This is MONTHLY achievement.
-                // But the modal shows a progress bar... let's check LiveSalesModal again.
-                // The modal uses `emp.achievement` for the progress bar.
-                // Dashboard logic: `const eAchievement = eTarget > 0 ? (eMTDSales / eTarget) * 100 : 0;` (Month Ach)
-                // Wait, LiveSalesModal line 293: `Math.round(emp.achievement)%`.
-                // If it's daily view, maybe we want Daily Achievement?
-                // Dashboard code had: `achievement: e.dailyTarget > 0 ? (e.sales / e.dailyTarget) * 100 : 0` inside the map.
-                // Line 808 of DashboardPage.tsx.
-                // Let's use THAT one.
+
                 const effectiveDailyTarget = eDailyTarget > 0 ? eDailyTarget : (eTarget / daysInMonth);
                 const eAchievement = effectiveDailyTarget > 0 ? (sales / effectiveDailyTarget) * 100 : 0;
 

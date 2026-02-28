@@ -28,12 +28,26 @@ jobs:
             fi
           done
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Run Dynamics Live Sales Fetch
+        env:
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+        run: |
+          pip install requests msal python-dotenv
+          python spa/scripts/fetch_dynamics_live.py
+
       - name: Commit and push if changed
         run: |
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
           git add management_data.json employees_data.json product_analysis_data.json stagnant_data.json offers_data.json audit_missing_emp.json 2>/dev/null || true
-          git add spa/public/management_data.json spa/public/employees_data.json spa/public/product_analysis_data.json spa/public/stagnant_data.json spa/public/offers_data.json spa/public/audit_missing_emp.json 2>/dev/null || true
+          git add spa/public/management_data.json spa/public/employees_data.json spa/public/product_analysis_data.json spa/public/stagnant_data.json spa/public/offers_data.json spa/public/audit_missing_emp.json spa/public/data/live_dynamics.json 2>/dev/null || true
           git diff --staged --quiet || (git commit -m "chore: sync data from ALAAWF2/orange-dashboard [auto]" && git push origin main)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

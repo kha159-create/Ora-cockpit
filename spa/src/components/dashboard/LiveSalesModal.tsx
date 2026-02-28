@@ -106,9 +106,30 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                 <span className="bg-white/20 text-white p-1.5 rounded-lg backdrop-blur-sm"><SalesIcon /></span>
                                 <span>مبيعات اليوم — لايف</span>
                             </h2>
-                            <p className="text-orange-100 text-xs mt-1">
-                                🕒 آخر تحديث: {new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
-                            </p>
+                            <div className="flex items-center gap-3 mt-2">
+                                <p className="text-orange-100 text-xs">
+                                    🕒 آخر تحديث: {new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                                <button
+                                    type="button"
+                                    className="bg-white/20 hover:bg-white/30 text-white text-xs px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                                    onClick={async () => {
+                                        try {
+                                            // Call Vercel serverless function to update the live json
+                                            const res = await fetch('/api/fetch-live-sales');
+                                            if (!res.ok) throw new Error('API Error');
+                                            // Wait a tiny bit for fs writes to settle on edge (if applicable) then reload UI
+                                            setTimeout(() => {
+                                                window.location.reload();
+                                            }, 500);
+                                        } catch (e) {
+                                            console.error("Failed to refresh live sales", e);
+                                        }
+                                    }}
+                                >
+                                    <span>تحديث 🔄</span>
+                                </button>
+                            </div>
                         </div>
                         <button
                             type="button"

@@ -52,16 +52,16 @@ const getRange = (mode: RangeMode, stdYear: number, stdMonth: string, customStar
             const targetYear = stdYear && stdYear > 2000 ? stdYear : today.getFullYear();
             const range = getSeasonDateRange(selectedSeason, targetYear);
             if (range) {
-                const todayStr = toYMD(today);
-                // Cap to 'today' if the season is currently ongoing
-                if (range.start <= todayStr && range.end > todayStr) {
-                    range.end = todayStr;
+                const yesterdayStr = toYMD(yesterday);
+                // Cap to 'yesterday' if the season is currently ongoing or in the future
+                if (range.start <= yesterdayStr && range.end > yesterdayStr) {
+                    range.end = yesterdayStr;
                 }
                 // Also cap if the season hasn't started yet (prevent future dates)
-                if (range.start > todayStr) {
-                    // Usually handled by UI, but we can set it to today for safety
-                    range.start = todayStr;
-                    range.end = todayStr;
+                // Although rare, if the whole season is in the future, set both to yesterday
+                if (range.start > yesterdayStr) {
+                    range.start = yesterdayStr;
+                    range.end = yesterdayStr;
                 }
                 return range;
             }
