@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { SalesIcon, InvoicesIcon, ChevronDownIcon, VisitorsIcon } from '../Icons';
+import { useLiveSalesData } from '../../hooks/useLiveSalesData';
 
 function KPICard({ title, value, format, icon, trendValue, className }: any) {
     return (
@@ -35,7 +36,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     onClose,
     formatSAR,
 }) => {
-    const { calculateLiveData, isAdminOrAuditor: checkAdmin } = require('../../hooks/useLiveSalesData').useLiveSalesData();
+    const { calculateLiveData, isAdminOrAuditor: checkAdmin } = useLiveSalesData();
     const [manager, setManager] = useState('all');
     const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
     const [expandedEmpId, setExpandedEmpId] = useState<string | null>(null);
