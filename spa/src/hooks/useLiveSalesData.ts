@@ -48,7 +48,7 @@ export function useLiveSalesData() {
         // Fetch static historical files + the new live dynamic JSON
         const pMgmt = loadManagementData();
         const pEmp = loadEmployeesData();
-        const pLive = fetch('/data/live_dynamics.json').then(res => res.json()).catch(() => null);
+        const pLive = fetch('./data/live_dynamics.json').then(res => res.json()).catch(() => null);
 
         Promise.all([pMgmt, pEmp, pLive])
             .then(([m, e, liveData]) => {
@@ -60,6 +60,25 @@ export function useLiveSalesData() {
             })
             .catch((err) => setError(err?.message || String(err)))
             .finally(() => setRefreshing(false));
+    }, []);
+
+    const fetchLiveFromAPI = useCallback(async (targetDateStr: string) => {
+        setRefreshing(true);
+        try {
+            // Point to the Vercel app domain since GitHub Pages doesn't host Serverless functions
+            const apiUrl = `https://ora-cockpit.vercel.app/api/fetch-live-sales?date=${targetDateStr}`;
+            const res = await fetch(apiUrl);
+            if (!res.ok) throw new Error('API Sync Failed');
+            const data = await res.json();
+
+            setDynamicsLiveData(data);
+            setLastUpdate(new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+            setError(null);
+        } catch (err: any) {
+            setError('Failed to fetch from API: ' + (err?.message || String(err)));
+        } finally {
+            setRefreshing(false);
+        }
     }, []);
 
     useEffect(() => {
@@ -142,7 +161,9 @@ export function useLiveSalesData() {
         const dynShiftsMap = new Map();
         const dynEmpMap: Record<string, any[]> = {};
 
-        if (isToday && dynamicsLiveData && !dynamicsLiveData.error) {
+        const isDynMatch = dynamicsLiveData && !dynamicsLiveData.error && (dynamicsLiveData.date === effectiveDateStr);
+
+        if (isDynMatch) {
             (dynamicsLiveData.sales || []).forEach((row: any[]) => dynSalesMap.set(String(row[1]), Number(row[2])));
             (dynamicsLiveData.transactions || []).forEach((row: any[]) => dynTransMap.set(String(row[1]), Number(row[2])));
             Object.entries(dynamicsLiveData.shifts || {}).forEach(([sid, shiftsObj]) => dynShiftsMap.set(String(sid), shiftsObj));
@@ -159,14 +180,14 @@ export function useLiveSalesData() {
                 byStore[sid].monthSales += v || 0;
 
                 if (dateStr === effectiveDateStr) {
-                    if (!isToday || !dynSalesMap.has(sid)) {
+                    if (!isDynMatch || !dynSalesMap.has(sid)) {
                         byStore[sid].sales += v || 0;
                     }
                 }
             }
         });
 
-        if (isToday) {
+        if (isDynMatch) {
             dynSalesMap.forEach((v, sid) => {
                 if (allowedStoreIds.has(sid)) {
                     ensureStore(sid);
@@ -190,13 +211,13 @@ export function useLiveSalesData() {
         (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
             if (String(d).startsWith(effectiveDateStr)) {
                 ensureStore(sid);
-                if (!isToday || !dynTransMap.has(sid)) {
+                if (!isDynMatch || !dynTransMap.has(sid)) {
                     byStore[sid].trans += v || 0;
                 }
             }
         });
 
-        if (isToday) {
+        if (isDynMatch) {
             dynTransMap.forEach((v, sid) => {
                 if (allowedStoreIds.has(sid)) {
                     ensureStore(sid);
@@ -219,7 +240,7 @@ export function useLiveSalesData() {
             s.achievement = s.dailyReq > 0 ? (s.sales / s.dailyReq) * 100 : 0;
         });
 
-        const empSource = (isToday && Object.keys(dynEmpMap).length > 0) ? dynEmpMap : historyData;
+        const empSource = (isDynMatch && Object.keys(dynEmpMap).length > 0) ? dynEmpMap : historyData;
 
         Object.entries(empSource).forEach(([storeCode, records]) => {
             ensureStore(storeCode);
@@ -299,6 +320,7 @@ export function useLiveSalesData() {
         refreshing,
         error,
         refresh: loadData,
+        fetchLiveFromAPI,
         lastUpdate,
         calculateLiveData,
         isAdminOrAuditor: isAdminOrAuditor(user?.role),

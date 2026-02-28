@@ -36,7 +36,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     onClose,
     formatSAR,
 }) => {
-    const { calculateLiveData, isAdminOrAuditor: checkAdmin } = useLiveSalesData();
+    const { calculateLiveData, fetchLiveFromAPI, isAdminOrAuditor: checkAdmin } = useLiveSalesData();
     const [manager, setManager] = useState('all');
     const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
     const [expandedEmpId, setExpandedEmpId] = useState<string | null>(null);
@@ -72,20 +72,12 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     };
 
     const handleRefresh = async (targetDate: 'today' | 'yesterday') => {
-        try {
-            let apiUrl = '/api/fetch-live-sales';
-            if (targetDate === 'yesterday') {
-                const d = new Date();
-                d.setDate(d.getDate() - 1);
-                const yStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                apiUrl += `?date=${yStr}`;
-            }
-            const res = await fetch(apiUrl);
-            if (!res.ok) throw new Error('API Error');
-            setTimeout(() => window.location.reload(), 500);
-        } catch (e) {
-            console.error("Failed to refresh live sales", e);
+        const d = new Date();
+        if (targetDate === 'yesterday') {
+            d.setDate(d.getDate() - 1);
         }
+        const yStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        await fetchLiveFromAPI(yStr);
     };
 
     if (!isOpen) return null;
