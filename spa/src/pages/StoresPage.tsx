@@ -99,13 +99,9 @@ function getRange(mode: Mode, standardYear: number, standardMonth: string, custo
   let currEnd: Date;
 
   if (mode === 'mtd') {
-    // If today is the 1st of the month, and yesterday is the previous month,
-    // MTD should cover the current month (which is just today/empty) or fallback to yesterday's month.
-    // To match standard business logic: "MTD" usually means current month up to yesterday.
-    // If yesterday is in the previous month, "MTD" of the *current* month has no finished days.
-    // Let's ensure currStart is <= currEnd.
-    currStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), 1, 0, 0, 0); // Use yesterday's month for MTD to avoid empty 1st-of-month trap
-    currEnd = new Date(yesterday);
+    currStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0);
+    const mtdEnd = yesterday.getMonth() !== today.getMonth() ? today : yesterday;
+    currEnd = new Date(mtdEnd);
     currEnd.setHours(23, 59, 59, 999);
   } else if (mode === 'yesterday') {
     currStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0);
