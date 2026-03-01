@@ -62,25 +62,6 @@ export function useLiveSalesData() {
             .finally(() => setRefreshing(false));
     }, []);
 
-    const fetchLiveFromAPI = useCallback(async (targetDateStr: string) => {
-        setRefreshing(true);
-        try {
-            // Point to the Vercel app domain since GitHub Pages doesn't host Serverless functions
-            const apiUrl = `https://ora-cockpit.vercel.app/api/fetch-live-sales?date=${targetDateStr}`;
-            const res = await fetch(apiUrl);
-            if (!res.ok) throw new Error('API Sync Failed');
-            const data = await res.json();
-
-            setDynamicsLiveData(data);
-            setLastUpdate(new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-            setError(null);
-        } catch (err: any) {
-            setError('Failed to fetch from API: ' + (err?.message || String(err)));
-        } finally {
-            setRefreshing(false);
-        }
-    }, []);
-
     useEffect(() => {
         loadData();
         // Optional: Auto-refresh interval? user asked for "pulsing", maybe implied live?
@@ -320,7 +301,6 @@ export function useLiveSalesData() {
         refreshing,
         error,
         refresh: loadData,
-        fetchLiveFromAPI,
         lastUpdate,
         calculateLiveData,
         isAdminOrAuditor: isAdminOrAuditor(user?.role),

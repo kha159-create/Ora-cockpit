@@ -36,7 +36,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     onClose,
     formatSAR,
 }) => {
-    const { calculateLiveData, fetchLiveFromAPI, isAdminOrAuditor: checkAdmin } = useLiveSalesData();
+    const { calculateLiveData, refresh, isAdminOrAuditor: checkAdmin } = useLiveSalesData();
     const [manager, setManager] = useState('all');
     const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
     const [expandedEmpId, setExpandedEmpId] = useState<string | null>(null);
@@ -71,13 +71,8 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
         visitors: liveData.stores.reduce((acc: number, s: any) => acc + (s.visitors || 0), 0)
     };
 
-    const handleRefresh = async (targetDate: 'today' | 'yesterday') => {
-        const d = new Date();
-        if (targetDate === 'yesterday') {
-            d.setDate(d.getDate() - 1);
-        }
-        const yStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        await fetchLiveFromAPI(yStr);
+    const handleRefresh = async () => {
+        await refresh();
     };
 
     if (!isOpen) return null;
@@ -133,7 +128,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                 <button
                                     type="button"
                                     className="bg-white/20 hover:bg-white/30 text-white text-xs px-2 py-1.5 rounded flex items-center gap-1 transition-colors ml-2"
-                                    onClick={() => handleRefresh(viewDate)}
+                                    onClick={handleRefresh}
                                 >
                                     <span>تحديث 🔄</span>
                                 </button>
