@@ -40,18 +40,17 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     const [manager, setManager] = useState('all');
     const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
     const [expandedEmpId, setExpandedEmpId] = useState<string | null>(null);
-    const [viewDate, setViewDate] = useState<'today' | 'yesterday'>('today');
-    const [viewMode, setViewMode] = useState<'standard' | 'shifts'>('standard');
+    const [dateMode, setDateMode] = useState<'today' | 'yesterday'>('today');
 
     const isAdminOrAuditor = checkAdmin;
 
     // Memoize the calculated data internally
     const { liveData, managersList: managers } = React.useMemo(() => {
-        const targetDateStr = viewDate === 'yesterday'
+        const targetDateStr = dateMode === 'yesterday'
             ? (() => { const d = new Date(); d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })()
             : undefined;
         return calculateLiveData(manager, 'all', 'all', targetDateStr);
-    }, [calculateLiveData, manager, viewDate]);
+    }, [calculateLiveData, manager, dateMode]);
 
     // Calculate totals on the fly if needed, or use passed totals
     // The passed totals might not exactly match the sum of displayed stores if filtering is complex upstream
@@ -85,39 +84,23 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                         <div>
                             <h2 className="text-xl font-bold flex items-center gap-2">
                                 <span className="bg-white/20 text-white p-1.5 rounded-lg backdrop-blur-sm"><SalesIcon /></span>
-                                <span>{viewDate === 'today' ? 'مبيعات اليوم' : 'مبيعات الأمس'} — لايف</span>
+                                <span>{dateMode === 'today' ? 'مبيعات اليوم' : 'مبيعات الأمس'} — لايف</span>
                             </h2>
                             <div className="flex items-center gap-3 mt-2">
                                 <div className="flex bg-white/10 rounded-lg p-0.5">
                                     <button
                                         type="button"
-                                        onClick={() => { setViewDate('today'); }}
-                                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${viewDate === 'today' ? 'bg-white text-orange-600 shadow-sm' : 'text-orange-100 hover:text-white'}`}
+                                        onClick={() => { setDateMode('today'); }}
+                                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${dateMode === 'today' ? 'bg-white text-orange-600 shadow-sm' : 'text-orange-100 hover:text-white'}`}
                                     >
                                         اليوم
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => { setViewDate('yesterday'); }}
-                                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${viewDate === 'yesterday' ? 'bg-white text-orange-600 shadow-sm' : 'text-orange-100 hover:text-white'}`}
+                                        onClick={() => { setDateMode('yesterday'); }}
+                                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${dateMode === 'yesterday' ? 'bg-white text-orange-600 shadow-sm' : 'text-orange-100 hover:text-white'}`}
                                     >
                                         الأمس
-                                    </button>
-                                </div>
-                                <div className="flex bg-white/10 rounded-lg p-0.5 ml-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setViewMode('standard')}
-                                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${viewMode === 'standard' ? 'bg-white text-orange-600 shadow-sm' : 'text-orange-100 hover:text-white'}`}
-                                    >
-                                        قياسي
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setViewMode('shifts')}
-                                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${viewMode === 'shifts' ? 'bg-white text-orange-600 shadow-sm' : 'text-orange-100 hover:text-white'}`}
-                                    >
-                                        شفتات (رمضان)
                                     </button>
                                 </div>
 
@@ -208,41 +191,24 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                         <div className="flex flex-col sm:flex-row gap-4 w-full">
 
                                             <div className="flex-1 flex flex-col gap-2">
-                                                {viewMode === 'standard' ? (
-                                                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                                                        <div className="flex justify-between items-center bg-neutral-50 px-2 py-1 rounded">
-                                                            <span className="text-neutral-500 text-xs">زوار:</span>
-                                                            <span className="font-bold text-neutral-700">{Math.round(store.visitors || 0).toLocaleString()}</span>
-                                                        </div>
-                                                        <div className="flex justify-between items-center bg-neutral-50 px-2 py-1 rounded">
-                                                            <span className="text-neutral-500 text-xs">تحويل:</span>
-                                                            <span className="font-bold text-neutral-700">{(store.visitors || 0) > 0 ? ((store.trans / (store.visitors || 1)) * 100).toFixed(1) : 0}%</span>
-                                                        </div>
-                                                        <div className="flex justify-between items-center bg-neutral-50 px-2 py-1 rounded">
-                                                            <span className="text-neutral-500 text-xs">فواتير:</span>
-                                                            <span className="font-bold text-neutral-700">{store.trans}</span>
-                                                        </div>
-                                                        <div className="flex justify-between items-center bg-neutral-50 px-2 py-1 rounded">
-                                                            <span className="text-neutral-500 text-xs">معدل الفاتورة:</span>
-                                                            <span className="font-bold text-neutral-700">{store.trans > 0 ? formatSAR(store.sales / store.trans) : '0'}</span>
-                                                        </div>
+                                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                                    <div className="flex justify-between items-center bg-neutral-50 px-2 py-1 rounded">
+                                                        <span className="text-neutral-500 text-xs">زوار:</span>
+                                                        <span className="font-bold text-neutral-700">{Math.round(store.visitors || 0).toLocaleString()}</span>
                                                     </div>
-                                                ) : (
-                                                    <div className="grid grid-cols-3 gap-x-2 gap-y-2 text-sm h-full">
-                                                        <div className="flex flex-col justify-center items-center bg-blue-50 border border-blue-100 rounded p-1">
-                                                            <span className="text-blue-600 text-[10px] font-bold mb-1">الصباح (6-11:30)</span>
-                                                            <span className="font-black text-blue-900">{formatSAR(store.shifts?.morning || 0)}</span>
-                                                        </div>
-                                                        <div className="flex flex-col justify-center items-center bg-amber-50 border border-amber-100 rounded p-1">
-                                                            <span className="text-amber-600 text-[10px] font-bold mb-1">المساء (11:30-6)</span>
-                                                            <span className="font-black text-amber-900">{formatSAR(store.shifts?.afternoon || 0)}</span>
-                                                        </div>
-                                                        <div className="flex flex-col justify-center items-center bg-indigo-50 border border-indigo-100 rounded p-1">
-                                                            <span className="text-indigo-600 text-[10px] font-bold mb-1">الليل (8-3)</span>
-                                                            <span className="font-black text-indigo-900">{formatSAR(store.shifts?.night || 0)}</span>
-                                                        </div>
+                                                    <div className="flex justify-between items-center bg-neutral-50 px-2 py-1 rounded">
+                                                        <span className="text-neutral-500 text-xs">تحويل:</span>
+                                                        <span className="font-bold text-neutral-700">{(store.visitors || 0) > 0 ? ((store.trans / (store.visitors || 1)) * 100).toFixed(1) : 0}%</span>
                                                     </div>
-                                                )}
+                                                    <div className="flex justify-between items-center bg-neutral-50 px-2 py-1 rounded">
+                                                        <span className="text-neutral-500 text-xs">فواتير:</span>
+                                                        <span className="font-bold text-neutral-700">{store.trans}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center bg-neutral-50 px-2 py-1 rounded">
+                                                        <span className="text-neutral-500 text-xs">معدل الفاتورة:</span>
+                                                        <span className="font-bold text-neutral-700">{store.trans > 0 ? formatSAR(store.sales / store.trans) : '0'}</span>
+                                                    </div>
+                                                </div>
                                                 <div className="flex justify-between items-center bg-orange-50 px-2 py-1 rounded mt-auto">
                                                     <span className="text-orange-600 text-xs font-semibold">موظفين:</span>
                                                     <span className="font-bold text-orange-700">{Object.keys(store.employees).length}</span>
