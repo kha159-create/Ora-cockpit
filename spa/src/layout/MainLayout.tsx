@@ -124,7 +124,8 @@ export default function MainLayout() {
         loadStockData()
       ]);
       setGlobalMeta(mgmtRaw);
-      const pData = prodRaw.periods?.['mtd'] || prodRaw.periods?.['30d'] || prodRaw.periods?.['14d'] || prodRaw.periods?.['7d'] || null;
+      const getP = (p: string) => prodRaw.periods?.[p]?.catalog && Object.keys(prodRaw.periods[p].catalog).length > 0 ? prodRaw.periods[p] : null;
+      const pData = getP('mtd') || getP('30d') || getP('14d') || getP('7d') || null;
       if (!pData) return;
 
       const history = prodRaw.product_daily_history || {};

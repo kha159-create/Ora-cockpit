@@ -40,7 +40,8 @@ function getRange(
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
   if (mode === 'mtd') {
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
-    return { start: toYMD(start), end: toYMD(today) };
+    const endMtd = yesterday.getMonth() !== today.getMonth() ? today : yesterday;
+    return { start: toYMD(start), end: toYMD(endMtd) };
   }
   if (mode === 'custom') {
     const start = customStart || toYMD(new Date(today.getFullYear(), today.getMonth(), 1));

@@ -51,10 +51,9 @@ function getDefaultRange(mode: Mode, selYear?: number, selMonth?: number) {
   if (mode === 'today') return { start: toYMD(now), end: toYMD(now) };
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
   if (mode === 'mtd') {
-    // Standard MTD logic (up to yesterday). If yesterday is in the previous month, 
-    // we use yesterday's month as the start to avoid empty/invalid ranges (e.g., Mar 1 to Feb 28).
-    const startOfTargetMonth = new Date(yesterday.getFullYear(), yesterday.getMonth(), 1);
-    return { start: toYMD(startOfTargetMonth), end: toYMD(yesterday) };
+    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endMtd = yesterday.getMonth() !== now.getMonth() ? now : yesterday;
+    return { start: toYMD(startOfCurrentMonth), end: toYMD(endMtd) };
   }
   if (mode === 'month' && selYear != null && selMonth != null) {
     if (selMonth === 0) {
@@ -911,7 +910,8 @@ export default function DashboardPage() {
     // We only care about MTD for the dashboard summary usually, 
     // or match the dashboard's selected range if possible. 
     // Data issue: mtd might be empty in product_analysis_data.json, fallback to 30d or 7d.
-    const pData = prodRaw.periods?.['mtd'] || prodRaw.periods?.['30d'] || prodRaw.periods?.['14d'] || prodRaw.periods?.['7d'] || null;
+    const getP = (p: string) => prodRaw.periods?.[p]?.catalog && Object.keys(prodRaw.periods[p].catalog).length > 0 ? prodRaw.periods[p] : null;
+    const pData = getP('mtd') || getP('30d') || getP('14d') || getP('7d') || null;
     if (!pData) return null;
 
     const analysis: Record<string, any> = (pData?.analysis || {}) as any;

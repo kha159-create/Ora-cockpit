@@ -115,7 +115,8 @@ export default function OffersPage() {
     }
     if (period === 'mtd') {
       const s = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { start: ymd(s), end: yesterdayYMD, label: 'من أول الشهر' };
+      const endMtd = yesterday.getMonth() !== now.getMonth() ? now : yesterday;
+      return { start: ymd(s), end: ymd(endMtd), label: 'الشهر الحالي' };
     }
     if (period === 'custom' && customStart && customEnd) {
       return { start: customStart, end: customEnd, label: 'فترة مخصصة' };
