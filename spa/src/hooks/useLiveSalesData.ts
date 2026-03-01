@@ -23,7 +23,6 @@ export function useLiveSalesData() {
     const [lastUpdate, setLastUpdate] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [dynamicsLiveData, setDynamicsLiveData] = useState<any>(null);
 
     const user = getCurrentUser();
     const todayStr = toYMD(getEffectiveDate());
@@ -45,16 +44,13 @@ export function useLiveSalesData() {
     const loadData = useCallback(() => {
         setRefreshing(true);
 
-        // Fetch static historical files + the new live dynamic JSON
         const pMgmt = loadManagementData();
         const pEmp = loadEmployeesData();
-        const pLive = fetch('./data/live_dynamics.json').then(res => res.json()).catch(() => null);
 
-        Promise.all([pMgmt, pEmp, pLive])
-            .then(([m, e, liveData]) => {
+        Promise.all([pMgmt, pEmp])
+            .then(([m, e]) => {
                 setRaw(m);
                 setEmpRaw(e);
-                setDynamicsLiveData(liveData);
                 setLastUpdate(new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
                 setError(null);
             })
@@ -137,23 +133,6 @@ export function useLiveSalesData() {
             if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, target: 0, monthSales: 0, monthTarget: 0, dailyReq: 0, remainingDays, achievement: 0, employees: {} };
         };
 
-        const dynSalesMap = new Map();
-        const dynTransMap = new Map();
-        const dynShiftsMap = new Map();
-        const dynEmpMap: Record<string, any[]> = {};
-
-        const isDynMatch = dynamicsLiveData && !dynamicsLiveData.error && (dynamicsLiveData.date === effectiveDateStr);
-
-        if (isDynMatch) {
-            (dynamicsLiveData.sales || []).forEach((row: any[]) => dynSalesMap.set(String(row[1]), Number(row[2])));
-            (dynamicsLiveData.transactions || []).forEach((row: any[]) => dynTransMap.set(String(row[1]), Number(row[2])));
-            Object.entries(dynamicsLiveData.shifts || {}).forEach(([sid, shiftsObj]) => dynShiftsMap.set(String(sid), shiftsObj));
-
-            Object.entries(dynamicsLiveData.employee_history || {}).forEach(([sid, rows]) => {
-                dynEmpMap[sid] = rows as any[];
-            });
-        }
-
         (raw.sales || []).forEach(([d, sid, v]: any[]) => {
             const dateStr = String(d).substring(0, 10);
             if (dateStr >= startOfMonthStr && dateStr <= effectiveDateStr) {
@@ -161,25 +140,10 @@ export function useLiveSalesData() {
                 byStore[sid].monthSales += v || 0;
 
                 if (dateStr === effectiveDateStr) {
-                    if (!isDynMatch || !dynSalesMap.has(sid)) {
-                        byStore[sid].sales += v || 0;
-                    }
+                    byStore[sid].sales += v || 0;
                 }
             }
         });
-
-        if (isDynMatch) {
-            dynSalesMap.forEach((v, sid) => {
-                if (allowedStoreIds.has(sid)) {
-                    ensureStore(sid);
-                    byStore[sid].sales = v;
-                    byStore[sid].monthSales += v;
-                    if (dynShiftsMap.has(sid)) {
-                        byStore[sid].shifts = dynShiftsMap.get(sid) as { morning: number, afternoon: number, night: number };
-                    }
-                }
-            });
-        }
 
         (raw.targets || []).forEach(([d, sid, v]: any[]) => {
             const dateStr = String(d).substring(0, 10);
@@ -192,20 +156,9 @@ export function useLiveSalesData() {
         (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
             if (String(d).startsWith(effectiveDateStr)) {
                 ensureStore(sid);
-                if (!isDynMatch || !dynTransMap.has(sid)) {
-                    byStore[sid].trans += v || 0;
-                }
+                byStore[sid].trans += v || 0;
             }
         });
-
-        if (isDynMatch) {
-            dynTransMap.forEach((v, sid) => {
-                if (allowedStoreIds.has(sid)) {
-                    ensureStore(sid);
-                    byStore[sid].trans = v;
-                }
-            });
-        }
 
         (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
             if (String(d).startsWith(effectiveDateStr)) {
@@ -221,7 +174,7 @@ export function useLiveSalesData() {
             s.achievement = s.dailyReq > 0 ? (s.sales / s.dailyReq) * 100 : 0;
         });
 
-        const empSource = (isDynMatch && Object.keys(dynEmpMap).length > 0) ? dynEmpMap : historyData;
+        const empSource = historyData;
 
         Object.entries(empSource).forEach(([storeCode, records]) => {
             ensureStore(storeCode);

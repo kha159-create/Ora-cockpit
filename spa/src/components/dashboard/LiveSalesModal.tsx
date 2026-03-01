@@ -36,7 +36,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     onClose,
     formatSAR,
 }) => {
-    const { calculateLiveData, refresh, isAdminOrAuditor: checkAdmin } = useLiveSalesData();
+    const { calculateLiveData, isAdminOrAuditor: checkAdmin } = useLiveSalesData();
     const [manager, setManager] = useState('all');
     const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
     const [expandedEmpId, setExpandedEmpId] = useState<string | null>(null);
@@ -69,10 +69,6 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
         sales: liveData.totals.sales,
         trans: liveData.totals.trans,
         visitors: liveData.stores.reduce((acc: number, s: any) => acc + (s.visitors || 0), 0)
-    };
-
-    const handleRefresh = async () => {
-        await refresh();
     };
 
     if (!isOpen) return null;
@@ -125,13 +121,6 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                     </button>
                                 </div>
 
-                                <button
-                                    type="button"
-                                    className="bg-white/20 hover:bg-white/30 text-white text-xs px-2 py-1.5 rounded flex items-center gap-1 transition-colors ml-2"
-                                    onClick={handleRefresh}
-                                >
-                                    <span>تحديث 🔄</span>
-                                </button>
                                 <p className="text-orange-100 text-xs hidden sm:block">
                                     🕒 آخر تحديث: {new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
                                 </p>
