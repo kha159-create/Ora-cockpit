@@ -1,10 +1,39 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { USERS } from '../auth/users';
 import { setCurrentUser } from '../auth/storage';
 
 export default function LoginPage() {
-  const userNames = useMemo(() => Object.keys(USERS).sort(), []);
-  const [selectedUser, setSelectedUser] = useState<string>(userNames[0] ?? '');
+  const [searchParams] = useSearchParams();
+  const loginType = searchParams.get('type'); // 'branch' or null
+
+  const userNames = useMemo(() => {
+    const all = Object.entries(USERS);
+    if (loginType === 'branch') {
+      return all
+        .filter(([_, u]) => u.role === 'BranchManager')
+        .map(([name]) => name)
+        .sort();
+    }
+    // Default: show non-branch managers or everyone? 
+    // User said "different login link so only these users appear", 
+    // implying the main login should maybe stay as is or hide them.
+    // Let's keep main login showing everyone for now, or hide branch managers from it.
+    return all
+      .filter(([_, u]) => loginType === 'branch' ? u.role === 'BranchManager' : u.role !== 'BranchManager')
+      .map(([name]) => name)
+      .sort();
+  }, [loginType]);
+
+  const [selectedUser, setSelectedUser] = useState<string>('');
+
+  // Update selectedUser when userNames changes
+  useEffect(() => {
+    if (userNames.length > 0 && !userNames.includes(selectedUser)) {
+      setSelectedUser(userNames[0]);
+    }
+  }, [userNames, selectedUser]);
+
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -15,7 +44,7 @@ export default function LoginPage() {
     if (!u) return setError('مستخدم غير موجود');
     if (pin !== u.pin) return setError('PIN غير صحيح');
 
-    setCurrentUser({ name: selectedUser, role: u.role });
+    setCurrentUser({ name: selectedUser, role: u.role, storeId: u.storeId });
     window.location.hash = '#/'; // go dashboard
   };
 

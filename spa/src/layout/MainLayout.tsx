@@ -33,9 +33,9 @@ const baseNavItems = [
   { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
   { to: '/offers', label: 'قائمة العروض', icon: <TagIcon /> },
   { to: '/reports', label: 'التقارير', icon: <ClipboardListIcon /> },
-] as const;
+];
 
-const targetsNavItem = { to: '/targets', label: 'تحديد الأهداف', icon: <TargetIcon /> } as const;
+const targetsNavItem = { to: '/targets', label: 'تحديد الأهداف', icon: <TargetIcon /> };
 
 function NavItem({ to, label, icon, onClick }: { to: string; label: string; icon: React.ReactNode; onClick?: () => void }) {
   return (
@@ -94,8 +94,21 @@ export default function MainLayout() {
   }, []);
 
   const navItems = useMemo(() => {
+    const isBranchManager = user?.role === 'BranchManager';
     const canTargets = user?.role === 'Admin' || user?.name === 'Sales Manager';
-    return canTargets ? [...baseNavItems, targetsNavItem] : baseNavItems;
+
+    let items = [...baseNavItems];
+
+    // Hide Reports for BranchManager
+    if (isBranchManager) {
+      items = items.filter(i => i.to !== '/reports');
+    }
+
+    if (canTargets) {
+      items = [...items, targetsNavItem];
+    }
+
+    return items;
   }, [user?.role, user?.name]);
   const activeLabel = useMemo(() => {
     const hit = navItems.find((i) => i.to === loc.pathname);
@@ -232,9 +245,9 @@ export default function MainLayout() {
 
   // Auto-refresh inquiry data every 15 minutes
   useEffect(() => {
-    // Initial load if empty? No, let's wait for user to open first or load in bg?
-    // User requested "automatic update every 15 mins".
-    // We'll set interval.
+    // Initial load
+    loadInquiryData();
+
     const interval = setInterval(() => {
       loadInquiryData();
     }, 15 * 60 * 1000); // 15 minutes

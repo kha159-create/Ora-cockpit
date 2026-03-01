@@ -582,7 +582,7 @@ export default function StoresPage() {
   const [manager, setManager] = useState<string>('all');
   const [city, setCity] = useState<string>('all');
   const [type, setType] = useState<string>('all');
-  const [branch, setBranch] = useState<string>('all');
+  const [branch, setBranch] = useState<string>(user?.storeId || 'all');
 
   const [selectedSid, setSelectedSid] = useState<string | null>(null);
 
@@ -709,7 +709,8 @@ export default function StoresPage() {
 
     const metaFilter = (sid: string) => {
       const m = meta[sid] || {};
-      if (!isAdminOrAuditor(user?.role) && m?.manager !== user?.name) return false;
+      if (user?.role === 'BranchManager' && sid !== user?.storeId) return false;
+      if (!isAdminOrAuditor(user?.role) && user?.role !== 'BranchManager' && m?.manager !== user?.name) return false;
       if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
       if (city !== 'all' && String(m?.city || '') !== city) return false;
       if (type !== 'all' && String(m?.type || '') !== type) return false;
@@ -889,7 +890,7 @@ export default function StoresPage() {
                 </select>
               </div>
             )}
-            <div>
+            <div className={`${user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}`}>
               <div className="text-xs font-semibold text-neutral-500 mb-1">المدينة</div>
               <select className="input" value={city} onChange={(e) => setCity(e.target.value)}>
                 <option value="all">الكل</option>
@@ -905,7 +906,7 @@ export default function StoresPage() {
                 <option value="أخرى">أخرى</option>
               </select>
             </div>
-            <div>
+            <div className={`${user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}`}>
               <div className="text-xs font-semibold text-neutral-500 mb-1">فرع محدد</div>
               <select className="input" value={branch} onChange={(e) => setBranch(e.target.value)}>
                 <option value="all">كافة الفروع</option>

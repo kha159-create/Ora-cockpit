@@ -116,7 +116,7 @@ export default function ComparisonPage() {
     // New filter states
     const [manager, setManager] = useState('all');
     const [city, setCity] = useState('all');
-    const [branch, setBranch] = useState('all');
+    const [branch, setBranch] = useState(user?.storeId || 'all');
     const [stdYear, setStdYear] = useState(() => new Date().getFullYear());
     const [stdMonth, setStdMonth] = useState('all');
     const [customStart, setCustomStart] = useState('');
@@ -156,6 +156,7 @@ export default function ComparisonPage() {
         const brList = Object.keys(stores)
             .filter(sid => {
                 const m = meta[sid];
+                if (user?.role === 'BranchManager' && sid !== user?.storeId) return false;
                 if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
                 if (city !== 'all' && String(m?.city || '') !== city) return false;
                 return true;
@@ -175,6 +176,7 @@ export default function ComparisonPage() {
         const meta: Record<string, any> = mgmtData.store_meta || {};
         const passFilter = (sid: string) => {
             const m = meta[sid] || {};
+            if (user?.role === 'BranchManager' && sid !== user?.storeId) return false;
             if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
             if (city !== 'all' && String(m?.city || '') !== city) return false;
             if (branch !== 'all' && sid !== branch) return false;
@@ -455,14 +457,14 @@ export default function ComparisonPage() {
                                 </select>
                             </div>
                         )}
-                        <div>
+                        <div className={`${user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}`}>
                             <div className="text-xs font-semibold text-neutral-500 mb-1">المدينة</div>
                             <select className="input w-full" value={city} onChange={(e) => setCity(e.target.value)}>
                                 <option value="all">الكل</option>
                                 {cities.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                         </div>
-                        <div>
+                        <div className={`${user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}`}>
                             <div className="text-xs font-semibold text-neutral-500 mb-1">المعرض</div>
                             <select className="input w-full" value={branch} onChange={(e) => setBranch(e.target.value)}>
                                 <option value="all">كافة المعارض</option>

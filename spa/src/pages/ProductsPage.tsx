@@ -121,7 +121,7 @@ export default function ProductsPage() {
 
   const [manager, setManager] = useState<string>('all');
   const [city, setCity] = useState<string>('all');
-  const [store, setStore] = useState<string>('all');
+  const [store, setStore] = useState<string>(user?.storeId || 'all');
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -254,6 +254,7 @@ export default function ProductsPage() {
 
     const isStoreAccessible = (sid: string) => {
       if (isAdminOrAuditor(user?.role)) return true;
+      if (user?.role === 'BranchManager') return sid === user?.storeId;
       const meta = storeMeta[sid];
       return meta && meta.manager === user?.name;
     };
@@ -602,7 +603,7 @@ export default function ProductsPage() {
             </select>
           </div>
 
-          <div>
+          <div className={`${user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}`}>
             <div className="text-xs font-semibold text-neutral-500 mb-1">المدينة</div>
             <select className="input" value={city} onChange={(e) => setCity(e.target.value)}>
               <option value="all">الكل</option>
@@ -612,7 +613,7 @@ export default function ProductsPage() {
             </select>
           </div>
 
-          <div>
+          <div className={`${user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}`}>
             <div className="text-xs font-semibold text-neutral-500 mb-1">المعرض</div>
             <select className="input" value={store} onChange={(e) => setStore(e.target.value)}>
               <option value="all">🏪 كل المعارض</option>

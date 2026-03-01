@@ -517,7 +517,7 @@ export default function EmployeesPage() {
   const [err, setErr] = useState<string | null>(null);
 
   const [manager, setManager] = useState<string>('all');
-  const [branch, setBranch] = useState<string>('all');
+  const [branch, setBranch] = useState<string>(user?.storeId || 'all');
   const [city, setCity] = useState<string>('all');
   const [period, setPeriod] = useState<Period>('mtd');
   const [selYear, setSelYear] = useState<number>(() => new Date().getFullYear());
@@ -591,6 +591,7 @@ export default function EmployeesPage() {
     const branches = Object.keys(historyData || {})
       .filter((sid) => {
         const m = storeMeta[sid];
+        if (user?.role === 'BranchManager' && sid !== user?.storeId) return false;
         if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
         if (city !== 'all' && String(m?.city || '') !== city) return false;
         return true;
@@ -1174,7 +1175,7 @@ export default function EmployeesPage() {
             </select>
           </div>
 
-          <div>
+          <div className={`${user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}`}>
             <div className="text-xs font-semibold text-neutral-500 mb-1">الفرع</div>
             <select className="input" value={branch} onChange={(e) => setBranch(e.target.value)}>
               <option value="all">كافة الفروع</option>
@@ -1186,7 +1187,7 @@ export default function EmployeesPage() {
             </select>
           </div>
 
-          <div>
+          <div className={`${user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}`}>
             <div className="text-xs font-semibold text-neutral-500 mb-1">المدينة</div>
             <select className="input" value={city} onChange={(e) => setCity(e.target.value)}>
               <option value="all">الكل</option>

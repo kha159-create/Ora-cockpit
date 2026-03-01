@@ -142,7 +142,7 @@ export default function CommissionsPage() {
     const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
     const [expandedStore, setExpandedStore] = useState<string | null>(null);
     const [manager, setManager] = useState<string>('all');
-    const [storeFilter, setStoreFilter] = useState<string>('all');
+    const [storeFilter, setStoreFilter] = useState<string>(user?.storeId || 'all');
 
     // Simulation State
     const [simModalOpen, setSimModalOpen] = useState(false);
@@ -170,6 +170,7 @@ export default function CommissionsPage() {
         const storeList = Object.keys(stores)
             .filter(sid => {
                 const m = meta[sid];
+                if (user?.role === 'BranchManager' && sid !== user?.storeId) return false;
                 if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
                 return true;
             })
@@ -263,7 +264,7 @@ export default function CommissionsPage() {
                             </select>
                         </div>
                     )}
-                    <div>
+                    <div className={`${user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}`}>
                         <label className="block text-xs font-semibold text-neutral-500 mb-1">المعرض</label>
                         <select className="input w-full" value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)}>
                             <option value="all">كافة المعارض</option>

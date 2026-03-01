@@ -75,8 +75,9 @@ export default function DashboardPage() {
   const [mode, setMode] = useState<Mode>('mtd');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const user = getCurrentUser();
   const [manager, setManager] = useState<string>('all');
-  const [branch, setBranch] = useState<string>('all');
+  const [branch, setBranch] = useState<string>(user?.storeId || 'all');
   const [city, setCity] = useState<string>('all');
   const [selYear, setSelYear] = useState<number>(() => new Date().getFullYear());
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1);
@@ -91,7 +92,8 @@ export default function DashboardPage() {
   const [includeAllPages, setIncludeAllPages] = useState(true);
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [empFilterStatus, setEmpFilterStatus] = useState<Set<string>>(new Set(['active']));
-  const user = getCurrentUser();
+  const isManager = user?.role === 'Manager' || (user?.role !== 'Admin' && user?.role !== 'Auditor' && user?.name && user?.name !== 'Sales Manager' && user?.role !== 'BranchManager');
+
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
     return user?.name || manager;
@@ -391,6 +393,8 @@ export default function DashboardPage() {
     setEmployeeReportModalOpen(false);
   };
 
+  const isBranchManager = user?.role === 'BranchManager';
+
   const { allowedStoreIds, managers, branches, cities } = useMemo(() => {
     const meta: Record<string, { manager?: string; city?: string }> = raw?.store_meta || {};
     const stores = raw?.stores || {};
@@ -398,24 +402,27 @@ export default function DashboardPage() {
     const citiesSet = new Set<string>();
     Object.values(meta).forEach((m: any) => {
       if (m?.manager) managersSet.add(String(m.manager));
-
-      // Filter cities based on selected manager
       if (effectiveManager === 'all' || String(m?.manager) === effectiveManager) {
         if (m?.city) citiesSet.add(String(m.city));
       }
     });
+
     const managers = Array.from(managersSet).sort((a, b) => a.localeCompare(b, 'ar'));
     const cities = Array.from(citiesSet).sort((a, b) => a.localeCompare(b, 'ar'));
     const branches = Object.keys(stores)
       .filter((sid) => {
         const m = meta[sid];
+        if (isBranchManager && sid !== user?.storeId) return false;
         if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
         if (city !== 'all' && String(m?.city || '') !== city) return false;
         return true;
       })
       .sort((a, b) => (stores[a] || a).localeCompare(stores[b] || b, 'ar'));
+
     const allowed = new Set<string>();
-    if (branch === 'all' && effectiveManager === 'all' && city === 'all') {
+    if (isBranchManager && user?.storeId) {
+      allowed.add(user.storeId);
+    } else if (branch === 'all' && effectiveManager === 'all' && city === 'all') {
       Object.keys(stores).forEach((sid) => allowed.add(sid));
     } else {
       Object.keys(meta).forEach((sid) => {
@@ -428,7 +435,7 @@ export default function DashboardPage() {
       if (allowed.size === 0) Object.keys(stores).forEach((sid) => allowed.add(sid));
     }
     return { allowedStoreIds: allowed, managers, branches, cities };
-  }, [raw, branch, effectiveManager, city]);
+  }, [raw, branch, effectiveManager, city, isBranchManager, user?.storeId]);
 
   const totals = useMemo(() => {
     if (!raw) return { sales: 0, trans: 0, visitors: 0, target: 0 };
@@ -1060,7 +1067,7 @@ export default function DashboardPage() {
               </select>
             </div>
           )}
-          <div>
+          <div className={`${user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}`}>
             <div className="text-xs font-semibold text-neutral-500 mb-1">الفرع</div>
             <select className="input" value={branch} onChange={(e) => setBranch(e.target.value)}>
               <option value="all">كافة الفروع</option>
@@ -1069,7 +1076,7 @@ export default function DashboardPage() {
               ))}
             </select>
           </div>
-          <div>
+          <div className={`${user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}`}>
             <div className="text-xs font-semibold text-neutral-500 mb-1">المدينة</div>
             <select className="input" value={city} onChange={(e) => setCity(e.target.value)}>
               <option value="all">الكل</option>

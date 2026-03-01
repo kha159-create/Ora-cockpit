@@ -469,16 +469,14 @@ export const ProductInquiryModal: React.FC<ProductInquiryModalProps> = ({ isOpen
 
                         {/* Results List */}
                         <div className="flex-1 overflow-y-auto p-2">
-                            {search.trim() === '' ? (
+                            {filtered.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center py-20 text-neutral-400">
                                     <div className="w-16 h-16 rounded-full bg-neutral-50 flex items-center justify-center mb-4 text-neutral-300">
                                         <SearchIcon className="h-8 w-8" />
                                     </div>
-                                    <p className="font-medium">ابدأ البحث بإدخال اسم المنتج أو الكود</p>
-                                </div>
-                            ) : filtered.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-20 text-neutral-400">
-                                    <p className="font-medium">لا توجد نتائج مطابقة لـ "{search}"</p>
+                                    <p className="font-medium">
+                                        {search.trim() === '' ? 'ابدأ البحث بإدخال اسم المنتج أو الكود' : `لا توجد نتائج مطابقة لـ "${search}"`}
+                                    </p>
                                 </div>
                             ) : (
                                 <div className="space-y-1">
