@@ -905,10 +905,8 @@ export default function DashboardPage() {
 
     // We only care about MTD for the dashboard summary usually, 
     // or match the dashboard's selected range if possible. 
-    // For now, let's stick to 'mtd' (Month to Date) as per common dashboard behavior,
-    // or we could try to match 'mode' if it maps well. 
-    // Let's use 'mtd' to ensure consistency with the "Top Selling" widget original context.
-    const pData = prodRaw.periods?.['mtd'] || null;
+    // Data issue: mtd might be empty in product_analysis_data.json, fallback to 30d or 7d.
+    const pData = prodRaw.periods?.['mtd'] || prodRaw.periods?.['30d'] || prodRaw.periods?.['14d'] || prodRaw.periods?.['7d'] || null;
     if (!pData) return null;
 
     const analysis: Record<string, any> = (pData?.analysis || {}) as any;

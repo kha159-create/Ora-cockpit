@@ -23,11 +23,11 @@ export const USERS: Record<string, { pin: string; role: UserRole; storeId?: stri
   "علاء": { pin: "0000", role: "Auditor" },
 
   // Branch Managers (New)
-  "عالية مول": { pin: "2391", role: "BranchManager", storeId: "23" },
-  "نور مول": { pin: "2648", role: "BranchManager", storeId: "26" },
-  "تبوك بارك": { pin: "2287", role: "BranchManager", storeId: "22" },
-  "ينبع الدانة": { pin: "2415", role: "BranchManager", storeId: "24" },
-  "عرعر": { pin: "1736", role: "BranchManager", storeId: "17" },
-  "الجوف": { pin: "4492", role: "BranchManager", storeId: "44" }
+  "عالية مول": { pin: "2391", role: "BranchManager", storeId: "1401" }, // 23-Alia Mall Madinah
+  "نور مول": { pin: "2648", role: "BranchManager", storeId: "1402" }, // 26-Al-Noor Mall Madinah
+  "تبوك بارك": { pin: "2287", role: "BranchManager", storeId: "2001" }, // 22-Tabuk Park
+  "ينبع الدانة": { pin: "2415", role: "BranchManager", storeId: "1501" }, // 24-Yanbu Dana Mall
+  "عرعر": { pin: "1736", role: "BranchManager", storeId: "1701" }, // 17-Arar Othaim Mall
+  "الجوف": { pin: "4492", role: "BranchManager", storeId: "2301" } // 44-Al-Jouf Center
 };
 
