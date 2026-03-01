@@ -50,7 +50,12 @@ function getDefaultRange(mode: Mode, selYear?: number, selMonth?: number) {
 
   if (mode === 'today') return { start: toYMD(now), end: toYMD(now) };
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
-  if (mode === 'mtd') return { start: toYMD(startOfCurrentMonth), end: toYMD(yesterday) };
+  if (mode === 'mtd') {
+    // Standard MTD logic (up to yesterday). If yesterday is in the previous month, 
+    // we use yesterday's month as the start to avoid empty/invalid ranges (e.g., Mar 1 to Feb 28).
+    const startOfTargetMonth = new Date(yesterday.getFullYear(), yesterday.getMonth(), 1);
+    return { start: toYMD(startOfTargetMonth), end: toYMD(yesterday) };
+  }
   if (mode === 'month' && selYear != null && selMonth != null) {
     if (selMonth === 0) {
       return { start: `${selYear}-01-01`, end: `${selYear}-12-31` };

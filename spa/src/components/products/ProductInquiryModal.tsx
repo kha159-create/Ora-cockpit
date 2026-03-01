@@ -78,8 +78,9 @@ export const ProductInquiryModal: React.FC<ProductInquiryModalProps> = ({ isOpen
             const d = new Date(today); d.setDate(today.getDate() - 30);
             startStr = toYMD(d);
         } else if (p === 'mtd') {
-            const d = new Date(today.getFullYear(), today.getMonth(), 1);
+            const d = new Date(yesterday.getFullYear(), yesterday.getMonth(), 1);
             startStr = toYMD(d);
+            endStr = toYMD(yesterday);
         } else if (p === 'last_month') {
             const dStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
             const dEnd = new Date(today.getFullYear(), today.getMonth(), 0);
