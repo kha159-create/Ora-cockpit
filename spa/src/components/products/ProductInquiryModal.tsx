@@ -133,7 +133,20 @@ export const ProductInquiryModal: React.FC<ProductInquiryModalProps> = ({ isOpen
 
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
-        if (!q) return [];
+
+        // If no search, show first 100 products so it's not empty
+        if (!q) {
+            return products.map(p => {
+                const m = mapping[p.id];
+                const merged = { ...p };
+                if (m) {
+                    if (m.alias) merged.alias = m.alias;
+                    if (m.dCode) merged.dCode = m.dCode;
+                }
+                return merged;
+            }).slice(0, 100);
+        }
+
         return products.map(p => {
             const m = mapping[p.id];
             const merged = { ...p };

@@ -568,6 +568,7 @@ function StoreDetailsModal({
 
 export default function StoresPage() {
   const user = getCurrentUser();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [mgmtRaw, setMgmtRaw] = useState<any>(null);
   const [empRaw, setEmpRaw] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -584,6 +585,20 @@ export default function StoresPage() {
   const [branch, setBranch] = useState<string>('all');
 
   const [selectedSid, setSelectedSid] = useState<string | null>(null);
+
+  // Deep-linking from Global Search
+  useEffect(() => {
+    const sidParam = searchParams.get('sid');
+    if (sidParam) {
+      setSelectedSid(sidParam);
+      // Clean up URL
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('sid');
+        return next;
+      }, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [showStoreCompare, setShowStoreCompare] = useState(false);
   const [prodRaw, setProdRaw] = useState<any>(null);
   const [storeSortKey, setStoreSortKey] = useState<StoreSortKey>('val');
@@ -609,7 +624,6 @@ export default function StoresPage() {
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
 
-  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     if (mode === 'custom' && !customStart && !customEnd) {

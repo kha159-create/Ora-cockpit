@@ -325,17 +325,17 @@ export default function MainLayout() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
               {/* Target div for Dashboard's Daily Report Button Portal */}
               <div id="daily-report-portal-target"></div>
 
               <button
                 onClick={() => window.open('#/tv', '_blank')}
-                className="flex bg-slate-800 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-md items-center gap-2 hover:scale-105 transition-transform"
+                className="hidden md:flex bg-slate-800 text-white px-4 py-2.5 rounded-xl shadow-md items-center gap-2 hover:scale-105 transition-transform"
                 title="شاشة العرض (TV Mode)"
               >
                 <span className="text-lg leading-none">📺</span>
-                <span className="hidden sm:inline font-bold text-xs sm:text-sm whitespace-nowrap">وضع الشاشة</span>
+                <span className="font-bold text-xs sm:text-sm whitespace-nowrap">وضع الشاشة</span>
               </button>
 
               <button

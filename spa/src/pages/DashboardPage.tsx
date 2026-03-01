@@ -1157,7 +1157,7 @@ export default function DashboardPage() {
           className="flex bg-gradient-to-r from-neutral-800 to-neutral-900 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-md items-center gap-2 hover:scale-105 transition-transform border border-neutral-700"
         >
           <span className="text-lg leading-none">📄</span>
-          <span className="hidden sm:inline font-bold text-xs sm:text-sm whitespace-nowrap">التقرير اليومي</span>
+          <span className="font-bold text-xs sm:text-sm whitespace-nowrap">التقرير اليومي</span>
         </button>,
         document.getElementById('daily-report-portal-target')!
       )}
