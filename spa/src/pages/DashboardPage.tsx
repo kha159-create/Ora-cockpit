@@ -103,6 +103,7 @@ export default function DashboardPage() {
   const [manager, setManager] = useState<string>('all');
   const [branch, setBranch] = useState<string>(user?.storeId || 'all');
   const [city, setCity] = useState<string>('all');
+  const [selectedStoreType, setSelectedStoreType] = useState<string>('all');
   const [selYear, setSelYear] = useState<number>(() => new Date().getFullYear());
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [dailyReportModalOpen, setDailyReportModalOpen] = useState(false);
@@ -420,7 +421,7 @@ export default function DashboardPage() {
   const isBranchManager = user?.role === 'BranchManager';
 
   const { allowedStoreIds, managers, branches, cities } = useMemo(() => {
-    const meta: Record<string, { manager?: string; city?: string }> = raw?.store_meta || {};
+    const meta: Record<string, { manager?: string; city?: string; type?: string }> = raw?.store_meta || {};
     const stores = raw?.stores || {};
     const managersSet = new Set<string>();
     const citiesSet = new Set<string>();
@@ -439,6 +440,12 @@ export default function DashboardPage() {
         if (isBranchManager && sid !== user?.storeId) return false;
         if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
         if (city !== 'all' && String(m?.city || '') !== city) return false;
+        if (selectedStoreType !== 'all') {
+          const type = String(m?.type || '').toLowerCase();
+          const isOnline = type === 'online' || type === 'platform' || type === 'warehouse';
+          if (selectedStoreType === 'online' && !isOnline) return false;
+          if (selectedStoreType === 'store' && isOnline) return false;
+        }
         return true;
       })
       .sort((a, b) => (stores[a] || a).localeCompare(stores[b] || b, 'ar'));
@@ -454,12 +461,18 @@ export default function DashboardPage() {
         if (branch !== 'all' && sid !== branch) return;
         if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return;
         if (city !== 'all' && String(m?.city || '') !== city) return;
+        if (selectedStoreType !== 'all') {
+          const type = String(m?.type || '').toLowerCase();
+          const isOnline = type === 'online' || type === 'platform' || type === 'warehouse';
+          if (selectedStoreType === 'online' && !isOnline) return;
+          if (selectedStoreType === 'store' && isOnline) return;
+        }
         allowed.add(sid);
       });
       if (allowed.size === 0) Object.keys(stores).forEach((sid) => allowed.add(sid));
     }
     return { allowedStoreIds: allowed, managers, branches, cities };
-  }, [raw, branch, effectiveManager, city, isBranchManager, user?.storeId]);
+  }, [raw, branch, effectiveManager, city, selectedStoreType, isBranchManager, user?.storeId]);
 
   const totals = useMemo(() => {
     if (!raw) return { sales: 0, trans: 0, visitors: 0, target: 0 };
@@ -1121,6 +1134,14 @@ export default function DashboardPage() {
             <select className="input" value={city} onChange={(e) => setCity(e.target.value)}>
               <option value="all">الكل</option>
               {cities.map((c) => (<option key={c} value={c}>{c}</option>))}
+            </select>
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-neutral-500 mb-1">نوع المعرض</div>
+            <select className="input" value={selectedStoreType} onChange={(e) => setSelectedStoreType(e.target.value)}>
+              <option value="all">الكل</option>
+              <option value="store">المعارض فقط</option>
+              <option value="online">الأونلاين فقط</option>
             </select>
           </div>
           <div>

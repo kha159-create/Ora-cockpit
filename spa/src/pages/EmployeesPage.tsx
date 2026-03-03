@@ -519,6 +519,7 @@ export default function EmployeesPage() {
   const [manager, setManager] = useState<string>('all');
   const [branch, setBranch] = useState<string>(user?.storeId || 'all');
   const [city, setCity] = useState<string>('all');
+  const [storeType, setStoreType] = useState<string>('all');
   const [period, setPeriod] = useState<Period>('mtd');
   const [selYear, setSelYear] = useState<number>(() => new Date().getFullYear());
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1); // 1-12
@@ -594,6 +595,12 @@ export default function EmployeesPage() {
         if (user?.role === 'BranchManager' && sid !== user?.storeId) return false;
         if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
         if (city !== 'all' && String(m?.city || '') !== city) return false;
+        if (storeType !== 'all') {
+          const type = String(m?.type || '').toLowerCase();
+          const isOnline = type === 'online' || type === 'platform' || type === 'warehouse';
+          if (storeType === 'online' && !isOnline) return false;
+          if (storeType === 'store' && isOnline) return false;
+        }
         return true;
       })
       .sort((a, b) => (storesData[a] || a).localeCompare(storesData[b] || b, 'ar'));
@@ -1206,6 +1213,15 @@ export default function EmployeesPage() {
               {(derived.cities || []).map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
+            </select>
+          </div>
+
+          <div>
+            <div className="text-xs font-semibold text-neutral-500 mb-1">نوع المعرض</div>
+            <select className="input" value={storeType} onChange={(e) => setStoreType(e.target.value)}>
+              <option value="all">الكل</option>
+              <option value="store">المعارض فقط</option>
+              <option value="online">الأونلاين فقط</option>
             </select>
           </div>
 

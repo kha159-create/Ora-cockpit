@@ -117,6 +117,7 @@ export default function ComparisonPage() {
     // New filter states
     const [manager, setManager] = useState('all');
     const [city, setCity] = useState('all');
+    const [storeType, setStoreType] = useState('all');
     const [branch, setBranch] = useState(user?.storeId || 'all');
     const [stdYear, setStdYear] = useState(() => new Date().getFullYear());
     const [stdMonth, setStdMonth] = useState('all');
@@ -160,6 +161,12 @@ export default function ComparisonPage() {
                 if (user?.role === 'BranchManager' && sid !== user?.storeId) return false;
                 if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
                 if (city !== 'all' && String(m?.city || '') !== city) return false;
+                if (storeType !== 'all') {
+                    const type = String(m?.type || '').toLowerCase();
+                    const isOnline = type === 'online' || type === 'platform' || type === 'warehouse';
+                    if (storeType === 'online' && !isOnline) return false;
+                    if (storeType === 'store' && isOnline) return false;
+                }
                 return true;
             })
             .map(sid => ({ id: sid, name: stores[sid] || sid }))
@@ -169,7 +176,7 @@ export default function ComparisonPage() {
             cities: Array.from(cts).sort((a, b) => a.localeCompare(b, 'ar')),
             branches: brList
         };
-    }, [mgmtData, effectiveManager, city]);
+    }, [mgmtData, effectiveManager, city, storeType]);
 
     // Build filtered data (filter management data by store filters)
     const filteredMgmt = useMemo(() => {
@@ -180,6 +187,12 @@ export default function ComparisonPage() {
             if (user?.role === 'BranchManager' && sid !== user?.storeId) return false;
             if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
             if (city !== 'all' && String(m?.city || '') !== city) return false;
+            if (storeType !== 'all') {
+                const type = String(m?.type || '').toLowerCase();
+                const isOnline = type === 'online' || type === 'platform' || type === 'warehouse';
+                if (storeType === 'online' && !isOnline) return false;
+                if (storeType === 'store' && isOnline) return false;
+            }
             if (branch !== 'all' && sid !== branch) return false;
             return true;
         };
@@ -190,7 +203,7 @@ export default function ComparisonPage() {
             transactions: (mgmtData.transactions || []).filter((r: any[]) => passFilter(r[1])),
             targets: (mgmtData.targets || []).filter((r: any[]) => passFilter(r[1])),
         };
-    }, [mgmtData, effectiveManager, city, branch]);
+    }, [mgmtData, effectiveManager, city, storeType, branch]);
 
     const dateRange = useMemo(() => getRange(rangeMode, stdYear, stdMonth, customStart, customEnd, selectedSeason), [rangeMode, stdYear, stdMonth, customStart, customEnd, selectedSeason]);
 
@@ -463,6 +476,14 @@ export default function ComparisonPage() {
                             <select className="input w-full" value={city} onChange={(e) => setCity(e.target.value)}>
                                 <option value="all">الكل</option>
                                 {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <div className="text-xs font-semibold text-neutral-500 mb-1">نوع المعرض</div>
+                            <select className="input w-full" value={storeType} onChange={(e) => setStoreType(e.target.value)}>
+                                <option value="all">الكل</option>
+                                <option value="store">المعارض فقط</option>
+                                <option value="online">الأونلاين فقط</option>
                             </select>
                         </div>
                         <div className={`${user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}`}>

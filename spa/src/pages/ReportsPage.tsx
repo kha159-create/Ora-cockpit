@@ -167,7 +167,12 @@ export default function ReportsPage() {
     const meta = rawMgmt?.store_meta?.[storeId] || {};
     if (effectiveManager !== 'all' && meta.manager !== effectiveManager) return false;
     if (city !== 'all' && meta.city !== city) return false;
-    if (storeType !== 'all' && meta.type !== storeType) return false;
+    if (storeType !== 'all') {
+      const type = String(meta.type || '').toLowerCase();
+      const isOnline = type === 'online' || type === 'platform' || type === 'warehouse';
+      if (storeType === 'online' && !isOnline) return false;
+      if (storeType === 'store' && isOnline) return false;
+    }
     return true;
   };
 
@@ -854,6 +859,14 @@ export default function ReportsPage() {
               </div>
             )}
             <div>
+              <label className="block text-sm font-semibold text-neutral-700">نوع المعرض</label>
+              <select className="input mt-1" value={storeType} onChange={(e) => setStoreType(e.target.value)}>
+                <option value="all">الكل</option>
+                <option value="store">المعارض فقط</option>
+                <option value="online">الأونلاين فقط</option>
+              </select>
+            </div>
+            <div>
               <label className="block text-sm font-semibold text-neutral-700">المدينة</label>
               <select className="input mt-1" value={city} onChange={(e) => setCity(e.target.value)}>
                 <option value="all">الكل</option>
@@ -881,10 +894,10 @@ export default function ReportsPage() {
             </div>
           </div>
         </div>
-      </div>
+      </div >
 
       {/* تقارير المعارض */}
-      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
+      < div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6" >
         <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
           <span className="text-2xl">🏪</span> تقارير المعارض
         </h3>
@@ -926,54 +939,56 @@ export default function ReportsPage() {
             <p className="text-xs text-neutral-500 mt-1">PDF - ملخص الشهر</p>
           </button>
         </div>
-      </div>
+      </div >
 
       {/* تقارير الموظفين */}
-      {canExportEmployee && (
-        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
-          <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
-            <span className="text-2xl">👥</span> تقارير الموظفين
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <button
-              type="button"
-              onClick={() => generateEmployeePerformance()}
-              className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-purple-400 transition-all group"
-            >
-              <div className="text-purple-500 text-2xl mb-2">📄</div>
-              <h5 className="font-bold text-neutral-800 text-sm">أداء الموظفين</h5>
-              <p className="text-xs text-neutral-500 mt-1">PDF - أمس والشهر الحالي</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setExcelType('employee'); setShowExcelModal(true); }}
-              className="bg-gradient-to-br from-teal-50 to-teal-100 border border-teal-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-teal-400 transition-all group"
-            >
-              <div className="text-teal-600 text-2xl mb-2">📊</div>
-              <h5 className="font-bold text-neutral-800 text-sm">بيانات الموظفين</h5>
-              <p className="text-xs text-neutral-500 mt-1">Excel - مبيعات تفصيلية</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePdfGeneration('yesterday_employee')}
-              className="bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-indigo-400 transition-all group"
-            >
-              <div className="text-indigo-500 text-2xl mb-2">👤</div>
-              <h5 className="font-bold text-neutral-800 text-sm">تقرير أمس</h5>
-              <p className="text-xs text-neutral-500 mt-1">PDF - مقارنة الأمس بالشهر</p>
-            </button>
-            <button
-              type="button"
-              onClick={openTargetTemplateModal}
-              className="bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-emerald-400 transition-all group"
-            >
-              <div className="text-emerald-600 text-2xl mb-2">🎯</div>
-              <h5 className="font-bold text-neutral-800 text-sm">قالب تارجت الشهر القادم</h5>
-              <p className="text-xs text-neutral-500 mt-1">Excel - اختيار الموظفين وتصدير القالب</p>
-            </button>
+      {
+        canExportEmployee && (
+          <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
+            <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
+              <span className="text-2xl">👥</span> تقارير الموظفين
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <button
+                type="button"
+                onClick={() => generateEmployeePerformance()}
+                className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-purple-400 transition-all group"
+              >
+                <div className="text-purple-500 text-2xl mb-2">📄</div>
+                <h5 className="font-bold text-neutral-800 text-sm">أداء الموظفين</h5>
+                <p className="text-xs text-neutral-500 mt-1">PDF - أمس والشهر الحالي</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setExcelType('employee'); setShowExcelModal(true); }}
+                className="bg-gradient-to-br from-teal-50 to-teal-100 border border-teal-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-teal-400 transition-all group"
+              >
+                <div className="text-teal-600 text-2xl mb-2">📊</div>
+                <h5 className="font-bold text-neutral-800 text-sm">بيانات الموظفين</h5>
+                <p className="text-xs text-neutral-500 mt-1">Excel - مبيعات تفصيلية</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePdfGeneration('yesterday_employee')}
+                className="bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-indigo-400 transition-all group"
+              >
+                <div className="text-indigo-500 text-2xl mb-2">👤</div>
+                <h5 className="font-bold text-neutral-800 text-sm">تقرير أمس</h5>
+                <p className="text-xs text-neutral-500 mt-1">PDF - مقارنة الأمس بالشهر</p>
+              </button>
+              <button
+                type="button"
+                onClick={openTargetTemplateModal}
+                className="bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-emerald-400 transition-all group"
+              >
+                <div className="text-emerald-600 text-2xl mb-2">🎯</div>
+                <h5 className="font-bold text-neutral-800 text-sm">قالب تارجت الشهر القادم</h5>
+                <p className="text-xs text-neutral-500 mt-1">Excel - اختيار الموظفين وتصدير القالب</p>
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* تقارير أخرى */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
@@ -1017,427 +1032,435 @@ export default function ReportsPage() {
       </div>
 
       {/* Report type choice modal */}
-      {showReportChoiceModal && reportChoiceType && (
-        <div className="modal-center-screen" onClick={() => setShowReportChoiceModal(false)}>
-          <div className="modal-content max-w-md w-full p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <h5 className="font-bold text-lg text-neutral-900 mb-4">
-              {reportChoiceType === 'pdf' ? 'اختر التقرير للمعاينة' : 'اختر تقرير Excel'}
-            </h5>
-            {reportChoiceType === 'pdf' ? (
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={generateGlobalSummary}
-                  className="w-full py-3 px-4 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600"
-                >
-                  فتح تقرير ملخص عام (Global Summary)
-                </button>
-                {canExportEmployee && (
+      {
+        showReportChoiceModal && reportChoiceType && (
+          <div className="modal-center-screen" onClick={() => setShowReportChoiceModal(false)}>
+            <div className="modal-content max-w-md w-full p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
+              <h5 className="font-bold text-lg text-neutral-900 mb-4">
+                {reportChoiceType === 'pdf' ? 'اختر التقرير للمعاينة' : 'اختر تقرير Excel'}
+              </h5>
+              {reportChoiceType === 'pdf' ? (
+                <div className="space-y-3">
                   <button
                     type="button"
-                    onClick={() => { generateEmployeePerformance(); setShowReportChoiceModal(false); }}
-                    className="w-full py-3 px-4 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700"
+                    onClick={generateGlobalSummary}
+                    className="w-full py-3 px-4 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600"
                   >
-                    فتح تقرير أداء الموظفين (Employee Performance)
+                    فتح تقرير ملخص عام (Global Summary)
                   </button>
-                )}
-                <p className="text-sm text-neutral-500">سيتم فتح التقرير للمراجعة أولاً، ثم يمكنك اختيار الطباعة.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => { setExcelType('store'); setShowReportChoiceModal(false); setShowExcelModal(true); setReportChoiceType(null); }}
-                  className="w-full py-3 px-4 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700"
-                >
-                  مبيعات المعارض (Excel)
-                </button>
-                {canExportEmployee && (
+                  {canExportEmployee && (
+                    <button
+                      type="button"
+                      onClick={() => { generateEmployeePerformance(); setShowReportChoiceModal(false); }}
+                      className="w-full py-3 px-4 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700"
+                    >
+                      فتح تقرير أداء الموظفين (Employee Performance)
+                    </button>
+                  )}
+                  <p className="text-sm text-neutral-500">سيتم فتح التقرير للمراجعة أولاً، ثم يمكنك اختيار الطباعة.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
                   <button
                     type="button"
-                    onClick={() => { setExcelType('employee'); setShowReportChoiceModal(false); setShowExcelModal(true); setReportChoiceType(null); }}
+                    onClick={() => { setExcelType('store'); setShowReportChoiceModal(false); setShowExcelModal(true); setReportChoiceType(null); }}
                     className="w-full py-3 px-4 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700"
                   >
-                    مبيعات الموظفين (Excel)
+                    مبيعات المعارض (Excel)
                   </button>
-                )}
-              </div>
-            )}
-            <button type="button" className="mt-4 w-full btn-secondary py-2" onClick={() => { setShowReportChoiceModal(false); setReportChoiceType(null); }}>إلغاء</button>
+                  {canExportEmployee && (
+                    <button
+                      type="button"
+                      onClick={() => { setExcelType('employee'); setShowReportChoiceModal(false); setShowExcelModal(true); setReportChoiceType(null); }}
+                      className="w-full py-3 px-4 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700"
+                    >
+                      مبيعات الموظفين (Excel)
+                    </button>
+                  )}
+                </div>
+              )}
+              <button type="button" className="mt-4 w-full btn-secondary py-2" onClick={() => { setShowReportChoiceModal(false); setReportChoiceType(null); }}>إلغاء</button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Excel confirm modal */}
-      {showExcelModal && (
-        <div className="modal-center-screen" onClick={() => setShowExcelModal(false)}>
-          <div className="modal-content max-w-md w-full p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <h5 className="font-bold text-lg text-neutral-900 mb-4">تصدير Excel</h5>
-            <p className="text-sm text-neutral-600 mb-2">الفترة: {range.start} → {range.end}</p>
-            <p className="text-sm text-neutral-500 mb-4">{excelType === 'store' ? 'مبيعات المعارض' : 'مبيعات الموظفين'}</p>
-            <div className="flex gap-3">
-              <button type="button" className="flex-1 btn-secondary py-2" onClick={() => setShowExcelModal(false)}>إلغاء</button>
-              <button type="button" className="flex-1 bg-green-600 text-white font-bold py-2 rounded-xl hover:bg-green-700 disabled:opacity-50" onClick={runExcelExport} disabled={excelExporting}>
-                {excelExporting ? 'جاري التصدير...' : 'تصدير'}
-              </button>
+      {
+        showExcelModal && (
+          <div className="modal-center-screen" onClick={() => setShowExcelModal(false)}>
+            <div className="modal-content max-w-md w-full p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
+              <h5 className="font-bold text-lg text-neutral-900 mb-4">تصدير Excel</h5>
+              <p className="text-sm text-neutral-600 mb-2">الفترة: {range.start} → {range.end}</p>
+              <p className="text-sm text-neutral-500 mb-4">{excelType === 'store' ? 'مبيعات المعارض' : 'مبيعات الموظفين'}</p>
+              <div className="flex gap-3">
+                <button type="button" className="flex-1 btn-secondary py-2" onClick={() => setShowExcelModal(false)}>إلغاء</button>
+                <button type="button" className="flex-1 bg-green-600 text-white font-bold py-2 rounded-xl hover:bg-green-700 disabled:opacity-50" onClick={runExcelExport} disabled={excelExporting}>
+                  {excelExporting ? 'جاري التصدير...' : 'تصدير'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Target Template Modal */}
-      {showTargetModal && (
-        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4" onClick={() => setShowTargetModal(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-neutral-100 bg-neutral-50">
-              <h3 className="font-bold text-lg text-neutral-900 flex items-center gap-2">
-                🎯 اختيار الموظفين لقالب التارجت
-              </h3>
-              <p className="text-sm text-neutral-500 mt-1">اختر الموظفين الذين تريد تضمينهم في قالب الشهر القادم</p>
-            </div>
+      {
+        showTargetModal && (
+          <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4" onClick={() => setShowTargetModal(false)}>
+            <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="p-4 border-b border-neutral-100 bg-neutral-50">
+                <h3 className="font-bold text-lg text-neutral-900 flex items-center gap-2">
+                  🎯 اختيار الموظفين لقالب التارجت
+                </h3>
+                <p className="text-sm text-neutral-500 mt-1">اختر الموظفين الذين تريد تضمينهم في قالب الشهر القادم</p>
+              </div>
 
-            <div className="p-4 border-b border-neutral-100 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex gap-2">
+              <div className="p-4 border-b border-neutral-100 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200"
+                    onClick={() => setTargetSelected(new Set(targetEmpList.map((e: any) => e.id)))}
+                  >
+                    تحديد الكل
+                  </button>
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 text-xs font-bold rounded-lg bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                    onClick={() => setTargetSelected(new Set())}
+                  >
+                    إلغاء الكل
+                  </button>
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-100 text-green-700 hover:bg-green-200"
+                    onClick={() => setTargetSelected(new Set(targetEmpList.filter((e: any) => e.active).map((e: any) => e.id)))}
+                  >
+                    النشطين فقط
+                  </button>
+                </div>
+                <div className="text-sm text-neutral-500">
+                  المحددين: <span className="font-bold text-neutral-800">{targetSelected.size}</span> من <span className="font-bold">{targetEmpList.length}</span>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-neutral-800 text-white">
+                    <tr>
+                      <th className="p-2 text-center w-10">
+                        <input
+                          type="checkbox"
+                          checked={targetSelected.size === targetEmpList.length && targetEmpList.length > 0}
+                          onChange={(e) => {
+                            if (e.target.checked) setTargetSelected(new Set(targetEmpList.map((emp: any) => emp.id)));
+                            else setTargetSelected(new Set());
+                          }}
+                        />
+                      </th>
+                      <th className="p-2 text-right">الموظف</th>
+                      <th className="p-2 text-right">الفرع</th>
+                      <th className="p-2 text-center">المبيعات (MTD)</th>
+                      <th className="p-2 text-center">التارجت الحالي</th>
+                      <th className="p-2 text-center">الحالة</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100">
+                    {targetEmpList.map((emp: any) => {
+                      const isSelected = targetSelected.has(emp.id);
+                      const bgClass = emp.active ? '' : 'bg-red-50';
+                      return (
+                        <tr
+                          key={emp.id}
+                          className={`hover:bg-neutral-50 cursor-pointer ${bgClass}`}
+                          onClick={() => {
+                            const next = new Set(targetSelected);
+                            if (next.has(emp.id)) next.delete(emp.id);
+                            else next.add(emp.id);
+                            setTargetSelected(next);
+                          }}
+                        >
+                          <td className="p-2 text-center">
+                            <input type="checkbox" checked={isSelected} readOnly />
+                          </td>
+                          <td className="p-2 font-medium text-neutral-800">{emp.name}</td>
+                          <td className="p-2 text-neutral-600">{emp.storeName}</td>
+                          <td className="p-2 text-center font-mono">{Math.round(emp.mtdSales).toLocaleString()}</td>
+                          <td className="p-2 text-center font-mono text-neutral-500">{emp.target ? Math.round(emp.target).toLocaleString() : '-'}</td>
+                          <td className="p-2 text-center">
+                            {emp.active ? (
+                              <span className="text-xs font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">نشط</span>
+                            ) : (
+                              <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-100 text-red-600">غير نشط</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="p-4 border-t border-neutral-100 flex justify-between items-center">
+                <button type="button" className="btn-secondary py-2 px-4" onClick={() => setShowTargetModal(false)}>إلغاء</button>
                 <button
                   type="button"
-                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200"
-                  onClick={() => setTargetSelected(new Set(targetEmpList.map((e: any) => e.id)))}
+                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-xl transition-colors flex items-center gap-2"
+                  onClick={exportTargetTemplate}
                 >
-                  تحديد الكل
-                </button>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-                  onClick={() => setTargetSelected(new Set())}
-                >
-                  إلغاء الكل
-                </button>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-100 text-green-700 hover:bg-green-200"
-                  onClick={() => setTargetSelected(new Set(targetEmpList.filter((e: any) => e.active).map((e: any) => e.id)))}
-                >
-                  النشطين فقط
+                  📥 تصدير المحددين ({targetSelected.size})
                 </button>
               </div>
-              <div className="text-sm text-neutral-500">
-                المحددين: <span className="font-bold text-neutral-800">{targetSelected.size}</span> من <span className="font-bold">{targetEmpList.length}</span>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-neutral-800 text-white">
-                  <tr>
-                    <th className="p-2 text-center w-10">
-                      <input
-                        type="checkbox"
-                        checked={targetSelected.size === targetEmpList.length && targetEmpList.length > 0}
-                        onChange={(e) => {
-                          if (e.target.checked) setTargetSelected(new Set(targetEmpList.map((emp: any) => emp.id)));
-                          else setTargetSelected(new Set());
-                        }}
-                      />
-                    </th>
-                    <th className="p-2 text-right">الموظف</th>
-                    <th className="p-2 text-right">الفرع</th>
-                    <th className="p-2 text-center">المبيعات (MTD)</th>
-                    <th className="p-2 text-center">التارجت الحالي</th>
-                    <th className="p-2 text-center">الحالة</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  {targetEmpList.map((emp: any) => {
-                    const isSelected = targetSelected.has(emp.id);
-                    const bgClass = emp.active ? '' : 'bg-red-50';
-                    return (
-                      <tr
-                        key={emp.id}
-                        className={`hover:bg-neutral-50 cursor-pointer ${bgClass}`}
-                        onClick={() => {
-                          const next = new Set(targetSelected);
-                          if (next.has(emp.id)) next.delete(emp.id);
-                          else next.add(emp.id);
-                          setTargetSelected(next);
-                        }}
-                      >
-                        <td className="p-2 text-center">
-                          <input type="checkbox" checked={isSelected} readOnly />
-                        </td>
-                        <td className="p-2 font-medium text-neutral-800">{emp.name}</td>
-                        <td className="p-2 text-neutral-600">{emp.storeName}</td>
-                        <td className="p-2 text-center font-mono">{Math.round(emp.mtdSales).toLocaleString()}</td>
-                        <td className="p-2 text-center font-mono text-neutral-500">{emp.target ? Math.round(emp.target).toLocaleString() : '-'}</td>
-                        <td className="p-2 text-center">
-                          {emp.active ? (
-                            <span className="text-xs font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">نشط</span>
-                          ) : (
-                            <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-100 text-red-600">غير نشط</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="p-4 border-t border-neutral-100 flex justify-between items-center">
-              <button type="button" className="btn-secondary py-2 px-4" onClick={() => setShowTargetModal(false)}>إلغاء</button>
-              <button
-                type="button"
-                className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-xl transition-colors flex items-center gap-2"
-                onClick={exportTargetTemplate}
-              >
-                📥 تصدير المحددين ({targetSelected.size})
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Report View Modal */}
-      {previewReport && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
-            <div className="p-4 border-b border-neutral-100 flex items-center justify-between bg-neutral-50">
-              <h3 className="font-bold text-neutral-900">
-                {previewReport.type === 'global' ? 'Global Summary - ملخص عام' : 'Employee Performance - أداء الموظفين'}
-              </h3>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="bg-primary-600 text-white font-bold py-2 px-4 rounded-xl hover:bg-primary-700 transition delay-100 flex items-center gap-2"
-                  onClick={async () => {
-                    if (previewReport.type === 'global') {
-                      await generateGlobalSalesPDF(previewReport.data, { start: range.start, end: range.end });
-                    } else if (previewReport.type === 'stores') {
-                      const today = new Date(); // Or parse from range
-                      // For daily report, we usually want Yesterday vs Last Year
-                      // We can infer dates from the preview data or passed range.
-                      // generateDailyReportPDF(data, { yesterday: 'YYYY-MM-DD', lastYear: 'YYYY-MM-DD' })
-                      // We'll use range.start as the 'yesterday' date since that's what we built the report for.
-                      const yDate = range.start;
-                      const lyDate = getPrevYearDate(range.start);
-                      await generateDailyReportPDF(previewReport.data, { yesterday: yDate, lastYear: lyDate });
-                    } else if (previewReport.type === 'employee') {
-                      const today = new Date();
-                      const yest = new Date(today); yest.setDate(today.getDate() - 1);
-                      const mStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      {
+        previewReport && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-2 sm:p-4">
+            <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+              <div className="p-4 border-b border-neutral-100 flex items-center justify-between bg-neutral-50">
+                <h3 className="font-bold text-neutral-900">
+                  {previewReport.type === 'global' ? 'Global Summary - ملخص عام' : 'Employee Performance - أداء الموظفين'}
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="bg-primary-600 text-white font-bold py-2 px-4 rounded-xl hover:bg-primary-700 transition delay-100 flex items-center gap-2"
+                    onClick={async () => {
+                      if (previewReport.type === 'global') {
+                        await generateGlobalSalesPDF(previewReport.data, { start: range.start, end: range.end });
+                      } else if (previewReport.type === 'stores') {
+                        const today = new Date(); // Or parse from range
+                        // For daily report, we usually want Yesterday vs Last Year
+                        // We can infer dates from the preview data or passed range.
+                        // generateDailyReportPDF(data, { yesterday: 'YYYY-MM-DD', lastYear: 'YYYY-MM-DD' })
+                        // We'll use range.start as the 'yesterday' date since that's what we built the report for.
+                        const yDate = range.start;
+                        const lyDate = getPrevYearDate(range.start);
+                        await generateDailyReportPDF(previewReport.data, { yesterday: yDate, lastYear: lyDate });
+                      } else if (previewReport.type === 'employee') {
+                        const today = new Date();
+                        const yest = new Date(today); yest.setDate(today.getDate() - 1);
+                        const mStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
-                      // Check if we have store-grouped data
-                      if (previewReport.data[0]?.storeId && previewReport.data[0]?.employees) {
-                        await generateEmployeeReportByStore(previewReport.data, {
-                          yesterday: yest.toISOString().split('T')[0],
-                          monthStart: mStart.toISOString().split('T')[0]
-                        });
-                      } else {
-                        await generateEmployeePerformancePDF(previewReport.data, {
-                          yesterday: yest.toISOString().split('T')[0],
-                          monthStart: mStart.toISOString().split('T')[0]
-                        });
+                        // Check if we have store-grouped data
+                        if (previewReport.data[0]?.storeId && previewReport.data[0]?.employees) {
+                          await generateEmployeeReportByStore(previewReport.data, {
+                            yesterday: yest.toISOString().split('T')[0],
+                            monthStart: mStart.toISOString().split('T')[0]
+                          });
+                        } else {
+                          await generateEmployeePerformancePDF(previewReport.data, {
+                            yesterday: yest.toISOString().split('T')[0],
+                            monthStart: mStart.toISOString().split('T')[0]
+                          });
+                        }
                       }
-                    }
-                  }}
-                >
-                  <span>🖨️</span> طباعة PDF
-                </button>
-                <button
-                  onClick={() => setPreviewReport(null)}
-                  className="px-4 py-2 bg-neutral-200 text-neutral-700 rounded-lg font-bold text-sm hover:bg-neutral-300 transition-colors"
-                >
-                  إغلاق
-                </button>
-              </div>
-            </div>
-
-            <div className="p-8 overflow-y-auto flex-1">
-
-              <div className="report-header flex justify-between items-end">
-                <div>
-                  <h1 className="text-2xl font-bold text-neutral-900">Ora Cockpit</h1>
-                  <p className="text-sm text-neutral-500">{previewReport.type === 'global' ? 'Global Summary - ملخص عام' : 'Employee Performance - أداء الموظفين'}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold">التاريخ: {range.start} إلى {range.end}</p>
-                  <p className="text-xs text-neutral-400">تم الاستخراج في: {new Date().toLocaleString('ar-SA')}</p>
+                    }}
+                  >
+                    <span>🖨️</span> طباعة PDF
+                  </button>
+                  <button
+                    onClick={() => setPreviewReport(null)}
+                    className="px-4 py-2 bg-neutral-200 text-neutral-700 rounded-lg font-bold text-sm hover:bg-neutral-300 transition-colors"
+                  >
+                    إغلاق
+                  </button>
                 </div>
               </div>
 
-              {previewReport.type === 'global' && (
-                <table className="w-full report-table border-collapse">
-                  <thead>
-                    <tr>
-                      <th>التاريخ</th>
-                      <th>مبيعات 2026</th>
-                      <th>مبيعات 2025</th>
-                      <th>% النمو</th>
-                      <th>عدد الفواتير</th>
-                      <th>م. الفاتورة</th>
-                      <th>قيمة العميل</th>
-                      <th>زوار 2026</th>
-                      <th>زوار 2025</th>
-                      <th>% التحويل</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewReport.data.map((r: any) => (
-                      <tr key={r.date}>
-                        <td className="font-mono">{r.date}</td>
-                        <td className="font-bold">{Math.round(r.sales).toLocaleString()}</td>
-                        <td className="text-neutral-500">{Math.round(r.salesPrev).toLocaleString()}</td>
-                        <td className={`font-bold ${r.growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {r.growth >= 0 ? '+' : ''}{r.growth.toFixed(1)}%
-                        </td>
-                        <td>{r.trans.toLocaleString()}</td>
-                        <td>{Math.round(r.avgInv).toLocaleString()}</td>
-                        <td className="font-bold">{Math.round(r.customerValue).toLocaleString()}</td>
-                        <td>{r.visitors.toLocaleString()}</td>
-                        <td className="text-neutral-400">{r.visitorsPrev.toLocaleString()}</td>
-                        <td className="text-orange-600 font-bold">{r.conversion.toFixed(1)}%</td>
-                      </tr>
-                    ))}
-                    <tr className="bg-neutral-100 font-bold">
-                      <td>الإجمالي</td>
-                      <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.sales, 0)).toLocaleString()}</td>
-                      <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.salesPrev, 0)).toLocaleString()}</td>
-                      <td>{((previewReport.data.reduce((s: any, x: any) => s + x.sales, 0) - previewReport.data.reduce((s: any, x: any) => s + x.salesPrev, 0)) / (previewReport.data.reduce((s: any, x: any) => s + x.salesPrev, 0) || 1) * 100).toFixed(1)}%</td>
-                      <td>{previewReport.data.reduce((s: any, x: any) => s + x.trans, 0).toLocaleString()}</td>
-                      <td>-</td>
-                      <td>-</td>
-                      <td>{previewReport.data.reduce((s: any, x: any) => s + x.visitors, 0).toLocaleString()}</td>
-                      <td>{previewReport.data.reduce((s: any, x: any) => s + x.visitorsPrev, 0).toLocaleString()}</td>
-                      <td>{(previewReport.data.reduce((s: any, x: any) => s + x.trans, 0) / (previewReport.data.reduce((s: any, x: any) => s + x.visitors, 0) || 1) * 100).toFixed(1)}%</td>
-                    </tr>
-                  </tbody>
-                </table>
-              )}
+              <div className="p-8 overflow-y-auto flex-1">
 
-              {previewReport.type === 'stores' && (
-                <table className="w-full report-table border-collapse text-sm">
-                  <thead>
-                    <tr className="bg-orange-500 text-white">
-                      <th className="p-2 border border-orange-600">المعرض</th>
-                      <th className="p-2 border border-orange-600">المبيعات</th>
-                      <th className="p-2 border border-orange-600">العام الماضي</th>
-                      <th className="p-2 border border-orange-600">% النمو</th>
-                      <th className="p-2 border border-orange-600">المطلوب يومياً</th>
-                      <th className="p-2 border border-orange-600">الفواتير</th>
-                      <th className="p-2 border border-orange-600">م. الفاتورة</th>
-                      <th className="p-2 border border-orange-600">الزوار</th>
-                      <th className="p-2 border border-orange-600">زوار LY</th>
-                      <th className="p-2 border border-orange-600">% التحويل</th>
-                      <th className="p-2 border border-orange-600">قيمة العميل</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewReport.data.map((r: any) => (
-                      <tr key={r.name} className="hover:bg-neutral-50 odd:bg-white even:bg-neutral-50">
-                        <td className="p-2 border border-neutral-200 font-bold">{r.name}</td>
-                        <td className="p-2 border border-neutral-200">{Math.round(r.sales).toLocaleString()}</td>
-                        <td className="p-2 border border-neutral-200 text-neutral-500">{Math.round(r.prevSales).toLocaleString()}</td>
-                        <td className={`p-2 border border-neutral-200 font-bold ${r.growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {r.growth >= 0 ? '+' : ''}{r.growth.toFixed(1)}%
-                        </td>
-                        <td className="p-2 border border-neutral-200 text-red-600 font-bold">{Math.round(r.dailyReq || 0).toLocaleString()}</td>
-                        <td className="p-2 border border-neutral-200">{r.trans.toLocaleString()}</td>
-                        <td className="p-2 border border-neutral-200">{Math.round(r.avgInv).toLocaleString()}</td>
-                        <td className="p-2 border border-neutral-200">{r.visitors.toLocaleString()}</td>
-                        <td className="p-2 border border-neutral-200 text-neutral-400">{r.prevVisitors.toLocaleString()}</td>
-                        <td className="p-2 border border-neutral-200 text-orange-600 font-bold">{r.conversion.toFixed(1)}%</td>
-                        <td className="p-2 border border-neutral-200 font-bold">{Math.round(r.customerValue).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                    <tr className="bg-neutral-200 font-bold">
-                      <td className="p-2 border border-neutral-300">الإجمالي</td>
-                      <td className="p-2 border border-neutral-300">{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.sales, 0)).toLocaleString()}</td>
-                      <td className="p-2 border border-neutral-300">{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.prevSales, 0)).toLocaleString()}</td>
-                      <td className="p-2 border border-neutral-300 text-center">-</td>
-                      <td className="p-2 border border-neutral-300">{Math.round(previewReport.data.reduce((s: any, x: any) => s + (x.dailyReq || 0), 0)).toLocaleString()}</td>
-                      <td className="p-2 border border-neutral-300">{previewReport.data.reduce((s: any, x: any) => s + x.trans, 0).toLocaleString()}</td>
-                      <td className="p-2 border border-neutral-300">-</td>
-                      <td className="p-2 border border-neutral-300">{previewReport.data.reduce((s: any, x: any) => s + x.visitors, 0).toLocaleString()}</td>
-                      <td className="p-2 border border-neutral-300">{previewReport.data.reduce((s: any, x: any) => s + x.prevVisitors, 0).toLocaleString()}</td>
-                      <td className="p-2 border border-neutral-300">-</td>
-                      <td className="p-2 border border-neutral-300">-</td>
-                    </tr>
-                  </tbody>
-                </table>
-              )}
+                <div className="report-header flex justify-between items-end">
+                  <div>
+                    <h1 className="text-2xl font-bold text-neutral-900">Ora Cockpit</h1>
+                    <p className="text-sm text-neutral-500">{previewReport.type === 'global' ? 'Global Summary - ملخص عام' : 'Employee Performance - أداء الموظفين'}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold">التاريخ: {range.start} إلى {range.end}</p>
+                    <p className="text-xs text-neutral-400">تم الاستخراج في: {new Date().toLocaleString('ar-SA')}</p>
+                  </div>
+                </div>
 
-              {previewReport.type === 'employee' && (
-                <div className="space-y-8">
-                  {/* Store-grouped employee data */}
-                  {previewReport.data.map((store: any) => (
-                    <div key={store.storeId} className="border border-neutral-200 rounded-xl overflow-hidden">
-                      <div className="bg-orange-500 text-white p-3 font-bold">
-                        {store.storeId} - {store.storeName}
-                      </div>
-                      <table className="w-full report-table border-collapse text-sm">
-                        <thead>
-                          <tr className="bg-neutral-100">
-                            <th rowSpan={2} className="p-2 border">الموظف</th>
-                            <th colSpan={4} className="p-2 border bg-neutral-200">الأمس (Yesterday)</th>
-                            <th colSpan={8} className="p-2 border bg-neutral-300">الشهر الحالي (MTD)</th>
-                          </tr>
-                          <tr className="bg-neutral-50 text-xs">
-                            <th className="p-2 border">المبيعات</th>
-                            <th className="p-2 border">مساهمة %</th>
-                            <th className="p-2 border">العدد</th>
-                            <th className="p-2 border">م. فاتورة</th>
-                            <th className="p-2 border">المبيعات</th>
-                            <th className="p-2 border">مساهمة %</th>
-                            <th className="p-2 border">العدد</th>
-                            <th className="p-2 border">م. فاتورة</th>
-                            <th className="p-2 border">الهدف</th>
-                            <th className="p-2 border">% تحقيق</th>
-                            <th className="p-2 border">المتبقي</th>
-                            <th className="p-2 border">يومية متبقية</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {store.employees.map((e: any, idx: number) => (
-                            <tr key={idx} className="hover:bg-neutral-50">
-                              <td className="p-2 border text-right font-bold">{e.name}</td>
-                              <td className="p-2 border">{Math.round(e.ySales).toLocaleString()}</td>
-                              <td className="p-2 border">{e.yShare.toFixed(0)}%</td>
-                              <td className="p-2 border">{e.yTrans}</td>
-                              <td className="p-2 border">{Math.round(e.yAvgInv).toLocaleString()}</td>
-                              <td className="p-2 border font-bold text-primary-700">{Math.round(e.mSales).toLocaleString()}</td>
-                              <td className="p-2 border">{e.mShare.toFixed(0)}%</td>
-                              <td className="p-2 border">{e.mTrans}</td>
-                              <td className="p-2 border">{Math.round(e.mAvgInv).toLocaleString()}</td>
-                              <td className="p-2 border text-neutral-500">{Math.round(e.target).toLocaleString()}</td>
-                              <td className="p-2 border font-bold text-green-600">{e.achievement.toFixed(1)}%</td>
-                              <td className="p-2 border text-red-500">{Math.round(e.remaining).toLocaleString()}</td>
-                              <td className="p-2 border font-bold">{Math.round(e.dailyReq).toLocaleString()}</td>
+                {previewReport.type === 'global' && (
+                  <table className="w-full report-table border-collapse">
+                    <thead>
+                      <tr>
+                        <th>التاريخ</th>
+                        <th>مبيعات 2026</th>
+                        <th>مبيعات 2025</th>
+                        <th>% النمو</th>
+                        <th>عدد الفواتير</th>
+                        <th>م. الفاتورة</th>
+                        <th>قيمة العميل</th>
+                        <th>زوار 2026</th>
+                        <th>زوار 2025</th>
+                        <th>% التحويل</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewReport.data.map((r: any) => (
+                        <tr key={r.date}>
+                          <td className="font-mono">{r.date}</td>
+                          <td className="font-bold">{Math.round(r.sales).toLocaleString()}</td>
+                          <td className="text-neutral-500">{Math.round(r.salesPrev).toLocaleString()}</td>
+                          <td className={`font-bold ${r.growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {r.growth >= 0 ? '+' : ''}{r.growth.toFixed(1)}%
+                          </td>
+                          <td>{r.trans.toLocaleString()}</td>
+                          <td>{Math.round(r.avgInv).toLocaleString()}</td>
+                          <td className="font-bold">{Math.round(r.customerValue).toLocaleString()}</td>
+                          <td>{r.visitors.toLocaleString()}</td>
+                          <td className="text-neutral-400">{r.visitorsPrev.toLocaleString()}</td>
+                          <td className="text-orange-600 font-bold">{r.conversion.toFixed(1)}%</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-neutral-100 font-bold">
+                        <td>الإجمالي</td>
+                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.sales, 0)).toLocaleString()}</td>
+                        <td>{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.salesPrev, 0)).toLocaleString()}</td>
+                        <td>{((previewReport.data.reduce((s: any, x: any) => s + x.sales, 0) - previewReport.data.reduce((s: any, x: any) => s + x.salesPrev, 0)) / (previewReport.data.reduce((s: any, x: any) => s + x.salesPrev, 0) || 1) * 100).toFixed(1)}%</td>
+                        <td>{previewReport.data.reduce((s: any, x: any) => s + x.trans, 0).toLocaleString()}</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>{previewReport.data.reduce((s: any, x: any) => s + x.visitors, 0).toLocaleString()}</td>
+                        <td>{previewReport.data.reduce((s: any, x: any) => s + x.visitorsPrev, 0).toLocaleString()}</td>
+                        <td>{(previewReport.data.reduce((s: any, x: any) => s + x.trans, 0) / (previewReport.data.reduce((s: any, x: any) => s + x.visitors, 0) || 1) * 100).toFixed(1)}%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+
+                {previewReport.type === 'stores' && (
+                  <table className="w-full report-table border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-orange-500 text-white">
+                        <th className="p-2 border border-orange-600">المعرض</th>
+                        <th className="p-2 border border-orange-600">المبيعات</th>
+                        <th className="p-2 border border-orange-600">العام الماضي</th>
+                        <th className="p-2 border border-orange-600">% النمو</th>
+                        <th className="p-2 border border-orange-600">المطلوب يومياً</th>
+                        <th className="p-2 border border-orange-600">الفواتير</th>
+                        <th className="p-2 border border-orange-600">م. الفاتورة</th>
+                        <th className="p-2 border border-orange-600">الزوار</th>
+                        <th className="p-2 border border-orange-600">زوار LY</th>
+                        <th className="p-2 border border-orange-600">% التحويل</th>
+                        <th className="p-2 border border-orange-600">قيمة العميل</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewReport.data.map((r: any) => (
+                        <tr key={r.name} className="hover:bg-neutral-50 odd:bg-white even:bg-neutral-50">
+                          <td className="p-2 border border-neutral-200 font-bold">{r.name}</td>
+                          <td className="p-2 border border-neutral-200">{Math.round(r.sales).toLocaleString()}</td>
+                          <td className="p-2 border border-neutral-200 text-neutral-500">{Math.round(r.prevSales).toLocaleString()}</td>
+                          <td className={`p-2 border border-neutral-200 font-bold ${r.growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {r.growth >= 0 ? '+' : ''}{r.growth.toFixed(1)}%
+                          </td>
+                          <td className="p-2 border border-neutral-200 text-red-600 font-bold">{Math.round(r.dailyReq || 0).toLocaleString()}</td>
+                          <td className="p-2 border border-neutral-200">{r.trans.toLocaleString()}</td>
+                          <td className="p-2 border border-neutral-200">{Math.round(r.avgInv).toLocaleString()}</td>
+                          <td className="p-2 border border-neutral-200">{r.visitors.toLocaleString()}</td>
+                          <td className="p-2 border border-neutral-200 text-neutral-400">{r.prevVisitors.toLocaleString()}</td>
+                          <td className="p-2 border border-neutral-200 text-orange-600 font-bold">{r.conversion.toFixed(1)}%</td>
+                          <td className="p-2 border border-neutral-200 font-bold">{Math.round(r.customerValue).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-neutral-200 font-bold">
+                        <td className="p-2 border border-neutral-300">الإجمالي</td>
+                        <td className="p-2 border border-neutral-300">{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.sales, 0)).toLocaleString()}</td>
+                        <td className="p-2 border border-neutral-300">{Math.round(previewReport.data.reduce((s: any, x: any) => s + x.prevSales, 0)).toLocaleString()}</td>
+                        <td className="p-2 border border-neutral-300 text-center">-</td>
+                        <td className="p-2 border border-neutral-300">{Math.round(previewReport.data.reduce((s: any, x: any) => s + (x.dailyReq || 0), 0)).toLocaleString()}</td>
+                        <td className="p-2 border border-neutral-300">{previewReport.data.reduce((s: any, x: any) => s + x.trans, 0).toLocaleString()}</td>
+                        <td className="p-2 border border-neutral-300">-</td>
+                        <td className="p-2 border border-neutral-300">{previewReport.data.reduce((s: any, x: any) => s + x.visitors, 0).toLocaleString()}</td>
+                        <td className="p-2 border border-neutral-300">{previewReport.data.reduce((s: any, x: any) => s + x.prevVisitors, 0).toLocaleString()}</td>
+                        <td className="p-2 border border-neutral-300">-</td>
+                        <td className="p-2 border border-neutral-300">-</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+
+                {previewReport.type === 'employee' && (
+                  <div className="space-y-8">
+                    {/* Store-grouped employee data */}
+                    {previewReport.data.map((store: any) => (
+                      <div key={store.storeId} className="border border-neutral-200 rounded-xl overflow-hidden">
+                        <div className="bg-orange-500 text-white p-3 font-bold">
+                          {store.storeId} - {store.storeName}
+                        </div>
+                        <table className="w-full report-table border-collapse text-sm">
+                          <thead>
+                            <tr className="bg-neutral-100">
+                              <th rowSpan={2} className="p-2 border">الموظف</th>
+                              <th colSpan={4} className="p-2 border bg-neutral-200">الأمس (Yesterday)</th>
+                              <th colSpan={8} className="p-2 border bg-neutral-300">الشهر الحالي (MTD)</th>
                             </tr>
-                          ))}
-                          <tr className="bg-neutral-100 font-bold">
-                            <td className="p-2 border">الإجمالي</td>
-                            <td className="p-2 border">{Math.round(store.employees.reduce((s: number, x: any) => s + x.ySales, 0)).toLocaleString()}</td>
-                            <td className="p-2 border">100%</td>
-                            <td className="p-2 border">{store.employees.reduce((s: number, x: any) => s + x.yTrans, 0)}</td>
-                            <td className="p-2 border">-</td>
-                            <td className="p-2 border">{Math.round(store.employees.reduce((s: number, x: any) => s + x.mSales, 0)).toLocaleString()}</td>
-                            <td className="p-2 border">100%</td>
-                            <td className="p-2 border">{store.employees.reduce((s: number, x: any) => s + x.mTrans, 0)}</td>
-                            <td className="p-2 border">-</td>
-                            <td className="p-2 border">{Math.round(store.employees.reduce((s: number, x: any) => s + x.target, 0)).toLocaleString()}</td>
-                            <td className="p-2 border">-</td>
-                            <td className="p-2 border">{Math.round(store.employees.reduce((s: number, x: any) => s + x.remaining, 0)).toLocaleString()}</td>
-                            <td className="p-2 border">-</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
-                </div>
-              )}
+                            <tr className="bg-neutral-50 text-xs">
+                              <th className="p-2 border">المبيعات</th>
+                              <th className="p-2 border">مساهمة %</th>
+                              <th className="p-2 border">العدد</th>
+                              <th className="p-2 border">م. فاتورة</th>
+                              <th className="p-2 border">المبيعات</th>
+                              <th className="p-2 border">مساهمة %</th>
+                              <th className="p-2 border">العدد</th>
+                              <th className="p-2 border">م. فاتورة</th>
+                              <th className="p-2 border">الهدف</th>
+                              <th className="p-2 border">% تحقيق</th>
+                              <th className="p-2 border">المتبقي</th>
+                              <th className="p-2 border">يومية متبقية</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {store.employees.map((e: any, idx: number) => (
+                              <tr key={idx} className="hover:bg-neutral-50">
+                                <td className="p-2 border text-right font-bold">{e.name}</td>
+                                <td className="p-2 border">{Math.round(e.ySales).toLocaleString()}</td>
+                                <td className="p-2 border">{e.yShare.toFixed(0)}%</td>
+                                <td className="p-2 border">{e.yTrans}</td>
+                                <td className="p-2 border">{Math.round(e.yAvgInv).toLocaleString()}</td>
+                                <td className="p-2 border font-bold text-primary-700">{Math.round(e.mSales).toLocaleString()}</td>
+                                <td className="p-2 border">{e.mShare.toFixed(0)}%</td>
+                                <td className="p-2 border">{e.mTrans}</td>
+                                <td className="p-2 border">{Math.round(e.mAvgInv).toLocaleString()}</td>
+                                <td className="p-2 border text-neutral-500">{Math.round(e.target).toLocaleString()}</td>
+                                <td className="p-2 border font-bold text-green-600">{e.achievement.toFixed(1)}%</td>
+                                <td className="p-2 border text-red-500">{Math.round(e.remaining).toLocaleString()}</td>
+                                <td className="p-2 border font-bold">{Math.round(e.dailyReq).toLocaleString()}</td>
+                              </tr>
+                            ))}
+                            <tr className="bg-neutral-100 font-bold">
+                              <td className="p-2 border">الإجمالي</td>
+                              <td className="p-2 border">{Math.round(store.employees.reduce((s: number, x: any) => s + x.ySales, 0)).toLocaleString()}</td>
+                              <td className="p-2 border">100%</td>
+                              <td className="p-2 border">{store.employees.reduce((s: number, x: any) => s + x.yTrans, 0)}</td>
+                              <td className="p-2 border">-</td>
+                              <td className="p-2 border">{Math.round(store.employees.reduce((s: number, x: any) => s + x.mSales, 0)).toLocaleString()}</td>
+                              <td className="p-2 border">100%</td>
+                              <td className="p-2 border">{store.employees.reduce((s: number, x: any) => s + x.mTrans, 0)}</td>
+                              <td className="p-2 border">-</td>
+                              <td className="p-2 border">{Math.round(store.employees.reduce((s: number, x: any) => s + x.target, 0)).toLocaleString()}</td>
+                              <td className="p-2 border">-</td>
+                              <td className="p-2 border">{Math.round(store.employees.reduce((s: number, x: any) => s + x.remaining, 0)).toLocaleString()}</td>
+                              <td className="p-2 border">-</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }

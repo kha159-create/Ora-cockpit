@@ -26,6 +26,7 @@ export default function OffersPage() {
   const [manager, setManager] = useState<string>('all');
   const [branch, setBranch] = useState<string>('all');
   const [city, setCity] = useState<string>('all');
+  const [storeType, setStoreType] = useState<string>('all');
   const [period, setPeriod] = useState<PeriodKey>('mtd');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedOffer, setSelectedOffer] = useState<any>(null);
@@ -52,7 +53,7 @@ export default function OffersPage() {
   }, [manager, user?.name, user?.role]);
 
   const { managers, branches, cities, allowedStoreIds } = useMemo(() => {
-    const meta: Record<string, { manager?: string; city?: string }> = mgmt?.store_meta || {};
+    const meta: Record<string, { manager?: string; city?: string; type?: string }> = mgmt?.store_meta || {};
     const stores = mgmt?.stores || {};
     const managersSet = new Set<string>();
     const citiesSet = new Set<string>();
@@ -67,6 +68,12 @@ export default function OffersPage() {
         const m = meta[sid];
         if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
         if (city !== 'all' && String(m?.city || '') !== city) return false;
+        if (storeType !== 'all') {
+          const type = String(m?.type || '').toLowerCase();
+          const isOnline = type === 'online' || type === 'platform' || type === 'warehouse';
+          if (storeType === 'online' && !isOnline) return false;
+          if (storeType === 'store' && isOnline) return false;
+        }
         return true;
       })
       .sort((a, b) => (stores[a] || a).localeCompare(stores[b] || b, 'ar'));
@@ -84,7 +91,7 @@ export default function OffersPage() {
       if (allowed.size === 0) Object.keys(stores).forEach((sid) => allowed.add(sid));
     }
     return { managers, branches, cities, allowedStoreIds: allowed };
-  }, [mgmt, branch, city, effectiveManager]);
+  }, [mgmt, branch, city, effectiveManager, storeType]);
 
   const rawOffers = useMemo(() => {
     if (!data) return [];
@@ -487,6 +494,14 @@ export default function OffersPage() {
               {(cities || []).map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-neutral-500 mb-1">نوع المعرض</label>
+            <select className="input w-full" value={storeType} onChange={(e) => setStoreType(e.target.value)}>
+              <option value="all">الكل</option>
+              <option value="store">المعارض فقط</option>
+              <option value="online">الأونلاين فقط</option>
             </select>
           </div>
           <div>

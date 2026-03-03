@@ -714,7 +714,12 @@ export default function StoresPage() {
       if (!isAdminOrAuditor(user?.role) && user?.role !== 'BranchManager' && m?.manager !== user?.name) return false;
       if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return false;
       if (city !== 'all' && String(m?.city || '') !== city) return false;
-      if (type !== 'all' && String(m?.type || '') !== type) return false;
+      if (type !== 'all') {
+        const storeType = String(m?.type || '').toLowerCase();
+        const isOnline = storeType === 'online' || storeType === 'platform' || storeType === 'warehouse';
+        if (type === 'online' && !isOnline) return false;
+        if (type === 'store' && isOnline) return false;
+      }
       if (branch !== 'all' && sid !== branch) return false;
       return true;
     };
@@ -899,12 +904,11 @@ export default function StoresPage() {
               </select>
             </div>
             <div>
-              <div className="text-xs font-semibold text-neutral-500 mb-1">نوع الفرع</div>
-              <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
+              <div className="text-xs font-semibold text-neutral-500 mb-1">نوع المعرض</div>
+              <select className="input text-sm py-1.5" value={type} onChange={(e) => setType(e.target.value)}>
                 <option value="all">الكل</option>
-                <option value="فرع">فرع</option>
-                <option value="معرض">معرض</option>
-                <option value="أخرى">أخرى</option>
+                <option value="store">المعارض فقط</option>
+                <option value="online">الأونلاين فقط</option>
               </select>
             </div>
             <div className={`${user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}`}>
