@@ -716,6 +716,11 @@ export default function EmployeesPage() {
         }
       } else if (period === 'custom' && customStart) {
         targetMonthKey = customStart.substring(0, 7);
+      } else if (period === 'yesterday') {
+        targetMonthKey = toLocalYMD(yesterday).substring(0, 7);
+      } else if (period === 'mtd') {
+        const rangeStartStr = rangeStart || toLocalYMD(today);
+        targetMonthKey = rangeStartStr.substring(0, 7);
       } else {
         targetMonthKey = toLocalYMD(today).substring(0, 7);
       }

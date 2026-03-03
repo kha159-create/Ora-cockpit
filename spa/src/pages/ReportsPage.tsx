@@ -59,6 +59,26 @@ function getRange(
   return { start: toYMD(start), end: toYMD(end) };
 }
 
+function normalizeTargetsByMonth(employeesJson: any) {
+  const direct = employeesJson?.targets_by_month;
+  if (direct && typeof direct === 'object') return direct as Record<string, Record<string, number>>;
+
+  const monthlyTargets = employeesJson?.monthly_targets;
+  const byMonth: Record<string, Record<string, number>> = {};
+  if (monthlyTargets && typeof monthlyTargets === 'object') {
+    for (const [empIdRaw, mp] of Object.entries(monthlyTargets)) {
+      if (!mp || typeof mp !== 'object') continue;
+      const empId = String(empIdRaw);
+      for (const [monthStart, val] of Object.entries(mp as Record<string, number>)) {
+        const monthKey = String(monthStart).substring(0, 7);
+        if (!byMonth[monthKey]) byMonth[monthKey] = {};
+        byMonth[monthKey][empId] = Number(val) || 0;
+      }
+    }
+  }
+  return byMonth;
+}
+
 export default function ReportsPage() {
   const user = getCurrentUser();
   const [rawMgmt, setRawMgmt] = useState<any>(null);
@@ -268,13 +288,30 @@ export default function ReportsPage() {
     const history = rawEmp.history || {};
     const names = rawEmp.employee_names || {};
     const targets = rawEmp.targets || {};
+    const targetsByMonth = normalizeTargetsByMonth(rawEmp);
     const storesMap = rawMgmt.stores || {};
 
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
     const yStr = toYMD(yesterday);
-    const mtdStart = toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
+
+    // MTD month-boundary fix
+    const mtdStartObj = new Date(today.getFullYear(), today.getMonth(), 1);
+    const mtdEndObj = yesterday.getMonth() !== today.getMonth() ? today : yesterday;
+    const mtdStart = toYMD(mtdStartObj);
+    const mtdEndStr = toYMD(mtdEndObj);
+
+    const targetMonthKey = range.start.substring(0, 7);
+    const getTarget = (rawId: string) => {
+      const id = String(rawId || '').split('-')[0].trim();
+      const padded = id.padStart(4, '0');
+      if (targetsByMonth[targetMonthKey]) {
+        if (targetsByMonth[targetMonthKey][id] != null) return targetsByMonth[targetMonthKey][id];
+        if (targetsByMonth[targetMonthKey][padded] != null) return targetsByMonth[targetMonthKey][padded];
+      }
+      return targets[id] || targets[padded] || 0;
+    };
 
     // Group employees by store
     const byStore: Record<string, Record<string, any>> = {};
@@ -292,14 +329,14 @@ export default function ReportsPage() {
             name: names[empId] || names[empId.padStart(4, '0')] || eid,
             ySales: 0, yTrans: 0,
             mSales: 0, mTrans: 0,
-            target: targets[empId] || targets[empId.padStart(4, '0')] || 0
+            target: getTarget(empId)
           };
         }
         if (dt === yStr) {
           byStore[sid][empId].ySales += s || 0;
           byStore[sid][empId].yTrans += t || 0;
         }
-        if (dt >= mtdStart && dt <= yStr) {
+        if (dt >= mtdStart && dt <= mtdEndStr) {
           byStore[sid][empId].mSales += s || 0;
           byStore[sid][empId].mTrans += t || 0;
         }
@@ -525,8 +562,23 @@ export default function ReportsPage() {
       const history = rawEmp?.history || {};
       const names = rawEmp?.employee_names || {};
       const targets = rawEmp?.targets || {};
+      const targetsByMonth = normalizeTargetsByMonth(rawEmp);
       const selectedIdsArray = Array.from(selectedEmpIds);
       const storesMap = rawMgmt.stores || {};
+
+      const mtdEndObj = yesterdayDate.getMonth() !== today.getMonth() ? today : yesterdayDate;
+      const mtdEndStr = toYMD(mtdEndObj);
+      const targetMonthKey = range.start.substring(0, 7);
+
+      const getTarget = (rawId: string) => {
+        const id = String(rawId || '').split('-')[0].trim();
+        const padded = id.padStart(4, '0');
+        if (targetsByMonth[targetMonthKey]) {
+          if (targetsByMonth[targetMonthKey][id] != null) return targetsByMonth[targetMonthKey][id];
+          if (targetsByMonth[targetMonthKey][padded] != null) return targetsByMonth[targetMonthKey][padded];
+        }
+        return targets[id] || targets[padded] || 0;
+      };
 
       // Group by store → employees (same structure as generateEmployeePerformance)
       const byStore: Record<string, Record<string, any>> = {};
@@ -547,7 +599,7 @@ export default function ReportsPage() {
               name: names[id] || names[rawId] || rawId,
               ySales: 0, yTrans: 0,
               mSales: 0, mTrans: 0,
-              target: targets[id] || targets[rawId] || 0
+              target: getTarget(id)
             };
           }
           const sales = Number(rec[2]) || 0;
@@ -557,7 +609,7 @@ export default function ReportsPage() {
             byStore[sid][id].ySales += sales;
             byStore[sid][id].yTrans += trans;
           }
-          if (d >= mtdStartYMD && d <= yesterdayYMD) {
+          if (d >= mtdStartYMD && d <= mtdEndStr) {
             byStore[sid][id].mSales += sales;
             byStore[sid][id].mTrans += trans;
           }
@@ -609,11 +661,27 @@ export default function ReportsPage() {
     const history = rawEmp.history || {};
     const names = rawEmp.employee_names || {};
     const targets = rawEmp.targets || {};
+    const targetsByMonth = normalizeTargetsByMonth(rawEmp);
     const storesMap = rawMgmt.stores || {};
 
     const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
     const mtdStart = toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
-    const todayYMD = toYMD(today);
+    const mtdEndObj = yesterday.getMonth() !== today.getMonth() ? today : yesterday;
+    const mtdEndStr = toYMD(mtdEndObj);
+    const targetMonthKey = range.start.substring(0, 7);
+
+    const getTarget = (rawId: string) => {
+      const id = String(rawId || '').split('-')[0].trim();
+      const padded = id.padStart(4, '0');
+      if (targetsByMonth[targetMonthKey]) {
+        if (targetsByMonth[targetMonthKey][id] != null) return targetsByMonth[targetMonthKey][id];
+        if (targetsByMonth[targetMonthKey][padded] != null) return targetsByMonth[targetMonthKey][padded];
+      }
+      return targets[id] || targets[padded] || 0;
+    };
 
     // Build employee list with MTD sales
     const empMap: Record<string, any> = {};
@@ -635,11 +703,11 @@ export default function ReportsPage() {
             storeName: storesMap[sid] || sid,
             mtdSales: 0,
             mtdTrans: 0,
-            target: targets[id] || targets[rawId] || 0,
+            target: getTarget(id),
             active: false,
           };
         }
-        if (d >= mtdStart && d <= todayYMD) {
+        if (d >= mtdStart && d <= mtdEndStr) {
           empMap[id].mtdSales += sales;
           empMap[id].mtdTrans += trans;
           if (sales > 0) empMap[id].active = true;
