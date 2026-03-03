@@ -453,7 +453,7 @@ export default function DashboardPage() {
     const allowed = new Set<string>();
     if (isBranchManager && user?.storeId) {
       allowed.add(user.storeId);
-    } else if (branch === 'all' && effectiveManager === 'all' && city === 'all') {
+    } else if (branch === 'all' && effectiveManager === 'all' && city === 'all' && selectedStoreType === 'all') {
       Object.keys(stores).forEach((sid) => allowed.add(sid));
     } else {
       Object.keys(meta).forEach((sid) => {
@@ -469,7 +469,9 @@ export default function DashboardPage() {
         }
         allowed.add(sid);
       });
-      if (allowed.size === 0) Object.keys(stores).forEach((sid) => allowed.add(sid));
+      if (allowed.size === 0 && branch === 'all' && effectiveManager === 'all' && city === 'all' && selectedStoreType === 'all') {
+        Object.keys(stores).forEach((sid) => allowed.add(sid));
+      }
     }
     return { allowedStoreIds: allowed, managers, branches, cities };
   }, [raw, branch, effectiveManager, city, selectedStoreType, isBranchManager, user?.storeId]);

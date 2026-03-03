@@ -100,7 +100,7 @@ function getRange(mode: Mode, standardYear: number, standardMonth: string, custo
 
   if (mode === 'mtd') {
     currStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0);
-    const mtdEnd = yesterday.getMonth() !== today.getMonth() ? today : yesterday;
+    const mtdEnd = today;
     currEnd = new Date(mtdEnd);
     currEnd.setHours(23, 59, 59, 999);
   } else if (mode === 'yesterday') {
