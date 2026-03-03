@@ -133,23 +133,27 @@ export function useCommissions(
             const cands = Array.from(new Set([id, padded, unpadded]));
 
             // 1. Try targets_by_month[YYYY-MM][empId]
-            const tbm = targetsByMonth[monthKey];
-            if (tbm) {
+            const hasMonthlyTbm = Object.values(targetsByMonth).some((m: any) => cands.some(c => m[c] != null));
+            const hasMonthlyMt = cands.some(c => monthlyTargets[c] != null);
+
+            if (hasMonthlyTbm || hasMonthlyMt) {
+                const tbm = targetsByMonth[monthKey];
+                if (tbm) {
+                    for (const c of cands) {
+                        if (tbm[c] != null) return Number(tbm[c]) || 0;
+                    }
+                }
                 for (const c of cands) {
-                    if (tbm[c] != null) return Number(tbm[c]) || 0;
+                    const mt = monthlyTargets[c];
+                    if (mt && typeof mt === 'object') {
+                        const targetVal = mt[monthKeyFull];
+                        if (targetVal != null) return Number(targetVal) || 0;
+                    }
                 }
+                return 0; // Tracked monthly, but no target for this specific month = 0
             }
 
-            // 2. Try monthly_targets[empId][YYYY-MM-01]
-            for (const c of cands) {
-                const mt = monthlyTargets[c];
-                if (mt && typeof mt === 'object') {
-                    const targetVal = mt[monthKeyFull];
-                    if (targetVal != null) return Number(targetVal) || 0;
-                }
-            }
-
-            // 3. Flat targets from targets object
+            // 3. Flat targets from targets object ONLY if not tracked monthly
             for (const c of cands) {
                 if (flatTargets[c] != null) return Number(flatTargets[c]) || 0;
             }

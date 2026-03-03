@@ -741,7 +741,11 @@ export default function EmployeesPage() {
       let target = checkTbm(targetMonthKey);
       if (target !== null) return target;
 
-      // 2. Fallback to default flat targets object if month-specific target is not found
+      // 2. Check if the employee is tracked monthly AT ALL. If yes, and the target is missing, it means 0.
+      const hasMonthlyTarget = Object.values(targetsByMonth).some((m: any) => candidates.some(c => m[c] != null));
+      if (hasMonthlyTarget) return 0;
+
+      // 3. Fallback to default flat targets object if NOT tracked monthly
       for (const c of candidates) {
         const v = targetsData[c];
         if (v != null && !isNaN(v)) return safeNum(v);

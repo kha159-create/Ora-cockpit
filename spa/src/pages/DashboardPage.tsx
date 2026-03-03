@@ -42,6 +42,26 @@ function getEffectiveDate() {
   return now;
 }
 
+function normalizeTargetsByMonth(employeesJson: any) {
+  const direct = employeesJson?.targets_by_month;
+  if (direct && typeof direct === 'object') return direct as Record<string, Record<string, number>>;
+
+  const monthlyTargets = employeesJson?.monthly_targets;
+  const byMonth: Record<string, Record<string, number>> = {};
+  if (monthlyTargets && typeof monthlyTargets === 'object') {
+    for (const [empIdRaw, mp] of Object.entries(monthlyTargets)) {
+      if (!mp || typeof mp !== 'object') continue;
+      const empId = String(empIdRaw);
+      for (const [monthStart, val] of Object.entries(mp as Record<string, number>)) {
+        const monthKey = String(monthStart).substring(0, 7);
+        if (!byMonth[monthKey]) byMonth[monthKey] = {};
+        byMonth[monthKey][empId] = Number(val) || 0;
+      }
+    }
+  }
+  return byMonth;
+}
+
 function getDefaultRange(mode: Mode, selYear?: number, selMonth?: number) {
   const now = new Date();
   const yesterday = new Date(now);
@@ -547,9 +567,26 @@ export default function DashboardPage() {
     const historyData: Record<string, any[]> = empRaw.history;
     const names: Record<string, string> = empRaw.employee_names;
     const targets: Record<string, number> = empRaw.targets || {};
+    const targetsByMonth = normalizeTargetsByMonth(empRaw);
     const storeMeta: Record<string, any> = raw?.store_meta || {};
     const norm = (s: unknown) => String(s || '').substring(0, 10);
     const agg: Record<string, { sales: number; trans: number; target: number; name: string }> = {};
+
+    const targetMonthKey = range.start.substring(0, 7);
+    const getTarget = (rawId: string) => {
+      const id = String(rawId || '').split('-')[0].trim();
+      const padded = id.padStart(4, '0');
+      const hasMonthlyTarget = Object.values(targetsByMonth).some(m => m[id] != null || m[padded] != null);
+      if (hasMonthlyTarget) {
+        if (targetsByMonth[targetMonthKey]) {
+          if (targetsByMonth[targetMonthKey][id] != null) return targetsByMonth[targetMonthKey][id];
+          if (targetsByMonth[targetMonthKey][padded] != null) return targetsByMonth[targetMonthKey][padded];
+        }
+        return 0;
+      }
+      return targets[id] || targets[padded] || 0;
+    };
+
     Object.entries(historyData).forEach(([storeId, records]) => {
       if (!allowedStoreIds.has(storeId)) return;
       // Exclude online stores
@@ -570,7 +607,7 @@ export default function DashboardPage() {
         }
         if (!id || empName === 'مرتجع') continue;
         empName = names[id] || names[id.padStart(4, '0')] || empName;
-        if (!agg[id]) agg[id] = { sales: 0, trans: 0, target: targets[id] ?? targets[id.padStart(4, '0')] ?? 0, name: empName };
+        if (!agg[id]) agg[id] = { sales: 0, trans: 0, target: getTarget(id), name: empName };
         agg[id].sales += sales;
         agg[id].trans += trans;
       }

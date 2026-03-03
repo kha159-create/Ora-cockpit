@@ -306,9 +306,14 @@ export default function ReportsPage() {
     const getTarget = (rawId: string) => {
       const id = String(rawId || '').split('-')[0].trim();
       const padded = id.padStart(4, '0');
-      if (targetsByMonth[targetMonthKey]) {
-        if (targetsByMonth[targetMonthKey][id] != null) return targetsByMonth[targetMonthKey][id];
-        if (targetsByMonth[targetMonthKey][padded] != null) return targetsByMonth[targetMonthKey][padded];
+      // Check if employee is tracked in monthly targets at all
+      const hasMonthlyTarget = Object.values(targetsByMonth).some(m => m[id] != null || m[padded] != null);
+      if (hasMonthlyTarget) {
+        if (targetsByMonth[targetMonthKey]) {
+          if (targetsByMonth[targetMonthKey][id] != null) return targetsByMonth[targetMonthKey][id];
+          if (targetsByMonth[targetMonthKey][padded] != null) return targetsByMonth[targetMonthKey][padded];
+        }
+        return 0; // Tracked monthly, but no target for this specific month = 0
       }
       return targets[id] || targets[padded] || 0;
     };
@@ -573,9 +578,13 @@ export default function ReportsPage() {
       const getTarget = (rawId: string) => {
         const id = String(rawId || '').split('-')[0].trim();
         const padded = id.padStart(4, '0');
-        if (targetsByMonth[targetMonthKey]) {
-          if (targetsByMonth[targetMonthKey][id] != null) return targetsByMonth[targetMonthKey][id];
-          if (targetsByMonth[targetMonthKey][padded] != null) return targetsByMonth[targetMonthKey][padded];
+        const hasMonthlyTarget = Object.values(targetsByMonth).some(m => m[id] != null || m[padded] != null);
+        if (hasMonthlyTarget) {
+          if (targetsByMonth[targetMonthKey]) {
+            if (targetsByMonth[targetMonthKey][id] != null) return targetsByMonth[targetMonthKey][id];
+            if (targetsByMonth[targetMonthKey][padded] != null) return targetsByMonth[targetMonthKey][padded];
+          }
+          return 0;
         }
         return targets[id] || targets[padded] || 0;
       };
