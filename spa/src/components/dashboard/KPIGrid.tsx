@@ -54,9 +54,10 @@ export const KPIGrid: React.FC<KPIGridProps> = ({ totals, prevYearTotals, monthl
     // Remaining to target
     const remaining = Math.max(totals.target - totals.sales, 0);
     const today = new Date();
-    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    const daysPassed = today.getDate();
-    const daysRemaining = daysInMonth - daysPassed;
+    const isMarch2026 = today.getFullYear() === 2026 && today.getMonth() === 2;
+    const daysInMonth = isMarch2026 ? 19 : new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const daysPassed = isMarch2026 ? Math.min(today.getDate(), 19) : today.getDate();
+    const daysRemaining = Math.max(0, daysInMonth - daysPassed);
     const dailyRequired = daysRemaining > 0 ? remaining / daysRemaining : 0;
 
     return (

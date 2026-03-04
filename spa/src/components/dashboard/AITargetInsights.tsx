@@ -54,12 +54,11 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
         if (!stores || stores.length === 0) return [];
 
         const today = new Date();
-        const pdaysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-        const currentDayOfM = today.getDate();
+        const isMarch2026 = today.getFullYear() === 2026 && today.getMonth() === 2;
+        const pdaysInMonth = isMarch2026 ? 19 : new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+        const currentDayOfM = isMarch2026 ? Math.min(today.getDate(), 19) : today.getDate();
 
-        // If not looking at the current month/MTD, the insights are less actionable.
-        // But let's fallback to assuming 1 day remaining to avoid div-by-zero if analyzing history.
-        let remDays = pdaysInMonth - currentDayOfM + 1;
+        let remDays = Math.max(0, pdaysInMonth - currentDayOfM + 1);
 
         // If the user selects a historical month, remDays shouldn't really apply for forecasting,
         // so we disable the "Required Daily" logic by zeroing it if mode != 'mtd' and mode != 'custom'

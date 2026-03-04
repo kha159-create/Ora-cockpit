@@ -56,8 +56,9 @@ export default function LivePage() {
   const { todayTotals, daysInfo } = useMemo(() => {
     if (!raw) return { todayTotals: { sales: 0, trans: 0, visitors: 0 }, daysInfo: { total: 30, current: 1 } };
     const now = new Date();
-    const total = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const current = now.getDate();
+    const isMarch2026 = now.getFullYear() === 2026 && now.getMonth() === 2;
+    const total = isMarch2026 ? 19 : new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const current = isMarch2026 ? Math.min(now.getDate(), 19) : now.getDate();
 
     const meta = raw.store_meta || {};
     const inRange = (d: string) => String(d).startsWith(today);

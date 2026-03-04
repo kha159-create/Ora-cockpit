@@ -113,8 +113,9 @@ export function useLiveSalesData() {
         const now = new Date(effectiveDateStr);
         const currentMonthKey = effectiveDateStr.substring(0, 7);
         const startOfMonthStr = `${currentMonthKey}-01`;
-        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-        const remainingDays = daysInMonth - now.getDate() + 1;
+        const isMarch2026 = currentMonthKey === '2026-03';
+        const daysInMonth = isMarch2026 ? 19 : new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const remainingDays = Math.max(0, daysInMonth - (isMarch2026 ? Math.min(now.getDate(), 19) : now.getDate()) + 1);
 
         const empMTDSales: Record<string, number> = {};
         Object.values(historyData).forEach((records) => {

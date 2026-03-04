@@ -353,8 +353,9 @@ export default function ReportsPage() {
       });
     });
 
-    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    const remainingDays = Math.max(0, daysInMonth - yesterday.getDate());
+    const isMarch2026 = today.getFullYear() === 2026 && today.getMonth() === 2;
+    const daysInMonth = isMarch2026 ? 19 : new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const remainingDays = Math.max(0, daysInMonth - (isMarch2026 ? Math.min(yesterday.getDate(), 19) : yesterday.getDate()));
 
     // Build store employee data
     const storesData = Object.entries(byStore)
@@ -544,8 +545,9 @@ export default function ReportsPage() {
       });
 
       const today2 = new Date();
-      const daysInMonth2 = new Date(today2.getFullYear(), today2.getMonth() + 1, 0).getDate();
-      const remainingDays2 = Math.max(0, daysInMonth2 - today2.getDate() + 1);
+      const isMarch2026 = today2.getFullYear() === 2026 && today2.getMonth() === 2;
+      const daysInMonth2 = isMarch2026 ? 19 : new Date(today2.getFullYear(), today2.getMonth() + 1, 0).getDate();
+      const remainingDays2 = Math.max(0, daysInMonth2 - (isMarch2026 ? Math.min(today2.getDate(), 19) : today2.getDate()) + 1);
 
       rows = Object.values(dataMap).map(r => {
         const remaining = Math.max(0, r.target - r.sales);
@@ -630,8 +632,9 @@ export default function ReportsPage() {
         });
       });
 
-      const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-      const remainingDays3 = Math.max(0, daysInMonth - yesterdayDate.getDate());
+      const isMarch2026 = today.getFullYear() === 2026 && today.getMonth() === 2;
+      const daysInMonth = isMarch2026 ? 19 : new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+      const remainingDays3 = Math.max(0, daysInMonth - (isMarch2026 ? Math.min(yesterdayDate.getDate(), 19) : yesterdayDate.getDate()));
 
       const storesData = Object.entries(byStore)
         .filter(([, emps]) => Object.keys(emps).length > 0)

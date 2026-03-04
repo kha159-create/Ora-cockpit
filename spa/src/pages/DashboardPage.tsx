@@ -380,8 +380,9 @@ export default function DashboardPage() {
       .map(([storeId, emps]) => {
         const storeTotalYSales = Object.values(emps).reduce((s: number, e: any) => s + (e.ySales || 0), 0);
         const storeTotalMSales = Object.values(emps).reduce((s: number, e: any) => s + (e.mSales || 0), 0);
-        const daysInMonth = new Date(yesterday.getFullYear(), yesterday.getMonth() + 1, 0).getDate();
-        const remainingDays = Math.max(0, daysInMonth - yesterday.getDate());
+        const isMarch2026 = yesterday.getFullYear() === 2026 && yesterday.getMonth() === 2;
+        const daysInMonth = isMarch2026 ? 19 : new Date(yesterday.getFullYear(), yesterday.getMonth() + 1, 0).getDate();
+        const remainingDays = Math.max(0, daysInMonth - (isMarch2026 ? Math.min(yesterday.getDate(), 19) : yesterday.getDate()));
 
         const employees = Object.values(emps).map((e: any) => {
           const remaining = Math.max(0, e.target - e.mSales);
