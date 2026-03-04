@@ -134,9 +134,36 @@ export function loadStagnantData(forceRefresh = false) {
   return fetchJson<any>('stagnant_data.json', forceRefresh);
 }
 
-// Load Stock Data (New)
-export function loadStockData(forceRefresh = false) {
-  return fetchJson<any>('products_stock.json', forceRefresh);
+// Load Accurate Stock Data from ALAAWF2 Catalog
+export async function loadStockData(forceRefresh = false) {
+  const fileKey = 'ALAAWF2_products.json';
+  if (!forceRefresh && CACHE[fileKey] && (Date.now() - CACHE[fileKey].resolvedAt! < CACHE_MAX_AGE_MS)) {
+    return CACHE[fileKey].data;
+  }
+
+  const promise = (async () => {
+    try {
+      const ts = Date.now();
+      const url = `https://raw.githubusercontent.com/ALAAWF2/catalog/main/products.json?t=${ts}`;
+      const res = await fetch(url, { cache: 'no-cache' });
+      if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
+      const data = await res.json();
+
+      if (CACHE[fileKey]) {
+        CACHE[fileKey].resolvedAt = Date.now();
+        CACHE[fileKey].data = data;
+      }
+      return data;
+    } catch (err) {
+      console.warn('ALAAWF2 Catalog fetch failed, falling back to local products_stock.json', err);
+      // Fallback relies on existing fetchJson logic
+      return await fetchJson<any>('products_stock.json', forceRefresh);
+    }
+  })();
+
+  CACHE[fileKey] = { promise };
+  promise.catch(() => { delete CACHE[fileKey]; });
+  return promise;
 }
 
 export function loadProductMapping() {

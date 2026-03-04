@@ -78,32 +78,51 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
 
     // --- Ramadan Shift Totals (global + per-store) ---
     const { globalShifts, storeShifts } = useMemo(() => {
-        const gs = { shift1: 0, shift2: 0, shift3: 0 };
-        const ss: Record<string, { shift1: number; shift2: number; shift3: number }> = {};
+        const gs = { shift1: 0, shift2: 0, shift3: 0, shift3_part1: 0, shift3_part2: 0 };
+        const ss: Record<string, { shift1: number; shift2: number; shift3: number; shift3_part1: number; shift3_part2: number }> = {};
         if (!isRamadan2026 || !raw?.sales_hourly) return { globalShifts: gs, storeShifts: ss };
 
-        const targetDate = dateMode === 'yesterday'
-            ? (() => { const d = new Date(); d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })()
-            : (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+        // Target Date
+        const targetDateObj = dateMode === 'yesterday'
+            ? (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d; })()
+            : new Date();
+
+        // Next Date (for Night Shift 00:00 - 03:00)
+        const nextDateObj = new Date(targetDateObj);
+        nextDateObj.setDate(nextDateObj.getDate() + 1);
+
+        const targetDate = `${targetDateObj.getFullYear()}-${String(targetDateObj.getMonth() + 1).padStart(2, '0')}-${String(targetDateObj.getDate()).padStart(2, '0')}`;
+        const nextDate = `${nextDateObj.getFullYear()}-${String(nextDateObj.getMonth() + 1).padStart(2, '0')}-${String(nextDateObj.getDate()).padStart(2, '0')}`;
 
         const meta = raw.store_meta || {};
         const okStore = (sid: string) =>
             manager === 'all' || (meta[sid] && String(meta[sid].manager) === manager);
 
-        // Shift calculations using hour (integer 0-23)
-        // Shift 1 (6:00 - 11:59), Shift 2 (12:00 - 17:59), Shift 3 (18:00 - 5:59)
         (raw.sales_hourly || []).forEach(([dt, sid, h, v]: any[]) => {
             const dtStr = String(dt || '').trim();
-            if (dtStr !== targetDate) return;
             if (!okStore(String(sid))) return;
 
             const hour = Number(h);
-            const bucket = (hour >= 6 && hour <= 11) ? 'shift1'
-                : (hour >= 12 && hour < 18) ? 'shift2' : 'shift3';
+            const val = Number(v) || 0;
 
-            gs[bucket] += v || 0;
-            if (!ss[sid]) ss[sid] = { shift1: 0, shift2: 0, shift3: 0 };
-            ss[sid][bucket] += v || 0;
+            if (!ss[sid]) ss[sid] = { shift1: 0, shift2: 0, shift3: 0, shift3_part1: 0, shift3_part2: 0 };
+
+            if (dtStr === targetDate) {
+                if (hour >= 6 && hour <= 11) {
+                    gs.shift1 += val; ss[sid].shift1 += val;
+                } else if (hour >= 12 && hour < 18) {
+                    gs.shift2 += val; ss[sid].shift2 += val;
+                } else if (hour >= 18 && hour <= 23) {
+                    gs.shift3 += val; ss[sid].shift3 += val;
+                    gs.shift3_part1 += val; ss[sid].shift3_part1 += val;
+                }
+            } else if (dtStr === nextDate) {
+                if (hour >= 0 && hour <= 3) {
+                    // Next day's early hours belong to the current day's Shift 3
+                    gs.shift3 += val; ss[sid].shift3 += val;
+                    gs.shift3_part2 += val; ss[sid].shift3_part2 += val;
+                }
+            }
         });
 
         return { globalShifts: gs, storeShifts: ss };
@@ -234,11 +253,14 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                     <span className="text-[10px] text-orange-500 mb-2">11:30ص – 6م</span>
                                     <span className="text-sm font-black text-orange-900" dir="ltr">{formatSAR(globalShifts.shift2)}</span>
                                 </div>
-                                <div className="flex flex-col items-center bg-indigo-50 rounded-xl p-3 border border-indigo-100">
+                                <div className="flex flex-col items-center bg-indigo-50 rounded-xl p-3 border border-indigo-100 relative">
                                     <span className="text-lg mb-1">🌙</span>
                                     <span className="text-[11px] font-bold text-indigo-700 mb-0.5">الشفت الثالث</span>
-                                    <span className="text-[10px] text-indigo-500 mb-2">6م – 3ص</span>
-                                    <span className="text-sm font-black text-indigo-900" dir="ltr">{formatSAR(globalShifts.shift3)}</span>
+                                    <div className="flex flex-col items-center text-[9px] text-indigo-500 mb-2 leading-tight">
+                                        <span>6م – 12م: {formatSAR(globalShifts.shift3_part1)}</span>
+                                        <span>12ص – 3ص: {formatSAR(globalShifts.shift3_part2)}</span>
+                                    </div>
+                                    <span className="text-sm font-black text-indigo-900" dir="ltr">{formatSAR(globalShifts.shift3_part1 + globalShifts.shift3_part2)}</span>
                                 </div>
                             </div>
                         </div>
@@ -301,7 +323,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
 
                                                 {/* Store Ramadan Shift Row */}
                                                 {isRamadan2026 && showRamadanShifts && (() => {
-                                                    const sh = storeShifts[store.sid] || { shift1: 0, shift2: 0, shift3: 0 };
+                                                    const sh = storeShifts[store.sid] || { shift1: 0, shift2: 0, shift3_part1: 0, shift3_part2: 0 };
                                                     return (
                                                         <div className="flex gap-1.5 pt-1 border-t border-orange-100 mt-1">
                                                             <div className="flex flex-col flex-1 items-center bg-amber-50 rounded py-1 border border-amber-100">
@@ -314,7 +336,11 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                                             </div>
                                                             <div className="flex flex-col flex-1 items-center bg-indigo-50 rounded py-1 border border-indigo-100">
                                                                 <span className="text-[9px] text-indigo-700 font-bold">ش3 🌙</span>
-                                                                <span className="text-[10px] font-black text-indigo-900" dir="ltr">{formatSAR(sh.shift3)}</span>
+                                                                <span className="text-[10px] font-black text-indigo-900" dir="ltr">{formatSAR(sh.shift3_part1 + sh.shift3_part2)}</span>
+                                                                <div className="flex flex-col items-center text-[7px] text-indigo-500 mt-0.5 leading-none px-1 text-center w-full">
+                                                                    <span>6-12: {Math.round(sh.shift3_part1)}</span>
+                                                                    <span>12-3: {Math.round(sh.shift3_part2)}</span>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     );
