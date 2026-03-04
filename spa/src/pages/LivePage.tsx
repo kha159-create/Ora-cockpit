@@ -27,6 +27,7 @@ export default function LivePage() {
   const [manager, setManager] = useState<string>('all');
   const [expandedStore, setExpandedStore] = useState<string | null>(null);
   const [expandedEmp, setExpandedEmp] = useState<string | null>(null);
+  const [showRamadanShifts, setShowRamadanShifts] = useState(false);
 
   useEffect(() => {
     Promise.all([loadManagementData(), loadEmployeesData()])
@@ -53,8 +54,17 @@ export default function LivePage() {
     return user?.name || manager;
   }, [manager, user?.name, user?.role]);
 
-  const { todayTotals, daysInfo } = useMemo(() => {
-    if (!raw) return { todayTotals: { sales: 0, trans: 0, visitors: 0 }, daysInfo: { total: 30, current: 1 } };
+  const isRamadan2026 = useMemo(() => {
+    const now = new Date();
+    return now.getFullYear() === 2026 && now.getMonth() === 2;
+  }, []);
+
+  const { todayTotals, daysInfo, shiftTotals } = useMemo(() => {
+    if (!raw) return {
+      todayTotals: { sales: 0, trans: 0, visitors: 0 },
+      daysInfo: { total: 30, current: 1 },
+      shiftTotals: { shift1: 0, shift2: 0, shift3: 0 }
+    };
     const now = new Date();
     const isMarch2026 = now.getFullYear() === 2026 && now.getMonth() === 2;
     const total = isMarch2026 ? 19 : new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -72,31 +82,80 @@ export default function LivePage() {
     (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
       if (inRange(d) && okStore(sid)) trans += v || 0;
     });
-    return { todayTotals: { sales, trans }, daysInfo: { total, current } };
+
+    // --- Ramadan Shift Totals (from sales_hourly) ---
+    // Shift 1 (صباحي):  06:00 - 11:29
+    // Shift 2 (ظهري):   11:30 - 17:59
+    // Shift 3 (مسائي):  18:00 - 05:59 (next day)
+    let shift1 = 0, shift2 = 0, shift3 = 0;
+    if (isMarch2026) {
+      (raw.sales_hourly || []).forEach(([dt, sid, v]: any[]) => {
+        const dtStr = String(dt || '');
+        if (!dtStr.startsWith(today)) return;
+        if (!okStore(String(sid))) return;
+        // parse hour & minute from "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DDTHH:MM:SS"
+        const timePart = dtStr.length > 10 ? dtStr.substring(11, 16) : '00:00';
+        const [hStr, mStr] = timePart.split(':');
+        const h = parseInt(hStr, 10);
+        const m = parseInt(mStr, 10);
+        const totalMin = h * 60 + m;
+        const S1_START = 6 * 60;       // 06:00
+        const S1_END = 11 * 60 + 30; // 11:30
+        const S2_END = 18 * 60;      // 18:00
+        if (totalMin >= S1_START && totalMin < S1_END) {
+          shift1 += v || 0;
+        } else if (totalMin >= S1_END && totalMin < S2_END) {
+          shift2 += v || 0;
+        } else {
+          shift3 += v || 0; // 18:00+ and 00:00-05:59
+        }
+      });
+    }
+
+    return {
+      todayTotals: { sales, trans },
+      daysInfo: { total, current },
+      shiftTotals: { shift1, shift2, shift3 }
+    };
   }, [raw, today, effectiveManager]);
 
   const storeList = useMemo(() => {
     if (!raw?.sales || !raw?.stores) return [];
-    const byStore: Record<string, { sales: number; trans: number; visitors: number; employees: Record<string, { sales: number; trans: number; name: string }> }> = {};
+    const byStore: Record<string, { sales: number; trans: number; visitors: number; shift1: number; shift2: number; shift3: number; employees: Record<string, { sales: number; trans: number; name: string }> }> = {};
     const meta = raw.store_meta || {};
     (raw.sales || []).forEach(([d, sid, v]: any[]) => {
       if (String(d).startsWith(today)) {
-        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, employees: {} };
+        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, shift1: 0, shift2: 0, shift3: 0, employees: {} };
         byStore[sid].sales += v || 0;
       }
     });
     (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
       if (String(d).startsWith(today)) {
-        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, employees: {} };
+        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, shift1: 0, shift2: 0, shift3: 0, employees: {} };
         byStore[sid].trans += v || 0;
       }
     });
     (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
       if (String(d).startsWith(today)) {
-        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, employees: {} };
+        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, shift1: 0, shift2: 0, shift3: 0, employees: {} };
         byStore[sid].visitors += v || 0;
       }
     });
+
+    const isMarch2026 = new Date().getFullYear() === 2026 && new Date().getMonth() === 2;
+    if (isMarch2026) {
+      (raw.sales_hourly || []).forEach(([dt, sid, v]: any[]) => {
+        const dtStr = String(dt || '');
+        if (!dtStr.startsWith(today)) return;
+        const totalMin = parseInt(dtStr.length > 10 ? dtStr.substring(11, 13) : '0', 10) * 60 + parseInt(dtStr.length > 10 ? dtStr.substring(14, 16) : '0', 10);
+        if (!byStore[sid]) return; // Only track for stores that have existing init (via sales/visitors/etc)
+
+        const S1_START = 6 * 60, S1_END = 11 * 60 + 30, S2_END = 18 * 60;
+        if (totalMin >= S1_START && totalMin < S1_END) byStore[sid].shift1 += v || 0;
+        else if (totalMin >= S1_END && totalMin < S2_END) byStore[sid].shift2 += v || 0;
+        else byStore[sid].shift3 += v || 0;
+      });
+    }
 
     const historyData: Record<string, any[]> = empRaw?.history || {};
     const names: Record<string, string> = empRaw?.employee_names || {};
@@ -113,7 +172,7 @@ export default function LivePage() {
     });
 
     Object.entries(historyData).forEach(([storeCode, records]) => {
-      if (!byStore[storeCode]) byStore[storeCode] = { sales: 0, trans: 0, visitors: 0, employees: {} };
+      if (!byStore[storeCode]) byStore[storeCode] = { sales: 0, trans: 0, visitors: 0, shift1: 0, shift2: 0, shift3: 0, employees: {} };
       for (const rec of records || []) {
         const date = rec?.[0];
         if (!String(date).startsWith(today)) continue;
@@ -152,6 +211,9 @@ export default function LivePage() {
           sales: v.sales,
           trans: v.trans,
           visitors: v.visitors,
+          shift1: v.shift1,
+          shift2: v.shift2,
+          shift3: v.shift3,
           target: sTarget,
           achievement,
           employees: Object.entries(v.employees)
@@ -202,7 +264,7 @@ export default function LivePage() {
             trendValue={todayTotals.trans > 0 ? `معدل: ${formatSAR(todayTotals.sales / todayTotals.trans)}` : undefined}
           />
           <KPICard
-            title="نسبة التحويل" // Visitor Conversion
+            title="نسبة التحويل"
             value={(todayTotals.visitors || 0) > 0 ? ((todayTotals.trans / (todayTotals.visitors || 1)) * 100) : 0}
             format={(v) => `${v.toFixed(1)}%`}
             icon={<VisitorsIcon />}
@@ -210,6 +272,52 @@ export default function LivePage() {
           />
         </div>
       </div>
+
+      {/* Ramadan Toggle Button */}
+      {isRamadan2026 && (
+        <div className="flex justify-start">
+          <button
+            onClick={() => setShowRamadanShifts(!showRamadanShifts)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold border transition-all duration-300 ${showRamadanShifts
+              ? 'bg-orange-500 text-white border-orange-500 shadow-md'
+              : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'
+              }`}
+          >
+            <span>🌙</span>
+            {showRamadanShifts ? 'إخفاء مبيعات الشفتات' : 'إظهار مبيعات شفتات رمضان'}
+          </button>
+        </div>
+      )}
+
+      {/* Ramadan Shift Breakdown — Global */}
+      {isRamadan2026 && showRamadanShifts && (
+        <div className="bg-white rounded-2xl shadow-sm border border-orange-200 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">🌙</span>
+            <h4 className="text-sm font-bold text-orange-700">مبيعات الشفتات — رمضان</h4>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="flex flex-col items-center bg-amber-50 rounded-xl p-3 border border-amber-200">
+              <span className="text-xl mb-1">🌅</span>
+              <span className="text-[11px] font-semibold text-amber-700 mb-1">الشفت الأول</span>
+              <span className="text-[10px] text-amber-500 mb-2">٦ص – ١١:٣٠ص</span>
+              <span className="text-base font-black text-amber-800" dir="ltr">{formatSAR(shiftTotals.shift1)}</span>
+            </div>
+            <div className="flex flex-col items-center bg-orange-50 rounded-xl p-3 border border-orange-200">
+              <span className="text-xl mb-1">☀️</span>
+              <span className="text-[11px] font-semibold text-orange-700 mb-1">الشفت الثاني</span>
+              <span className="text-[10px] text-orange-500 mb-2">١١:٣٠ص – ٦م</span>
+              <span className="text-base font-black text-orange-800" dir="ltr">{formatSAR(shiftTotals.shift2)}</span>
+            </div>
+            <div className="flex flex-col items-center bg-indigo-50 rounded-xl p-3 border border-indigo-200">
+              <span className="text-xl mb-1">🌙</span>
+              <span className="text-[11px] font-semibold text-indigo-700 mb-1">الشفت الثالث</span>
+              <span className="text-[10px] text-indigo-500 mb-2">٦م – ٣ص</span>
+              <span className="text-base font-black text-indigo-800" dir="ltr">{formatSAR(shiftTotals.shift3)}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {managers.length > 0 && (
         <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4">
@@ -289,13 +397,30 @@ export default function LivePage() {
                   </div>
 
                   {/* Monthly Target (Simulated or Real if available) */}
-                  {/* Since we don't have monthly achievement calc explicitly in props, we use daily as proxy or just show target value */}
                   <div className="flex justify-between items-center text-xs text-neutral-400">
                     <span>الهدف: {formatSAR(store.target)}</span>
                     <span className="bg-neutral-100 px-1 rounded">شهري</span>
                   </div>
                 </div>
               </div>
+
+              {/* Store Level Shift Breakdown */}
+              {isRamadan2026 && showRamadanShifts && (
+                <div className="mt-3 pt-3 border-t border-orange-100 flex gap-2 justify-between items-center bg-orange-50/50 -mx-4 -mb-4 px-4 pb-4">
+                  <div className="flex flex-col flex-1 items-center bg-amber-50 rounded p-1 border border-amber-100">
+                    <span className="text-[10px] text-amber-700 font-bold">ش1 🌅</span>
+                    <span className="text-xs font-black text-amber-900" dir="ltr">{formatSAR(store.shift1)}</span>
+                  </div>
+                  <div className="flex flex-col flex-1 items-center bg-orange-50 rounded p-1 border border-orange-100">
+                    <span className="text-[10px] text-orange-700 font-bold">ش2 ☀️</span>
+                    <span className="text-xs font-black text-orange-900" dir="ltr">{formatSAR(store.shift2)}</span>
+                  </div>
+                  <div className="flex flex-col flex-1 items-center bg-indigo-50 rounded p-1 border border-indigo-100">
+                    <span className="text-[10px] text-indigo-700 font-bold">ش3 🌙</span>
+                    <span className="text-xs font-black text-indigo-900" dir="ltr">{formatSAR(store.shift3)}</span>
+                  </div>
+                </div>
+              )}
             </button>
             {expandedStore === store.sid && store.employees.length > 0 && (
               <div className="border-t border-neutral-100 bg-neutral-50 divide-y divide-neutral-100 transition-all duration-300 animate-in slide-in-from-top-2">
