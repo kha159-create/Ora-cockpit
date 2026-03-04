@@ -80,25 +80,27 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     const { globalShifts, storeShifts } = useMemo(() => {
         const gs = { shift1: 0, shift2: 0, shift3: 0 };
         const ss: Record<string, { shift1: number; shift2: number; shift3: number }> = {};
-        if (!isRamadan2026 || !raw?.sales_hourly || dateMode === 'yesterday') return { globalShifts: gs, storeShifts: ss };
+        if (!isRamadan2026 || !raw?.sales_hourly) return { globalShifts: gs, storeShifts: ss };
 
-        const now = new Date();
-        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const targetDate = dateMode === 'yesterday'
+            ? (() => { const d = new Date(); d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })()
+            : (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+
         const meta = raw.store_meta || {};
         const okStore = (sid: string) =>
             manager === 'all' || (meta[sid] && String(meta[sid].manager) === manager);
 
-        const S1_START = 6 * 60, S1_END = 11 * 60 + 30, S2_END = 18 * 60;
-
-        (raw.sales_hourly || []).forEach(([dt, sid, v]: any[]) => {
-            const dtStr = String(dt || '');
-            if (!dtStr.startsWith(todayStr)) return;
+        // Shift calculations using hour (integer 0-23)
+        // Shift 1 (6:00 - 11:59), Shift 2 (12:00 - 17:59), Shift 3 (18:00 - 5:59)
+        (raw.sales_hourly || []).forEach(([dt, sid, h, v]: any[]) => {
+            const dtStr = String(dt || '').trim();
+            if (dtStr !== targetDate) return;
             if (!okStore(String(sid))) return;
-            const h = parseInt(dtStr.substring(11, 13) || '0', 10);
-            const m = parseInt(dtStr.substring(14, 16) || '0', 10);
-            const totalMin = h * 60 + m;
-            const bucket = totalMin >= S1_START && totalMin < S1_END ? 'shift1'
-                : totalMin >= S1_END && totalMin < S2_END ? 'shift2' : 'shift3';
+
+            const hour = Number(h);
+            const bucket = (hour >= 6 && hour <= 11) ? 'shift1'
+                : (hour >= 12 && hour < 18) ? 'shift2' : 'shift3';
+
             gs[bucket] += v || 0;
             if (!ss[sid]) ss[sid] = { shift1: 0, shift2: 0, shift3: 0 };
             ss[sid][bucket] += v || 0;
@@ -197,13 +199,13 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                     </div>
 
                     {/* Ramadan Toggle Button */}
-                    {isRamadan2026 && dateMode === 'today' && (
+                    {isRamadan2026 && (
                         <div className="flex justify-start">
                             <button
                                 onClick={() => setShowRamadanShifts(!showRamadanShifts)}
                                 className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold border transition-all duration-300 shadow-sm ${showRamadanShifts
-                                        ? 'bg-orange-500 text-white border-orange-500'
-                                        : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'
+                                    ? 'bg-orange-500 text-white border-orange-500'
+                                    : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'
                                     }`}
                             >
                                 <span>🌙</span>
@@ -213,7 +215,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                     )}
 
                     {/* Ramadan Global Shift Cards */}
-                    {isRamadan2026 && showRamadanShifts && dateMode === 'today' && (
+                    {isRamadan2026 && showRamadanShifts && (
                         <div className="bg-white rounded-2xl border border-orange-200 shadow-sm p-4">
                             <div className="flex items-center gap-2 mb-3">
                                 <span className="text-base">🌙</span>
@@ -298,7 +300,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                                 </div>
 
                                                 {/* Store Ramadan Shift Row */}
-                                                {isRamadan2026 && showRamadanShifts && dateMode === 'today' && (() => {
+                                                {isRamadan2026 && showRamadanShifts && (() => {
                                                     const sh = storeShifts[store.sid] || { shift1: 0, shift2: 0, shift3: 0 };
                                                     return (
                                                         <div className="flex gap-1.5 pt-1 border-t border-orange-100 mt-1">
