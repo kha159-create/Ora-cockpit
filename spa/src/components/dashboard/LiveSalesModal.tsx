@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { SalesIcon, InvoicesIcon, ChevronDownIcon, VisitorsIcon } from '../Icons';
 import { useLiveSalesData } from '../../hooks/useLiveSalesData';
 
@@ -36,13 +36,19 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     onClose,
     formatSAR,
 }) => {
-    const { calculateLiveData, isAdminOrAuditor: checkAdmin } = useLiveSalesData();
+    const { calculateLiveData, isAdminOrAuditor: checkAdmin, raw } = useLiveSalesData();
     const [manager, setManager] = useState('all');
     const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
     const [expandedEmpId, setExpandedEmpId] = useState<string | null>(null);
     const [dateMode, setDateMode] = useState<'today' | 'yesterday'>('today');
+    const [showRamadanShifts, setShowRamadanShifts] = useState(false);
 
     const isAdminOrAuditor = checkAdmin;
+
+    const isRamadan2026 = useMemo(() => {
+        const now = new Date();
+        return now.getFullYear() === 2026 && now.getMonth() === 2;
+    }, []);
 
     // Memoize the calculated data internally
     const { liveData, managersList: managers } = React.useMemo(() => {
@@ -69,6 +75,37 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
         trans: liveData.totals.trans,
         visitors: liveData.stores.reduce((acc: number, s: any) => acc + (s.visitors || 0), 0)
     };
+
+    // --- Ramadan Shift Totals (global + per-store) ---
+    const { globalShifts, storeShifts } = useMemo(() => {
+        const gs = { shift1: 0, shift2: 0, shift3: 0 };
+        const ss: Record<string, { shift1: number; shift2: number; shift3: number }> = {};
+        if (!isRamadan2026 || !raw?.sales_hourly || dateMode === 'yesterday') return { globalShifts: gs, storeShifts: ss };
+
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const meta = raw.store_meta || {};
+        const okStore = (sid: string) =>
+            manager === 'all' || (meta[sid] && String(meta[sid].manager) === manager);
+
+        const S1_START = 6 * 60, S1_END = 11 * 60 + 30, S2_END = 18 * 60;
+
+        (raw.sales_hourly || []).forEach(([dt, sid, v]: any[]) => {
+            const dtStr = String(dt || '');
+            if (!dtStr.startsWith(todayStr)) return;
+            if (!okStore(String(sid))) return;
+            const h = parseInt(dtStr.substring(11, 13) || '0', 10);
+            const m = parseInt(dtStr.substring(14, 16) || '0', 10);
+            const totalMin = h * 60 + m;
+            const bucket = totalMin >= S1_START && totalMin < S1_END ? 'shift1'
+                : totalMin >= S1_END && totalMin < S2_END ? 'shift2' : 'shift3';
+            gs[bucket] += v || 0;
+            if (!ss[sid]) ss[sid] = { shift1: 0, shift2: 0, shift3: 0 };
+            ss[sid][bucket] += v || 0;
+        });
+
+        return { globalShifts: gs, storeShifts: ss };
+    }, [raw, isRamadan2026, manager, dateMode]);
 
     if (!isOpen) return null;
 
@@ -159,6 +196,52 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                         </div>
                     </div>
 
+                    {/* Ramadan Toggle Button */}
+                    {isRamadan2026 && dateMode === 'today' && (
+                        <div className="flex justify-start">
+                            <button
+                                onClick={() => setShowRamadanShifts(!showRamadanShifts)}
+                                className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold border transition-all duration-300 shadow-sm ${showRamadanShifts
+                                        ? 'bg-orange-500 text-white border-orange-500'
+                                        : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'
+                                    }`}
+                            >
+                                <span>🌙</span>
+                                {showRamadanShifts ? 'إخفاء مبيعات الشفتات' : 'إظهار مبيعات شفتات رمضان'}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Ramadan Global Shift Cards */}
+                    {isRamadan2026 && showRamadanShifts && dateMode === 'today' && (
+                        <div className="bg-white rounded-2xl border border-orange-200 shadow-sm p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                                <span className="text-base">🌙</span>
+                                <h4 className="text-sm font-bold text-orange-700">مبيعات الشفتات — رمضان</h4>
+                            </div>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="flex flex-col items-center bg-amber-50 rounded-xl p-3 border border-amber-100">
+                                    <span className="text-lg mb-1">🌅</span>
+                                    <span className="text-[11px] font-bold text-amber-700 mb-0.5">الشفت الأول</span>
+                                    <span className="text-[10px] text-amber-500 mb-2">6ص – 11:30ص</span>
+                                    <span className="text-sm font-black text-amber-900" dir="ltr">{formatSAR(globalShifts.shift1)}</span>
+                                </div>
+                                <div className="flex flex-col items-center bg-orange-50 rounded-xl p-3 border border-orange-100">
+                                    <span className="text-lg mb-1">☀️</span>
+                                    <span className="text-[11px] font-bold text-orange-700 mb-0.5">الشفت الثاني</span>
+                                    <span className="text-[10px] text-orange-500 mb-2">11:30ص – 6م</span>
+                                    <span className="text-sm font-black text-orange-900" dir="ltr">{formatSAR(globalShifts.shift2)}</span>
+                                </div>
+                                <div className="flex flex-col items-center bg-indigo-50 rounded-xl p-3 border border-indigo-100">
+                                    <span className="text-lg mb-1">🌙</span>
+                                    <span className="text-[11px] font-bold text-indigo-700 mb-0.5">الشفت الثالث</span>
+                                    <span className="text-[10px] text-indigo-500 mb-2">6م – 3ص</span>
+                                    <span className="text-sm font-black text-indigo-900" dir="ltr">{formatSAR(globalShifts.shift3)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Store List */}
                     <div className="grid grid-cols-1 gap-4">
                         {liveData.stores.map((store: any) => {
@@ -213,6 +296,27 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                                     <span className="text-orange-600 text-xs font-semibold">موظفين:</span>
                                                     <span className="font-bold text-orange-700">{Object.keys(store.employees).length}</span>
                                                 </div>
+
+                                                {/* Store Ramadan Shift Row */}
+                                                {isRamadan2026 && showRamadanShifts && dateMode === 'today' && (() => {
+                                                    const sh = storeShifts[store.sid] || { shift1: 0, shift2: 0, shift3: 0 };
+                                                    return (
+                                                        <div className="flex gap-1.5 pt-1 border-t border-orange-100 mt-1">
+                                                            <div className="flex flex-col flex-1 items-center bg-amber-50 rounded py-1 border border-amber-100">
+                                                                <span className="text-[9px] text-amber-700 font-bold">ش1 🌅</span>
+                                                                <span className="text-[10px] font-black text-amber-900" dir="ltr">{formatSAR(sh.shift1)}</span>
+                                                            </div>
+                                                            <div className="flex flex-col flex-1 items-center bg-orange-50 rounded py-1 border border-orange-100">
+                                                                <span className="text-[9px] text-orange-700 font-bold">ش2 ☀️</span>
+                                                                <span className="text-[10px] font-black text-orange-900" dir="ltr">{formatSAR(sh.shift2)}</span>
+                                                            </div>
+                                                            <div className="flex flex-col flex-1 items-center bg-indigo-50 rounded py-1 border border-indigo-100">
+                                                                <span className="text-[9px] text-indigo-700 font-bold">ش3 🌙</span>
+                                                                <span className="text-[10px] font-black text-indigo-900" dir="ltr">{formatSAR(sh.shift3)}</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
 
                                             {/* Left Side: Targets & Progress */}
