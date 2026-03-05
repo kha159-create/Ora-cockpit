@@ -170,7 +170,9 @@ export function getSeasonalPrevRange(start: string, end: string): { start: strin
  * otherwise, subtract 1 Gregorian year.
  */
 export function getPrevYearDate(dateStr: string): string {
-  const season = detectCurrentSeason();
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const targetDate = new Date(y, m - 1, d);
+  const season = detectCurrentSeason(targetDate);
   if (season?.isHijri) {
     return getSeasonalPrevDate(dateStr);
   }
@@ -183,7 +185,9 @@ export function getPrevYearDate(dateStr: string): string {
  * otherwise, subtract 1 Gregorian year from both dates.
  */
 export function getPrevYearRange(start: string, end: string): { start: string; end: string } {
-  const season = detectCurrentSeason();
+  const [y, m, d] = start.split('-').map(Number);
+  const startDate = new Date(y, m - 1, d);
+  const season = detectCurrentSeason(startDate);
   if (season?.isHijri) {
     return getSeasonalPrevRange(start, end);
   }
