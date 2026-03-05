@@ -268,15 +268,26 @@ function StoreDetailsModal({
 
     const dailyBreakdown: Record<string, { sales: number; trans: number; visitors: number; prevSales: number; prevVisitors: number }> = {};
     const visitorsData = mgmtRaw?.visitors || [];
+    const mgmtSales = mgmtRaw?.sales || [];
+    const mgmtTrans = mgmtRaw?.transactions || [];
 
-    for (const r of rec) {
-      const d = normDate(r?.[0]);
-      if (d && d >= rangeStart && d <= rangeEnd) {
-        if (!dailyBreakdown[d]) dailyBreakdown[d] = { sales: 0, trans: 0, visitors: 0, prevSales: 0, prevVisitors: 0 };
-        dailyBreakdown[d].sales += safeNum(r?.[2]);
-        dailyBreakdown[d].trans += safeNum(r?.[3]);
+    mgmtSales.forEach(([d, sid, s]: any[]) => {
+      if (sid !== store?.sid) return;
+      const dateStr = normDate(d);
+      if (dateStr && dateStr >= rangeStart && dateStr <= rangeEnd) {
+        if (!dailyBreakdown[dateStr]) dailyBreakdown[dateStr] = { sales: 0, trans: 0, visitors: 0, prevSales: 0, prevVisitors: 0 };
+        dailyBreakdown[dateStr].sales += safeNum(s);
       }
-    }
+    });
+
+    mgmtTrans.forEach(([d, sid, t]: any[]) => {
+      if (sid !== store?.sid) return;
+      const dateStr = normDate(d);
+      if (dateStr && dateStr >= rangeStart && dateStr <= rangeEnd) {
+        if (!dailyBreakdown[dateStr]) dailyBreakdown[dateStr] = { sales: 0, trans: 0, visitors: 0, prevSales: 0, prevVisitors: 0 };
+        dailyBreakdown[dateStr].trans += safeNum(t);
+      }
+    });
 
     visitorsData.forEach(([d, sid, v]: any[]) => {
       if (sid !== store?.sid) return;
@@ -296,15 +307,16 @@ function StoreDetailsModal({
     });
     const prevRange = getPrevYearRange(rangeStart, rangeEnd);
 
-    for (const r of rec) {
-      const d = normDate(r?.[0]);
-      if (d && d >= prevRange.start && d <= prevRange.end) {
-        const currentDateStr = prevToCurrentMap[d];
+    mgmtSales.forEach(([d, sid, s]: any[]) => {
+      if (sid !== store?.sid) return;
+      const dateStr = normDate(d);
+      if (dateStr && dateStr >= prevRange.start && dateStr <= prevRange.end) {
+        const currentDateStr = prevToCurrentMap[dateStr];
         if (currentDateStr && dailyBreakdown[currentDateStr]) {
-          dailyBreakdown[currentDateStr].prevSales += safeNum(r?.[2]);
+          dailyBreakdown[currentDateStr].prevSales += safeNum(s);
         }
       }
-    }
+    });
 
     // Add previous year visitors for LY column
     visitorsData.forEach(([d, sid, v]: any[]) => {
