@@ -37,7 +37,9 @@ export function useComparison(
             prevStartStr = ps;
             prevEndStr = pe;
         } else {
-            const { start: ps, end: pe } = getPrevYearRange(start, end);
+            // If it's a Gregorian season (not Hijri), forceGregorian to avoid accidental Hijri shifting
+            const isGregorianSeason = !options?.isHijriSeason;
+            const { start: ps, end: pe } = getPrevYearRange(start, end, isGregorianSeason);
             prevStartStr = ps;
             prevEndStr = pe;
         }

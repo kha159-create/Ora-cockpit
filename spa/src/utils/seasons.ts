@@ -169,11 +169,11 @@ export function getSeasonalPrevRange(start: string, end: string): { start: strin
  * Get previous-year date: if in a Hijri season, use Hijri alignment;
  * otherwise, subtract 1 Gregorian year.
  */
-export function getPrevYearDate(dateStr: string): string {
+export function getPrevYearDate(dateStr: string, forceGregorian = false): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   const targetDate = new Date(y, m - 1, d);
   const season = detectCurrentSeason(targetDate);
-  if (season?.isHijri) {
+  if (season?.isHijri && !forceGregorian) {
     return getSeasonalPrevDate(dateStr);
   }
   // Default: subtract 1 Gregorian year
@@ -184,11 +184,11 @@ export function getPrevYearDate(dateStr: string): string {
  * Get previous-year range: if in a Hijri season, use Hijri alignment;
  * otherwise, subtract 1 Gregorian year from both dates.
  */
-export function getPrevYearRange(start: string, end: string): { start: string; end: string } {
+export function getPrevYearRange(start: string, end: string, forceGregorian = false): { start: string; end: string } {
   const [y, m, d] = start.split('-').map(Number);
   const startDate = new Date(y, m - 1, d);
   const season = detectCurrentSeason(startDate);
-  if (season?.isHijri) {
+  if (season?.isHijri && !forceGregorian) {
     return getSeasonalPrevRange(start, end);
   }
   return {
@@ -292,6 +292,7 @@ export function getSeasonDateRange(seasonId: string, currentGregorianYear?: numb
     const season = GREGORIAN_SEASONS.find(s => s.name === name);
     if (!season) return null;
 
+    let startYear = year;
     let endYear = year;
     // Handle cross-year seasons (e.g. November to January)
     if (season.endMonth < season.startMonth) {
@@ -299,7 +300,7 @@ export function getSeasonDateRange(seasonId: string, currentGregorianYear?: numb
     }
 
     return {
-      start: `${year}-${pad(season.startMonth)}-${pad(season.startDay)}`,
+      start: `${startYear}-${pad(season.startMonth)}-${pad(season.startDay)}`,
       end: `${endYear}-${pad(season.endMonth)}-${pad(season.endDay)}`,
     };
   }
