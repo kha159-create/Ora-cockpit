@@ -19,6 +19,12 @@ export default function HourlyPage() {
         return Array.from(mSet).sort();
     }, [meta]);
 
+    const prevDate = useMemo(() => {
+        const d = new Date(selectedDate);
+        d.setDate(d.getDate() - 1);
+        return d.toISOString().split('T')[0];
+    }, [selectedDate]);
+
     const hourlyData = useMemo(() => {
         if (!raw) return Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
 
@@ -45,9 +51,11 @@ export default function HourlyPage() {
 
             let localHour = -1;
             if (date === selectedDate) {
-                // POS 'Business Day' is GMT 0..23 (AST 5 AM to 5 AM tomorrow)
-                // We map all records of the selected date to local slots (h+5)%24
-                localHour = (hourGMT + 5) % 24;
+                // h=0..18 GMT maps to 5..23 AST
+                if (hourGMT <= 18) localHour = hourGMT + 5;
+            } else if (date === prevDate) {
+                // h=19..23 GMT maps to 0..4 AST (Early morning of the selected local day)
+                if (hourGMT >= 19) localHour = hourGMT + 5 - 24;
             }
 
             if (localHour !== -1) {
@@ -65,7 +73,7 @@ export default function HourlyPage() {
         (raw.visitors_hourly || []).forEach((r: any[]) => processRow(r, 'visitors'));
 
         return hourly;
-    }, [raw, selectedDate, selectedStore, selectedManager, meta]);
+    }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta]);
 
     const totals = useMemo(() => {
         return hourlyData.reduce((acc, h) => ({
@@ -84,7 +92,7 @@ export default function HourlyPage() {
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                     <div>
-                        <h1 className="text-2xl font-black text-neutral-900">المبيعات بالساعة</h1>
+                        <h1 className="text-2xl font-black text-neutral-900">المبيعات بالساعه</h1>
                         <p className="text-sm text-neutral-500 mt-1 font-medium">مراقبة دقيقة للأداء على مدار اليوم (GMT+5)</p>
                     </div>
 

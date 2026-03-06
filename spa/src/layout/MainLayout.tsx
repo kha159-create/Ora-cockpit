@@ -31,7 +31,7 @@ const baseNavItems = [
   { to: '/comparison', label: 'المقارنات', icon: <SwitchHorizontalIcon /> },
   { to: '/employees', label: 'الموظفين', icon: <UserGroupIcon /> },
   { to: '/commissions', label: 'العمولات', icon: <CashIcon /> },
-  { to: '/hourly', label: 'المبيعات بالساعة', icon: <ClockIcon /> },
+  { to: '/hourly', label: 'المبيعات بالساعه', icon: <ClockIcon /> },
   { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
   { to: '/offers', label: 'قائمة العروض', icon: <TagIcon /> },
   { to: '/reports', label: 'التقارير', icon: <ClipboardListIcon /> },
