@@ -31,6 +31,55 @@ const TrendIcon = ({ isUp, isDown }: { isUp?: boolean; isDown?: boolean }) => {
     return null;
 }
 
+// Sub-component for individual requirement cards (90% or 100%)
+const AIRequirementCard = ({
+    label,
+    targetVal,
+    remSales,
+    reqDailySales,
+    reqDailyVisitors,
+    atv,
+    avgDailySales,
+    avgDailyVisitors,
+    formatSAR,
+    compact = false
+}: any) => {
+    return (
+        <div className={`${compact ? 'bg-neutral-100/50' : 'bg-white'} rounded-lg p-3 border border-neutral-200 shadow-sm relative overflow-hidden transition-all duration-300`}>
+            {!compact && <div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 to-white pointer-events-none" />}
+
+            <div className={`flex items-center justify-between mb-2 pb-1.5 border-b border-neutral-100 relative z-10`}>
+                <span className={`text-[11px] font-black ${compact ? 'text-neutral-500' : 'text-orange-600'}`}>{label}</span>
+                <span className="text-[10px] text-neutral-400 font-bold">{formatSAR(remSales)} متبقي</span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 relative z-10">
+                <div className="flex flex-col text-center">
+                    <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-tighter mb-0.5">مبيعات يومية</span>
+                    <span className={`font-black font-mono ${compact ? 'text-sm text-neutral-600' : 'text-base text-orange-600'}`}>{formatSAR(reqDailySales)}</span>
+                    <div className="flex items-center justify-center gap-0.5 mt-0.5 opacity-70">
+                        <span className="text-[8px] font-bold text-neutral-400">{formatSAR(avgDailySales)}</span>
+                        <TrendIcon isUp={avgDailySales >= reqDailySales} isDown={avgDailySales < reqDailySales} />
+                    </div>
+                </div>
+                <div className="flex flex-col text-center border-x border-neutral-100">
+                    <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-tighter mb-0.5">زوار للجول</span>
+                    <span className={`font-black font-mono ${compact ? 'text-sm text-neutral-600' : 'text-base text-emerald-600'}`}>{reqDailyVisitors}</span>
+                    <div className="flex items-center justify-center gap-0.5 mt-0.5 opacity-70">
+                        <span className="text-[8px] font-bold text-neutral-400">{avgDailyVisitors}</span>
+                        <TrendIcon isUp={avgDailyVisitors >= reqDailyVisitors} isDown={avgDailyVisitors < reqDailyVisitors} />
+                    </div>
+                </div>
+                <div className="flex flex-col text-center">
+                    <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-tighter mb-0.5">متوسط سلة</span>
+                    <span className={`font-black font-mono ${compact ? 'text-sm text-neutral-600' : 'text-base text-blue-600'}`}>{formatSAR(atv)}</span>
+                    <div className="text-[8px] font-bold text-neutral-400 mt-1 opacity-70">المعدل الحالي</div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 interface StoreData {
     id: string;
     name: string;
@@ -86,49 +135,37 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
             // Skip stores that already hit 100% or have 0 target.
             if (t100 <= 0 || currentAch >= 100) return;
 
-            // Which target is the primary AI goal?
-            let goalValue = t90;
-            let goalLabel = "90%";
-            let type = "warning"; // default target style
+            const remSales100 = Math.max(0, t100 - store.sales);
+            const remSales90 = Math.max(0, t90 - store.sales);
 
-            // If they already hit 90% but not 100%, the AI goal switches to 100%
-            if (currentAch >= 90) {
-                goalValue = t100;
-                goalLabel = "100%";
-                type = "success";
-            } else if (currentAch < 50 && remDays < 10 && remDays > 0) {
-                // Critical state: Far behind and month ending. Focus on realistic intermediate step or just 90% survival.
-                type = "critical";
-            }
+            const reqDailySales100 = remDays > 0 ? remSales100 / remDays : 0;
+            const reqDailySales90 = remDays > 0 ? remSales90 / remDays : 0;
 
-            const remSales = Math.max(0, goalValue - store.sales);
-            let reqDailySales = remDays > 0 ? remSales / remDays : 0;
-            let reqDailyVisitors = 0;
-            let reqDailyTrans = 0;
+            // AI prediction: How many visitors are needed if maintaining current Conversion & ATV?
+            const reqDailyVisitors100 = reqDailySales100 / (conversion * atv);
+            const reqDailyVisitors90 = reqDailySales90 / (conversion * atv);
 
-            if (reqDailySales > 0) {
-                // AI prediction: How many visitors are needed if maintaining current Conversion & ATV?
-                reqDailyVisitors = reqDailySales / (conversion * atv);
-                reqDailyTrans = reqDailySales / atv;
-            }
+            const reqDailyTrans100 = reqDailySales100 / atv;
+            const reqDailyTrans90 = reqDailySales90 / atv;
 
-            // Generate an AI distance score to rank the most "actionable" branches.
-            // A branch very close to 90% or 100% is a "High Opportunity".
-            let distanceToGoal = 100 - (store.sales / goalValue * 100);
+            // Rank based on how close they are to 90% (intermediate) or 100% (ultimate)
+            let distanceToGoal = 100 - (store.sales / t100 * 100);
 
             actionable.push({
                 ...store,
-                goalLabel,
-                goalValue,
-                remSales,
-                reqDailySales,
-                reqDailyVisitors: Math.ceil(reqDailyVisitors),
-                reqDailyTrans: Math.ceil(reqDailyTrans),
+                remSales90,
+                remSales100,
+                reqDailySales90,
+                reqDailySales100,
+                reqDailyVisitors90: Math.ceil(reqDailyVisitors90),
+                reqDailyVisitors100: Math.ceil(reqDailyVisitors100),
+                reqDailyTrans90: Math.ceil(reqDailyTrans90),
+                reqDailyTrans100: Math.ceil(reqDailyTrans100),
                 conversionPct: (conversion * 100).toFixed(1),
                 atvFormatted: atv,
                 avgDailySales,
                 avgDailyVisitors: Math.ceil(avgDailyVisitors),
-                type,
+                type: currentAch >= 90 ? 'success' : currentAch < 50 && remDays < 10 && remDays > 0 ? 'critical' : 'warning',
                 distanceToGoal,
                 currentAch
             });
@@ -190,59 +227,33 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
                                 </div>
                             </div>
 
-                            <div className="mb-4">
-                                <span className="text-neutral-900 text-2xl font-black font-mono tracking-tight">{formatSAR(store.remSales)}</span>
-                                <span className="text-neutral-400 text-xs mr-1 font-bold">متبقي كهدف مبيعات</span>
+                            <div className="flex flex-col gap-3 mt-auto">
+                                <AIRequirementCard
+                                    label="للوصول للهدف 100%"
+                                    targetVal={100}
+                                    remSales={store.remSales100}
+                                    reqDailySales={store.reqDailySales100}
+                                    reqDailyVisitors={store.reqDailyVisitors100}
+                                    atv={store.atvFormatted}
+                                    avgDailySales={store.avgDailySales}
+                                    avgDailyVisitors={store.avgDailyVisitors}
+                                    formatSAR={formatSAR}
+                                />
+                                {store.currentAch < 90 && (
+                                    <AIRequirementCard
+                                        label="ميلستون الأمان 90%"
+                                        targetVal={90}
+                                        remSales={store.remSales90}
+                                        reqDailySales={store.reqDailySales90}
+                                        reqDailyVisitors={store.reqDailyVisitors90}
+                                        atv={store.atvFormatted}
+                                        avgDailySales={store.avgDailySales}
+                                        avgDailyVisitors={store.avgDailyVisitors}
+                                        formatSAR={formatSAR}
+                                        compact
+                                    />
+                                )}
                             </div>
-
-                            {store.reqDailySales > 0 ? (
-                                <div className="mt-auto bg-white rounded-lg p-3 border border-neutral-200 shadow-sm relative overflow-hidden">
-                                    <div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 to-white pointer-events-none" />
-
-                                    <div className="text-xs text-neutral-600 mb-3 font-bold relative z-10 border-b border-neutral-100 pb-2">متطلبات يومية للوصول للهدف:</div>
-
-                                    <div className="grid grid-cols-3 gap-2 relative z-10">
-                                        <div className="flex flex-col mb-1 text-center">
-                                            <span className="text-[10px] font-bold text-neutral-500 bg-neutral-100 rounded-t py-1">مبيعات</span>
-                                            <span className="text-orange-600 font-black font-mono text-sm border-x border-b border-neutral-100 rounded-b py-1 object-center flex justify-center">{formatSAR(store.reqDailySales)}</span>
-                                        </div>
-                                        <div className="flex flex-col mb-1 text-center">
-                                            <span className="text-[10px] font-bold text-neutral-500 bg-neutral-100 rounded-t py-1">زوار</span>
-                                            <span className="text-emerald-600 font-black font-mono text-sm border-x border-b border-neutral-100 rounded-b py-1 object-center flex justify-center">{store.reqDailyVisitors}</span>
-                                        </div>
-                                        <div className="flex flex-col mb-1 text-center">
-                                            <span className="text-[10px] font-bold text-neutral-500 bg-neutral-100 rounded-t py-1">متوسط السلة</span>
-                                            <span className="text-blue-600 font-black font-mono text-sm border-x border-b border-neutral-100 rounded-b py-1 object-center flex justify-center">{formatSAR(store.atvFormatted)}</span>
-                                        </div>
-
-                                        {/* Averages Row */}
-                                        <div className="flex flex-col text-center mt-1">
-                                            <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 font-bold mb-0.5">المتوسط الحالي</div>
-                                            <div className="text-[11px] font-bold text-neutral-800 font-mono tracking-tighter flex justify-center items-center gap-1">
-                                                {formatSAR(store.avgDailySales)}
-                                                <TrendIcon isUp={store.avgDailySales >= store.reqDailySales} isDown={store.avgDailySales < store.reqDailySales} />
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-col text-center mt-1">
-                                            <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 font-bold mb-0.5">المتوسط الحالي</div>
-                                            <div className="text-[11px] font-bold text-neutral-800 font-mono tracking-tighter flex justify-center items-center gap-1">
-                                                {store.avgDailyVisitors}
-                                                <TrendIcon isUp={store.avgDailyVisitors >= store.reqDailyVisitors} isDown={store.avgDailyVisitors < store.reqDailyVisitors} />
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-col text-center mt-1">
-                                            <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 font-bold mb-0.5">المتوسط الحالي</div>
-                                            <div className="text-[11px] font-bold text-neutral-800 font-mono tracking-tighter flex justify-center items-center gap-1">
-                                                {formatSAR(store.atvFormatted)}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="mt-auto bg-neutral-100 rounded-lg p-4 border border-neutral-200 flex items-center justify-center text-xs font-bold text-neutral-400">
-                                    لا يتوفر متطلبات يومية دقيقة لهذه الفترة
-                                </div>
-                            )}
                         </div>
                     ))}
                 </div>
