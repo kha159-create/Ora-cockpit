@@ -19,12 +19,6 @@ export default function HourlyPage() {
         return Array.from(mSet).sort();
     }, [meta]);
 
-    const prevDate = useMemo(() => {
-        const d = new Date(selectedDate);
-        d.setDate(d.getDate() - 1);
-        return d.toISOString().split('T')[0];
-    }, [selectedDate]);
-
     const hourlyData = useMemo(() => {
         if (!raw) return Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
 
@@ -51,11 +45,9 @@ export default function HourlyPage() {
 
             let localHour = -1;
             if (date === selectedDate) {
-                // h=0..18 maps to 5..23 today AST
-                if (hourGMT <= 18) localHour = hourGMT + 5;
-            } else if (date === prevDate) {
-                // h=19..23 maps to 0..4 today AST
-                if (hourGMT >= 19) localHour = hourGMT + 5 - 24;
+                // POS 'Business Day' is GMT 0..23 (AST 5 AM to 5 AM tomorrow)
+                // We map all records of the selected date to local slots (h+5)%24
+                localHour = (hourGMT + 5) % 24;
             }
 
             if (localHour !== -1) {
@@ -73,7 +65,7 @@ export default function HourlyPage() {
         (raw.visitors_hourly || []).forEach((r: any[]) => processRow(r, 'visitors'));
 
         return hourly;
-    }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta]);
+    }, [raw, selectedDate, selectedStore, selectedManager, meta]);
 
     const totals = useMemo(() => {
         return hourlyData.reduce((acc, h) => ({
