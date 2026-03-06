@@ -102,23 +102,22 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
             const dtStr = String(dt || '').trim();
             if (!okStore(String(sid))) return;
 
-            const hour = Number(h);
+            // GMT to Saudi Time (+3h)
+            const localHour = (Number(h) + 3) % 24;
             const val = Number(v) || 0;
 
             if (!ss[sid]) ss[sid] = { shift1: 0, shift2: 0, shift3: 0, shift3_part1: 0, shift3_part2: 0 };
 
             if (dtStr === targetDate) {
-                if (hour >= 6 && hour <= 11) {
+                if (localHour >= 6 && localHour < 11) {
                     gs.shift1 += val; ss[sid].shift1 += val;
-                } else if (hour >= 12 && hour < 18) {
+                } else if (localHour >= 11 && localHour < 18) {
                     gs.shift2 += val; ss[sid].shift2 += val;
-                } else if (hour >= 18 && hour <= 23) {
+                } else if (localHour >= 18 && localHour <= 23) {
                     gs.shift3 += val; ss[sid].shift3 += val;
                     gs.shift3_part1 += val; ss[sid].shift3_part1 += val;
-                }
-            } else if (dtStr === nextDate) {
-                if (hour >= 0 && hour <= 3) {
-                    // Next day's early hours belong to the current day's Shift 3
+                } else if (localHour < 6) {
+                    // Early hours (00:00 - 05:59) belong to Shift 3 of the SAME business day
                     gs.shift3 += val; ss[sid].shift3 += val;
                     gs.shift3_part2 += val; ss[sid].shift3_part2 += val;
                 }

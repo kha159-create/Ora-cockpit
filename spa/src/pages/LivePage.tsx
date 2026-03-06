@@ -84,30 +84,26 @@ export default function LivePage() {
     });
 
     // --- Ramadan Shift Totals (from sales_hourly) ---
-    // Shift 1 (صباحي):  06:00 - 11:29
-    // Shift 2 (ظهري):   11:30 - 17:59
-    // Shift 3 (مسائي):  18:00 - 05:59 (next day)
+    // Shift 1 (صباحي):  06:00 - 10:59 (Local AST) -> 03:00 - 07:59 (GMT)
+    // Shift 2 (ظهري):   11:00 - 17:59 (Local AST) -> 08:00 - 14:59 (GMT)
+    // Shift 3 (مسائي):  18:00 - 05:59 (Local AST) -> 15:00 - 02:59 (GMT)
     let shift1 = 0, shift2 = 0, shift3 = 0;
     if (isMarch2026) {
-      (raw.sales_hourly || []).forEach(([dt, sid, v]: any[]) => {
+      (raw.sales_hourly || []).forEach(([dt, sid, h, v]: any[]) => {
         const dtStr = String(dt || '');
         if (!dtStr.startsWith(today)) return;
         if (!okStore(String(sid))) return;
-        // parse hour & minute from "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DDTHH:MM:SS"
-        const timePart = dtStr.length > 10 ? dtStr.substring(11, 16) : '00:00';
-        const [hStr, mStr] = timePart.split(':');
-        const h = parseInt(hStr, 10);
-        const m = parseInt(mStr, 10);
-        const totalMin = h * 60 + m;
-        const S1_START = 6 * 60;       // 06:00
-        const S1_END = 11 * 60 + 30; // 11:30
-        const S2_END = 18 * 60;      // 18:00
-        if (totalMin >= S1_START && totalMin < S1_END) {
-          shift1 += v || 0;
-        } else if (totalMin >= S1_END && totalMin < S2_END) {
-          shift2 += v || 0;
+
+        // The 'h' in raw data is GMT. Saudi is GMT+3.
+        const localHour = (Number(h) + 3) % 24;
+        const val = Number(v) || 0;
+
+        if (localHour >= 6 && localHour < 11) {
+          shift1 += val;
+        } else if (localHour >= 11 && localHour < 18) {
+          shift2 += val;
         } else {
-          shift3 += v || 0; // 18:00+ and 00:00-05:59
+          shift3 += val; // 18:00-05:59
         }
       });
     }
@@ -144,16 +140,17 @@ export default function LivePage() {
 
     const isMarch2026 = new Date().getFullYear() === 2026 && new Date().getMonth() === 2;
     if (isMarch2026) {
-      (raw.sales_hourly || []).forEach(([dt, sid, v]: any[]) => {
+      (raw.sales_hourly || []).forEach(([dt, sid, h, v]: any[]) => {
         const dtStr = String(dt || '');
         if (!dtStr.startsWith(today)) return;
-        const totalMin = parseInt(dtStr.length > 10 ? dtStr.substring(11, 13) : '0', 10) * 60 + parseInt(dtStr.length > 10 ? dtStr.substring(14, 16) : '0', 10);
-        if (!byStore[sid]) return; // Only track for stores that have existing init (via sales/visitors/etc)
+        if (!byStore[sid]) return;
 
-        const S1_START = 6 * 60, S1_END = 11 * 60 + 30, S2_END = 18 * 60;
-        if (totalMin >= S1_START && totalMin < S1_END) byStore[sid].shift1 += v || 0;
-        else if (totalMin >= S1_END && totalMin < S2_END) byStore[sid].shift2 += v || 0;
-        else byStore[sid].shift3 += v || 0;
+        const localHour = (Number(h) + 3) % 24;
+        const val = Number(v) || 0;
+
+        if (localHour >= 6 && localHour < 11) byStore[sid].shift1 += val;
+        else if (localHour >= 11 && localHour < 18) byStore[sid].shift2 += val;
+        else byStore[sid].shift3 += val;
       });
     }
 
