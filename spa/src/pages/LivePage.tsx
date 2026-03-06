@@ -98,9 +98,9 @@ export default function LivePage() {
         const localHour = (Number(h) + 3) % 24;
         const val = Number(v) || 0;
 
-        if (localHour >= 6 && localHour < 11) {
+        if (localHour >= 6 && localHour < 12) {
           shift1 += val;
-        } else if (localHour >= 11 && localHour < 18) {
+        } else if (localHour >= 12 && localHour < 18) {
           shift2 += val;
         } else {
           shift3 += val; // 18:00-05:59
@@ -148,8 +148,8 @@ export default function LivePage() {
         const localHour = (Number(h) + 3) % 24;
         const val = Number(v) || 0;
 
-        if (localHour >= 6 && localHour < 11) byStore[sid].shift1 += val;
-        else if (localHour >= 11 && localHour < 18) byStore[sid].shift2 += val;
+        if (localHour >= 6 && localHour < 12) byStore[sid].shift1 += val;
+        else if (localHour >= 12 && localHour < 18) byStore[sid].shift2 += val;
         else byStore[sid].shift3 += val;
       });
     }

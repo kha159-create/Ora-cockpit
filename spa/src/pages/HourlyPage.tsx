@@ -19,6 +19,12 @@ export default function HourlyPage() {
         return Array.from(mSet).sort();
     }, [meta]);
 
+    const prevDate = useMemo(() => {
+        const d = new Date(selectedDate);
+        d.setDate(d.getDate() - 1);
+        return d.toISOString().split('T')[0];
+    }, [selectedDate]);
+
     const hourlyData = useMemo(() => {
         if (!raw) return Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
 
@@ -37,29 +43,37 @@ export default function HourlyPage() {
             visitors: 0
         }));
 
-        // 1. Process Sales & Transactions
-        (raw.sales_hourly || []).forEach((row: any[]) => {
-            const [date, sid, hourGMT, val, trans] = row;
-            if (date !== selectedDate) return;
-            if (filteredSids.size > 0 && !filteredSids.has(String(sid))) return;
+        const processRow = (row: any[], type: 'sales' | 'visitors') => {
+            const [date, sid, h, v, t] = row;
+            const hourGMT = Number(h);
+            const val = Number(v) || 0;
+            const trans = Number(t) || 0;
 
-            const localHour = (Number(hourGMT) + 3) % 24;
-            hourly[localHour].sales += Number(val) || 0;
-            hourly[localHour].trans += Number(trans) || 0;
-        });
+            let localHour = -1;
+            if (date === selectedDate) {
+                // h=0..20 maps to 3..23 today AST
+                if (hourGMT <= 20) localHour = hourGMT + 3;
+            } else if (date === prevDate) {
+                // h=21..23 maps to 0..2 today AST
+                if (hourGMT >= 21) localHour = hourGMT + 3 - 24;
+            }
 
-        // 2. Process Visitors
-        (raw.visitors_hourly || []).forEach((row: any[]) => {
-            const [date, sid, hourGMT, val] = row;
-            if (date !== selectedDate) return;
-            if (filteredSids.size > 0 && !filteredSids.has(String(sid))) return;
+            if (localHour !== -1) {
+                if (filteredSids.size > 0 && !filteredSids.has(String(sid))) return;
+                if (type === 'sales') {
+                    hourly[localHour].sales += val;
+                    hourly[localHour].trans += trans;
+                } else {
+                    hourly[localHour].visitors += val;
+                }
+            }
+        };
 
-            const localHour = (Number(hourGMT) + 3) % 24;
-            hourly[localHour].visitors += Number(val) || 0;
-        });
+        (raw.sales_hourly || []).forEach((r: any[]) => processRow(r, 'sales'));
+        (raw.visitors_hourly || []).forEach((r: any[]) => processRow(r, 'visitors'));
 
         return hourly;
-    }, [raw, selectedDate, selectedStore, selectedManager, meta]);
+    }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta]);
 
     const totals = useMemo(() => {
         return hourlyData.reduce((acc, h) => ({

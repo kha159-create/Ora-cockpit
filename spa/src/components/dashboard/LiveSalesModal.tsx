@@ -109,9 +109,9 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
             if (!ss[sid]) ss[sid] = { shift1: 0, shift2: 0, shift3: 0, shift3_part1: 0, shift3_part2: 0 };
 
             if (dtStr === targetDate) {
-                if (localHour >= 6 && localHour < 11) {
+                if (localHour >= 6 && localHour < 12) {
                     gs.shift1 += val; ss[sid].shift1 += val;
-                } else if (localHour >= 11 && localHour < 18) {
+                } else if (localHour >= 12 && localHour < 18) {
                     gs.shift2 += val; ss[sid].shift2 += val;
                 } else if (localHour >= 18 && localHour <= 23) {
                     gs.shift3 += val; ss[sid].shift3 += val;
