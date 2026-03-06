@@ -83,10 +83,9 @@ export default function LivePage() {
       if (inRange(d) && okStore(sid)) trans += v || 0;
     });
 
-    // --- Ramadan Shift Totals (from sales_hourly) ---
-    // Shift 1 (صباحي):  06:00 - 10:59 (Local AST) -> 03:00 - 07:59 (GMT)
-    // Shift 2 (ظهري):   11:00 - 17:59 (Local AST) -> 08:00 - 14:59 (GMT)
-    // Shift 3 (مسائي):  18:00 - 05:59 (Local AST) -> 15:00 - 02:59 (GMT)
+    // Shift 1 (صباحي):  06:00 - 11:59 (Local AST) -> 01:00 - 06:59 (GMT)
+    // Shift 2 (ظهري):   12:00 - 17:59 (Local AST) -> 07:00 - 12:59 (GMT)
+    // Shift 3 (مسائي):  18:00 - 05:59 (Local AST) -> 13:00 - 00:59 (GMT)
     let shift1 = 0, shift2 = 0, shift3 = 0;
     if (isMarch2026) {
       (raw.sales_hourly || []).forEach(([dt, sid, h, v]: any[]) => {
@@ -94,8 +93,8 @@ export default function LivePage() {
         if (!dtStr.startsWith(today)) return;
         if (!okStore(String(sid))) return;
 
-        // The 'h' in raw data is GMT. Saudi is GMT+3.
-        const localHour = (Number(h) + 3) % 24;
+        // The 'h' in raw data is GMT. Saudi POS is GMT+5.
+        const localHour = (Number(h) + 5) % 24;
         const val = Number(v) || 0;
 
         if (localHour >= 6 && localHour < 12) {
@@ -145,7 +144,7 @@ export default function LivePage() {
         if (!dtStr.startsWith(today)) return;
         if (!byStore[sid]) return;
 
-        const localHour = (Number(h) + 3) % 24;
+        const localHour = (Number(h) + 5) % 24;
         const val = Number(v) || 0;
 
         if (localHour >= 6 && localHour < 12) byStore[sid].shift1 += val;

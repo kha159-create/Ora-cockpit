@@ -102,8 +102,8 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
             const dtStr = String(dt || '').trim();
             if (!okStore(String(sid))) return;
 
-            // GMT to Saudi Time (+3h)
-            const localHour = (Number(h) + 3) % 24;
+            // GMT to Saudi Time (+5h)
+            const localHour = (Number(h) + 5) % 24;
             const val = Number(v) || 0;
 
             if (!ss[sid]) ss[sid] = { shift1: 0, shift2: 0, shift3: 0, shift3_part1: 0, shift3_part2: 0 };

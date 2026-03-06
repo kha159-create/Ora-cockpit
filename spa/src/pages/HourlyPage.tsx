@@ -51,11 +51,11 @@ export default function HourlyPage() {
 
             let localHour = -1;
             if (date === selectedDate) {
-                // h=0..20 maps to 3..23 today AST
-                if (hourGMT <= 20) localHour = hourGMT + 3;
+                // h=0..18 maps to 5..23 today AST
+                if (hourGMT <= 18) localHour = hourGMT + 5;
             } else if (date === prevDate) {
-                // h=21..23 maps to 0..2 today AST
-                if (hourGMT >= 21) localHour = hourGMT + 3 - 24;
+                // h=19..23 maps to 0..4 today AST
+                if (hourGMT >= 19) localHour = hourGMT + 5 - 24;
             }
 
             if (localHour !== -1) {
@@ -92,8 +92,8 @@ export default function HourlyPage() {
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                     <div>
-                        <h1 className="text-2xl font-black text-neutral-900">التفاصيل بالساعة</h1>
-                        <p className="text-sm text-neutral-500 mt-1 font-medium">مراقبة دقيقة للأداء على مدار اليوم (GMT+3)</p>
+                        <h1 className="text-2xl font-black text-neutral-900">المبيعات بالساعة</h1>
+                        <p className="text-sm text-neutral-500 mt-1 font-medium">مراقبة دقيقة للأداء على مدار اليوم (GMT+5)</p>
                     </div>
 
                     <div className="flex flex-wrap gap-3">
@@ -186,8 +186,8 @@ export default function HourlyPage() {
                                                 <span className="w-8 h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center text-[11px] font-black text-neutral-500 shadow-sm">
                                                     {h.hour}
                                                 </span>
-                                                <span className="text-xs font-black">
-                                                    {h.hour === 0 ? '12:00 م' : h.hour === 12 ? '12:00 ظ' : h.hour < 12 ? `${h.hour}:00 ص` : `${h.hour - 12}:00 م`}
+                                                <span className="text-[11px] font-black whitespace-nowrap">
+                                                    {`${h.hour.toString().padStart(2, '0')}:00 ~ ${((h.hour + 1) % 24).toString().padStart(2, '0')}:00`}
                                                 </span>
                                             </div>
                                         </td>
