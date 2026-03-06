@@ -17,6 +17,7 @@ import {
   UserGroupIcon,
   SearchIcon,
   FireIcon, // Added
+  ClockIcon, // Added for Hourly
   XIcon, // For modal close if needed
 } from '../components/Icons';
 import { loadManagementData, loadProductAnalysisData, loadStockData } from '../services/upstreamData';
@@ -30,6 +31,7 @@ const baseNavItems = [
   { to: '/comparison', label: 'المقارنات', icon: <SwitchHorizontalIcon /> },
   { to: '/employees', label: 'الموظفين', icon: <UserGroupIcon /> },
   { to: '/commissions', label: 'العمولات', icon: <CashIcon /> },
+  { to: '/hourly', label: 'التفاصيل الساعة', icon: <ClockIcon /> },
   { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
   { to: '/offers', label: 'قائمة العروض', icon: <TagIcon /> },
   { to: '/reports', label: 'التقارير', icon: <ClipboardListIcon /> },
