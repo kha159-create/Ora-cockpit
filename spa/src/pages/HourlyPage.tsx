@@ -51,10 +51,10 @@ export default function HourlyPage() {
 
             let localHour = -1;
             if (date === selectedDate) {
-                // h=0..18 GMT maps to 5..23 AST
+                // h=0..18 GMT maps to 05:00..23:00 AST Today
                 if (hourGMT <= 18) localHour = hourGMT + 5;
             } else if (date === prevDate) {
-                // h=19..23 GMT maps to 0..4 AST (Early morning of the selected local day)
+                // h=19..23 GMT maps to 00:00..04:00 AST Today (Records from previous GMT day)
                 if (hourGMT >= 19) localHour = hourGMT + 5 - 24;
             }
 
