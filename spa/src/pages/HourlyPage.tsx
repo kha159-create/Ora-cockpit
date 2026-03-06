@@ -50,12 +50,19 @@ export default function HourlyPage() {
             const trans = Number(t) || 0;
 
             let localHour = -1;
-            if (date === selectedDate) {
-                // h=0..18 GMT maps to 05:00..23:00 AST Today
-                if (hourGMT <= 18) localHour = hourGMT + 5;
-            } else if (date === prevDate) {
-                // h=19..23 GMT maps to 00:00..04:00 AST Today (Records from previous GMT day)
-                if (hourGMT >= 19) localHour = hourGMT + 5 - 24;
+            if (type === 'sales') {
+                if (date === selectedDate) {
+                    // h=0..18 GMT maps to 05:00..23:00 AST Today
+                    if (hourGMT <= 18) localHour = hourGMT + 5;
+                } else if (date === prevDate) {
+                    // h=19..23 GMT maps to 00:00..04:00 AST Today
+                    if (hourGMT >= 19) localHour = hourGMT + 5 - 24;
+                }
+            } else {
+                // Visitors use local GMT 0..23 (No shift)
+                if (date === selectedDate) {
+                    localHour = hourGMT;
+                }
             }
 
             if (localHour !== -1) {
@@ -114,7 +121,7 @@ export default function HourlyPage() {
                                 className="bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none min-w-[140px]"
                             >
                                 <option value="all">كل المدراء</option>
-                                {managers.map(m => <option key={m} value={m}>{m}</option>)}
+                                {managers.map((m: string) => <option key={m} value={m}>{m}</option>)}
                             </select>
                         </div>
                         <div className="flex flex-col gap-1">
