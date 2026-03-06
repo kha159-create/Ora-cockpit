@@ -208,8 +208,12 @@ export default function ComparisonPage() {
     const dateRange = useMemo(() => getRange(rangeMode, stdYear, stdMonth, customStart, customEnd, selectedSeason), [rangeMode, stdYear, stdMonth, customStart, customEnd, selectedSeason]);
 
     const isHijriSeasonSelected = rangeMode === 'seasons' && selectedSeason.startsWith('hijri_');
+    const isGregorianSeasonSelected = rangeMode === 'seasons' && !selectedSeason.startsWith('hijri_');
     const chartType = (activeMetric === 'atv' || activeMetric === 'conversion' || activeMetric === 'customer_value') ? 'sales' : activeMetric;
-    const { metrics, chartData, prevDateRange } = useComparison(filteredMgmt, dateRange, chartType, { isHijriSeason: isHijriSeasonSelected });
+    const { metrics, chartData, prevDateRange } = useComparison(filteredMgmt, dateRange, chartType, {
+        isHijriSeason: isHijriSeasonSelected,
+        forceGregorian: isGregorianSeasonSelected
+    });
 
     // Detailed Comparison Table data
     const detailedTable = useMemo(() => {
@@ -444,20 +448,21 @@ export default function ComparisonPage() {
                                 </select>
                             </div>
                         )}
-                        {rangeMode === 'seasons' && (
-                            <div className="text-xs text-neutral-500 mt-2 bg-neutral-50 p-2 rounded-lg border border-neutral-100 flex flex-col gap-1">
-                                <div>
-                                    <strong>الفترة الحالية (ميلادي):</strong> {dateRange.start} إلى {dateRange.end}
-                                    {' | '}
-                                    <strong>(هجري):</strong> {formatHijriDate(dateRange.start)} إلى {formatHijriDate(dateRange.end)}
-                                </div>
-                                <div>
-                                    <strong>فترة المقارنة (ميلادي):</strong> {prevDateRange?.start || ''} إلى {prevDateRange?.end || ''}
-                                    {' | '}
-                                    <strong>(هجري):</strong> {formatHijriDate(prevDateRange?.start || '')} إلى {formatHijriDate(prevDateRange?.end || '')}
-                                </div>
+                        <div className="text-xs text-neutral-500 mt-2 bg-neutral-50 p-2 rounded-lg border border-neutral-100 flex flex-col gap-1">
+                            <div>
+                                <strong>الفترة الحالية (ميلادي):</strong> {dateRange.start} إلى {dateRange.end}
+                                {' | '}
+                                <strong>(هجري):</strong> {formatHijriDate(dateRange.start)} إلى {formatHijriDate(dateRange.end)}
                             </div>
-                        )}
+                            <div>
+                                <strong>فترة المقارنة (ميلادي):</strong> {prevDateRange?.start || ''} إلى {prevDateRange?.end || ''}
+                                {' | '}
+                                <strong>(هجري):</strong> {formatHijriDate(prevDateRange?.start || '')} إلى {formatHijriDate(prevDateRange?.end || '')}
+                            </div>
+                            {isHijriSeasonSelected && (
+                                <div className="text-primary-600 font-medium">✨ يتم استخدام المقارنة الهجرية لهذا الموسم</div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Store Filters */}

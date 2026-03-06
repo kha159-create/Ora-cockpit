@@ -21,7 +21,7 @@ export function useComparison(
     rawMgmt: any,
     dateRange: { start: string; end: string }, // Current Year Range
     type: 'sales' | 'visitors' | 'transactions' = 'sales',
-    options?: { isHijriSeason?: boolean }
+    options?: { isHijriSeason?: boolean, forceGregorian?: boolean }
 ) {
     return useMemo(() => {
         if (!rawMgmt?.sales) return { metrics: [], chartData: [] };
@@ -37,9 +37,8 @@ export function useComparison(
             prevStartStr = ps;
             prevEndStr = pe;
         } else {
-            // If it's a Gregorian season (not Hijri), forceGregorian to avoid accidental Hijri shifting
-            const isGregorianSeason = !options?.isHijriSeason;
-            const { start: ps, end: pe } = getPrevYearRange(start, end, isGregorianSeason);
+            const force = options?.forceGregorian ?? false;
+            const { start: ps, end: pe } = getPrevYearRange(start, end, force);
             prevStartStr = ps;
             prevEndStr = pe;
         }
