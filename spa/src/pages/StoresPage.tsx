@@ -565,7 +565,7 @@ function StoreDetailsModal({
                         <td className="td text-center text-neutral-900">{formatSAR(totalSales)}</td>
                         <td className="td text-center text-neutral-500">{formatSAR(totalPrevSales)}</td>
                         <td className={`td text-center ${growthPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>{growthPct >= 0 ? '+' : ''}{growthPct.toFixed(1)}%</td>
-                        <td className={`td text-center ${totalGrowthVal >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatSAR(totalGrowthVal)}</td>
+                        <td className="td text-center ${totalGrowthVal >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatSAR(totalGrowthVal)}</td>
                         <td className="td text-center">{Math.round(totalTrans)}</td>
                         <td className="td text-center">{formatSAR(avgInv)}</td>
                         <td className="td text-center">{Math.round(totalVisitors)}</td>
@@ -574,49 +574,49 @@ function StoreDetailsModal({
                         <td className="td text-center text-orange-600">{conversion.toFixed(1)}%</td>
                         <td className="td text-center text-blue-600">{formatSAR(customerValue)}</td>
                       </tr>
-                    );
+                );
                   })()}
-                </tfoot>
-              </table>
-            </div>
-          </div>
-
-          {/* Product Mix Widget (Moved from Employees) */}
-          <div className="mt-6">
-            <ChartCard title="تحليل المنتجات (نسبة المبيعات)" className="h-[400px]">
-              {productMix.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-neutral-400">لا توجد بيانات</div>
-              ) : (
-                <div className="h-full flex flex-col">
-                  <div className="h-[200px] flex-shrink-0">
-                    <PieChart data={productMix.map(p => ({ name: p.name, value: p.value }))} />
-                  </div>
-                  <div className="flex-1 overflow-y-auto mt-4 custom-scrollbar">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-neutral-500 border-b border-neutral-100">
-                          <th className="pb-2 text-right">المنتج</th>
-                          <th className="pb-2 text-right">القيمة</th>
-                          <th className="pb-2 text-right">النسبة</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-neutral-50">
-                        {productMix.map((p) => (
-                          <tr key={p.name}>
-                            <td className="py-2 font-medium">{p.name}</td>
-                            <td className="py-2 dir-ltr text-right">{formatSAR(p.value)}</td>
-                            <td className="py-2 dir-ltr text-right font-bold text-neutral-900">{p.percentage.toFixed(1)}%</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </ChartCard>
+              </tfoot>
+            </table>
           </div>
         </div>
-      </div >
+
+        {/* Product Mix Widget (Moved from Employees) */}
+        <div className="mt-6">
+          <ChartCard title="تحليل المنتجات (نسبة المبيعات)" className="h-[400px]">
+            {productMix.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-neutral-400">لا توجد بيانات</div>
+            ) : (
+              <div className="h-full flex flex-col">
+                <div className="h-[200px] flex-shrink-0">
+                  <PieChart data={productMix.map(p => ({ name: p.name, value: p.value }))} />
+                </div>
+                <div className="flex-1 overflow-y-auto mt-4 custom-scrollbar">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-neutral-500 border-b border-neutral-100">
+                        <th className="pb-2 text-right">المنتج</th>
+                        <th className="pb-2 text-right">القيمة</th>
+                        <th className="pb-2 text-right">النسبة</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-50">
+                      {productMix.map((p) => (
+                        <tr key={p.name}>
+                          <td className="py-2 font-medium">{p.name}</td>
+                          <td className="py-2 dir-ltr text-right">{formatSAR(p.value)}</td>
+                          <td className="py-2 dir-ltr text-right font-bold text-neutral-900">{p.percentage.toFixed(1)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </ChartCard>
+        </div>
+      </div>
+    </div >
     </>
   );
 }
