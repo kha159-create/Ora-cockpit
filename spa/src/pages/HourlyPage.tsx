@@ -10,6 +10,8 @@ export default function HourlyPage() {
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [selectedStore, setSelectedStore] = useState<string>('all');
     const [selectedManager, setSelectedManager] = useState<string>('all');
+    const [fromHour, setFromHour] = useState<number>(0);
+    const [toHour, setToHour] = useState<number>(23);
 
     const stores = useMemo(() => raw?.stores || {}, [raw]);
     const meta = useMemo(() => raw?.store_meta || {}, [raw]);
@@ -43,8 +45,6 @@ export default function HourlyPage() {
             visitors: 0
         }));
 
-        // المبيعات فقط: إزاحة +5 ساعات (GMT → توقيت السعودية) لمطابقة الـ POS
-        // اليوم المحلي = أمس GMT (19–23) → 00:00–04:00 + اليوم GMT (0–18) → 05:00–23:00
         const gmtToLocalHour = (date: string, hourGMT: number): number => {
             if (date === selectedDate) {
                 if (hourGMT >= 0 && hourGMT <= 18) return hourGMT + 5;
@@ -66,7 +66,6 @@ export default function HourlyPage() {
             if (type === 'sales') {
                 slotHour = gmtToLocalHour(date, h);
             } else {
-                // الزوار: بدون إزاحة — الساعة كما في المصدر لنفس التاريخ
                 if (date !== selectedDate || h < 0 || h > 23) return;
                 slotHour = h;
             }
@@ -87,7 +86,6 @@ export default function HourlyPage() {
         return hourly;
     }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta]);
 
-    // الإجمالي = مجموع الساعات من مصدر البيانات (بدون توزيع يدوي)
     const totals = useMemo(() => {
         return hourlyData.reduce((acc, h) => ({
             sales: acc.sales + h.sales,
@@ -96,7 +94,29 @@ export default function HourlyPage() {
         }), { sales: 0, trans: 0, visitors: 0 });
     }, [hourlyData]);
 
-    if (loading && !raw) return <div className="p-8 text-center animate-pulse">جاري تحميل البيانات الحيوية...</div>;
+    const rangeSummary = useMemo(() => {
+        const start = Math.max(0, Math.min(23, fromHour));
+        const end = Math.max(start, Math.min(23, toHour));
+        let sales = 0, trans = 0, visitors = 0;
+        hourlyData.forEach(h => {
+            if (h.hour >= start && h.hour <= end) {
+                sales += h.sales;
+                trans += h.trans;
+                visitors += h.visitors;
+            }
+        });
+        return {
+            from: start,
+            to: end,
+            sales,
+            trans,
+            visitors,
+            atv: trans > 0 ? sales / trans : 0,
+            conversion: visitors > 0 ? (trans / visitors) * 100 : 0,
+        };
+    }, [hourlyData, fromHour, toHour]);
+
+    if (loading && !raw) return <div className="p-8 text-center animate-pulse text-orange-500 font-bold">جاري تحميل البيانات الحيوية...</div>;
     if (error) return <div className="p-8 text-center text-red-500 font-bold">خطأ: {error}</div>;
 
     return (
@@ -148,7 +168,7 @@ export default function HourlyPage() {
                     </div>
                 </div>
 
-                {/* Global Stats Bar */}
+                {/* Global Stats Bar - RESTORED as requested */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-dashed border-neutral-100">
                     <div className="p-3 bg-orange-50 rounded-2xl border border-orange-100">
                         <div className="text-[10px] font-black text-neutral-400 uppercase mb-1">إجمالي المبيعات</div>
@@ -169,6 +189,65 @@ export default function HourlyPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Range Summary Card - Replaces Only the PeakHour/QuickInsight portion */}
+                <div className="mt-6 bg-neutral-50 rounded-3xl border border-neutral-200 p-5 space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-end gap-6 pb-2">
+                        <div className="flex flex-col gap-1.5">
+                            <span className="text-[10px] font-black text-neutral-500 uppercase mr-1">من الساعة</span>
+                            <select
+                                className="bg-white border border-neutral-200 rounded-xl px-3 py-2 text-sm font-black focus:ring-2 focus:ring-orange-500 outline-none min-w-[120px] shadow-sm"
+                                value={fromHour}
+                                onChange={(e) => setFromHour(Number(e.target.value))}
+                            >
+                                {Array.from({ length: 24 }, (_, i) => i).map(h => (
+                                    <option key={h} value={h}>{h.toString().padStart(2, '0')}:00</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <span className="text-[10px] font-black text-neutral-500 uppercase mr-1">إلى الساعة</span>
+                            <select
+                                className="bg-white border border-neutral-200 rounded-xl px-3 py-2 text-sm font-black focus:ring-2 focus:ring-orange-500 outline-none min-w-[120px] shadow-sm"
+                                value={toHour}
+                                onChange={(e) => setToHour(Number(e.target.value))}
+                            >
+                                {Array.from({ length: 24 }, (_, i) => i).map(h => (
+                                    <option key={h} value={h}>{h.toString().padStart(2, '0')}:00</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="text-sm font-black text-neutral-800 mb-1">حساب المبيعات مخصص للفترة</h3>
+                            <p className="text-[11px] text-neutral-500 font-bold leading-relaxed">
+                                تحليل للفترة بين <span className="text-orange-600 font-black">{fromHour.toString().padStart(2, '0')}:00</span> و <span className="text-orange-600 font-black">{((toHour + 1) % 24).toString().padStart(2, '0')}:00</span>.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div className="p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
+                            <div className="text-[9px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">مبيعات الفترة</div>
+                            <div className="text-lg font-black text-orange-600">{formatSAR(rangeSummary.sales)}</div>
+                        </div>
+                        <div className="p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
+                            <div className="text-[9px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">فواتير الفترة</div>
+                            <div className="text-lg font-black text-blue-600">{formatNum(rangeSummary.trans)}</div>
+                        </div>
+                        <div className="p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
+                            <div className="text-[9px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">زوار الفترة</div>
+                            <div className="text-lg font-black text-emerald-600">{formatNum(rangeSummary.visitors)}</div>
+                        </div>
+                        <div className="p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
+                            <div className="text-[9px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">متوسط الفاتورة</div>
+                            <div className="text-lg font-black text-neutral-700">{formatSAR(rangeSummary.atv)}</div>
+                        </div>
+                        <div className="p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
+                            <div className="text-[9px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">التحويل</div>
+                            <div className="text-lg font-black text-purple-600">{rangeSummary.conversion.toFixed(1)}%</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Hourly Table */}
@@ -177,7 +256,7 @@ export default function HourlyPage() {
                     <table className="w-full text-right border-collapse">
                         <thead>
                             <tr className="bg-neutral-50 border-b border-neutral-200">
-                                <th className="p-4 text-xs font-black text-neutral-400 uppercase tracking-wider">الساعة</th>
+                                <th className="p-4 text-xs font-black text-neutral-400 uppercase tracking-wider text-center">الساعة</th>
                                 <th className="p-4 text-xs font-black text-neutral-400 uppercase tracking-wider border-r border-neutral-100">المبيعات</th>
                                 <th className="p-4 text-xs font-black text-neutral-400 uppercase tracking-wider">الفواتير</th>
                                 <th className="p-4 text-xs font-black text-neutral-400 uppercase tracking-wider font-mono">ATV</th>
@@ -194,38 +273,35 @@ export default function HourlyPage() {
                                 return (
                                     <tr key={h.hour} className={`hover:bg-neutral-50/80 transition-colors ${isPeak ? 'bg-orange-50/30' : ''}`}>
                                         <td className="p-4 font-bold text-neutral-900 border-l border-neutral-100 bg-neutral-50/50">
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-8 h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center text-[11px] font-black text-neutral-500 shadow-sm">
-                                                    {h.hour}
-                                                </span>
-                                                <span className="text-[11px] font-black whitespace-nowrap">
-                                                    {`${h.hour.toString().padStart(2, '0')}:00 ~ ${((h.hour + 1) % 24).toString().padStart(2, '0')}:00`}
+                                            <div className="flex items-center gap-2 justify-center">
+                                                <span className="w-10 h-10 rounded-xl bg-white border border-neutral-200 flex items-center justify-center text-[12px] font-black text-neutral-600 shadow-sm">
+                                                    {h.hour.toString().padStart(2, '0')}:00
                                                 </span>
                                             </div>
                                         </td>
                                         <td className="p-4 border-r border-neutral-100">
-                                            <span className={`font-black font-mono ${h.sales > 0 ? 'text-orange-600' : 'text-neutral-300'}`}>
+                                            <span className={`font-black font-mono text-base ${h.sales > 0 ? 'text-orange-600' : 'text-neutral-300'}`}>
                                                 {formatSAR(h.sales)}
                                             </span>
                                         </td>
-                                        <td className="p-4 font-bold text-blue-600 font-mono">
+                                        <td className="p-4 font-bold text-blue-600 font-mono text-base">
                                             {h.trans > 0 ? h.trans : <span className="text-neutral-200">0</span>}
                                         </td>
-                                        <td className="p-4 text-xs font-bold text-neutral-400 font-mono">
+                                        <td className="p-4 text-sm font-bold text-neutral-400 font-mono">
                                             {atv > 0 ? formatSAR(atv) : '-'}
                                         </td>
-                                        <td className="p-4 border-r border-neutral-100 font-bold text-emerald-600 font-mono">
+                                        <td className="p-4 border-r border-neutral-100 font-bold text-emerald-600 font-mono text-base">
                                             {h.visitors > 0 ? h.visitors : <span className="text-neutral-200">0</span>}
                                         </td>
                                         <td className="p-4 bg-emerald-50/30">
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex-1 h-1.5 bg-neutral-200 rounded-full overflow-hidden max-w-[60px]">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex-1 h-2 bg-neutral-200 rounded-full overflow-hidden max-w-[80px]">
                                                     <div
                                                         className="h-full bg-emerald-500 rounded-full"
-                                                        style={{ width: `${Math.min(100, conv * 2)}%` }}
+                                                        style={{ width: `${Math.min(100, conv * 2.5)}%` }}
                                                     />
                                                 </div>
-                                                <span className={`text-[11px] font-black ${conv > 0 ? 'text-emerald-700' : 'text-neutral-300'}`}>
+                                                <span className={`text-[12px] font-black ${conv > 0 ? 'text-emerald-700' : 'text-neutral-300'}`}>
                                                     {conv.toFixed(1)}%
                                                 </span>
                                             </div>
@@ -235,15 +311,15 @@ export default function HourlyPage() {
                             })}
                         </tbody>
                         <tfoot>
-                            <tr className="bg-neutral-100 border-t-2 border-neutral-200 font-black">
-                                <td className="p-4 text-neutral-700 border-l border-neutral-200">الإجمالي</td>
-                                <td className="p-4 text-orange-600 border-r border-neutral-100">{formatSAR(totals.sales)}</td>
-                                <td className="p-4 text-blue-600">{formatNum(totals.trans)}</td>
-                                <td className="p-4 text-neutral-600 text-xs">
+                            <tr className="bg-neutral-100 border-t-4 border-neutral-200 font-black">
+                                <td className="p-5 text-neutral-700 border-l border-neutral-200 text-base">الإجمالي العام</td>
+                                <td className="p-5 text-orange-600 border-r border-neutral-100 text-xl">{formatSAR(totals.sales)}</td>
+                                <td className="p-5 text-blue-600 text-xl">{formatNum(totals.trans)}</td>
+                                <td className="p-5 text-neutral-600 text-sm">
                                     {totals.trans > 0 ? formatSAR(totals.sales / totals.trans) : '-'}
                                 </td>
-                                <td className="p-4 text-emerald-600 border-r border-neutral-100">{formatNum(totals.visitors)}</td>
-                                <td className="p-4 text-emerald-700">
+                                <td className="p-5 text-emerald-600 border-r border-neutral-100 text-xl">{formatNum(totals.visitors)}</td>
+                                <td className="p-5 text-emerald-700 text-xl">
                                     {totals.visitors > 0 ? ((totals.trans / totals.visitors) * 100).toFixed(1) : '0'}%
                                 </td>
                             </tr>
@@ -254,4 +330,3 @@ export default function HourlyPage() {
         </div>
     );
 }
-

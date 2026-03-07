@@ -560,7 +560,7 @@ function StoreDetailsModal({
                     const customerValue = totalVisitors > 0 ? totalSales / totalVisitors : 0;
                     return (
                       <tr className="bg-neutral-100 border-t-2 border-neutral-300 font-black">
-                        <td className="td font-bold text-neutral-700">المجاميع</td>
+                        <td className="td font-bold text-neutral-700">الإجمالي</td>
                         <td className="td text-center text-neutral-900">{formatSAR(totalSales)}</td>
                         <td className="td text-center text-neutral-500">{formatSAR(totalPrevSales)}</td>
                         <td className={`td text-center ${growthPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>{growthPct >= 0 ? '+' : ''}{growthPct.toFixed(1)}%</td>
@@ -1018,6 +1018,7 @@ export default function StoresPage() {
                 <SortableTh label="متوسط الفاتورة" sortKey="avgInv" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="زوار" sortKey="visitors" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="زوار (LY)" sortKey="prevVisitors" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
+                <th className="th text-center">نمو الزوار %</th>
                 <SortableTh label="تحويل %" sortKey="conversion" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
                 <SortableTh label="قيمة العميل" sortKey="customerValue" activeKey={storeSortKey} direction={storeSortDir} onClick={handleStoreSort} className="text-center" />
               </tr>
@@ -1061,11 +1062,64 @@ export default function StoresPage() {
                   <td className="td text-center font-mono">{formatSAR(s.avgInv)}</td>
                   <td className="td text-center font-medium">{Math.round(s.visitors).toLocaleString()}</td>
                   <td className="td text-center text-neutral-400">{Math.round(s.prevVisitors).toLocaleString()}</td>
+                  <td className={`td text-center font-bold ${s.prevVisitors > 0 ? ((s.visitors - s.prevVisitors) / s.prevVisitors) * 100 >= 0 ? 'text-green-600' : 'text-red-500' : 'text-neutral-400'}`}>
+                    {s.prevVisitors > 0 ? `${((s.visitors - s.prevVisitors) / s.prevVisitors) * 100 >= 0 ? '+' : ''}${(((s.visitors - s.prevVisitors) / s.prevVisitors) * 100).toFixed(1)}%` : '0.0%'}
+                  </td>
                   <td className="td text-center font-bold text-orange-600">{s.conversion.toFixed(1)}%</td>
                   <td className="td text-center font-bold text-blue-600">{formatSAR(s.customerValue)}</td>
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              {(() => {
+                const list = sortedList;
+                if (list.length === 0) return null;
+                const totalSales = list.reduce((acc, r) => acc + (r.val || 0), 0);
+                const totalPrevSales = list.reduce((acc, r) => acc + (r.prevVal || 0), 0);
+                const totalTarget = list.reduce((acc, r) => acc + (r.target || 0), 0);
+                const totalTrans = list.reduce((acc, r) => acc + (r.trans || 0), 0);
+                const totalVisitors = list.reduce((acc, r) => acc + (r.visitors || 0), 0);
+                const totalPrevVisitors = list.reduce((acc, r) => acc + (r.prevVisitors || 0), 0);
+                const growthPct = totalPrevSales > 0 ? ((totalSales - totalPrevSales) / totalPrevSales) * 100 : 0;
+                const growthVisitorsPct = totalPrevVisitors > 0 ? ((totalVisitors - totalPrevVisitors) / totalPrevVisitors) * 100 : 0;
+                const avgInv = totalTrans > 0 ? totalSales / totalTrans : 0;
+                const conversion = totalVisitors > 0 ? (totalTrans / totalVisitors) * 100 : 0;
+                const customerValue = totalVisitors > 0 ? totalSales / totalVisitors : 0;
+                const achTotal = totalTarget > 0 ? (totalSales / totalTarget) * 100 : 0;
+                return (
+                  <tr className="bg-neutral-100 border-t-2 border-neutral-300 font-black">
+                    <td className="td text-neutral-700" colSpan={2}>الإجمالي</td>
+                    <td className="td text-center text-neutral-700 font-mono">{formatSAR(totalTarget)}</td>
+                    <td className="td text-center text-green-700 font-mono">{formatSAR(totalSales)}</td>
+                    <td className="td text-center text-neutral-500 font-mono">{formatSAR(totalPrevSales)}</td>
+                    <td className={`td text-center font-mono ${growthPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {growthPct >= 0 ? '+' : ''}{growthPct.toFixed(1)}%
+                    </td>
+                    <td className="td text-center font-mono text-blue-600">{formatSAR(list.reduce((acc, r) => acc + (r.dailyReq || 0), 0))}</td>
+                    <td className="td text-center">{Math.round(totalTrans).toLocaleString()}</td>
+                    <td className="td text-center">
+                      <div className="w-[85px] mx-auto flex flex-col items-center">
+                        <div className="w-full bg-neutral-100 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+                            style={{ width: `${Math.min(100, Math.max(0, achTotal))}%` }}
+                          />
+                        </div>
+                        <div className="text-[10px] font-bold text-neutral-600 mt-1">{achTotal.toFixed(1)}%</div>
+                      </div>
+                    </td>
+                    <td className="td text-center font-mono">{formatSAR(avgInv)}</td>
+                    <td className="td text-center">{Math.round(totalVisitors).toLocaleString()}</td>
+                    <td className="td text-center text-neutral-500">{Math.round(totalPrevVisitors).toLocaleString()}</td>
+                    <td className={`td text-center ${growthVisitorsPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {growthVisitorsPct >= 0 ? '+' : ''}{growthVisitorsPct.toFixed(1)}%
+                    </td>
+                    <td className="td text-center text-orange-600">{conversion.toFixed(1)}%</td>
+                    <td className="td text-center text-blue-600">{formatSAR(customerValue)}</td>
+                  </tr>
+                );
+              })()}
+            </tfoot>
           </table>
         </div>
       </ChartCard>
