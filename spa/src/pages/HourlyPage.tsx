@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useLiveSalesData } from '../hooks/useLiveSalesData';
 import { SalesIcon, InvoicesIcon, VisitorsIcon, ChevronDownIcon } from '../components/Icons';
 import { getCurrentUser } from '../auth/storage';
+import * as XLSX from 'xlsx';
 
 const formatSAR = (val: number) => val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 const formatNum = (val: number) => Math.round(val).toLocaleString();
@@ -120,6 +121,67 @@ export default function HourlyPage() {
         };
     }, [hourlyData, fromHour, toHour]);
 
+    const handleExportExcel = () => {
+        const branchName = selectedStore !== 'all' ? stores[selectedStore] : (selectedManager !== 'all' ? `مدير المنطقة: ${selectedManager}` : 'كل الفروع');
+
+        // Prepare Metadata rows
+        const metadata = [
+            ['تقرير المبيعات بالساعة'],
+            ['التاريخ', selectedDate],
+            ['الجهة', branchName],
+            [''], // Spacer
+            ['الساعة', 'المبيعات', 'الفواتير', 'متوسط الفاتورة (ATV)', 'الزوار', 'نسبة التحويل %']
+        ];
+
+        // Prepare Data rows
+        const dataRows = hourlyData.map(h => {
+            const atv = h.trans > 0 ? h.sales / h.trans : 0;
+            const conv = h.visitors > 0 ? (h.trans / h.visitors) * 100 : 0;
+            return [
+                `${h.hour.toString().padStart(2, '0')}:00 ~ ${((h.hour + 1) % 24).toString().padStart(2, '0')}:00`,
+                h.sales,
+                h.trans,
+                atv,
+                h.visitors,
+                conv.toFixed(1) + '%'
+            ];
+        });
+
+        // Prepare Totals row
+        const totalsRow = [
+            'الإجمالي العام',
+            totals.sales,
+            totals.trans,
+            totals.trans > 0 ? totals.sales / totals.trans : 0,
+            totals.visitors,
+            (totals.visitors > 0 ? (totals.trans / totals.visitors) * 100 : 0).toFixed(1) + '%'
+        ];
+
+        // Combine all
+        const wsData = [...metadata, ...dataRows, totalsRow];
+
+        // Create workbook and worksheet
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+        // Styling (Column Widths)
+        const wscols = [
+            { wch: 25 }, // Hour range
+            { wch: 15 }, // Sales
+            { wch: 12 }, // Invoices
+            { wch: 18 }, // ATV
+            { wch: 12 }, // Visitors
+            { wch: 15 }, // Conversion
+        ];
+        ws['!cols'] = wscols;
+
+        XLSX.utils.book_append_sheet(wb, ws, 'Hourly Sales');
+
+        // File identification name
+        const filename = `Hourly_Sales_${branchName}_${selectedDate}.xlsx`.replace(/\s+/g, '_');
+        XLSX.writeFile(wb, filename);
+    };
+
     if (loading && !raw) return <div className="p-8 text-center animate-pulse text-orange-500 font-bold">جاري تحميل البيانات الحيوية...</div>;
     if (error) return <div className="p-8 text-center text-red-500 font-bold">خطأ: {error}</div>;
 
@@ -128,8 +190,14 @@ export default function HourlyPage() {
             {/* Header & Filters */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                    <div>
+                    <div className="flex flex-col md:flex-row md:items-center gap-4">
                         <h1 className="text-2xl font-black text-neutral-900">المبيعات بالساعه</h1>
+                        <button
+                            onClick={handleExportExcel}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-sm active:scale-95"
+                        >
+                            <span>📥</span> تصدير Excel
+                        </button>
                     </div>
 
                     <div className="flex flex-wrap gap-3">
