@@ -1,15 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import { useLiveSalesData } from '../hooks/useLiveSalesData';
 import { SalesIcon, InvoicesIcon, VisitorsIcon, ChevronDownIcon } from '../components/Icons';
+import { getCurrentUser } from '../auth/storage';
 
 const formatSAR = (val: number) => val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 const formatNum = (val: number) => Math.round(val).toLocaleString();
 
 export default function HourlyPage() {
-    const { raw, loading, error } = useLiveSalesData();
+    const user = getCurrentUser();
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
-    const [selectedStore, setSelectedStore] = useState<string>('all');
-    const [selectedManager, setSelectedManager] = useState<string>('all');
+    const [selectedStore, setSelectedStore] = useState<string>(user?.role === 'BranchManager' ? (user?.storeId || 'all') : 'all');
+    const [selectedManager, setSelectedManager] = useState<string>(
+        (user?.role !== 'Admin' && user?.role !== 'Auditor' && user?.role !== 'Accountant') ? (user?.name || 'all') : 'all'
+    );
     const [fromHour, setFromHour] = useState<number>(0);
     const [toHour, setToHour] = useState<number>(23);
 
@@ -138,27 +141,35 @@ export default function HourlyPage() {
                                 className="bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none"
                             />
                         </div>
-                        <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-black text-neutral-400 mr-2 uppercase">مدير المنطقة</label>
-                            <select
-                                value={selectedManager}
-                                onChange={(e) => { setSelectedManager(e.target.value); setSelectedStore('all'); }}
-                                className="bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none min-w-[140px]"
-                            >
-                                <option value="all">كل المدراء</option>
-                                {managers.map((m: string) => <option key={m} value={m}>{m}</option>)}
-                            </select>
-                        </div>
+                        {(user?.role === 'Admin' || user?.role === 'Auditor' || user?.role === 'Accountant') && (
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-black text-neutral-400 mr-2 uppercase">مدير المنطقة</label>
+                                <select
+                                    value={selectedManager}
+                                    onChange={(e) => { setSelectedManager(e.target.value); setSelectedStore('all'); }}
+                                    className="bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none min-w-[140px]"
+                                >
+                                    <option value="all">كل المدراء</option>
+                                    {managers.map((m: string) => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                            </div>
+                        )}
                         <div className="flex flex-col gap-1">
                             <label className="text-[10px] font-black text-neutral-400 mr-2 uppercase">الفرع</label>
                             <select
                                 value={selectedStore}
                                 onChange={(e) => setSelectedStore(e.target.value)}
-                                className="bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none min-w-[200px]"
+                                disabled={user?.role === 'BranchManager'}
+                                className={`bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none min-w-[200px] ${user?.role === 'BranchManager' ? 'opacity-60 cursor-not-allowed' : ''}`}
                             >
-                                <option value="all">كل الفروع</option>
+                                {user?.role !== 'BranchManager' && <option value="all">كل الفروع</option>}
                                 {Object.entries(stores)
-                                    .filter(([sid]) => selectedManager === 'all' || meta[sid]?.manager === selectedManager)
+                                    .filter(([sid]) => {
+                                        if (user?.role === 'BranchManager' && sid !== user?.storeId) return false;
+                                        const m = meta[sid] || {};
+                                        if (selectedManager !== 'all' && m.manager !== selectedManager) return false;
+                                        return true;
+                                    })
                                     .map(([sid, name]: any) => (
                                         <option key={sid} value={sid}>{name}</option>
                                     ))

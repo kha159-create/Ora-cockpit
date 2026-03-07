@@ -34,7 +34,7 @@ type StoreRow = {
 
 type RangeStat = { s: number; t: number; i: number; target: number };
 
-type StoreSortKey = 'name' | 'val' | 'prevVal' | 'target' | 'ach' | 'growth' | 'growthVal' | 'trans' | 'avgInv' | 'visitors' | 'prevVisitors' | 'dailyReq' | 'conversion' | 'customerValue';
+type StoreSortKey = 'name' | 'val' | 'prevVal' | 'target' | 'ach' | 'growth' | 'growthVal' | 'trans' | 'avgInv' | 'visitors' | 'prevVisitors' | 'growthVisitors' | 'dailyReq' | 'conversion' | 'customerValue';
 
 function SortableTh({
   label,
@@ -826,6 +826,7 @@ export default function StoresPage() {
         dailyReq,
         conversion,
         customerValue,
+        growthVisitors: prevVis > 0 ? ((visitorsVal - prevVis) / prevVis) * 100 : 0
       });
     });
 
