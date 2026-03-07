@@ -95,10 +95,18 @@ interface AITargetInsightsProps {
     mode: string;
 }
 
+/**
+ * بطاقة "توصيات الذكاء الاصطناعي" — آلية العمل:
+ * 1. تأخذ قائمة الفروع (مبيعات، هدف، زوار، فواتير) ووضع التقرير (mtd / today / custom).
+ * 2. للأوضاع mtd و today: تحسب الأيام المتبقية في الشهر والتحقق الحالي %.
+ * 3. لكل فرع لم يصل 100%: تحسب المبيعات المتبقية لـ 90% و 100%، ثم المطلوب يومياً (مبيعات، زوار، فواتير) بناءً على التحويل و ATV الحالي.
+ * 4. ترتب الفروع حسب الأبعد عن الهدف (أولوية الفرص)، وتعرض أول 3 مع زر "عرض المزيد".
+ * 5. كل التوصيات معادلات (rule-based) بدون استدعاء API خارجي. لاستخدام Gemini أضف مفتاح VITE_GEMINI_API_KEY واستدعِه من طبقة خدمة منفصلة.
+ */
 export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, formatSAR, mode }) => {
     const [expanded, setExpanded] = useState(false);
 
-    // Calculate AI insights intelligently based on remaining days.
+    // Calculate insights based on remaining days and current performance (rule-based).
     const insights = useMemo(() => {
         if (!stores || stores.length === 0) return [];
 
@@ -149,7 +157,8 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
             const reqDailyTrans90 = reqDailySales90 / atv;
 
             // Rank based on how close they are to 90% (intermediate) or 100% (ultimate)
-            let distanceToGoal = 100 - (store.sales / t100 * 100);
+            const distanceToGoal = 100 - (store.sales / t100 * 100);
+            const goalLabel = currentAch >= 90 ? '100%' : currentAch >= 50 ? '90% ثم 100%' : '90%';
 
             actionable.push({
                 ...store,
@@ -167,7 +176,8 @@ export const AITargetInsights: React.FC<AITargetInsightsProps> = ({ stores, form
                 avgDailyVisitors: Math.ceil(avgDailyVisitors),
                 type: currentAch >= 90 ? 'success' : currentAch < 50 && remDays < 10 && remDays > 0 ? 'critical' : 'warning',
                 distanceToGoal,
-                currentAch
+                currentAch,
+                goalLabel
             });
         });
 
