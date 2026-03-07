@@ -19,6 +19,12 @@ export default function HourlyPage() {
         return Array.from(mSet).sort();
     }, [meta]);
 
+    const prevDate = useMemo(() => {
+        const d = new Date(selectedDate + 'T12:00:00');
+        d.setDate(d.getDate() - 1);
+        return d.toISOString().split('T')[0];
+    }, [selectedDate]);
+
     const hourlyData = useMemo(() => {
         if (!raw) return Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
 
@@ -37,7 +43,17 @@ export default function HourlyPage() {
             visitors: 0
         }));
 
-        // البيانات كما هي من المصدر: التاريخ والساعة بدون تحويل. قد يكون هناك زوار فقط أو مبيعات فقط.
+        // إزاحة +5 ساعات (GMT → توقيت السعودية) لمطابقة نظام الـ POS
+        // اليوم المحلي = أمس GMT (19–23) → 00:00–04:00 + اليوم GMT (0–18) → 05:00–23:00
+        const gmtToLocalHour = (date: string, hourGMT: number): number => {
+            if (date === selectedDate) {
+                if (hourGMT >= 0 && hourGMT <= 18) return hourGMT + 5;
+                return -1;
+            }
+            if (date === prevDate && hourGMT >= 19 && hourGMT <= 23) return hourGMT + 5 - 24;
+            return -1;
+        };
+
         const processRow = (row: any[], type: 'sales' | 'visitors') => {
             const date = String(row[0] || '').trim();
             const sid = row[1];
@@ -45,14 +61,15 @@ export default function HourlyPage() {
             const val = Number(row[3]) || 0;
             const trans = type === 'sales' ? (Number(row[4]) || 0) : 0;
 
-            if (date !== selectedDate || h < 0 || h > 23) return;
+            const localHour = gmtToLocalHour(date, h);
+            if (localHour < 0 || localHour > 23) return;
             if (filteredSids.size > 0 && !filteredSids.has(String(sid))) return;
 
             if (type === 'sales') {
-                hourly[h].sales += val;
-                hourly[h].trans += trans;
+                hourly[localHour].sales += val;
+                hourly[localHour].trans += trans;
             } else {
-                hourly[h].visitors += val;
+                hourly[localHour].visitors += val;
             }
         };
 
@@ -60,7 +77,7 @@ export default function HourlyPage() {
         (raw.visitors_hourly || []).forEach((r: any[]) => processRow(r, 'visitors'));
 
         return hourly;
-    }, [raw, selectedDate, selectedStore, selectedManager, meta]);
+    }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta]);
 
     // الإجماليات = مجموع الصفوف (مطابقة تلقائية)
     const totals = useMemo(() => {
@@ -81,7 +98,7 @@ export default function HourlyPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                     <div>
                         <h1 className="text-2xl font-black text-neutral-900">المبيعات بالساعه</h1>
-                        <p className="text-sm text-neutral-500 mt-1 font-medium">البيانات كما وردت من المصدر — قد تكون مبيعات فقط أو زوار فقط أو الاثنين</p>
+                        <p className="text-sm text-neutral-500 mt-1 font-medium">توقيت السعودية (GMT+5) — إزاحة 5 ساعات لمطابقة نظام الـ POS</p>
                     </div>
 
                     <div className="flex flex-wrap gap-3">

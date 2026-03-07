@@ -6,6 +6,27 @@ export const safeNum = (x: unknown) => {
     return Number.isFinite(n) ? n : 0;
 };
 
+/**
+ * إزالة تكرار الزوار: بعض المصادر ترسل أكثر من صف لنفس (تاريخ، فرع).
+ * نعيد صفاً واحداً لكل (تاريخ، فرع) بقيمة الأعلى لتجنب العد المزدوج.
+ */
+export function dedupeVisitors(rows: any[]): any[] {
+    if (!Array.isArray(rows) || rows.length === 0) return rows;
+    const byKey: Record<string, number> = {};
+    rows.forEach((r: any) => {
+        const date = String(r?.[0] ?? '').substring(0, 10);
+        const sid = String(r?.[1] ?? '');
+        const val = safeNum(r?.[2]);
+        const key = `${date}|${sid}`;
+        if (key in byKey) byKey[key] = Math.max(byKey[key], val);
+        else byKey[key] = val;
+    });
+    return Object.entries(byKey).map(([k, val]) => {
+        const [date, sid] = k.split('|');
+        return [date, sid, val];
+    });
+}
+
 export const getSmartDuvetCategories = () => ({
     low: { min: 99, max: 300, label: 'Low Value (99-300)' },
     medium: { min: 301, max: 600, label: 'Medium Value (301-600)' },

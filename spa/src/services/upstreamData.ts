@@ -1,3 +1,5 @@
+import { dedupeVisitors } from './analysisHelpers';
+
 export type ManagementData = any;
 export type EmployeesData = any;
 export type ProductAnalysisData = any;
@@ -114,8 +116,12 @@ async function fetchJson<T>(file: string, forceRefresh = false): Promise<T> {
   return promise;
 }
 
-export function loadManagementData(forceRefresh = false) {
-  return fetchJson<ManagementData>('management_data.json', forceRefresh);
+export async function loadManagementData(forceRefresh = false) {
+  const data = await fetchJson<ManagementData>('management_data.json', forceRefresh);
+  if (data && Array.isArray(data.visitors)) {
+    data.visitors = dedupeVisitors(data.visitors);
+  }
+  return data;
 }
 
 export function loadEmployeesData(forceRefresh = false) {
