@@ -105,7 +105,6 @@ export default function HourlyPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                     <div>
                         <h1 className="text-2xl font-black text-neutral-900">المبيعات بالساعه</h1>
-                        <p className="text-sm text-neutral-500 mt-1 font-medium">المبيعات بالساعة كما ترد من مصدر البيانات — بدون توزيع يدوي</p>
                     </div>
 
                     <div className="flex flex-wrap gap-3">
