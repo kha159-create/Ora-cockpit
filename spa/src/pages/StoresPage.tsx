@@ -30,6 +30,7 @@ type StoreRow = {
   dailyReq: number;
   conversion: number;
   customerValue: number;
+  growthVisitors: number;
 };
 
 type RangeStat = { s: number; t: number; i: number; target: number };

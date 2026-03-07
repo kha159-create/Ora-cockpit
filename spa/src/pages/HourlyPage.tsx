@@ -7,6 +7,7 @@ const formatSAR = (val: number) => val.toLocaleString('en-US', { style: 'currenc
 const formatNum = (val: number) => Math.round(val).toLocaleString();
 
 export default function HourlyPage() {
+    const { raw, loading, error } = useLiveSalesData();
     const user = getCurrentUser();
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [selectedStore, setSelectedStore] = useState<string>(user?.role === 'BranchManager' ? (user?.storeId || 'all') : 'all');
