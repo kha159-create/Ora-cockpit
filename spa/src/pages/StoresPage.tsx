@@ -337,6 +337,8 @@ function StoreDetailsModal({
         ...stats,
         growth: stats.prevSales > 0 ? ((stats.sales - stats.prevSales) / stats.prevSales) * 100 : 0,
         growthVal: stats.sales - stats.prevSales,
+        growthVisitors: stats.prevVisitors > 0 ? ((stats.visitors - stats.prevVisitors) / stats.prevVisitors) * 100 : 0,
+        growthVisitorsVal: stats.visitors - stats.prevVisitors,
         avgInv: stats.trans > 0 ? stats.sales / stats.trans : 0,
         conversion: stats.visitors > 0 ? (stats.trans / stats.visitors) * 100 : 0,
         customerValue: stats.visitors > 0 ? stats.sales / stats.visitors : 0,
@@ -512,6 +514,7 @@ function StoreDetailsModal({
                     <th className="th text-center">متوسط الفاتورة</th>
                     <th className="th text-center">الزوار</th>
                     <th className="th text-center">زوار (LY)</th>
+                    <th className="th text-center">نمو الزوار %</th>
                     <th className="th text-center">التحويل %</th>
                     <th className="th text-center">قيمة العميل</th>
                   </tr>
@@ -532,11 +535,47 @@ function StoreDetailsModal({
                       <td className="td text-center font-medium text-neutral-700">{formatSAR(row.avgInv)}</td>
                       <td className="td text-center font-medium text-neutral-700">{Math.round(row.visitors)}</td>
                       <td className="td text-center text-neutral-400 font-medium">{Math.round(row.prevVisitors)}</td>
+                      <td className={`td text-center font-bold ${(row.growthVisitors ?? 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        {(row.growthVisitors ?? 0) >= 0 ? '+' : ''}{(row.growthVisitors ?? 0).toFixed(1)}%
+                      </td>
                       <td className="td text-center font-bold text-orange-600">{row.conversion.toFixed(1)}%</td>
                       <td className="td text-center font-bold text-blue-600">{formatSAR(row.customerValue)}</td>
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  {(() => {
+                    const list = details?.dailyList || [];
+                    if (list.length === 0) return null;
+                    const totalSales = list.reduce((a, r) => a + (r.sales || 0), 0);
+                    const totalPrevSales = list.reduce((a, r) => a + (r.prevSales || 0), 0);
+                    const totalTrans = list.reduce((a, r) => a + (r.trans || 0), 0);
+                    const totalVisitors = list.reduce((a, r) => a + (r.visitors || 0), 0);
+                    const totalPrevVisitors = list.reduce((a, r) => a + (r.prevVisitors || 0), 0);
+                    const totalGrowthVal = list.reduce((a, r) => a + (r.growthVal || 0), 0);
+                    const growthPct = totalPrevSales > 0 ? ((totalSales - totalPrevSales) / totalPrevSales) * 100 : 0;
+                    const growthVisitorsPct = totalPrevVisitors > 0 ? ((totalVisitors - totalPrevVisitors) / totalPrevVisitors) * 100 : 0;
+                    const avgInv = totalTrans > 0 ? totalSales / totalTrans : 0;
+                    const conversion = totalVisitors > 0 ? (totalTrans / totalVisitors) * 100 : 0;
+                    const customerValue = totalVisitors > 0 ? totalSales / totalVisitors : 0;
+                    return (
+                      <tr className="bg-neutral-100 border-t-2 border-neutral-300 font-black">
+                        <td className="td font-bold text-neutral-700">المجاميع</td>
+                        <td className="td text-center text-neutral-900">{formatSAR(totalSales)}</td>
+                        <td className="td text-center text-neutral-500">{formatSAR(totalPrevSales)}</td>
+                        <td className={`td text-center ${growthPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>{growthPct >= 0 ? '+' : ''}{growthPct.toFixed(1)}%</td>
+                        <td className={`td text-center ${totalGrowthVal >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatSAR(totalGrowthVal)}</td>
+                        <td className="td text-center">{Math.round(totalTrans)}</td>
+                        <td className="td text-center">{formatSAR(avgInv)}</td>
+                        <td className="td text-center">{Math.round(totalVisitors)}</td>
+                        <td className="td text-center text-neutral-500">{Math.round(totalPrevVisitors)}</td>
+                        <td className={`td text-center ${growthVisitorsPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>{growthVisitorsPct >= 0 ? '+' : ''}{growthVisitorsPct.toFixed(1)}%</td>
+                        <td className="td text-center text-orange-600">{conversion.toFixed(1)}%</td>
+                        <td className="td text-center text-blue-600">{formatSAR(customerValue)}</td>
+                      </tr>
+                    );
+                  })()}
+                </tfoot>
               </table>
             </div>
           </div>
