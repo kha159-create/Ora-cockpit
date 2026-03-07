@@ -58,6 +58,7 @@ export default function HourlyPage() {
             const date = String(row[0] || '').trim();
             const sid = row[1];
             const h = Number(row[2]);
+            if (!Number.isInteger(h) || h < 0 || h > 23) return;
             const val = Number(row[3]) || 0;
             const trans = type === 'sales' ? (Number(row[4]) || 0) : 0;
 
