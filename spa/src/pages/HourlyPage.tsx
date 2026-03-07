@@ -218,33 +218,35 @@ export default function HourlyPage() {
                             </select>
                         </div>
                         <div className="flex-1">
-                            <h3 className="text-sm font-black text-neutral-800 mb-1">حساب المبيعات مخصص للفترة</h3>
+                            <h3 className="text-sm font-black text-neutral-800 mb-1">
+                                {selectedStore !== 'all' ? stores[selectedStore] : (selectedManager !== 'all' ? `مدير المنطقة: ${selectedManager}` : 'كل الفروع')}
+                            </h3>
                             <p className="text-[11px] text-neutral-500 font-bold leading-relaxed">
-                                تحليل للفترة بين <span className="text-orange-600 font-black">{fromHour.toString().padStart(2, '0')}:00</span> و <span className="text-orange-600 font-black">{((toHour + 1) % 24).toString().padStart(2, '0')}:00</span>.
+                                تحليل من <span className="text-orange-600 font-black">{fromHour.toString().padStart(2, '0')}:00</span> إلى <span className="text-orange-600 font-black">{((toHour + 1) % 24).toString().padStart(2, '0')}:00</span>
                             </p>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                        <div className="p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
-                            <div className="text-[9px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">مبيعات الفترة</div>
-                            <div className="text-lg font-black text-orange-600">{formatSAR(rangeSummary.sales)}</div>
+                    <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+                        <div className="p-2.5 bg-white rounded-xl border border-neutral-100 shadow-sm">
+                            <div className="text-[8px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">المبيعات</div>
+                            <div className="text-sm font-black text-orange-600">{formatSAR(rangeSummary.sales)}</div>
                         </div>
-                        <div className="p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
-                            <div className="text-[9px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">فواتير الفترة</div>
-                            <div className="text-lg font-black text-blue-600">{formatNum(rangeSummary.trans)}</div>
+                        <div className="p-2.5 bg-white rounded-xl border border-neutral-100 shadow-sm">
+                            <div className="text-[8px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">الفواتير</div>
+                            <div className="text-sm font-black text-blue-600">{formatNum(rangeSummary.trans)}</div>
                         </div>
-                        <div className="p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
-                            <div className="text-[9px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">زوار الفترة</div>
-                            <div className="text-lg font-black text-emerald-600">{formatNum(rangeSummary.visitors)}</div>
+                        <div className="p-2.5 bg-white rounded-xl border border-neutral-100 shadow-sm">
+                            <div className="text-[8px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">الزوار</div>
+                            <div className="text-sm font-black text-emerald-600">{formatNum(rangeSummary.visitors)}</div>
                         </div>
-                        <div className="p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
-                            <div className="text-[9px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">متوسط الفاتورة</div>
-                            <div className="text-lg font-black text-neutral-700">{formatSAR(rangeSummary.atv)}</div>
+                        <div className="p-2.5 bg-white rounded-xl border border-neutral-100 shadow-sm">
+                            <div className="text-[8px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">ATV</div>
+                            <div className="text-sm font-black text-neutral-700">{formatSAR(rangeSummary.atv)}</div>
                         </div>
-                        <div className="p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
-                            <div className="text-[9px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">التحويل</div>
-                            <div className="text-lg font-black text-purple-600">{rangeSummary.conversion.toFixed(1)}%</div>
+                        <div className="p-2.5 bg-white rounded-xl border border-neutral-100 shadow-sm">
+                            <div className="text-[8px] font-black text-neutral-400 uppercase mb-0.5 tracking-wider">التحويل</div>
+                            <div className="text-sm font-black text-purple-600">{rangeSummary.conversion.toFixed(1)}%</div>
                         </div>
                     </div>
                 </div>
@@ -273,9 +275,12 @@ export default function HourlyPage() {
                                 return (
                                     <tr key={h.hour} className={`hover:bg-neutral-50/80 transition-colors ${isPeak ? 'bg-orange-50/30' : ''}`}>
                                         <td className="p-4 font-bold text-neutral-900 border-l border-neutral-100 bg-neutral-50/50">
-                                            <div className="flex items-center gap-2 justify-center">
-                                                <span className="w-10 h-10 rounded-xl bg-white border border-neutral-200 flex items-center justify-center text-[12px] font-black text-neutral-600 shadow-sm">
-                                                    {h.hour.toString().padStart(2, '0')}:00
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-8 h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center text-[11px] font-black text-neutral-500 shadow-sm">
+                                                    {h.hour}
+                                                </span>
+                                                <span className="text-[11px] font-black whitespace-nowrap">
+                                                    {`${h.hour.toString().padStart(2, '0')}:00 ~ ${((h.hour + 1) % 24).toString().padStart(2, '0')}:00`}
                                                 </span>
                                             </div>
                                         </td>
