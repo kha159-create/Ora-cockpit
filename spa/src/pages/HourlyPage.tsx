@@ -19,12 +19,6 @@ export default function HourlyPage() {
         return Array.from(mSet).sort();
     }, [meta]);
 
-    const prevDate = useMemo(() => {
-        const d = new Date(selectedDate);
-        d.setDate(d.getDate() - 1);
-        return d.toISOString().split('T')[0];
-    }, [selectedDate]);
-
     const hourlyData = useMemo(() => {
         if (!raw) return Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
 
@@ -43,36 +37,22 @@ export default function HourlyPage() {
             visitors: 0
         }));
 
+        // البيانات كما هي من المصدر: التاريخ والساعة بدون تحويل. قد يكون هناك زوار فقط أو مبيعات فقط.
         const processRow = (row: any[], type: 'sales' | 'visitors') => {
-            const [date, sid, h, v, t] = row;
-            const hourGMT = Number(h);
-            const val = Number(v) || 0;
-            const trans = Number(t) || 0;
+            const date = String(row[0] || '').trim();
+            const sid = row[1];
+            const h = Number(row[2]);
+            const val = Number(row[3]) || 0;
+            const trans = type === 'sales' ? (Number(row[4]) || 0) : 0;
 
-            let localHour = -1;
+            if (date !== selectedDate || h < 0 || h > 23) return;
+            if (filteredSids.size > 0 && !filteredSids.has(String(sid))) return;
+
             if (type === 'sales') {
-                if (date === selectedDate) {
-                    // h=0..18 GMT maps to 05:00..23:00 AST Today
-                    if (hourGMT <= 18) localHour = hourGMT + 5;
-                } else if (date === prevDate) {
-                    // h=19..23 GMT maps to 00:00..04:00 AST Today
-                    if (hourGMT >= 19) localHour = hourGMT + 5 - 24;
-                }
+                hourly[h].sales += val;
+                hourly[h].trans += trans;
             } else {
-                // Visitors use local GMT 0..23 (No shift)
-                if (date === selectedDate) {
-                    localHour = hourGMT;
-                }
-            }
-
-            if (localHour !== -1) {
-                if (filteredSids.size > 0 && !filteredSids.has(String(sid))) return;
-                if (type === 'sales') {
-                    hourly[localHour].sales += val;
-                    hourly[localHour].trans += trans;
-                } else {
-                    hourly[localHour].visitors += val;
-                }
+                hourly[h].visitors += val;
             }
         };
 
@@ -80,8 +60,9 @@ export default function HourlyPage() {
         (raw.visitors_hourly || []).forEach((r: any[]) => processRow(r, 'visitors'));
 
         return hourly;
-    }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta]);
+    }, [raw, selectedDate, selectedStore, selectedManager, meta]);
 
+    // الإجماليات = مجموع الصفوف (مطابقة تلقائية)
     const totals = useMemo(() => {
         return hourlyData.reduce((acc, h) => ({
             sales: acc.sales + h.sales,
@@ -100,7 +81,7 @@ export default function HourlyPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                     <div>
                         <h1 className="text-2xl font-black text-neutral-900">المبيعات بالساعه</h1>
-                        <p className="text-sm text-neutral-500 mt-1 font-medium">مراقبة دقيقة للأداء على مدار اليوم (GMT+5)</p>
+                        <p className="text-sm text-neutral-500 mt-1 font-medium">البيانات كما وردت من المصدر — قد تكون مبيعات فقط أو زوار فقط أو الاثنين</p>
                     </div>
 
                     <div className="flex flex-wrap gap-3">
@@ -229,6 +210,20 @@ export default function HourlyPage() {
                                 );
                             })}
                         </tbody>
+                        <tfoot>
+                            <tr className="bg-neutral-100 border-t-2 border-neutral-200 font-black">
+                                <td className="p-4 text-neutral-700 border-l border-neutral-200">الإجمالي</td>
+                                <td className="p-4 text-orange-600 border-r border-neutral-100">{formatSAR(totals.sales)}</td>
+                                <td className="p-4 text-blue-600">{formatNum(totals.trans)}</td>
+                                <td className="p-4 text-neutral-600 text-xs">
+                                    {totals.trans > 0 ? formatSAR(totals.sales / totals.trans) : '-'}
+                                </td>
+                                <td className="p-4 text-emerald-600 border-r border-neutral-100">{formatNum(totals.visitors)}</td>
+                                <td className="p-4 text-emerald-700">
+                                    {totals.visitors > 0 ? ((totals.trans / totals.visitors) * 100).toFixed(1) : '0'}%
+                                </td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             </div>
