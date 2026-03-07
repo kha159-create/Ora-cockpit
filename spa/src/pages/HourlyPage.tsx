@@ -122,63 +122,121 @@ export default function HourlyPage() {
     }, [hourlyData, fromHour, toHour]);
 
     const handleExportExcel = () => {
-        const branchName = selectedStore !== 'all' ? stores[selectedStore] : (selectedManager !== 'all' ? `مدير المنطقة: ${selectedManager}` : 'كل الفروع');
+        const wb = XLSX.utils.book_new();
 
-        // Prepare Metadata rows
-        const metadata = [
-            ['تقرير المبيعات بالساعة'],
-            ['التاريخ', selectedDate],
-            ['الجهة', branchName],
-            [''], // Spacer
-            ['الساعة', 'المبيعات', 'الفواتير', 'متوسط الفاتورة (ATV)', 'الزوار', 'نسبة التحويل %']
-        ];
+        const getHourlyForSids = (sids: Set<string>) => {
+            const hourly = Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
+            const gmtToLocalHour = (date: string, hourGMT: number): number => {
+                if (date === selectedDate) {
+                    if (hourGMT >= 0 && hourGMT <= 18) return hourGMT + 5;
+                    return -1;
+                }
+                if (date === prevDate && hourGMT >= 19 && hourGMT <= 23) return hourGMT + 5 - 24;
+                return -1;
+            };
 
-        // Prepare Data rows
-        const dataRows = hourlyData.map(h => {
-            const atv = h.trans > 0 ? h.sales / h.trans : 0;
-            const conv = h.visitors > 0 ? (h.trans / h.visitors) * 100 : 0;
-            return [
-                `${h.hour.toString().padStart(2, '0')}:00 ~ ${((h.hour + 1) % 24).toString().padStart(2, '0')}:00`,
-                h.sales,
-                h.trans,
-                atv,
-                h.visitors,
-                conv.toFixed(1) + '%'
+            const processRow = (row: any[], type: 'sales' | 'visitors') => {
+                const date = String(row[0] || '').trim();
+                const sid = String(row[1]);
+                const h = Number(row[2]);
+                if (!Number.isInteger(h) || h < 0 || h > 23) return;
+                const val = Number(row[3]) || 0;
+                const trans = type === 'sales' ? (Number(row[4]) || 0) : 0;
+
+                let slotHour: number;
+                if (type === 'sales') slotHour = gmtToLocalHour(date, h);
+                else {
+                    if (date !== selectedDate || h < 0 || h > 23) return;
+                    slotHour = h;
+                }
+                if (slotHour < 0 || slotHour > 23) return;
+                if (sids.size > 0 && !sids.has(sid)) return;
+
+                if (type === 'sales') {
+                    hourly[slotHour].sales += val;
+                    hourly[slotHour].trans += trans;
+                } else {
+                    hourly[slotHour].visitors += val;
+                }
+            };
+
+            (raw?.sales_hourly || []).forEach((r: any[]) => processRow(r, 'sales'));
+            (raw?.visitors_hourly || []).forEach((r: any[]) => processRow(r, 'visitors'));
+            return hourly;
+        };
+
+        const addSheet = (sheetName: string, sids: Set<string>, titleSuffix: string) => {
+            const data = getHourlyForSids(sids);
+            const sheetTotals = data.reduce((acc, h) => ({
+                sales: acc.sales + h.sales,
+                trans: acc.trans + h.trans,
+                visitors: acc.visitors + h.visitors
+            }), { sales: 0, trans: 0, visitors: 0 });
+
+            const metadata = [
+                ['تقرير المبيعات بالساعة'],
+                ['التاريخ', selectedDate],
+                ['الجهة', titleSuffix],
+                [''],
+                ['الساعة', 'المبيعات', 'الفواتير', 'متوسط الفاتورة (ATV)', 'الزوار', 'نسبة التحويل %']
             ];
+
+            const dataRows = data.map(h => {
+                const atv = h.trans > 0 ? Math.round(h.sales / h.trans) : 0;
+                const conv = h.visitors > 0 ? (h.trans / h.visitors) * 100 : 0;
+                return [
+                    `${h.hour.toString().padStart(2, '0')}:00 ~ ${((h.hour + 1) % 24).toString().padStart(2, '0')}:00`,
+                    h.sales,
+                    h.trans,
+                    atv,
+                    h.visitors,
+                    conv.toFixed(1) + '%'
+                ];
+            });
+
+            const totalsRow = [
+                'الإجمالي العام',
+                sheetTotals.sales,
+                sheetTotals.trans,
+                sheetTotals.trans > 0 ? Math.round(sheetTotals.sales / sheetTotals.trans) : 0,
+                sheetTotals.visitors,
+                (sheetTotals.visitors > 0 ? (sheetTotals.trans / sheetTotals.visitors) * 100 : 0).toFixed(1) + '%'
+            ];
+
+            const ws = XLSX.utils.aoa_to_sheet([...metadata, ...dataRows, totalsRow]);
+
+            // Formatting: Number formats for Sales (with commas) and ATV (no decimals)
+            const range = XLSX.utils.decode_range(ws['!ref']!);
+            for (let R = 5; R <= range.e.r; ++R) { // Rows start after headers
+                const salesCell = ws[XLSX.utils.encode_cell({ r: R, c: 1 })];
+                if (salesCell) salesCell.z = '#,##0';
+                const atvCell = ws[XLSX.utils.encode_cell({ r: R, c: 3 })];
+                if (atvCell) atvCell.z = '0';
+            }
+
+            ws['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 12 }, { wch: 15 }];
+            XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31)); // Sheet name limit
+        };
+
+        const currentFilterSids = new Set<string>();
+        Object.keys(meta).forEach(sid => {
+            const m = meta[sid];
+            if (selectedStore !== 'all' && sid !== selectedStore) return;
+            if (selectedManager !== 'all' && m.manager !== selectedManager) return;
+            currentFilterSids.add(sid);
         });
 
-        // Prepare Totals row
-        const totalsRow = [
-            'الإجمالي العام',
-            totals.sales,
-            totals.trans,
-            totals.trans > 0 ? totals.sales / totals.trans : 0,
-            totals.visitors,
-            (totals.visitors > 0 ? (totals.trans / totals.visitors) * 100 : 0).toFixed(1) + '%'
-        ];
+        const mainTitle = selectedStore !== 'all' ? stores[selectedStore] : (selectedManager !== 'all' ? `مدير المنطقة: ${selectedManager}` : 'كل الفروع');
+        addSheet(selectedStore !== 'all' ? stores[selectedStore] : "الملخص العام", currentFilterSids, mainTitle);
 
-        // Combine all
-        const wsData = [...metadata, ...dataRows, totalsRow];
+        // If Manager mode and All Stores selected, add each store as a separate sheet
+        if (selectedStore === 'all' && selectedManager !== 'all') {
+            Array.from(currentFilterSids).sort((a, b) => (stores[a] || '').localeCompare(stores[b] || '')).forEach(sid => {
+                addSheet(stores[sid] || sid, new Set([sid]), stores[sid] || sid);
+            });
+        }
 
-        // Create workbook and worksheet
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-        // Styling (Column Widths)
-        const wscols = [
-            { wch: 25 }, // Hour range
-            { wch: 15 }, // Sales
-            { wch: 12 }, // Invoices
-            { wch: 18 }, // ATV
-            { wch: 12 }, // Visitors
-            { wch: 15 }, // Conversion
-        ];
-        ws['!cols'] = wscols;
-
-        XLSX.utils.book_append_sheet(wb, ws, 'Hourly Sales');
-
-        // File identification name
-        const filename = `Hourly_Sales_${branchName}_${selectedDate}.xlsx`.replace(/\s+/g, '_');
+        const filename = `Hourly_Sales_${mainTitle}_${selectedDate}.xlsx`.replace(/\s+/g, '_');
         XLSX.writeFile(wb, filename);
     };
 
