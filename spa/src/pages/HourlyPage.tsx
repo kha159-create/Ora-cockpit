@@ -43,7 +43,7 @@ export default function HourlyPage() {
             visitors: 0
         }));
 
-        // إزاحة +5 ساعات (GMT → توقيت السعودية) لمطابقة نظام الـ POS
+        // المبيعات فقط: إزاحة +5 ساعات (GMT → توقيت السعودية) لمطابقة الـ POS
         // اليوم المحلي = أمس GMT (19–23) → 00:00–04:00 + اليوم GMT (0–18) → 05:00–23:00
         const gmtToLocalHour = (date: string, hourGMT: number): number => {
             if (date === selectedDate) {
@@ -61,15 +61,22 @@ export default function HourlyPage() {
             const val = Number(row[3]) || 0;
             const trans = type === 'sales' ? (Number(row[4]) || 0) : 0;
 
-            const localHour = gmtToLocalHour(date, h);
-            if (localHour < 0 || localHour > 23) return;
+            let slotHour: number;
+            if (type === 'sales') {
+                slotHour = gmtToLocalHour(date, h);
+            } else {
+                // الزوار: بدون إزاحة — الساعة كما في المصدر لنفس التاريخ
+                if (date !== selectedDate || h < 0 || h > 23) return;
+                slotHour = h;
+            }
+            if (slotHour < 0 || slotHour > 23) return;
             if (filteredSids.size > 0 && !filteredSids.has(String(sid))) return;
 
             if (type === 'sales') {
-                hourly[localHour].sales += val;
-                hourly[localHour].trans += trans;
+                hourly[slotHour].sales += val;
+                hourly[slotHour].trans += trans;
             } else {
-                hourly[localHour].visitors += val;
+                hourly[slotHour].visitors += val;
             }
         };
 
@@ -98,7 +105,7 @@ export default function HourlyPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                     <div>
                         <h1 className="text-2xl font-black text-neutral-900">المبيعات بالساعه</h1>
-                        <p className="text-sm text-neutral-500 mt-1 font-medium">توقيت السعودية (GMT+5) — إزاحة 5 ساعات لمطابقة نظام الـ POS</p>
+                        <p className="text-sm text-neutral-500 mt-1 font-medium">المبيعات: توقيت السعودية (GMT+5). الزوار: كما في المصدر بدون إزاحة</p>
                     </div>
 
                     <div className="flex flex-wrap gap-3">
