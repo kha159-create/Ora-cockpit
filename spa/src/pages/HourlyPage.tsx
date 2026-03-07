@@ -86,7 +86,7 @@ export default function HourlyPage() {
         return hourly;
     }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta]);
 
-    // الإجماليات = مجموع الصفوف (مطابقة تلقائية)
+    // الإجمالي = مجموع الساعات من مصدر البيانات (بدون توزيع يدوي)
     const totals = useMemo(() => {
         return hourlyData.reduce((acc, h) => ({
             sales: acc.sales + h.sales,
@@ -105,7 +105,7 @@ export default function HourlyPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                     <div>
                         <h1 className="text-2xl font-black text-neutral-900">المبيعات بالساعه</h1>
-                        <p className="text-sm text-neutral-500 mt-1 font-medium">المبيعات: توقيت السعودية (GMT+5). الزوار: كما في المصدر بدون إزاحة</p>
+                        <p className="text-sm text-neutral-500 mt-1 font-medium">المبيعات بالساعة كما ترد من مصدر البيانات — بدون توزيع يدوي</p>
                     </div>
 
                     <div className="flex flex-wrap gap-3">
