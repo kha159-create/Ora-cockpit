@@ -793,8 +793,9 @@ export default function ProductsPage() {
               <thead className="sticky top-0 bg-white z-10">
                 <tr className="text-xs text-neutral-500 border-b border-neutral-100">
                   <th className="font-medium text-right pb-2">الفئة</th>
+                  <th className="font-medium text-center pb-2">التفاصيل</th>
                   <th className="font-medium text-center pb-2">النسبة</th>
-                  <th className="font-medium text-left pb-2 w-1/3">المساهمة</th>
+                  <th className="font-medium text-left pb-2 w-1/4">المساهمة</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-50">
@@ -809,13 +810,13 @@ export default function ProductsPage() {
                       <td className="py-2.5 text-xs sm:text-sm font-bold text-neutral-700">
                         <div className="flex items-center gap-2">
                           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${['bg-blue-500', 'bg-orange-500', 'bg-emerald-500', 'bg-purple-500'][idx % 4]}`} />
-                          <div className="flex flex-col min-w-0">
-                            <span className="truncate max-w-[150px]" title={c.category}>{c.category}</span>
-                            <span className="text-[10px] text-neutral-400 font-medium">
-                              {metric === 'qty' ? `العدد: ${Math.round(c.qty).toLocaleString()}` : `القيمة: ${formatSAR(c.amount)}`}
-                            </span>
-                          </div>
+                          <span className="truncate max-w-[150px]" title={c.category}>{c.category}</span>
                         </div>
+                      </td>
+                      <td className="py-2.5 text-center">
+                        <span className="text-[10px] sm:text-xs text-neutral-500 font-bold bg-neutral-50 px-2 py-0.5 rounded border border-neutral-100">
+                          {metric === 'qty' ? Math.round(c.qty).toLocaleString() : formatSAR(c.amount)}
+                        </span>
                       </td>
                       <td className="py-2.5 text-center">
                         <span className="inline-block bg-neutral-100 text-neutral-700 text-[10px] font-bold px-1.5 py-0.5 rounded dir-ltr">
