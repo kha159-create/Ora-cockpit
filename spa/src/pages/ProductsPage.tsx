@@ -809,7 +809,12 @@ export default function ProductsPage() {
                       <td className="py-2.5 text-xs sm:text-sm font-bold text-neutral-700">
                         <div className="flex items-center gap-2">
                           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${['bg-blue-500', 'bg-orange-500', 'bg-emerald-500', 'bg-purple-500'][idx % 4]}`} />
-                          <span className="truncate max-w-[150px]" title={c.category}>{c.category}</span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="truncate max-w-[150px]" title={c.category}>{c.category}</span>
+                            <span className="text-[10px] text-neutral-400 font-medium">
+                              {metric === 'qty' ? `العدد: ${Math.round(c.qty).toLocaleString()}` : `القيمة: ${formatSAR(c.amount)}`}
+                            </span>
+                          </div>
                         </div>
                       </td>
                       <td className="py-2.5 text-center">
