@@ -28,16 +28,9 @@ export default function HourlyPage() {
         return Array.from(mSet).sort();
     }, [meta]);
 
-    const HOUR_OFFSET = 5;
-    const prevDate = useMemo(() => {
-        const d = new Date(selectedDate + 'T12:00:00');
-        d.setDate(d.getDate() - 1);
-        return d.toISOString().split('T')[0];
-    }, [selectedDate]);
-
     useEffect(() => {
         let cancelled = false;
-        loadD365SalesRange(prevDate, selectedDate)
+        loadD365SalesRange(selectedDate, selectedDate)
             .then((payload) => {
                 if (!cancelled) setD365Data(payload);
             })
@@ -45,7 +38,7 @@ export default function HourlyPage() {
                 if (!cancelled) setD365Data(null);
             });
         return () => { cancelled = true; };
-    }, [prevDate, selectedDate]);
+    }, [selectedDate]);
 
     const salesDailyRows = d365Data?.sales || raw?.sales || [];
     const transactionsRows = d365Data?.transactions || raw?.transactions || [];
@@ -53,11 +46,8 @@ export default function HourlyPage() {
     const visitorsDailyRows = raw?.visitors || [];
     const visitorsHourlyRows = raw?.visitors_hourly || [];
 
-    const getSalesLocalHour = (date: string, hourGMT: number): number => {
-        if (date === selectedDate && hourGMT >= 0 && hourGMT <= 18) return hourGMT + HOUR_OFFSET;
-        if (date === prevDate && hourGMT >= 19 && hourGMT <= 23) return hourGMT + HOUR_OFFSET - 24;
-        return -1;
-    };
+    const getSalesLocalHour = (date: string, hourFromSource: number): number =>
+        date === selectedDate ? hourFromSource : -1;
 
     const hourlyData = useMemo(() => {
         if (!raw) return Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
@@ -104,7 +94,7 @@ export default function HourlyPage() {
         });
 
         return hourly;
-    }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta, salesHourlyRows, visitorsHourlyRows]);
+    }, [raw, selectedDate, selectedStore, selectedManager, meta, salesHourlyRows, visitorsHourlyRows]);
 
     const totals = useMemo(() => {
         if (!raw) return { sales: 0, trans: 0, visitors: 0 };

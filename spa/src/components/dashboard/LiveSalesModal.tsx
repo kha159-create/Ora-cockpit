@@ -171,24 +171,18 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
             const dtStr = String(dt || '').trim();
             if (!okStore(String(sid))) return;
 
-            const hourGmt = Number(h);
-            if (!Number.isInteger(hourGmt) || hourGmt < 0 || hourGmt > 23) return;
-            // GMT to Saudi-like display day (+5h)
-            const shifted = hourGmt + 5;
-            const localHour = shifted % 24;
-            const localDateObj = new Date(`${dtStr}T12:00:00`);
-            if (shifted >= 24) localDateObj.setDate(localDateObj.getDate() + 1);
-            const localDate = `${localDateObj.getFullYear()}-${String(localDateObj.getMonth() + 1).padStart(2, '0')}-${String(localDateObj.getDate()).padStart(2, '0')}`;
+            const sourceHour = Number(h);
+            if (!Number.isInteger(sourceHour) || sourceHour < 0 || sourceHour > 23) return;
             const val = Number(v) || 0;
 
             if (!ss[sid]) ss[sid] = { shift1: 0, shift2: 0, shift3: 0, shift3_part1: 0, shift3_part2: 0 };
 
-            if (localDate !== targetDate) return;
-            if (localHour >= 6 && localHour < 12) {
+            if (dtStr !== targetDate) return;
+            if (sourceHour >= 6 && sourceHour < 12) {
                 gs.shift1 += val; ss[sid].shift1 += val;
-            } else if (localHour >= 12 && localHour < 18) {
+            } else if (sourceHour >= 12 && sourceHour < 18) {
                 gs.shift2 += val; ss[sid].shift2 += val;
-            } else if (localHour >= 18 && localHour <= 23) {
+            } else if (sourceHour >= 18 && sourceHour <= 23) {
                 gs.shift3 += val; ss[sid].shift3 += val;
                 gs.shift3_part1 += val; ss[sid].shift3_part1 += val;
             } else {
