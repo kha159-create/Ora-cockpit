@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { SalesIcon, InvoicesIcon, ChevronDownIcon, VisitorsIcon } from '../Icons';
 import { useLiveSalesData } from '../../hooks/useLiveSalesData';
+import { loadD365SalesRange } from '../../services/d365Live';
 
 function KPICard({ title, value, format, icon, trendValue, className }: any) {
     return (
@@ -42,6 +43,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     const [expandedEmpId, setExpandedEmpId] = useState<string | null>(null);
     const [dateMode, setDateMode] = useState<'today' | 'yesterday'>('today');
     const [showRamadanShifts, setShowRamadanShifts] = useState(false);
+    const [d365Daily, setD365Daily] = useState<{ salesByStore: Record<string, number>; transByStore: Record<string, number> } | null>(null);
 
     const isAdminOrAuditor = checkAdmin;
 
@@ -50,13 +52,47 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
         return now.getFullYear() === 2026 && now.getMonth() === 2;
     }, []);
 
+    const targetDateStr = React.useMemo(() => {
+        if (dateMode === 'yesterday') {
+            const d = new Date();
+            d.setDate(d.getDate() - 1);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }, [dateMode]);
+
+    React.useEffect(() => {
+        let cancelled = false;
+        loadD365SalesRange(targetDateStr, targetDateStr)
+            .then((payload) => {
+                if (cancelled) return;
+                const salesByStore: Record<string, number> = {};
+                const transByStore: Record<string, number> = {};
+                (payload.sales || []).forEach((r: any[]) => {
+                    const dt = String(r[0] || '').substring(0, 10);
+                    const sid = String(r[1] || '');
+                    if (!sid || dt !== targetDateStr) return;
+                    salesByStore[sid] = (salesByStore[sid] || 0) + (Number(r[2]) || 0);
+                });
+                (payload.transactions || []).forEach((r: any[]) => {
+                    const dt = String(r[0] || '').substring(0, 10);
+                    const sid = String(r[1] || '');
+                    if (!sid || dt !== targetDateStr) return;
+                    transByStore[sid] = (transByStore[sid] || 0) + (Number(r[2]) || 0);
+                });
+                setD365Daily({ salesByStore, transByStore });
+            })
+            .catch(() => {
+                if (!cancelled) setD365Daily(null);
+            });
+        return () => { cancelled = true; };
+    }, [targetDateStr]);
+
     // Memoize the calculated data internally
     const { liveData, managersList: managers } = React.useMemo(() => {
-        const targetDateStr = dateMode === 'yesterday'
-            ? (() => { const d = new Date(); d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })()
-            : undefined;
         return calculateLiveData(manager, 'all', 'all', targetDateStr);
-    }, [calculateLiveData, manager, dateMode]);
+    }, [calculateLiveData, manager, targetDateStr]);
 
     // Calculate totals on the fly if needed, or use passed totals
     // The passed totals might not exactly match the sum of displayed stores if filtering is complex upstream
@@ -70,11 +106,23 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     // The liveData.stores already has most fields. 
     // We need to ensure 'visitors' is handled (it's in the interface).
 
-    const todayTotals = {
-        sales: liveData.totals.sales,
-        trans: liveData.totals.trans,
-        visitors: liveData.stores.reduce((acc: number, s: any) => acc + (s.visitors || 0), 0)
-    };
+    const enhancedStores = useMemo(() => {
+        if (!d365Daily) return liveData.stores;
+        return (liveData.stores || []).map((s: any) => {
+            const sid = String(s.sid || '');
+            return {
+                ...s,
+                sales: d365Daily.salesByStore[sid] ?? s.sales,
+                trans: d365Daily.transByStore[sid] ?? s.trans,
+            };
+        });
+    }, [liveData.stores, d365Daily]);
+
+    const todayTotals = useMemo(() => ({
+        sales: enhancedStores.reduce((acc: number, s: any) => acc + (s.sales || 0), 0),
+        trans: enhancedStores.reduce((acc: number, s: any) => acc + (s.trans || 0), 0),
+        visitors: enhancedStores.reduce((acc: number, s: any) => acc + (s.visitors || 0), 0),
+    }), [enhancedStores]);
 
     // --- Ramadan Shift Totals (global + per-store) ---
     const { globalShifts, storeShifts } = useMemo(() => {
@@ -267,7 +315,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
 
                     {/* Store List */}
                     <div className="grid grid-cols-1 gap-4">
-                        {liveData.stores.map((store: any) => {
+                        {enhancedStores.map((store: any) => {
                             const isExpanded = expandedStoreId === store.sid;
                             // Calculate achievement if not provided directly (fallback)
                             const dailyAchievement = store.achievement || 0; // Passed from parent logic

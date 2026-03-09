@@ -1,14 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLiveSalesData } from '../hooks/useLiveSalesData';
 import { SalesIcon, InvoicesIcon, VisitorsIcon, ChevronDownIcon } from '../components/Icons';
 import { getCurrentUser } from '../auth/storage';
 import * as XLSX from 'xlsx';
+import { loadD365SalesRange } from '../services/d365Live';
 
 const formatSAR = (val: number) => val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 const formatNum = (val: number) => Math.round(val).toLocaleString();
 
 export default function HourlyPage() {
     const { raw, loading, error } = useLiveSalesData();
+    const [d365Data, setD365Data] = useState<any>(null);
     const user = getCurrentUser();
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [selectedStore, setSelectedStore] = useState<string>(user?.role === 'BranchManager' ? (user?.storeId || 'all') : 'all');
@@ -33,6 +35,24 @@ export default function HourlyPage() {
         return d.toISOString().split('T')[0];
     }, [selectedDate]);
 
+    useEffect(() => {
+        let cancelled = false;
+        loadD365SalesRange(prevDate, selectedDate)
+            .then((payload) => {
+                if (!cancelled) setD365Data(payload);
+            })
+            .catch(() => {
+                if (!cancelled) setD365Data(null);
+            });
+        return () => { cancelled = true; };
+    }, [prevDate, selectedDate]);
+
+    const salesDailyRows = d365Data?.sales || raw?.sales || [];
+    const transactionsRows = d365Data?.transactions || raw?.transactions || [];
+    const salesHourlyRows = d365Data?.sales_hourly || raw?.sales_hourly || [];
+    const visitorsDailyRows = raw?.visitors || [];
+    const visitorsHourlyRows = raw?.visitors_hourly || [];
+
     const salesBoundaryModeBySid = useMemo(() => {
         if (!raw) return {} as Record<string, 'same' | 'cross'>;
 
@@ -40,14 +60,14 @@ export default function HourlyPage() {
         const sameDateTotals: Record<string, number> = {};
         const crossDateTotals: Record<string, number> = {};
 
-        (raw.sales || []).forEach((r: any[]) => {
+        (salesDailyRows || []).forEach((r: any[]) => {
             const date = String(r[0] || '').substring(0, 10);
             if (date !== selectedDate) return;
             const sid = String(r[1]);
             dailyTotals[sid] = (dailyTotals[sid] || 0) + (Number(r[2]) || 0);
         });
 
-        (raw.sales_hourly || []).forEach((r: any[]) => {
+        (salesHourlyRows || []).forEach((r: any[]) => {
             const date = String(r[0] || '').trim();
             const sid = String(r[1]);
             const h = Number(r[2]);
@@ -79,7 +99,7 @@ export default function HourlyPage() {
         });
 
         return modes;
-    }, [raw, selectedDate, prevDate, meta]);
+    }, [raw, selectedDate, prevDate, meta, salesDailyRows, salesHourlyRows]);
 
     const getSalesLocalHour = (mode: 'same' | 'cross', date: string, hourGMT: number): number => {
         if (mode === 'same') {
@@ -109,7 +129,7 @@ export default function HourlyPage() {
             visitors: 0
         }));
 
-        (raw.sales_hourly || []).forEach((r: any[]) => {
+        (salesHourlyRows || []).forEach((r: any[]) => {
             const date = String(r[0] || '').trim();
             const sid = r[1];
             const h = Number(r[2]);
@@ -125,7 +145,7 @@ export default function HourlyPage() {
             hourly[localHour].trans += trans;
         });
 
-        (raw.visitors_hourly || []).forEach((r: any[]) => {
+        (visitorsHourlyRows || []).forEach((r: any[]) => {
             const date = String(r[0] || '').trim();
             if (date !== selectedDate) return;
             const sid = r[1];
@@ -137,7 +157,7 @@ export default function HourlyPage() {
         });
 
         return hourly;
-    }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta, salesBoundaryModeBySid]);
+    }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta, salesBoundaryModeBySid, salesHourlyRows, visitorsHourlyRows]);
 
     const totals = useMemo(() => {
         if (!raw) return { sales: 0, trans: 0, visitors: 0 };
@@ -154,7 +174,7 @@ export default function HourlyPage() {
         let trans = 0;
         let visitors = 0;
 
-        (raw.sales || []).forEach((r: any[]) => {
+        (salesDailyRows || []).forEach((r: any[]) => {
             const date = String(r[0] || '').substring(0, 10);
             const sid = String(r[1]);
             if (date !== selectedDate) return;
@@ -162,7 +182,7 @@ export default function HourlyPage() {
             sales += Number(r[2]) || 0;
         });
 
-        (raw.transactions || []).forEach((r: any[]) => {
+        (transactionsRows || []).forEach((r: any[]) => {
             const date = String(r[0] || '').substring(0, 10);
             const sid = String(r[1]);
             if (date !== selectedDate) return;
@@ -170,7 +190,7 @@ export default function HourlyPage() {
             trans += Number(r[2]) || 0;
         });
 
-        (raw.visitors || []).forEach((r: any[]) => {
+        (visitorsDailyRows || []).forEach((r: any[]) => {
             const date = String(r[0] || '').substring(0, 10);
             const sid = String(r[1]);
             if (date !== selectedDate) return;
@@ -179,7 +199,7 @@ export default function HourlyPage() {
         });
 
         return { sales, trans, visitors };
-    }, [raw, meta, selectedDate, selectedStore, selectedManager]);
+    }, [raw, meta, selectedDate, selectedStore, selectedManager, salesDailyRows, transactionsRows, visitorsDailyRows]);
 
     const rangeSummary = useMemo(() => {
         const start = Math.max(0, Math.min(23, fromHour));
@@ -209,7 +229,7 @@ export default function HourlyPage() {
         const getHourlyForSids = (sids: Set<string>) => {
             const hourly = Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
 
-            (raw?.sales_hourly || []).forEach((r: any[]) => {
+            (salesHourlyRows || []).forEach((r: any[]) => {
                 const date = String(r[0] || '').trim();
                 const sid = String(r[1]);
                 const h = Number(r[2]);
@@ -223,7 +243,7 @@ export default function HourlyPage() {
                 hourly[localHour].trans += Number(r[4]) || 0;
             });
 
-            (raw?.visitors_hourly || []).forEach((r: any[]) => {
+            (visitorsHourlyRows || []).forEach((r: any[]) => {
                 const date = String(r[0] || '').trim();
                 if (date !== selectedDate) return;
                 const sid = String(r[1]);
@@ -241,7 +261,7 @@ export default function HourlyPage() {
             let trans = 0;
             let visitors = 0;
 
-            (raw?.sales || []).forEach((r: any[]) => {
+            (salesDailyRows || []).forEach((r: any[]) => {
                 const date = String(r[0] || '').substring(0, 10);
                 const sid = String(r[1]);
                 if (date !== selectedDate) return;
@@ -249,7 +269,7 @@ export default function HourlyPage() {
                 sales += Number(r[2]) || 0;
             });
 
-            (raw?.transactions || []).forEach((r: any[]) => {
+            (transactionsRows || []).forEach((r: any[]) => {
                 const date = String(r[0] || '').substring(0, 10);
                 const sid = String(r[1]);
                 if (date !== selectedDate) return;
@@ -257,7 +277,7 @@ export default function HourlyPage() {
                 trans += Number(r[2]) || 0;
             });
 
-            (raw?.visitors || []).forEach((r: any[]) => {
+            (visitorsDailyRows || []).forEach((r: any[]) => {
                 const date = String(r[0] || '').substring(0, 10);
                 const sid = String(r[1]);
                 if (date !== selectedDate) return;
