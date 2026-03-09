@@ -102,6 +102,64 @@ async function pickTimeField(
   return null;
 }
 
+type TimeProfile = {
+  field: string;
+  parseable: number;
+  distinctHours: number;
+  nonEmpty: number;
+  score: number;
+};
+
+function parseHourCandidate(v: any): number | null {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.getUTCHours();
+}
+
+function buildTimeProfiles(rows: any[], fields: string[]): TimeProfile[] {
+  const profiles: TimeProfile[] = [];
+  for (const f of fields) {
+    let parseable = 0;
+    let nonEmpty = 0;
+    const hours: number[] = [];
+    for (const r of rows) {
+      const v = r?.[f];
+      if (v !== null && v !== undefined && String(v).trim() !== '') nonEmpty++;
+      const h = parseHourCandidate(v);
+      if (h !== null) {
+        parseable++;
+        hours.push(h);
+      }
+    }
+    const distinctHours = uniqueCount(hours);
+    // Heavier weight on hour diversity, then parseable coverage.
+    const score = distinctHours * 1000 + parseable * 10 + nonEmpty;
+    profiles.push({ field: f, parseable, distinctHours, nonEmpty, score });
+  }
+  profiles.sort((a, b) => b.score - a.score);
+  return profiles;
+}
+
+async function probeEntityTimeField(
+  baseUrl: string,
+  token: string,
+  entityPath: string,
+  dateFilter: string,
+) {
+  const probeUrl = `${baseUrl}/data/${entityPath}?$top=300&$filter=${dateFilter}`;
+  const rows = await fetchAllRows(probeUrl, token);
+  if (!rows.length) return { rows, bestField: null as string | null, profiles: [] as TimeProfile[] };
+
+  const allFields = Object.keys(rows[0] || {});
+  const timeLike = allFields.filter((k) => /date|time/i.test(k));
+  const profiles = buildTimeProfiles(rows, timeLike);
+  const best = profiles[0]?.field || null;
+  return { rows, bestField: best, profiles };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const from = String(req.query.from || '');
@@ -136,21 +194,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let sourceEntity = 'RetailTransactions';
     let timeFieldUsed = 'TransactionDate';
     let rawRowCount = 0;
+    let probeSummary: any = {};
 
-    // 1) Prefer lines entity to get true per-transaction timestamps when available.
+    // Probe both entities and choose the one with stronger hour diversity.
     const linesFilter = `ReceiptDateRequested ge ${fromIso} and ReceiptDateRequested lt ${toExclusive}`;
-    const linesFixed = ['store', 'transactionId', 'netAmountInclTax', 'transactionStatus'];
-    const linesTimeField =
-      (await pickTimeField(
-        baseUrl,
-        token,
-        'RetailTransactionSalesTransBIEntities',
-        linesFixed,
-        ['CreatedDateTime', 'ReceiptDateRequested', 'TransactionDate'],
-        linesFilter,
-      )) || 'ReceiptDateRequested';
-
+    const txFilter = `PaymentAmount ne 0 and TransactionDate ge ${fromIso} and TransactionDate lt ${toExclusive}`;
+    let useLines = true;
+    let linesProbe: any = null;
+    let txProbe: any = null;
     try {
+      linesProbe = await probeEntityTimeField(baseUrl, token, 'RetailTransactionSalesTransBIEntities', linesFilter);
+    } catch {
+      linesProbe = { rows: [], bestField: null, profiles: [] };
+    }
+    try {
+      txProbe = await probeEntityTimeField(baseUrl, token, 'RetailTransactions', txFilter);
+    } catch {
+      txProbe = { rows: [], bestField: null, profiles: [] };
+    }
+
+    const linesScore = linesProbe?.profiles?.[0]?.score || 0;
+    const txScore = txProbe?.profiles?.[0]?.score || 0;
+    if (txScore > linesScore) useLines = false;
+
+    probeSummary = {
+      lines: linesProbe?.profiles?.slice(0, 5) || [],
+      transactions: txProbe?.profiles?.slice(0, 5) || [],
+      chosen: useLines ? 'RetailTransactionSalesTransBIEntities' : 'RetailTransactions',
+    };
+
+    if (useLines) {
+      const linesFixed = ['store', 'transactionId', 'netAmountInclTax', 'transactionStatus'];
+      const linesTimeField =
+        linesProbe?.bestField ||
+        (await pickTimeField(
+          baseUrl,
+          token,
+          'RetailTransactionSalesTransBIEntities',
+          linesFixed,
+          ['CreatedDateTime', 'ReceiptDateRequested', 'TransactionDate'],
+          linesFilter,
+        )) ||
+        'ReceiptDateRequested';
+
       const linesUrl =
         `${baseUrl}/data/RetailTransactionSalesTransBIEntities` +
         `?$select=${[...linesFixed, linesTimeField].join(',')}` +
@@ -183,11 +269,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!hourlyTrans.has(hourKey)) hourlyTrans.set(hourKey, new Set<string>());
         hourlyTrans.get(hourKey)!.add(tx);
       }
-    } catch {
-      // 2) Fallback to RetailTransactions if lines endpoint fails.
-      const txFilter = `PaymentAmount ne 0 and TransactionDate ge ${fromIso} and TransactionDate lt ${toExclusive}`;
+    } else {
+      // Use RetailTransactions when it shows better time diversity.
       const txFixed = ['OperatingUnitNumber', 'PaymentAmount', 'TransactionNumber'];
       const txTimeField =
+        txProbe?.bestField ||
         (await pickTimeField(
           baseUrl,
           token,
@@ -263,6 +349,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         fetched_at: new Date().toISOString(),
         tx_rows: rawRowCount,
         distinct_hours: distinctHours,
+        probe_summary: probeSummary,
       },
       sales,
       transactions,
