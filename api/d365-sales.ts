@@ -205,10 +205,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let rawRowCount = 0;
     let probeSummary: any = {};
 
-    // Probe both entities and choose the one with stronger hour diversity.
+    // Probe entities for diagnostics, but use RetailTransactions for monetary correctness.
     const linesFilter = `ReceiptDateRequested ge ${fromIso} and ReceiptDateRequested lt ${toExclusive}`;
     const txFilter = `PaymentAmount ne 0 and TransactionDate ge ${fromIso} and TransactionDate lt ${toExclusive}`;
-    let useLines = true;
     let linesProbe: any = null;
     let txProbe: any = null;
     try {
@@ -222,105 +221,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       txProbe = { rows: [], bestField: null, profiles: [] };
     }
 
-    const linesScore = linesProbe?.profiles?.[0]?.score || 0;
-    const txScore = txProbe?.profiles?.[0]?.score || 0;
-    if (txScore > linesScore) useLines = false;
-
     probeSummary = {
       lines: linesProbe?.profiles?.slice(0, 5) || [],
       transactions: txProbe?.profiles?.slice(0, 5) || [],
-      chosen: useLines ? 'RetailTransactionSalesTransBIEntities' : 'RetailTransactions',
+      chosen: 'RetailTransactions',
     };
 
-    if (useLines) {
-      const linesFixed = ['store', 'transactionId', 'netAmountInclTax', 'transactionStatus'];
-      const linesTimeField =
-        linesProbe?.bestField ||
-        (await pickTimeField(
-          baseUrl,
-          token,
-          'RetailTransactionSalesTransBIEntities',
-          linesFixed,
-          ['CreatedDateTime', 'ReceiptDateRequested', 'TransactionDate'],
-          linesFilter,
-        )) ||
-        'ReceiptDateRequested';
+    const txFixed = ['OperatingUnitNumber', 'PaymentAmount', 'TransactionNumber'];
+    const txTimeField =
+      txProbe?.bestField ||
+      (await pickTimeField(
+        baseUrl,
+        token,
+        'RetailTransactions',
+        txFixed,
+        ['BeginDateTime', 'CreatedDateTime', 'TransactionDate'],
+        txFilter,
+      )) ||
+      'TransactionDate';
 
-      const linesUrl =
-        `${baseUrl}/data/RetailTransactionSalesTransBIEntities` +
-        `?$select=${[...linesFixed, linesTimeField].join(',')}` +
-        `&$filter=${linesFilter}`;
-      const lineRows = await fetchAllRows(linesUrl, token);
-      rawRowCount = lineRows.length;
-      sourceEntity = 'RetailTransactionSalesTransBIEntities';
-      timeFieldUsed = linesTimeField;
+    const txUrl =
+      `${baseUrl}/data/RetailTransactions` +
+      `?$select=${[...txFixed, txTimeField].join(',')}` +
+      `&$filter=${txFilter}`;
+    const rows = await fetchAllRows(txUrl, token);
+    rawRowCount = rows.length;
+    sourceEntity = 'RetailTransactions';
+    timeFieldUsed = txTimeField;
 
-      for (const r of lineRows) {
-        const status = String(r.transactionStatus || '');
-        if (status.toLowerCase() === 'voided') continue;
+    for (const r of rows) {
+      const sid = String(r.OperatingUnitNumber || '').trim();
+      const tx = String(r.TransactionNumber || '').trim();
+      const ts = String(r[txTimeField] || '').trim();
+      const val = Number(r.PaymentAmount) || 0;
+      if (!sid || !ts) continue;
 
-        const sid = String(r.store || '').trim();
-        const tx = String(r.transactionId || '').trim();
-        const ts = String(r[linesTimeField] || '').trim();
-        const val = Number(r.netAmountInclTax) || 0;
-        if (!sid || !tx || !ts) continue;
+      const parsed = fmtUtcDateHour(ts);
+      if (!parsed) continue;
+      const dateKey = `${parsed.date}|${sid}`;
+      const hourKey = `${parsed.date}|${sid}|${parsed.hour}`;
 
-        const parsed = fmtUtcDateHour(ts);
-        if (!parsed) continue;
-        const dateKey = `${parsed.date}|${sid}`;
-        const hourKey = `${parsed.date}|${sid}|${parsed.hour}`;
+      dailySales.set(dateKey, (dailySales.get(dateKey) || 0) + val);
+      if (!dailyTrans.has(dateKey)) dailyTrans.set(dateKey, new Set<string>());
+      if (tx) dailyTrans.get(dateKey)!.add(tx);
 
-        dailySales.set(dateKey, (dailySales.get(dateKey) || 0) + val);
-        if (!dailyTrans.has(dateKey)) dailyTrans.set(dateKey, new Set<string>());
-        dailyTrans.get(dateKey)!.add(tx);
-
-        hourlySales.set(hourKey, (hourlySales.get(hourKey) || 0) + val);
-        if (!hourlyTrans.has(hourKey)) hourlyTrans.set(hourKey, new Set<string>());
-        hourlyTrans.get(hourKey)!.add(tx);
-      }
-    } else {
-      // Use RetailTransactions when it shows better time diversity.
-      const txFixed = ['OperatingUnitNumber', 'PaymentAmount', 'TransactionNumber'];
-      const txTimeField =
-        txProbe?.bestField ||
-        (await pickTimeField(
-          baseUrl,
-          token,
-          'RetailTransactions',
-          txFixed,
-          ['CreatedDateTime', 'TransactionDate'],
-          txFilter,
-        )) || 'TransactionDate';
-
-      const txUrl =
-        `${baseUrl}/data/RetailTransactions` +
-        `?$select=${[...txFixed, txTimeField].join(',')}` +
-        `&$filter=${txFilter}`;
-      const rows = await fetchAllRows(txUrl, token);
-      rawRowCount = rows.length;
-      sourceEntity = 'RetailTransactions';
-      timeFieldUsed = txTimeField;
-
-      for (const r of rows) {
-        const sid = String(r.OperatingUnitNumber || '').trim();
-        const tx = String(r.TransactionNumber || '').trim();
-        const ts = String(r[txTimeField] || '').trim();
-        const val = Number(r.PaymentAmount) || 0;
-        if (!sid || !ts) continue;
-
-        const parsed = fmtUtcDateHour(ts);
-        if (!parsed) continue;
-        const dateKey = `${parsed.date}|${sid}`;
-        const hourKey = `${parsed.date}|${sid}|${parsed.hour}`;
-
-        dailySales.set(dateKey, (dailySales.get(dateKey) || 0) + val);
-        if (!dailyTrans.has(dateKey)) dailyTrans.set(dateKey, new Set<string>());
-        if (tx) dailyTrans.get(dateKey)!.add(tx);
-
-        hourlySales.set(hourKey, (hourlySales.get(hourKey) || 0) + val);
-        if (!hourlyTrans.has(hourKey)) hourlyTrans.set(hourKey, new Set<string>());
-        if (tx) hourlyTrans.get(hourKey)!.add(tx);
-      }
+      hourlySales.set(hourKey, (hourlySales.get(hourKey) || 0) + val);
+      if (!hourlyTrans.has(hourKey)) hourlyTrans.set(hourKey, new Set<string>());
+      if (tx) hourlyTrans.get(hourKey)!.add(tx);
     }
 
     const sales: any[] = [];
