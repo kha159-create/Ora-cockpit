@@ -44,7 +44,7 @@ export default function HourlyPage() {
             visitors: 0
         }));
 
-        const HOUR_OFFSET = 5;
+        const SALES_HOUR_OFFSET = 5;
 
         const processRow = (row: any[], type: 'sales' | 'visitors') => {
             const date = String(row[0] || '').trim();
@@ -56,12 +56,12 @@ export default function HourlyPage() {
             const trans = type === 'sales' ? (Number(row[4]) || 0) : 0;
             if (filteredSids.size > 0 && !filteredSids.has(String(sid))) return;
 
-            const localHour = (h + HOUR_OFFSET) % 24;
             if (type === 'sales') {
+                const localHour = (h + SALES_HOUR_OFFSET) % 24;
                 hourly[localHour].sales += val;
                 hourly[localHour].trans += trans;
             } else {
-                hourly[localHour].visitors += val;
+                hourly[h].visitors += val;
             }
         };
 
@@ -107,7 +107,7 @@ export default function HourlyPage() {
         const getHourlyForSids = (sids: Set<string>) => {
             const hourly = Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
 
-            const HOUR_OFFSET = 5;
+            const SALES_HOUR_OFFSET = 5;
 
             const processRow = (row: any[], type: 'sales' | 'visitors') => {
                 const date = String(row[0] || '').trim();
@@ -119,12 +119,12 @@ export default function HourlyPage() {
                 const trans = type === 'sales' ? (Number(row[4]) || 0) : 0;
                 if (sids.size > 0 && !sids.has(sid)) return;
 
-                const localHour = (h + HOUR_OFFSET) % 24;
                 if (type === 'sales') {
+                    const localHour = (h + SALES_HOUR_OFFSET) % 24;
                     hourly[localHour].sales += val;
                     hourly[localHour].trans += trans;
                 } else {
-                    hourly[localHour].visitors += val;
+                    hourly[h].visitors += val;
                 }
             };
 
