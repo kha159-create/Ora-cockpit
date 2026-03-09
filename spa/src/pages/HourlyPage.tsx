@@ -26,11 +26,7 @@ export default function HourlyPage() {
         return Array.from(mSet).sort();
     }, [meta]);
 
-    const prevDate = useMemo(() => {
-        const d = new Date(selectedDate + 'T12:00:00');
-        d.setDate(d.getDate() - 1);
-        return d.toISOString().split('T')[0];
-    }, [selectedDate]);
+    const HOUR_OFFSET = 5;
 
     const hourlyData = useMemo(() => {
         if (!raw) return Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
@@ -50,22 +46,16 @@ export default function HourlyPage() {
             visitors: 0
         }));
 
-        const gmtToLocalHour = (date: string, hourGMT: number): number => {
-            if (date === selectedDate && hourGMT >= 0 && hourGMT <= 18) return hourGMT + 5;
-            if (date === prevDate && hourGMT >= 19 && hourGMT <= 23) return hourGMT + 5 - 24;
-            return -1;
-        };
-
         (raw.sales_hourly || []).forEach((r: any[]) => {
             const date = String(r[0] || '').trim();
+            if (date !== selectedDate) return;
             const sid = r[1];
             const h = Number(r[2]);
             if (!Number.isInteger(h) || h < 0 || h > 23) return;
             const val = Number(r[3]) || 0;
             const trans = Number(r[4]) || 0;
             if (filteredSids.size > 0 && !filteredSids.has(String(sid))) return;
-            const localHour = gmtToLocalHour(date, h);
-            if (localHour < 0 || localHour > 23) return;
+            const localHour = (h + HOUR_OFFSET) % 24;
             hourly[localHour].sales += val;
             hourly[localHour].trans += trans;
         });
@@ -82,7 +72,7 @@ export default function HourlyPage() {
         });
 
         return hourly;
-    }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta]);
+    }, [raw, selectedDate, selectedStore, selectedManager, meta]);
 
     const totals = useMemo(() => {
         return hourlyData.reduce((acc, h) => ({
@@ -120,20 +110,14 @@ export default function HourlyPage() {
         const getHourlyForSids = (sids: Set<string>) => {
             const hourly = Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
 
-            const gmtToLocal = (date: string, hourGMT: number): number => {
-                if (date === selectedDate && hourGMT >= 0 && hourGMT <= 18) return hourGMT + 5;
-                if (date === prevDate && hourGMT >= 19 && hourGMT <= 23) return hourGMT + 5 - 24;
-                return -1;
-            };
-
             (raw?.sales_hourly || []).forEach((r: any[]) => {
                 const date = String(r[0] || '').trim();
+                if (date !== selectedDate) return;
                 const sid = String(r[1]);
                 const h = Number(r[2]);
                 if (!Number.isInteger(h) || h < 0 || h > 23) return;
                 if (sids.size > 0 && !sids.has(sid)) return;
-                const localHour = gmtToLocal(date, h);
-                if (localHour < 0 || localHour > 23) return;
+                const localHour = (h + HOUR_OFFSET) % 24;
                 hourly[localHour].sales += Number(r[3]) || 0;
                 hourly[localHour].trans += Number(r[4]) || 0;
             });
