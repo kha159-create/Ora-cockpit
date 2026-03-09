@@ -53,59 +53,7 @@ export default function HourlyPage() {
     const visitorsDailyRows = raw?.visitors || [];
     const visitorsHourlyRows = raw?.visitors_hourly || [];
 
-    const salesBoundaryModeBySid = useMemo(() => {
-        if (!raw) return {} as Record<string, 'same' | 'cross'>;
-
-        const dailyTotals: Record<string, number> = {};
-        const sameDateTotals: Record<string, number> = {};
-        const crossDateTotals: Record<string, number> = {};
-
-        (salesDailyRows || []).forEach((r: any[]) => {
-            const date = String(r[0] || '').substring(0, 10);
-            if (date !== selectedDate) return;
-            const sid = String(r[1]);
-            dailyTotals[sid] = (dailyTotals[sid] || 0) + (Number(r[2]) || 0);
-        });
-
-        (salesHourlyRows || []).forEach((r: any[]) => {
-            const date = String(r[0] || '').trim();
-            const sid = String(r[1]);
-            const h = Number(r[2]);
-            if (!Number.isInteger(h) || h < 0 || h > 23) return;
-            const val = Number(r[3]) || 0;
-
-            if (date === selectedDate) {
-                sameDateTotals[sid] = (sameDateTotals[sid] || 0) + val;
-                if (h >= 0 && h <= 18) {
-                    crossDateTotals[sid] = (crossDateTotals[sid] || 0) + val;
-                }
-            } else if (date === prevDate && h >= 19 && h <= 23) {
-                crossDateTotals[sid] = (crossDateTotals[sid] || 0) + val;
-            }
-        });
-
-        const modes: Record<string, 'same' | 'cross'> = {};
-        Object.keys(meta).forEach((sid) => {
-            const daily = dailyTotals[sid] || 0;
-            const same = sameDateTotals[sid] || 0;
-            const cross = crossDateTotals[sid] || 0;
-
-            if (daily === 0) {
-                modes[sid] = 'cross';
-                return;
-            }
-
-            modes[sid] = Math.abs(same - daily) < Math.abs(cross - daily) ? 'same' : 'cross';
-        });
-
-        return modes;
-    }, [raw, selectedDate, prevDate, meta, salesDailyRows, salesHourlyRows]);
-
-    const getSalesLocalHour = (mode: 'same' | 'cross', date: string, hourGMT: number): number => {
-        if (mode === 'same') {
-            return date === selectedDate ? (hourGMT + HOUR_OFFSET) % 24 : -1;
-        }
-
+    const getSalesLocalHour = (date: string, hourGMT: number): number => {
         if (date === selectedDate && hourGMT >= 0 && hourGMT <= 18) return hourGMT + HOUR_OFFSET;
         if (date === prevDate && hourGMT >= 19 && hourGMT <= 23) return hourGMT + HOUR_OFFSET - 24;
         return -1;
@@ -137,8 +85,7 @@ export default function HourlyPage() {
             const val = Number(r[3]) || 0;
             const trans = Number(r[4]) || 0;
             if (filteredSids.size > 0 && !filteredSids.has(String(sid))) return;
-            const mode = salesBoundaryModeBySid[String(sid)] || 'cross';
-            const localHour = getSalesLocalHour(mode, date, h);
+            const localHour = getSalesLocalHour(date, h);
 
             if (localHour < 0 || localHour > 23) return;
             hourly[localHour].sales += val;
@@ -157,7 +104,7 @@ export default function HourlyPage() {
         });
 
         return hourly;
-    }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta, salesBoundaryModeBySid, salesHourlyRows, visitorsHourlyRows]);
+    }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta, salesHourlyRows, visitorsHourlyRows]);
 
     const totals = useMemo(() => {
         if (!raw) return { sales: 0, trans: 0, visitors: 0 };
@@ -235,8 +182,7 @@ export default function HourlyPage() {
                 const h = Number(r[2]);
                 if (!Number.isInteger(h) || h < 0 || h > 23) return;
                 if (sids.size > 0 && !sids.has(sid)) return;
-                const mode = salesBoundaryModeBySid[sid] || 'cross';
-                const localHour = getSalesLocalHour(mode, date, h);
+                const localHour = getSalesLocalHour(date, h);
 
                 if (localHour < 0 || localHour > 23) return;
                 hourly[localHour].sales += Number(r[3]) || 0;
