@@ -37,13 +37,19 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     onClose,
     formatSAR,
 }) => {
-    const { calculateLiveData, isAdminOrAuditor: checkAdmin, raw } = useLiveSalesData();
+    const { calculateLiveData, isAdminOrAuditor: checkAdmin, raw, refresh } = useLiveSalesData();
     const [manager, setManager] = useState('all');
     const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
     const [expandedEmpId, setExpandedEmpId] = useState<string | null>(null);
     const [dateMode, setDateMode] = useState<'today' | 'yesterday'>('today');
     const [showRamadanShifts, setShowRamadanShifts] = useState(false);
-    const [d365Daily, setD365Daily] = useState<{ salesByStore: Record<string, number>; transByStore: Record<string, number> } | null>(null);
+    const [d365Daily, setD365Daily] = useState<{
+        salesByStore: Record<string, number>;
+        transByStore: Record<string, number>;
+        salesHourlyRows: any[];
+    } | null>(null);
+    const [liveRefreshing, setLiveRefreshing] = useState(false);
+    const [liveRefreshTick, setLiveRefreshTick] = useState(0);
 
     const isAdminOrAuditor = checkAdmin;
 
@@ -64,7 +70,14 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
 
     React.useEffect(() => {
         let cancelled = false;
-        loadD365SalesRange(targetDateStr, targetDateStr)
+        const prevDateStr = (() => {
+            const d = new Date(`${targetDateStr}T12:00:00`);
+            d.setDate(d.getDate() - 1);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        })();
+
+        setLiveRefreshing(true);
+        loadD365SalesRange(prevDateStr, targetDateStr)
             .then((payload) => {
                 if (cancelled) return;
                 const salesByStore: Record<string, number> = {};
@@ -81,13 +94,16 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                     if (!sid || dt !== targetDateStr) return;
                     transByStore[sid] = (transByStore[sid] || 0) + (Number(r[2]) || 0);
                 });
-                setD365Daily({ salesByStore, transByStore });
+                setD365Daily({ salesByStore, transByStore, salesHourlyRows: payload.sales_hourly || [] });
             })
             .catch(() => {
                 if (!cancelled) setD365Daily(null);
+            })
+            .finally(() => {
+                if (!cancelled) setLiveRefreshing(false);
             });
         return () => { cancelled = true; };
-    }, [targetDateStr]);
+    }, [targetDateStr, liveRefreshTick]);
 
     // Memoize the calculated data internally
     const { liveData, managersList: managers } = React.useMemo(() => {
@@ -128,52 +144,52 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     const { globalShifts, storeShifts } = useMemo(() => {
         const gs = { shift1: 0, shift2: 0, shift3: 0, shift3_part1: 0, shift3_part2: 0 };
         const ss: Record<string, { shift1: number; shift2: number; shift3: number; shift3_part1: number; shift3_part2: number }> = {};
-        if (!isRamadan2026 || !raw?.sales_hourly) return { globalShifts: gs, storeShifts: ss };
+        const hourlyRows = d365Daily?.salesHourlyRows || raw?.sales_hourly || [];
+        if (!isRamadan2026 || !hourlyRows.length) return { globalShifts: gs, storeShifts: ss };
 
         // Target Date
         const targetDateObj = dateMode === 'yesterday'
             ? (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d; })()
             : new Date();
 
-        // Next Date (for Night Shift 00:00 - 03:00)
-        const nextDateObj = new Date(targetDateObj);
-        nextDateObj.setDate(nextDateObj.getDate() + 1);
-
         const targetDate = `${targetDateObj.getFullYear()}-${String(targetDateObj.getMonth() + 1).padStart(2, '0')}-${String(targetDateObj.getDate()).padStart(2, '0')}`;
-        const nextDate = `${nextDateObj.getFullYear()}-${String(nextDateObj.getMonth() + 1).padStart(2, '0')}-${String(nextDateObj.getDate()).padStart(2, '0')}`;
 
         const meta = raw.store_meta || {};
         const okStore = (sid: string) =>
             manager === 'all' || (meta[sid] && String(meta[sid].manager) === manager);
 
-        (raw.sales_hourly || []).forEach(([dt, sid, h, v]: any[]) => {
+        hourlyRows.forEach(([dt, sid, h, v]: any[]) => {
             const dtStr = String(dt || '').trim();
             if (!okStore(String(sid))) return;
 
-            // GMT to Saudi Time (+5h)
-            const localHour = (Number(h) + 5) % 24;
+            const hourGmt = Number(h);
+            if (!Number.isInteger(hourGmt) || hourGmt < 0 || hourGmt > 23) return;
+            // GMT to Saudi-like display day (+5h)
+            const shifted = hourGmt + 5;
+            const localHour = shifted % 24;
+            const localDateObj = new Date(`${dtStr}T12:00:00`);
+            if (shifted >= 24) localDateObj.setDate(localDateObj.getDate() + 1);
+            const localDate = `${localDateObj.getFullYear()}-${String(localDateObj.getMonth() + 1).padStart(2, '0')}-${String(localDateObj.getDate()).padStart(2, '0')}`;
             const val = Number(v) || 0;
 
             if (!ss[sid]) ss[sid] = { shift1: 0, shift2: 0, shift3: 0, shift3_part1: 0, shift3_part2: 0 };
 
-            if (dtStr === targetDate) {
-                if (localHour >= 6 && localHour < 12) {
-                    gs.shift1 += val; ss[sid].shift1 += val;
-                } else if (localHour >= 12 && localHour < 18) {
-                    gs.shift2 += val; ss[sid].shift2 += val;
-                } else if (localHour >= 18 && localHour <= 23) {
-                    gs.shift3 += val; ss[sid].shift3 += val;
-                    gs.shift3_part1 += val; ss[sid].shift3_part1 += val;
-                } else if (localHour < 6) {
-                    // Early hours (00:00 - 05:59) belong to Shift 3 of the SAME business day
-                    gs.shift3 += val; ss[sid].shift3 += val;
-                    gs.shift3_part2 += val; ss[sid].shift3_part2 += val;
-                }
+            if (localDate !== targetDate) return;
+            if (localHour >= 6 && localHour < 12) {
+                gs.shift1 += val; ss[sid].shift1 += val;
+            } else if (localHour >= 12 && localHour < 18) {
+                gs.shift2 += val; ss[sid].shift2 += val;
+            } else if (localHour >= 18 && localHour <= 23) {
+                gs.shift3 += val; ss[sid].shift3 += val;
+                gs.shift3_part1 += val; ss[sid].shift3_part1 += val;
+            } else {
+                gs.shift3 += val; ss[sid].shift3 += val;
+                gs.shift3_part2 += val; ss[sid].shift3_part2 += val;
             }
         });
 
         return { globalShifts: gs, storeShifts: ss };
-    }, [raw, isRamadan2026, manager, dateMode]);
+    }, [raw, isRamadan2026, manager, dateMode, d365Daily]);
 
     if (!isOpen) return null;
 
@@ -208,6 +224,14 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                         الأمس
                                     </button>
                                 </div>
+                                <button
+                                    type="button"
+                                    onClick={() => { setLiveRefreshTick((v) => v + 1); refresh(); }}
+                                    className="px-3 py-1 text-xs font-bold rounded-md bg-white/15 hover:bg-white/25 text-white transition-colors"
+                                    disabled={liveRefreshing}
+                                >
+                                    {liveRefreshing ? '...جاري التحديث' : 'تحديث مباشر'}
+                                </button>
 
                                 <p className="text-orange-100 text-xs hidden sm:block">
                                     🕒 آخر تحديث: {new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
