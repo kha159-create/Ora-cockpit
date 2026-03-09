@@ -1,4 +1,13 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+declare const process: any;
+
+type VercelRequest = {
+  query: Record<string, any>;
+};
+
+type VercelResponse = {
+  status: (code: number) => VercelResponse;
+  json: (payload: any) => any;
+};
 
 type TxRow = {
   OperatingUnitNumber?: string;
