@@ -18,7 +18,8 @@ export default function HourlyPage() {
         (user?.role !== 'Admin' && user?.role !== 'Auditor' && user?.role !== 'Accountant') ? (user?.name || 'all') : 'all'
     );
     const [fromHour, setFromHour] = useState<number>(0);
-    const [toHour, setToHour] = useState<number>(23);
+    const [toHour, setToHour] = useState<number>(24);
+    const HOUR_OFFSET = 5;
 
     const stores = useMemo(() => raw?.stores || {}, [raw]);
     const meta = useMemo(() => raw?.store_meta || {}, [raw]);
@@ -47,7 +48,7 @@ export default function HourlyPage() {
     const visitorsHourlyRows = raw?.visitors_hourly || [];
 
     const getSalesLocalHour = (date: string, hourFromSource: number): number =>
-        date === selectedDate ? hourFromSource : -1;
+        date === selectedDate ? (hourFromSource + HOUR_OFFSET) % 24 : -1;
 
     const hourlyData = useMemo(() => {
         if (!raw) return Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
@@ -140,10 +141,10 @@ export default function HourlyPage() {
 
     const rangeSummary = useMemo(() => {
         const start = Math.max(0, Math.min(23, fromHour));
-        const end = Math.max(start, Math.min(23, toHour));
+        const end = Math.max(start, Math.min(24, toHour));
         let sales = 0, trans = 0, visitors = 0;
         hourlyData.forEach(h => {
-            if (h.hour >= start && h.hour <= end) {
+            if (h.hour >= start && h.hour <= Math.min(23, end)) {
                 sales += h.sales;
                 trans += h.trans;
                 visitors += h.visitors;
@@ -405,7 +406,7 @@ export default function HourlyPage() {
                                 value={toHour}
                                 onChange={(e) => setToHour(Number(e.target.value))}
                             >
-                                {Array.from({ length: 24 }, (_, i) => i).map(h => (
+                                {Array.from({ length: 25 }, (_, i) => i).map(h => (
                                     <option key={h} value={h}>{h.toString().padStart(2, '0')}:00</option>
                                 ))}
                             </select>
@@ -415,7 +416,7 @@ export default function HourlyPage() {
                                 {selectedStore !== 'all' ? stores[selectedStore] : (selectedManager !== 'all' ? `مدير المنطقة: ${selectedManager}` : 'كل الفروع')}
                             </h3>
                             <p className="text-[11px] text-neutral-500 font-bold leading-relaxed">
-                                تحليل من <span className="text-orange-600 font-black">{fromHour.toString().padStart(2, '0')}:00</span> إلى <span className="text-orange-600 font-black">{((toHour + 1) % 24).toString().padStart(2, '0')}:00</span>
+                                تحليل من <span className="text-orange-600 font-black">{fromHour.toString().padStart(2, '0')}:00</span> إلى <span className="text-orange-600 font-black">{(toHour % 24).toString().padStart(2, '0')}:00</span>
                             </p>
                         </div>
                     </div>
