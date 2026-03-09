@@ -27,6 +27,69 @@ export default function HourlyPage() {
     }, [meta]);
 
     const HOUR_OFFSET = 5;
+    const prevDate = useMemo(() => {
+        const d = new Date(selectedDate + 'T12:00:00');
+        d.setDate(d.getDate() - 1);
+        return d.toISOString().split('T')[0];
+    }, [selectedDate]);
+
+    const salesBoundaryModeBySid = useMemo(() => {
+        if (!raw) return {} as Record<string, 'same' | 'cross'>;
+
+        const dailyTotals: Record<string, number> = {};
+        const sameDateTotals: Record<string, number> = {};
+        const crossDateTotals: Record<string, number> = {};
+
+        (raw.sales || []).forEach((r: any[]) => {
+            const date = String(r[0] || '').substring(0, 10);
+            if (date !== selectedDate) return;
+            const sid = String(r[1]);
+            dailyTotals[sid] = (dailyTotals[sid] || 0) + (Number(r[2]) || 0);
+        });
+
+        (raw.sales_hourly || []).forEach((r: any[]) => {
+            const date = String(r[0] || '').trim();
+            const sid = String(r[1]);
+            const h = Number(r[2]);
+            if (!Number.isInteger(h) || h < 0 || h > 23) return;
+            const val = Number(r[3]) || 0;
+
+            if (date === selectedDate) {
+                sameDateTotals[sid] = (sameDateTotals[sid] || 0) + val;
+                if (h >= 0 && h <= 18) {
+                    crossDateTotals[sid] = (crossDateTotals[sid] || 0) + val;
+                }
+            } else if (date === prevDate && h >= 19 && h <= 23) {
+                crossDateTotals[sid] = (crossDateTotals[sid] || 0) + val;
+            }
+        });
+
+        const modes: Record<string, 'same' | 'cross'> = {};
+        Object.keys(meta).forEach((sid) => {
+            const daily = dailyTotals[sid] || 0;
+            const same = sameDateTotals[sid] || 0;
+            const cross = crossDateTotals[sid] || 0;
+
+            if (daily === 0) {
+                modes[sid] = 'cross';
+                return;
+            }
+
+            modes[sid] = Math.abs(same - daily) < Math.abs(cross - daily) ? 'same' : 'cross';
+        });
+
+        return modes;
+    }, [raw, selectedDate, prevDate, meta]);
+
+    const getSalesLocalHour = (mode: 'same' | 'cross', date: string, hourGMT: number): number => {
+        if (mode === 'same') {
+            return date === selectedDate ? (hourGMT + HOUR_OFFSET) % 24 : -1;
+        }
+
+        if (date === selectedDate && hourGMT >= 0 && hourGMT <= 18) return hourGMT + HOUR_OFFSET;
+        if (date === prevDate && hourGMT >= 19 && hourGMT <= 23) return hourGMT + HOUR_OFFSET - 24;
+        return -1;
+    };
 
     const hourlyData = useMemo(() => {
         if (!raw) return Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
@@ -48,14 +111,16 @@ export default function HourlyPage() {
 
         (raw.sales_hourly || []).forEach((r: any[]) => {
             const date = String(r[0] || '').trim();
-            if (date !== selectedDate) return;
             const sid = r[1];
             const h = Number(r[2]);
             if (!Number.isInteger(h) || h < 0 || h > 23) return;
             const val = Number(r[3]) || 0;
             const trans = Number(r[4]) || 0;
             if (filteredSids.size > 0 && !filteredSids.has(String(sid))) return;
-            const localHour = (h + HOUR_OFFSET) % 24;
+            const mode = salesBoundaryModeBySid[String(sid)] || 'cross';
+            const localHour = getSalesLocalHour(mode, date, h);
+
+            if (localHour < 0 || localHour > 23) return;
             hourly[localHour].sales += val;
             hourly[localHour].trans += trans;
         });
@@ -72,15 +137,49 @@ export default function HourlyPage() {
         });
 
         return hourly;
-    }, [raw, selectedDate, selectedStore, selectedManager, meta]);
+    }, [raw, selectedDate, prevDate, selectedStore, selectedManager, meta, salesBoundaryModeBySid]);
 
     const totals = useMemo(() => {
-        return hourlyData.reduce((acc, h) => ({
-            sales: acc.sales + h.sales,
-            trans: acc.trans + h.trans,
-            visitors: acc.visitors + h.visitors
-        }), { sales: 0, trans: 0, visitors: 0 });
-    }, [hourlyData]);
+        if (!raw) return { sales: 0, trans: 0, visitors: 0 };
+
+        const filteredSids = new Set<string>();
+        Object.keys(meta).forEach(sid => {
+            const m = meta[sid];
+            if (selectedStore !== 'all' && sid !== selectedStore) return;
+            if (selectedManager !== 'all' && m.manager !== selectedManager) return;
+            filteredSids.add(sid);
+        });
+
+        let sales = 0;
+        let trans = 0;
+        let visitors = 0;
+
+        (raw.sales || []).forEach((r: any[]) => {
+            const date = String(r[0] || '').substring(0, 10);
+            const sid = String(r[1]);
+            if (date !== selectedDate) return;
+            if (filteredSids.size > 0 && !filteredSids.has(sid)) return;
+            sales += Number(r[2]) || 0;
+        });
+
+        (raw.transactions || []).forEach((r: any[]) => {
+            const date = String(r[0] || '').substring(0, 10);
+            const sid = String(r[1]);
+            if (date !== selectedDate) return;
+            if (filteredSids.size > 0 && !filteredSids.has(sid)) return;
+            trans += Number(r[2]) || 0;
+        });
+
+        (raw.visitors || []).forEach((r: any[]) => {
+            const date = String(r[0] || '').substring(0, 10);
+            const sid = String(r[1]);
+            if (date !== selectedDate) return;
+            if (filteredSids.size > 0 && !filteredSids.has(sid)) return;
+            visitors += Number(r[2]) || 0;
+        });
+
+        return { sales, trans, visitors };
+    }, [raw, meta, selectedDate, selectedStore, selectedManager]);
 
     const rangeSummary = useMemo(() => {
         const start = Math.max(0, Math.min(23, fromHour));
@@ -112,12 +211,14 @@ export default function HourlyPage() {
 
             (raw?.sales_hourly || []).forEach((r: any[]) => {
                 const date = String(r[0] || '').trim();
-                if (date !== selectedDate) return;
                 const sid = String(r[1]);
                 const h = Number(r[2]);
                 if (!Number.isInteger(h) || h < 0 || h > 23) return;
                 if (sids.size > 0 && !sids.has(sid)) return;
-                const localHour = (h + HOUR_OFFSET) % 24;
+                const mode = salesBoundaryModeBySid[sid] || 'cross';
+                const localHour = getSalesLocalHour(mode, date, h);
+
+                if (localHour < 0 || localHour > 23) return;
                 hourly[localHour].sales += Number(r[3]) || 0;
                 hourly[localHour].trans += Number(r[4]) || 0;
             });
@@ -135,13 +236,41 @@ export default function HourlyPage() {
             return hourly;
         };
 
+        const getExactTotalsForSids = (sids: Set<string>) => {
+            let sales = 0;
+            let trans = 0;
+            let visitors = 0;
+
+            (raw?.sales || []).forEach((r: any[]) => {
+                const date = String(r[0] || '').substring(0, 10);
+                const sid = String(r[1]);
+                if (date !== selectedDate) return;
+                if (sids.size > 0 && !sids.has(sid)) return;
+                sales += Number(r[2]) || 0;
+            });
+
+            (raw?.transactions || []).forEach((r: any[]) => {
+                const date = String(r[0] || '').substring(0, 10);
+                const sid = String(r[1]);
+                if (date !== selectedDate) return;
+                if (sids.size > 0 && !sids.has(sid)) return;
+                trans += Number(r[2]) || 0;
+            });
+
+            (raw?.visitors || []).forEach((r: any[]) => {
+                const date = String(r[0] || '').substring(0, 10);
+                const sid = String(r[1]);
+                if (date !== selectedDate) return;
+                if (sids.size > 0 && !sids.has(sid)) return;
+                visitors += Number(r[2]) || 0;
+            });
+
+            return { sales, trans, visitors };
+        };
+
         const addSheet = (sheetName: string, sids: Set<string>, titleSuffix: string) => {
             const data = getHourlyForSids(sids);
-            const sheetTotals = data.reduce((acc, h) => ({
-                sales: acc.sales + h.sales,
-                trans: acc.trans + h.trans,
-                visitors: acc.visitors + h.visitors
-            }), { sales: 0, trans: 0, visitors: 0 });
+            const sheetTotals = getExactTotalsForSids(sids);
 
             const metadata = [
                 ['تقرير المبيعات بالساعة'],
