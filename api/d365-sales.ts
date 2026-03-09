@@ -5,6 +5,7 @@ type TxRow = {
   TransactionDate?: string;
   PaymentAmount?: number | string;
   TransactionNumber?: string;
+  [k: string]: any;
 };
 
 function toIsoDayStart(day: string) {
@@ -72,6 +73,35 @@ async function fetchAllRows(url: string, token: string) {
   return rows;
 }
 
+function uniqueCount<T>(arr: T[]) {
+  return new Set(arr).size;
+}
+
+async function pickTimeField(
+  baseUrl: string,
+  token: string,
+  entityPath: string,
+  fixedSelect: string[],
+  candidateFields: string[],
+  filterExpr: string,
+) {
+  for (const field of candidateFields) {
+    const select = [...fixedSelect, field].join(',');
+    const probeUrl = `${baseUrl}/data/${entityPath}?$top=1&$select=${select}&$filter=${filterExpr}`;
+    try {
+      const rows = await fetchAllRows(probeUrl, token);
+      if (!rows.length) continue;
+      const sample = rows[0]?.[field];
+      if (sample !== undefined && sample !== null && String(sample).trim() !== '') {
+        return field;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const from = String(req.query.from || '');
@@ -99,37 +129,103 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const fromIso = toIsoDayStart(from);
     const toExclusive = toIsoDayStart(nextDay(to));
 
-    const txUrl =
-      `${baseUrl}/data/RetailTransactions` +
-      `?$select=OperatingUnitNumber,TransactionDate,PaymentAmount,TransactionNumber` +
-      `&$filter=PaymentAmount ne 0 and TransactionDate ge ${fromIso} and TransactionDate lt ${toExclusive}`;
-
-    const rows = await fetchAllRows(txUrl, token);
-
     const dailySales = new Map<string, number>();
     const dailyTrans = new Map<string, Set<string>>();
     const hourlySales = new Map<string, number>();
     const hourlyTrans = new Map<string, Set<string>>();
+    let sourceEntity = 'RetailTransactions';
+    let timeFieldUsed = 'TransactionDate';
+    let rawRowCount = 0;
 
-    for (const r of rows) {
-      const sid = String(r.OperatingUnitNumber || '').trim();
-      const ts = String(r.TransactionDate || '').trim();
-      const tx = String(r.TransactionNumber || '').trim();
-      const val = Number(r.PaymentAmount) || 0;
-      if (!sid || !ts) continue;
+    // 1) Prefer lines entity to get true per-transaction timestamps when available.
+    const linesFilter = `ReceiptDateRequested ge ${fromIso} and ReceiptDateRequested lt ${toExclusive}`;
+    const linesFixed = ['store', 'transactionId', 'netAmountInclTax', 'transactionStatus'];
+    const linesTimeField =
+      (await pickTimeField(
+        baseUrl,
+        token,
+        'RetailTransactionSalesTransBIEntities',
+        linesFixed,
+        ['CreatedDateTime', 'ReceiptDateRequested', 'TransactionDate'],
+        linesFilter,
+      )) || 'ReceiptDateRequested';
 
-      const parsed = fmtUtcDateHour(ts);
-      if (!parsed) continue;
-      const dateKey = `${parsed.date}|${sid}`;
-      const hourKey = `${parsed.date}|${sid}|${parsed.hour}`;
+    try {
+      const linesUrl =
+        `${baseUrl}/data/RetailTransactionSalesTransBIEntities` +
+        `?$select=${[...linesFixed, linesTimeField].join(',')}` +
+        `&$filter=${linesFilter}`;
+      const lineRows = await fetchAllRows(linesUrl, token);
+      rawRowCount = lineRows.length;
+      sourceEntity = 'RetailTransactionSalesTransBIEntities';
+      timeFieldUsed = linesTimeField;
 
-      dailySales.set(dateKey, (dailySales.get(dateKey) || 0) + val);
-      if (!dailyTrans.has(dateKey)) dailyTrans.set(dateKey, new Set<string>());
-      if (tx) dailyTrans.get(dateKey)!.add(tx);
+      for (const r of lineRows) {
+        const status = String(r.transactionStatus || '');
+        if (status.toLowerCase() === 'voided') continue;
 
-      hourlySales.set(hourKey, (hourlySales.get(hourKey) || 0) + val);
-      if (!hourlyTrans.has(hourKey)) hourlyTrans.set(hourKey, new Set<string>());
-      if (tx) hourlyTrans.get(hourKey)!.add(tx);
+        const sid = String(r.store || '').trim();
+        const tx = String(r.transactionId || '').trim();
+        const ts = String(r[linesTimeField] || '').trim();
+        const val = Number(r.netAmountInclTax) || 0;
+        if (!sid || !tx || !ts) continue;
+
+        const parsed = fmtUtcDateHour(ts);
+        if (!parsed) continue;
+        const dateKey = `${parsed.date}|${sid}`;
+        const hourKey = `${parsed.date}|${sid}|${parsed.hour}`;
+
+        dailySales.set(dateKey, (dailySales.get(dateKey) || 0) + val);
+        if (!dailyTrans.has(dateKey)) dailyTrans.set(dateKey, new Set<string>());
+        dailyTrans.get(dateKey)!.add(tx);
+
+        hourlySales.set(hourKey, (hourlySales.get(hourKey) || 0) + val);
+        if (!hourlyTrans.has(hourKey)) hourlyTrans.set(hourKey, new Set<string>());
+        hourlyTrans.get(hourKey)!.add(tx);
+      }
+    } catch {
+      // 2) Fallback to RetailTransactions if lines endpoint fails.
+      const txFilter = `PaymentAmount ne 0 and TransactionDate ge ${fromIso} and TransactionDate lt ${toExclusive}`;
+      const txFixed = ['OperatingUnitNumber', 'PaymentAmount', 'TransactionNumber'];
+      const txTimeField =
+        (await pickTimeField(
+          baseUrl,
+          token,
+          'RetailTransactions',
+          txFixed,
+          ['CreatedDateTime', 'TransactionDate'],
+          txFilter,
+        )) || 'TransactionDate';
+
+      const txUrl =
+        `${baseUrl}/data/RetailTransactions` +
+        `?$select=${[...txFixed, txTimeField].join(',')}` +
+        `&$filter=${txFilter}`;
+      const rows = await fetchAllRows(txUrl, token);
+      rawRowCount = rows.length;
+      sourceEntity = 'RetailTransactions';
+      timeFieldUsed = txTimeField;
+
+      for (const r of rows) {
+        const sid = String(r.OperatingUnitNumber || '').trim();
+        const tx = String(r.TransactionNumber || '').trim();
+        const ts = String(r[txTimeField] || '').trim();
+        const val = Number(r.PaymentAmount) || 0;
+        if (!sid || !ts) continue;
+
+        const parsed = fmtUtcDateHour(ts);
+        if (!parsed) continue;
+        const dateKey = `${parsed.date}|${sid}`;
+        const hourKey = `${parsed.date}|${sid}|${parsed.hour}`;
+
+        dailySales.set(dateKey, (dailySales.get(dateKey) || 0) + val);
+        if (!dailyTrans.has(dateKey)) dailyTrans.set(dateKey, new Set<string>());
+        if (tx) dailyTrans.get(dateKey)!.add(tx);
+
+        hourlySales.set(hourKey, (hourlySales.get(hourKey) || 0) + val);
+        if (!hourlyTrans.has(hourKey)) hourlyTrans.set(hourKey, new Set<string>());
+        if (tx) hourlyTrans.get(hourKey)!.add(tx);
+      }
     }
 
     const sales: any[] = [];
@@ -155,14 +251,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         String(a[1]).localeCompare(String(b[1])) ||
         Number(a[2]) - Number(b[2]),
     );
+    const distinctHours = uniqueCount(salesHourly.map((r) => Number(r[2])));
 
     return res.status(200).json({
       metadata: {
         source: 'd365-direct',
+        source_entity: sourceEntity,
+        time_field: timeFieldUsed,
         from,
         to,
         fetched_at: new Date().toISOString(),
-        tx_rows: rows.length,
+        tx_rows: rawRowCount,
+        distinct_hours: distinctHours,
       },
       sales,
       transactions,

@@ -69,6 +69,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     }, [dateMode]);
 
     React.useEffect(() => {
+        if (!isOpen) return;
         let cancelled = false;
         const prevDateStr = (() => {
             const d = new Date(`${targetDateStr}T12:00:00`);
@@ -76,34 +77,42 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         })();
 
-        setLiveRefreshing(true);
-        loadD365SalesRange(prevDateStr, targetDateStr)
-            .then((payload) => {
-                if (cancelled) return;
-                const salesByStore: Record<string, number> = {};
-                const transByStore: Record<string, number> = {};
-                (payload.sales || []).forEach((r: any[]) => {
-                    const dt = String(r[0] || '').substring(0, 10);
-                    const sid = String(r[1] || '');
-                    if (!sid || dt !== targetDateStr) return;
-                    salesByStore[sid] = (salesByStore[sid] || 0) + (Number(r[2]) || 0);
+        const fetchLiveData = () => {
+            setLiveRefreshing(true);
+            loadD365SalesRange(prevDateStr, targetDateStr)
+                .then((payload) => {
+                    if (cancelled) return;
+                    const salesByStore: Record<string, number> = {};
+                    const transByStore: Record<string, number> = {};
+                    (payload.sales || []).forEach((r: any[]) => {
+                        const dt = String(r[0] || '').substring(0, 10);
+                        const sid = String(r[1] || '');
+                        if (!sid || dt !== targetDateStr) return;
+                        salesByStore[sid] = (salesByStore[sid] || 0) + (Number(r[2]) || 0);
+                    });
+                    (payload.transactions || []).forEach((r: any[]) => {
+                        const dt = String(r[0] || '').substring(0, 10);
+                        const sid = String(r[1] || '');
+                        if (!sid || dt !== targetDateStr) return;
+                        transByStore[sid] = (transByStore[sid] || 0) + (Number(r[2]) || 0);
+                    });
+                    setD365Daily({ salesByStore, transByStore, salesHourlyRows: payload.sales_hourly || [] });
+                })
+                .catch(() => {
+                    if (!cancelled) setD365Daily(null);
+                })
+                .finally(() => {
+                    if (!cancelled) setLiveRefreshing(false);
                 });
-                (payload.transactions || []).forEach((r: any[]) => {
-                    const dt = String(r[0] || '').substring(0, 10);
-                    const sid = String(r[1] || '');
-                    if (!sid || dt !== targetDateStr) return;
-                    transByStore[sid] = (transByStore[sid] || 0) + (Number(r[2]) || 0);
-                });
-                setD365Daily({ salesByStore, transByStore, salesHourlyRows: payload.sales_hourly || [] });
-            })
-            .catch(() => {
-                if (!cancelled) setD365Daily(null);
-            })
-            .finally(() => {
-                if (!cancelled) setLiveRefreshing(false);
-            });
-        return () => { cancelled = true; };
-    }, [targetDateStr, liveRefreshTick]);
+        };
+
+        fetchLiveData();
+        const timer = window.setInterval(fetchLiveData, 60 * 1000);
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
+    }, [isOpen, targetDateStr, liveRefreshTick]);
 
     // Memoize the calculated data internally
     const { liveData, managersList: managers } = React.useMemo(() => {
