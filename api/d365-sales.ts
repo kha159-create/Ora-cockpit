@@ -227,44 +227,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       chosen: 'RetailTransactions',
     };
 
-    const txFixed = ['OperatingUnitNumber', 'PaymentAmount', 'TransactionNumber'];
+    const txFixed = ['OperatingUnitNumber', 'PaymentAmount', 'TransactionNumber', 'TransactionDate'];
     const txTimeField =
       txProbe?.bestField ||
       (await pickTimeField(
         baseUrl,
         token,
         'RetailTransactions',
-        txFixed,
+        ['OperatingUnitNumber', 'PaymentAmount', 'TransactionNumber', 'TransactionDate'],
         ['BeginDateTime', 'CreatedDateTime', 'TransactionDate'],
         txFilter,
       )) ||
       'TransactionDate';
 
+    const selectFields = [...new Set([...txFixed, txTimeField])];
     const txUrl =
       `${baseUrl}/data/RetailTransactions` +
-      `?$select=${[...txFixed, txTimeField].join(',')}` +
+      `?$select=${selectFields.join(',')}` +
       `&$filter=${txFilter}`;
     const rows = await fetchAllRows(txUrl, token);
     rawRowCount = rows.length;
     sourceEntity = 'RetailTransactions';
     timeFieldUsed = txTimeField;
 
+    // AST offset (UTC to Arabia): +3. Use +5 if your POS uses that.
+    const LOCAL_HOUR_OFFSET = 5;
+
     for (const r of rows) {
       const sid = String(r.OperatingUnitNumber || '').trim();
       const tx = String(r.TransactionNumber || '').trim();
-      const ts = String(r[txTimeField] || '').trim();
       const val = Number(r.PaymentAmount) || 0;
-      if (!sid || !ts) continue;
+      const txDateRaw = String(r.TransactionDate || '').trim();
+      const txDate = txDateRaw ? txDateRaw.substring(0, 10) : '';
+      const ts = String(r[txTimeField] || '').trim();
+      if (!sid || !txDate) continue;
 
-      const parsed = fmtUtcDateHour(ts);
-      if (!parsed) continue;
-      const dateKey = `${parsed.date}|${sid}`;
-      const hourKey = `${parsed.date}|${sid}|${parsed.hour}`;
-
+      // Daily: key by TransactionDate so total matches POS / official daily
+      const dateKey = `${txDate}|${sid}`;
       dailySales.set(dateKey, (dailySales.get(dateKey) || 0) + val);
       if (!dailyTrans.has(dateKey)) dailyTrans.set(dateKey, new Set<string>());
       if (tx) dailyTrans.get(dateKey)!.add(tx);
 
+      // Hourly: same date (TransactionDate), hour = local hour from time field so sum(hours) = daily
+      let localHour: number;
+      if (ts) {
+        const parsed = fmtUtcDateHour(ts);
+        if (parsed != null) {
+          localHour = (parsed.hour + LOCAL_HOUR_OFFSET) % 24;
+        } else {
+          localHour = 12;
+        }
+      } else {
+        localHour = 12;
+      }
+      const hourKey = `${txDate}|${sid}|${localHour}`;
       hourlySales.set(hourKey, (hourlySales.get(hourKey) || 0) + val);
       if (!hourlyTrans.has(hourKey)) hourlyTrans.set(hourKey, new Set<string>());
       if (tx) hourlyTrans.get(hourKey)!.add(tx);

@@ -47,8 +47,12 @@ export default function HourlyPage() {
     const visitorsDailyRows = raw?.visitors || [];
     const visitorsHourlyRows = raw?.visitors_hourly || [];
 
-    const getSalesLocalHour = (date: string, hourFromSource: number): number =>
-        date === selectedDate ? (hourFromSource + HOUR_OFFSET) % 24 : -1;
+    // D365 API sends hourly with TransactionDate + local hour (offset applied in API). Raw uses UTC.
+    const useD365 = !!d365Data?.sales_hourly;
+    const getSalesLocalHour = (date: string, hourFromSource: number): number => {
+        if (date !== selectedDate) return -1;
+        return useD365 ? hourFromSource : (hourFromSource + HOUR_OFFSET) % 24;
+    };
 
     const hourlyData = useMemo(() => {
         if (!raw) return Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, trans: 0, visitors: 0 }));
@@ -95,7 +99,7 @@ export default function HourlyPage() {
         });
 
         return hourly;
-    }, [raw, selectedDate, selectedStore, selectedManager, meta, salesHourlyRows, visitorsHourlyRows]);
+    }, [raw, selectedDate, selectedStore, selectedManager, meta, salesHourlyRows, visitorsHourlyRows, d365Data]);
 
     const totals = useMemo(() => {
         if (!raw) return { sales: 0, trans: 0, visitors: 0 };
