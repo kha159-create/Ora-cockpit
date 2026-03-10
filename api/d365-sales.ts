@@ -1,7 +1,27 @@
 declare const process: any;
 
-type VercelRequest = { query: Record<string, any> };
-type VercelResponse = { status: (code: number) => VercelResponse; json: (payload: any) => any };
+type VercelRequest = { method?: string; query: Record<string, any>; headers?: Record<string, string> };
+type VercelResponse = {
+  setHeader: (name: string, value: string) => void;
+  status: (code: number) => VercelResponse;
+  json: (payload: any) => any;
+};
+
+const CORS_ORIGINS = [
+  'https://kha159-create.github.io',
+  'https://ora-cockpit.vercel.app',
+];
+function setCors(res: VercelResponse, req: VercelRequest) {
+  const origin = (req.headers && req.headers['origin']) || '';
+  const allow =
+    origin && (CORS_ORIGINS.some((o) => origin.startsWith(o)) || origin.includes('vercel.app'))
+      ? origin
+      : '*';
+  res.setHeader('Access-Control-Allow-Origin', allow);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Max-Age', '86400');
+}
 
 type TxRow = {
   OperatingUnitNumber?: string;
@@ -64,6 +84,9 @@ function getLocalHourFromBeginDateTime(beginDateTimeStr: string | undefined | nu
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setCors(res, req);
+  if (req.method === 'OPTIONS') return res.status(204).json(null);
+
   try {
     const from = String(req.query.from || '');
     const to = String(req.query.to || from);
