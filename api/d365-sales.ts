@@ -53,14 +53,13 @@ async function fetchAllRows(url: string, token: string) {
   return rows;
 }
 
-// UTC+3 = Arabia Standard Time (same as production import script)
-const AST_OFFSET = 3;
-
+// BeginDateTime in D365 RetailTransactions is stored as POS local time (Saudi),
+// NOT UTC. No offset needed.
 function getLocalHourFromBeginDateTime(beginDateTimeStr: string | undefined | null): number {
   if (!beginDateTimeStr) return 12;
   const d = new Date(String(beginDateTimeStr));
   if (Number.isNaN(d.getTime())) return 12;
-  return (d.getUTCHours() + AST_OFFSET) % 24;
+  return d.getUTCHours();
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -152,7 +151,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       metadata: {
         source: 'd365-direct',
         time_field: 'BeginDateTime',
-        offset: `+${AST_OFFSET}h (UTC to AST)`,
+        offset: '0 (BeginDateTime is POS local time)',
         from,
         to,
         fetched_at: new Date().toISOString(),

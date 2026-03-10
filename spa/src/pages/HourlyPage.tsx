@@ -19,9 +19,9 @@ export default function HourlyPage() {
     );
     const [fromHour, setFromHour] = useState<number>(0);
     const [toHour, setToHour] = useState<number>(24);
-    // Fallback offset for raw data (management_data.json) which stores UTC hours.
-    // D365 API already sends local hours (BeginDateTime + 3h), so no offset needed.
-    const RAW_HOUR_OFFSET = 3;
+    // Raw data (management_data.json) uses begin_datetime+3h in SQL, giving local hours.
+    // D365 API also sends local hours directly. No offset needed for either source.
+    const RAW_HOUR_OFFSET = 0;
 
     const stores = useMemo(() => raw?.stores || {}, [raw]);
     const meta = useMemo(() => raw?.store_meta || {}, [raw]);
