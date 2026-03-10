@@ -1,4 +1,6 @@
 {
+  "buildCommand": "cd spa && npm install && npm run build",
+  "outputDirectory": "spa/dist",
   "functions": {
     "api/d365-sales.ts": {
       "maxDuration": 60
