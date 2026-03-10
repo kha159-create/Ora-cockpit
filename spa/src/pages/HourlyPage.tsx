@@ -50,9 +50,12 @@ export default function HourlyPage() {
     const visitorsHourlyRows = raw?.visitors_hourly || [];
 
     const useD365 = !!d365Data?.sales_hourly;
+    // D365 API sends hour that is 5h ahead of POS: POS 6–7 appears as 11–12. Subtract 5 to match POS.
+    const D365_HOUR_BACK = 5;
     const getSalesLocalHour = (date: string, hourFromSource: number): number => {
         if (date !== selectedDate) return -1;
-        return useD365 ? hourFromSource : (hourFromSource + RAW_HOUR_OFFSET) % 24;
+        if (useD365) return (hourFromSource - D365_HOUR_BACK + 24) % 24;
+        return (hourFromSource + RAW_HOUR_OFFSET) % 24;
     };
 
     const hourlyData = useMemo(() => {

@@ -167,12 +167,15 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
         const okStore = (sid: string) =>
             manager === 'all' || (meta[sid] && String(meta[sid].manager) === manager);
 
+        const useD365 = !!d365Daily?.salesHourlyRows?.length;
+        const D365_HOUR_BACK = 5;
         hourlyRows.forEach(([dt, sid, h, v]: any[]) => {
             const dtStr = String(dt || '').trim();
             if (!okStore(String(sid))) return;
 
-            const sourceHour = Number(h);
+            let sourceHour = Number(h);
             if (!Number.isInteger(sourceHour) || sourceHour < 0 || sourceHour > 23) return;
+            if (useD365) sourceHour = (sourceHour - D365_HOUR_BACK + 24) % 24;
             const val = Number(v) || 0;
 
             if (!ss[sid]) ss[sid] = { shift1: 0, shift2: 0, shift3: 0, shift3_part1: 0, shift3_part2: 0 };
