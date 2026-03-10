@@ -19,8 +19,8 @@ export default function HourlyPage() {
     );
     const [fromHour, setFromHour] = useState<number>(0);
     const [toHour, setToHour] = useState<number>(24);
-    // Raw data (management_data.json) uses begin_datetime+3h in SQL (2h short of POS).
-    // When falling back to raw, add remaining +2 to match POS local time.
+    // D365 API returns hours already in POS local time (+5 applied server-side).
+    // Raw fallback: management_data uses +3 in SQL; add +2 so display matches POS.
     const RAW_HOUR_OFFSET = 2;
 
     const stores = useMemo(() => raw?.stores || {}, [raw]);
@@ -311,6 +311,15 @@ export default function HourlyPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                     <div className="flex flex-col md:flex-row md:items-center gap-4">
                         <h1 className="text-2xl font-black text-neutral-900">المبيعات بالساعه</h1>
+                        {useD365 ? (
+                            <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg" title="الساعات مطابقة للـ POS">
+                                لايف من D365
+                            </span>
+                        ) : (
+                            <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg" title="جرّب من ora-cockpit.vercel.app إذا ظهرت 404">
+                                بيانات محفوظة
+                            </span>
+                        )}
                         <button
                             onClick={handleExportExcel}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-sm active:scale-95"

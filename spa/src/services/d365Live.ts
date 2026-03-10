@@ -5,8 +5,13 @@ export type D365SalesPayload = {
   sales_hourly: any[];
 };
 
+const D365_API_BASE =
+  typeof window !== 'undefined' && window.location?.hostname?.includes('vercel.app')
+    ? '' // same origin on Vercel
+    : 'https://ora-cockpit.vercel.app';
+
 export async function loadD365SalesRange(from: string, to: string): Promise<D365SalesPayload> {
-  const url = `/api/d365-sales?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  const url = `${D365_API_BASE}/api/d365-sales?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) {
     const txt = await res.text();
