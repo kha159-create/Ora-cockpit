@@ -879,14 +879,6 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-neutral-700">نوع المعرض</label>
-              <select className="input mt-1" value={storeType} onChange={(e) => setStoreType(e.target.value)}>
-                <option value="all">الكل</option>
-                <option value="Showroom">معارض</option>
-                <option value="Online">أونلاين</option>
-              </select>
-            </div>
-            <div>
               <label className="block text-sm font-semibold text-neutral-700">الفرع</label>
               <select className="input mt-1" value={branch} onChange={(e) => setBranch(e.target.value)}>
                 <option value="all">الكل</option>
@@ -897,10 +889,10 @@ export default function ReportsPage() {
             </div>
           </div>
         </div>
-      </div >
+      </div>
 
       {/* تقارير المعارض */}
-      < div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6" >
+      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
         <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
           <span className="text-2xl">🏪</span> تقارير المعارض
         </h3>
@@ -942,7 +934,7 @@ export default function ReportsPage() {
             <p className="text-xs text-neutral-500 mt-1">PDF - ملخص الشهر</p>
           </button>
         </div>
-      </div >
+      </div>
 
       {/* تقارير الموظفين */}
       {

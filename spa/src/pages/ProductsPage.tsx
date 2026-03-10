@@ -867,7 +867,15 @@ export default function ProductsPage() {
         <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-lg font-bold text-neutral-900">📦 قائمة المنتجات</div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                className="input min-w-[200px] max-w-[280px]"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="🔍 الكود القديم، الجديد، أو اسم المنتج"
+                title="بحث بالكود القديم أو الجديد أو اسم المنتج"
+              />
               <select className="input" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
                 <option value="all">كل الأقسام</option>
                 {derived.catalogCategories.map((c) => (
@@ -956,7 +964,7 @@ export default function ProductsPage() {
               })()}
               {derived.filteredCatalog.length === 0 && (
                 <tr>
-                  <td className="td text-center text-neutral-500" colSpan={5}>
+                  <td className="td text-center text-neutral-500" colSpan={8}>
                     لا توجد منتجات مطابقة.
                   </td>
                 </tr>
