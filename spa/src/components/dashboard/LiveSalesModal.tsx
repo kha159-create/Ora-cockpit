@@ -71,6 +71,14 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     React.useEffect(() => {
         if (!isOpen) return;
         let cancelled = false;
+
+        // لا نستخدم D365 ليوم الأمس حتى لا نكرر التحميل؛ نعتمد فقط على البيانات المحفوظة.
+        if (dateMode === 'yesterday') {
+            setD365Daily(null);
+            setLiveRefreshing(false);
+            return;
+        }
+
         const prevDateStr = (() => {
             const d = new Date(`${targetDateStr}T12:00:00`);
             d.setDate(d.getDate() - 1);
@@ -112,7 +120,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
             cancelled = true;
             clearInterval(timer);
         };
-    }, [isOpen, targetDateStr, liveRefreshTick]);
+    }, [isOpen, targetDateStr, liveRefreshTick, dateMode]);
 
     // Memoize the calculated data internally
     const { liveData, managersList: managers } = React.useMemo(() => {

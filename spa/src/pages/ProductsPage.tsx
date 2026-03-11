@@ -44,6 +44,7 @@ type CatalogItem = {
   name: string;
   alias?: string;
   old_code?: string;
+  dCode?: string;
   category: string;
   qty: number;
   amount: number;
@@ -411,6 +412,7 @@ export default function ProductsPage() {
           name: name,
           alias: alias,
           old_code: String(it?.old_code || ''),
+          dCode,
           category: String(catName),
           qty,
           amount,
@@ -432,7 +434,8 @@ export default function ProductsPage() {
         r.id.toLowerCase().includes(q) ||
         r.name.toLowerCase().includes(q) ||
         String(r.alias || '').toLowerCase().includes(q) ||
-        String(r.old_code || '').toLowerCase().includes(q)
+        String(r.old_code || '').toLowerCase().includes(q) ||
+        String(r.dCode || '').toLowerCase().includes(q)
       );
     }
     filteredCatalog.sort((a, b) => (metric === 'qty' ? b.qty - a.qty : b.amount - a.amount));
