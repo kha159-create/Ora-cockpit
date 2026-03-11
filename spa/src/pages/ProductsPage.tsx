@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { loadManagementData, loadProductAnalysisData, loadStagnantData, loadStockData } from '../services/upstreamData';
+import { loadManagementData, loadProductAnalysisData, loadStagnantData, loadStockData, loadProductMapping } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
@@ -116,6 +116,7 @@ export default function ProductsPage() {
 
   const [mgmt, setMgmt] = useState<any>(null);
   const [, setErr] = useState<string | null>(null);
+  const [productMapping, setProductMapping] = useState<Record<string, any>>({});
 
   const [mode, setMode] = useState<PeriodMode>('mtd');
   const [metric, setMetric] = useState<Metric>('qty');
@@ -158,12 +159,19 @@ export default function ProductsPage() {
       loadManagementData(),
       loadStagnantData(),
       loadStockData(),
+      loadProductMapping(),
     ])
-      .then(([p, m, stag, stock]) => {
+      .then(([p, m, stag, stock, mapping]) => {
         setRaw(p);
         setMgmt(m);
         setStagnantRaw(stag);
         setStockRaw(stock);
+        const mapObj: Record<string, any> = {};
+        (mapping || []).forEach((item: any) => {
+          if (!item || !item.id) return;
+          mapObj[String(item.id)] = item;
+        });
+        setProductMapping(mapObj);
       })
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
@@ -373,8 +381,9 @@ export default function ProductsPage() {
       for (const it of items) {
         const id = String(it?.id || '');
         const name = String(it?.name || id);
-        const alias = String(it?.alias || '').trim();
-        const dCode = String(it?.dCode || '').trim();
+        const map = productMapping[id] || {};
+        const alias = String(map.alias ?? it?.alias ?? '').trim();
+        const dCode = String(map.dCode ?? it?.dCode ?? '').trim();
         const stores = it?.stores || {};
 
         // Find Stock Data
