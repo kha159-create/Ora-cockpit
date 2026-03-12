@@ -809,6 +809,7 @@ export default function DashboardPage() {
 
     return Object.entries(byStore)
       .filter(([sid]) => {
+        if (!allowedStoreIds.has(sid)) return false;
         const m = meta[sid];
         if (effectiveManager !== 'all' && (!m || String(m.manager) !== effectiveManager)) return false;
         return byStore[sid].sales > 0 || byStore[sid].trans > 0 || byStore[sid].yesterdaySales > 0;
@@ -837,7 +838,7 @@ export default function DashboardPage() {
         };
       })
       .sort((a, b) => b.sales - a.sales);
-  }, [raw, yesterdayStr, lastYearYesterdayStr, effectiveManager]);
+  }, [raw, yesterdayStr, lastYearYesterdayStr, effectiveManager, allowedStoreIds]);
 
   // Chart data - adapts to selected period and filters
   const isFullYearView = mode === 'month';
