@@ -172,11 +172,9 @@ export async function loadStockData(forceRefresh = false) {
   return promise;
 }
 
-export function loadProductMapping() {
-  // Use local ONLY to avoid 404s from upstream (since upstream doesn't have it yet)
-  const ts = Date.now();
-  const localUrl = repoRootUrl(`product_mapping.json?t=${ts}`);
-  return fetchWithRetry(localUrl, 1, 500).then(res => res.json()).catch(() => []);
+export function loadProductMapping(forceRefresh = false) {
+  // نفس منطق باقي الملفات: جرّب الريبو الأصلي أولاً ثم fallback للنسخة المحلية.
+  return fetchJson<any[]>('product_mapping.json', forceRefresh).catch(() => []);
 }
 
 /** Refresh all cached data */
