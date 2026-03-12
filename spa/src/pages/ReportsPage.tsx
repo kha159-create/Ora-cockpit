@@ -149,14 +149,20 @@ export default function ReportsPage() {
     if (!rawMgmt?.stores || !rawMgmt?.store_meta) return [];
     return Object.entries(rawMgmt.stores)
       .filter(([id]) => {
-        const meta = (rawMgmt.store_meta as Record<string, { manager?: string; city?: string }>)[id];
+        const meta = (rawMgmt.store_meta as Record<string, { manager?: string; city?: string; type?: string }>)[id];
         if (effectiveManager !== 'all' && (meta?.manager || '') !== effectiveManager) return false;
         if (city !== 'all' && (meta?.city || '') !== city) return false;
+        if (storeType !== 'all') {
+          const type = String(meta?.type || '').toLowerCase();
+          const isOnline = type === 'online' || type === 'platform' || type === 'warehouse';
+          if (storeType === 'online' && !isOnline) return false;
+          if (storeType === 'store' && isOnline) return false;
+        }
         return true;
       })
       .map(([id, name]) => ({ id, name: (name as string) || id }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [rawMgmt, effectiveManager, city]);
+  }, [rawMgmt, effectiveManager, city, storeType]);
 
   if (!rawMgmt || !rawEmp) {
     return <DashboardSkeleton />;
@@ -411,10 +417,12 @@ export default function ReportsPage() {
       recs.forEach((rec: any[]) => {
         const [date, empId, sales, trans] = rec;
         if (date >= range.start && date <= range.end) {
-          let name = empNames[empId] || empId;
+          const idPart = String(empId || '').split('-')[0].trim();
+          let name = empNames[idPart] || empNames[idPart?.padStart(4, '0')] || empId;
           if (empId && String(empId).includes('-')) {
             const parts = String(empId).split('-');
-            name = parts.slice(1).join('-').trim() || empId;
+            const nameFromParts = parts.slice(1).join('-').trim();
+            if (nameFromParts) name = nameFromParts;
           }
           rows.push({
             'التاريخ': date,
@@ -606,16 +614,16 @@ export default function ReportsPage() {
         (recs || []).forEach((rec: any[]) => {
           const d = rec[0];
           const rawId = String(rec[1] || '').split('-')[0].trim();
+          if (!rawId || rawId === 'مرتجع') return;
           const id = rawId.padStart(4, '0');
-          if (rawId === 'مرتجع') return;
-          if (selectedIdsArray.length > 0 && !selectedIdsArray.includes(id)) return;
+          if (selectedIdsArray.length > 0 && !selectedIdsArray.includes(id) && !selectedIdsArray.includes(rawId)) return;
 
           if (!byStore[sid][id]) {
             byStore[sid][id] = {
               name: names[id] || names[rawId] || rawId,
               ySales: 0, yTrans: 0,
               mSales: 0, mTrans: 0,
-              target: getTarget(id)
+              target: getTarget(rawId)
             };
           }
           const sales = Number(rec[2]) || 0;
