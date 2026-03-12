@@ -708,8 +708,9 @@ export default function ReportsPage() {
       return targets[id] || targets[padded] || 0;
     };
 
-    // Build employee list with MTD sales
+    // Build employee list with MTD sales + عدد الأيام الفعلية التي باع فيها الموظف
     const empMap: Record<string, any> = {};
+    const empDaysMap: Record<string, Set<string>> = {};
     Object.entries(history).forEach(([sid, recs]: [string, any]) => {
       if (!passFilter(sid)) return;
       (recs || []).forEach((rec: any[]) => {
@@ -735,9 +736,29 @@ export default function ReportsPage() {
         if (d >= mtdStart && d <= mtdEndStr) {
           empMap[id].mtdSales += sales;
           empMap[id].mtdTrans += trans;
-          if (sales > 0) empMap[id].active = true;
+          if (sales > 0) {
+            if (!empDaysMap[id]) empDaysMap[id] = new Set<string>();
+            empDaysMap[id].add(String(d).substring(0, 10));
+          }
         }
       });
+    });
+
+    // بعد بناء البيانات، نحدد من هو "نشط" فعلياً:
+    // تعريف النشاط:
+    // - باع في 3 أيام مختلفة على الأقل خلال الشهر، و
+    // - حصته من مبيعات الفرع الذي يعمل فيه ليست هامشية جداً (>= 1% من مبيعات الفرع MTD).
+    const storeTotals: Record<string, number> = {};
+    Object.values(empMap).forEach((e: any) => {
+      storeTotals[e.storeId] = (storeTotals[e.storeId] || 0) + (e.mtdSales || 0);
+    });
+    Object.values(empMap).forEach((e: any) => {
+      const daysCount = empDaysMap[e.id]?.size || 0;
+      const storeTotal = storeTotals[e.storeId] || 0;
+      const share = storeTotal > 0 ? (e.mtdSales || 0) / storeTotal : 0;
+      const isActiveByDays = daysCount >= 3;
+      const isActiveByShare = share >= 0.01; // 1% على الأقل من مبيعات الفرع
+      e.active = isActiveByDays && isActiveByShare;
     });
 
     const list = Object.values(empMap).sort((a: any, b: any) => b.mtdSales - a.mtdSales);
