@@ -186,10 +186,10 @@ export default function ReportsPage() {
 
   const exportStoreExcel = () => {
     if (!rawMgmt) return;
-    const dataMap: Record<string, { date: string; storeId: string; sales: number; trans: number; visitors: number }> = {};
+    const dataMap: Record<string, { date: string; storeId: string; sales: number; trans: number; visitors: number; target: number }> = {};
     const ensure = (d: string, s: string) => {
       const k = `${d}_${s}`;
-      if (!dataMap[k]) dataMap[k] = { date: d, storeId: s, sales: 0, trans: 0, visitors: 0 };
+      if (!dataMap[k]) dataMap[k] = { date: d, storeId: s, sales: 0, trans: 0, visitors: 0, target: 0 };
       return dataMap[k];
     };
     (rawMgmt.sales || []).forEach(([d, s, v]: any[]) => {
@@ -201,22 +201,23 @@ export default function ReportsPage() {
     (rawMgmt.visitors || []).forEach(([d, s, v]: any[]) => {
       if (inRange(d) && passFilter(s)) ensure(d, s).visitors += v || 0;
     });
+    (rawMgmt.targets || []).forEach(([d, s, v]: any[]) => {
+      if (inRange(d) && passFilter(s)) ensure(d, s).target += v || 0;
+    });
     const rows = Object.values(dataMap).map((r) => {
-      const prevRange = {
-        start: r.date.replace(/^\d{4}/, (y) => String(Number(y) - 1)),
-        end: r.date.replace(/^\d{4}/, (y) => String(Number(y) - 1))
-      };
+      const prevDate = r.date.replace(/^\d{4}/, (y) => String(Number(y) - 1));
       let prevSales = 0;
       let prevVisitors = 0;
       (rawMgmt.sales || []).forEach(([d, s, v]: any[]) => {
-        if (d === prevRange.start && s === r.storeId) prevSales += v || 0;
+        if (d === prevDate && s === r.storeId) prevSales += v || 0;
       });
       (rawMgmt.visitors || []).forEach(([d, s, v]: any[]) => {
-        if (d === prevRange.start && s === r.storeId) prevVisitors += v || 0;
+        if (d === prevDate && s === r.storeId) prevVisitors += v || 0;
       });
 
       const growth = prevSales > 0 ? ((r.sales - prevSales) / prevSales) * 100 : 0;
       const customerValue = r.visitors > 0 ? r.sales / r.visitors : 0;
+      const ach = r.target > 0 ? ((r.sales / r.target) * 100).toFixed(1) + '%' : '0%';
 
       const meta = rawMgmt.store_meta?.[r.storeId] || {};
       return {
@@ -224,12 +225,14 @@ export default function ReportsPage() {
         'المعرض': rawMgmt.stores?.[r.storeId] || r.storeId,
         'المدينة': meta.city || '-',
         'مدير المنطقة': meta.manager || '-',
-        'المبيعات الحالية': r.sales,
-        'مبيعات العام الماضي': prevSales,
+        'المبيعات': r.sales,
+        'مبيعات السنة السابقة': prevSales,
+        'الهدف': r.target,
+        'نسبة التحقيق': ach,
         'النمو %': growth.toFixed(1) + '%',
         'عدد الفواتير': r.trans,
         'الزوار': r.visitors,
-        'زوار العام الماضي': prevVisitors,
+        'زوار السنة السابقة': prevVisitors,
         'متوسط الفاتورة': r.trans > 0 ? Math.round(r.sales / r.trans) : 0,
         'نسبة التحويل': r.visitors > 0 ? ((r.trans / r.visitors) * 100).toFixed(1) + '%' : '0%',
         'قيمة العميل': Math.round(customerValue)
@@ -409,6 +412,26 @@ export default function ReportsPage() {
     if (!rawMgmt || !rawEmp) return;
     const history = rawEmp.history || {};
     const empNames = rawEmp.employee_names || {};
+    const targetsByMonth = normalizeTargetsByMonth(rawEmp);
+    const monthKey = range.start.substring(0, 7);
+    const getTarget = (id: string) => {
+      const padded = id.padStart(4, '0');
+      const m = targetsByMonth[monthKey];
+      if (m && (m[id] != null || m[padded] != null)) return m[id] ?? m[padded] ?? 0;
+      return (rawEmp.targets || {})[id] ?? (rawEmp.targets || {})[padded] ?? 0;
+    };
+    const prevYearDate = (d: string) => d.replace(/^\d{4}/, (y) => String(Number(y) - 1));
+    const empSalesByDateId: Record<string, number> = {};
+    Object.entries(history).forEach(([sid, recs]) => {
+      if (!passFilter(sid)) return;
+      (recs || []).forEach((rec: any[]) => {
+        const [date, empId, sales] = rec;
+        const idPart = String(empId || '').split('-')[0].trim();
+        if (!idPart) return;
+        const key = `${date}_${idPart}`;
+        empSalesByDateId[key] = (empSalesByDateId[key] || 0) + (Number(sales) || 0);
+      });
+    });
     let targetStoreIds = Object.keys(history).filter((sid) => passFilter(sid));
     const rows: any[] = [];
     targetStoreIds.forEach((sid) => {
@@ -424,12 +447,16 @@ export default function ReportsPage() {
             const nameFromParts = parts.slice(1).join('-').trim();
             if (nameFromParts) name = nameFromParts;
           }
+          const prevSales = empSalesByDateId[`${prevYearDate(date)}_${idPart}`] || 0;
+          const targetVal = getTarget(idPart);
           rows.push({
             'التاريخ': date,
             'المعرض': storeName,
-            'الرقم الوظيفي': empId,
+            'الرقم الوظيفي': idPart,
             'اسم الموظف': name,
             'المبيعات': sales,
+            'مبيعات السنة السابقة': prevSales,
+            'الهدف (الشهري)': targetVal,
             'عدد الفواتير': trans,
           });
         }
@@ -557,10 +584,11 @@ export default function ReportsPage() {
       const daysInMonth2 = isMarch2026 ? 19 : new Date(today2.getFullYear(), today2.getMonth() + 1, 0).getDate();
       const remainingDays2 = Math.max(0, daysInMonth2 - (isMarch2026 ? Math.min(today2.getDate(), 19) : today2.getDate()) + 1);
 
-      rows = Object.values(dataMap).map(r => {
+      rows = Object.entries(dataMap).map(([sid, r]) => {
         const remaining = Math.max(0, r.target - r.sales);
         return {
           ...r,
+          sid,
           avgInv: r.trans > 0 ? r.sales / r.trans : 0,
           ach: r.target > 0 ? (r.sales / r.target) * 100 : 0,
           conversion: r.visitors > 0 ? (r.trans / r.visitors) * 100 : 0,
@@ -825,13 +853,16 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6 relative min-h-[400px]">
+      {/* عنوان الصفحة */}
       <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-xl font-bold text-neutral-900 border-r-4 border-primary-500 pr-3">التقارير</h2>
         <p className="text-sm text-neutral-500">آخر تحديث: <span className="text-primary-600 font-medium">{lastUpdate}</span></p>
       </div>
 
+      {/* نوع التقرير والفلاتر (مطابق للريبو الأصلي) */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 sm:p-6">
-        <h3 className="text-lg font-bold text-neutral-900 mb-4">الفلاتر</h3>
-        <p className="text-sm text-neutral-500 mb-4">جميع التقارير (PDF / Excel) ستستخدم هذه الفلاتر.</p>
+        <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">نوع التقرير</h3>
+        <p className="text-sm text-neutral-500 mb-4">جميع التقارير (PDF / Excel) تستخدم الفلاتر أدناه.</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-neutral-700">الفترة</label>
@@ -840,48 +871,50 @@ export default function ReportsPage() {
               value={filterMode}
               onChange={(e) => setFilterMode(e.target.value as FilterMode)}
             >
-              <option value="today">اليوم</option>
-              <option value="yesterday">أمس</option>
+              <option value="today">اليوم (Today)</option>
+              <option value="yesterday">أمس (Yesterday)</option>
               <option value="mtd">الشهر الحالي (MTD)</option>
-              <option value="standard">شهر محدد</option>
-              <option value="custom">فترة مخصصة</option>
+              <option value="standard">شهر محدد / سنوي</option>
+              <option value="custom">فترة مخصصة (Custom Range)</option>
             </select>
             {filterMode === 'standard' && (
               <div className="flex gap-2 flex-wrap">
-                <select className="input flex-1 min-w-[100px]" value={standardYear} onChange={(e) => setStandardYear(Number(e.target.value))}>
-                  {[2026, 2025, 2024].map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-                <select className="input flex-1 min-w-[120px]" value={standardMonth} onChange={(e) => setStandardMonth(e.target.value)}>
-                  <option value="all">كل السنة</option>
-                  {months.map((m, i) => (
-                    <option key={m} value={i + 1}>{m}</option>
-                  ))}
-                </select>
+                <div>
+                  <label className="block text-xs text-neutral-500 mb-1">السنة</label>
+                  <select className="input flex-1 min-w-[100px]" value={standardYear} onChange={(e) => setStandardYear(Number(e.target.value))}>
+                    {[2026, 2025, 2024].map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-neutral-500 mb-1">الشهر</label>
+                  <select className="input flex-1 min-w-[120px]" value={standardMonth} onChange={(e) => setStandardMonth(e.target.value)}>
+                    <option value="all">كل السنة</option>
+                    {months.map((m, i) => (
+                      <option key={m} value={i + 1}>{m}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
             {filterMode === 'custom' && (
               <div className="flex gap-2 flex-wrap">
-                <input
-                  type="date"
-                  className="input flex-1 min-w-[140px]"
-                  value={customStart}
-                  onChange={(e) => setCustomStart(e.target.value)}
-                />
-                <input
-                  type="date"
-                  className="input flex-1 min-w-[140px]"
-                  value={customEnd}
-                  onChange={(e) => setCustomEnd(e.target.value)}
-                />
+                <div>
+                  <label className="block text-xs text-neutral-500 mb-1">من تاريخ</label>
+                  <input type="date" className="input flex-1 min-w-[140px]" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-xs text-neutral-500 mb-1">إلى تاريخ</label>
+                  <input type="date" className="input flex-1 min-w-[140px]" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+                </div>
               </div>
             )}
           </div>
           <div className="space-y-3 flex flex-wrap gap-x-4 gap-y-2 items-end">
             {isAdminOrAuditor(user?.role) && (
               <div>
-                <label className="block text-sm font-semibold text-neutral-700">مدير المنطقة</label>
+                <label className="block text-sm font-semibold text-neutral-700">مدير المنطقة (Manager)</label>
                 <select className="input mt-1" value={manager} onChange={(e) => setManager(e.target.value)}>
                   <option value="all">الكل</option>
                   {managers.map((m) => (
@@ -891,15 +924,7 @@ export default function ReportsPage() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-semibold text-neutral-700">نوع المعرض</label>
-              <select className="input mt-1" value={storeType} onChange={(e) => setStoreType(e.target.value)}>
-                <option value="all">الكل</option>
-                <option value="store">المعارض فقط</option>
-                <option value="online">الأونلاين فقط</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-neutral-700">المدينة</label>
+              <label className="block text-sm font-semibold text-neutral-700">المدينة (City)</label>
               <select className="input mt-1" value={city} onChange={(e) => setCity(e.target.value)}>
                 <option value="all">الكل</option>
                 {cities.map((c) => (
@@ -908,9 +933,17 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-neutral-700">الفرع</label>
-              <select className="input mt-1" value={branch} onChange={(e) => setBranch(e.target.value)}>
+              <label className="block text-sm font-semibold text-neutral-700">نوع المعرض (Type)</label>
+              <select className="input mt-1" value={storeType} onChange={(e) => setStoreType(e.target.value)}>
                 <option value="all">الكل</option>
+                <option value="store">معارض</option>
+                <option value="online">أونلاين</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-neutral-700">المعرض / الفرع</label>
+              <select className="input mt-1" value={branch} onChange={(e) => setBranch(e.target.value)}>
+                <option value="all">كافة الفروع</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
@@ -920,138 +953,132 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* تقارير المعارض */}
+      {/* التقرير اليومي (مطابق للريبو الأصلي) */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
-        <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
-          <span className="text-2xl">🏪</span> تقارير المعارض
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">📊 التقرير اليومي</h3>
+        <p className="text-sm text-neutral-500 mb-4">تقرير أمس مقارنةً بنفس اليوم من العام الماضي (جدول المعارض).</p>
+        <div className="flex flex-wrap gap-3">
           <button
             type="button"
             onClick={() => handlePdfGeneration('yesterday_store')}
-            className="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-red-400 transition-all group"
+            className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
           >
-            <div className="text-red-500 text-2xl mb-2">📄</div>
-            <h5 className="font-bold text-neutral-800 text-sm">تقرير المعارض</h5>
-            <p className="text-xs text-neutral-500 mt-1">PDF - مقارنة المبيعات والنمو</p>
+            📄 عرض التقرير اليومي
+          </button>
+        </div>
+        <p className="text-xs text-neutral-400 mt-2">بعد العرض يمكنك طباعة PDF (جدول واحد) أو PDF ملخص لكل فرع.</p>
+      </div>
+
+      {/* تفاصيل الفروع (Detailed Report) - مطابق للريبو الأصلي */}
+      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
+        <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">تفاصيل الفروع (Detailed Report)</h3>
+        <p className="text-sm text-neutral-500 mb-4">تقرير المعارض حسب الفترة المختارة: المبيعات، العام الماضي، النمو، الفواتير، الزوار، التحويل.</p>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => handlePdfGeneration('yesterday_store')}
+            className="bg-neutral-700 hover:bg-neutral-800 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
+          >
+            📄 PDF
           </button>
           <button
             type="button"
             onClick={() => { setExcelType('store'); setShowExcelModal(true); }}
-            className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-green-400 transition-all group"
+            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
           >
-            <div className="text-green-600 text-2xl mb-2">📊</div>
-            <h5 className="font-bold text-neutral-800 text-sm">بيانات المعارض</h5>
-            <p className="text-xs text-neutral-500 mt-1">Excel - بيانات تفصيلية</p>
+            📊 Excel
           </button>
+        </div>
+        <p className="text-xs text-neutral-400 mt-2">PDF: يفتح المعاينة ثم اختر «طباعة PDF» أو «PDF ملخص لكل فرع».</p>
+      </div>
+
+      {/* ملخص عام والتقرير الشهري */}
+      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
+        <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">ملخص عام والتقرير الشهري</h3>
+        <p className="text-sm text-neutral-500 mb-4">تحليل الأداء اليومي (ملخص عام) أو ملخص الشهر حسب الفترة.</p>
+        <div className="flex flex-wrap gap-3">
           <button
             type="button"
             onClick={generateGlobalSummary}
-            className="bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-amber-400 transition-all group"
+            className="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
           >
-            <div className="text-amber-600 text-2xl mb-2">📈</div>
-            <h5 className="font-bold text-neutral-800 text-sm">ملخص عام</h5>
-            <p className="text-xs text-neutral-500 mt-1">PDF - تحليل الأداء اليومي</p>
+            📈 ملخص عام (Global Summary)
           </button>
           <button
             type="button"
             onClick={() => handlePdfGeneration('monthly_summary')}
-            className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-blue-400 transition-all group"
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
           >
-            <div className="text-blue-600 text-2xl mb-2">📊</div>
-            <h5 className="font-bold text-neutral-800 text-sm">التقرير الشهري</h5>
-            <p className="text-xs text-neutral-500 mt-1">PDF - ملخص الشهر</p>
+            📊 التقرير الشهري
           </button>
         </div>
       </div>
 
-      {/* تقارير الموظفين */}
-      {
-        canExportEmployee && (
-          <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
-            <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
-              <span className="text-2xl">👥</span> تقارير الموظفين
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <button
-                type="button"
-                onClick={() => generateEmployeePerformance()}
-                className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-purple-400 transition-all group"
-              >
-                <div className="text-purple-500 text-2xl mb-2">📄</div>
-                <h5 className="font-bold text-neutral-800 text-sm">أداء الموظفين</h5>
-                <p className="text-xs text-neutral-500 mt-1">PDF - أمس والشهر الحالي</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setExcelType('employee'); setShowExcelModal(true); }}
-                className="bg-gradient-to-br from-teal-50 to-teal-100 border border-teal-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-teal-400 transition-all group"
-              >
-                <div className="text-teal-600 text-2xl mb-2">📊</div>
-                <h5 className="font-bold text-neutral-800 text-sm">بيانات الموظفين</h5>
-                <p className="text-xs text-neutral-500 mt-1">Excel - مبيعات تفصيلية</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => handlePdfGeneration('yesterday_employee')}
-                className="bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-indigo-400 transition-all group"
-              >
-                <div className="text-indigo-500 text-2xl mb-2">👤</div>
-                <h5 className="font-bold text-neutral-800 text-sm">تقرير أمس</h5>
-                <p className="text-xs text-neutral-500 mt-1">PDF - مقارنة الأمس بالشهر</p>
-              </button>
-              <button
-                type="button"
-                onClick={openTargetTemplateModal}
-                className="bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-emerald-400 transition-all group"
-              >
-                <div className="text-emerald-600 text-2xl mb-2">🎯</div>
-                <h5 className="font-bold text-neutral-800 text-sm">قالب تارجت الشهر القادم</h5>
-                <p className="text-xs text-neutral-500 mt-1">Excel - اختيار الموظفين وتصدير القالب</p>
-              </button>
-            </div>
-          </div>
-        )
-      }
-
-      {/* تقارير أخرى */}
+      {/* تصدير Excel - مطابق للريبو الأصلي (نوع التقرير: مبيعات المعارض / مبيعات الموظفين) */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
-        <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
-          <span className="text-2xl">📦</span> تقارير أخرى
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Link
-            to="/offers"
-            className="bg-gradient-to-br from-pink-50 to-pink-100 border border-pink-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-pink-400 transition-all group block"
-          >
-            <div className="text-pink-500 text-2xl mb-2">🏷️</div>
-            <h5 className="font-bold text-neutral-800 text-sm">تحليل العروض</h5>
-            <p className="text-xs text-neutral-500 mt-1">مبيعات العروض والخصومات</p>
-          </Link>
-          <Link
-            to="/products"
-            className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-orange-400 transition-all group block"
-          >
-            <div className="text-orange-500 text-2xl mb-2">📦</div>
-            <h5 className="font-bold text-neutral-800 text-sm">تحليل المنتجات</h5>
-            <p className="text-xs text-neutral-500 mt-1">أداء المنتجات والأصناف</p>
-          </Link>
-          <Link
-            to="/stores"
-            className="bg-gradient-to-br from-cyan-50 to-cyan-100 border border-cyan-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-cyan-400 transition-all group block"
-          >
-            <div className="text-cyan-500 text-2xl mb-2">🏬</div>
-            <h5 className="font-bold text-neutral-800 text-sm">تفاصيل المعارض</h5>
-            <p className="text-xs text-neutral-500 mt-1">بيانات الفروع</p>
-          </Link>
-          <Link
-            to="/employees"
-            className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-xl p-4 text-center hover:shadow-lg hover:border-slate-400 transition-all group block"
-          >
-            <div className="text-slate-500 text-2xl mb-2">👥</div>
-            <h5 className="font-bold text-neutral-800 text-sm">أداء الموظفين</h5>
-            <p className="text-xs text-neutral-500 mt-1">بيانات الموظفين التفصيلية</p>
-          </Link>
+        <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">📊 تصدير Excel</h3>
+        <p className="text-sm text-neutral-500 mb-4">اختر الفترة ونوع التقرير (مبيعات المعارض أو مبيعات الموظفين) ثم صدّر.</p>
+        <button
+          type="button"
+          onClick={() => setShowExcelModal(true)}
+          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
+        >
+          📊 فتح نافذة تصدير Excel
+        </button>
+        <p className="text-xs text-neutral-400 mt-2">نوع التقرير (Sales Manager / Admin): مبيعات المعارض (Store Sales) أو مبيعات الموظفين (Employee Sales).</p>
+      </div>
+
+      {/* تقارير الموظفين - مطابق للريبو الأصلي (أداء الموظفين، PDF، قالب تارجت) */}
+      {canExportEmployee && (
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
+          <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">👥 تقارير الموظفين</h3>
+          <p className="text-sm text-neutral-500 mb-4">أداء الموظفين (أمس + الشهر الحالي)، تقرير أمس، تصدير Excel، قالب تارجت الشهر القادم.</p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => generateEmployeePerformance()}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
+            >
+              📄 أداء الموظفين (عرض + PDF)
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePdfGeneration('yesterday_employee')}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
+            >
+              📄 تقرير أمس (موظفين)
+            </button>
+            <button
+              type="button"
+              onClick={() => { setExcelType('employee'); setShowExcelModal(true); }}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
+            >
+              📊 تصدير Excel (موظفين)
+            </button>
+            <button
+              type="button"
+              onClick={openTargetTemplateModal}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
+            >
+              🎯 قالب تارجت الشهر القادم
+            </button>
+            <Link
+              to="/employees"
+              className="bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
+            >
+              👥 صفحة أداء الموظفين
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* روابط سريعة (تحليل المنتجات، المعارض، العروض) */}
+      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
+        <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">صفحات ذات صلة</h3>
+        <div className="flex flex-wrap gap-3">
+          <Link to="/products" className="text-primary-600 hover:underline font-medium">📦 تحليل المنتجات</Link>
+          <Link to="/stores" className="text-primary-600 hover:underline font-medium">🏬 تفاصيل المعارض</Link>
+          <Link to="/offers" className="text-primary-600 hover:underline font-medium">🏷️ تحليل العروض</Link>
         </div>
       </div>
 
@@ -1109,18 +1136,37 @@ export default function ReportsPage() {
         )
       }
 
-      {/* Excel confirm modal */}
+      {/* نافذة تصدير Excel - مطابقة للريبو الأصلي (اختر الفترة + نوع التقرير) */}
       {
         showExcelModal && (
           <div className="modal-center-screen" onClick={() => setShowExcelModal(false)}>
             <div className="modal-content max-w-md w-full p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
-              <h5 className="font-bold text-lg text-neutral-900 mb-4">تصدير Excel</h5>
-              <p className="text-sm text-neutral-600 mb-2">الفترة: {range.start} → {range.end}</p>
-              <p className="text-sm text-neutral-500 mb-4">{excelType === 'store' ? 'مبيعات المعارض' : 'مبيعات الموظفين'}</p>
+              <h5 className="font-bold text-lg text-neutral-900 mb-4">📊 تصدير Excel</h5>
+              <p className="text-sm text-neutral-600 mb-2">اختر الفترة: من <span className="font-mono">{range.start}</span> إلى <span className="font-mono">{range.end}</span></p>
+              <p className="text-xs text-neutral-500 mb-3">(الفترة من الفلاتر أعلاه)</p>
+              <label className="block text-sm font-semibold text-neutral-700 mb-2">نوع التقرير {isAdminOrAuditor(user?.role) && '(Sales Manager / Admin)'}</label>
+              <div className="flex gap-2 mb-4">
+                <button
+                  type="button"
+                  className={`flex-1 py-2 px-3 rounded-xl font-medium text-sm transition ${excelType === 'store' ? 'bg-orange-500 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}
+                  onClick={() => setExcelType('store')}
+                >
+                  مبيعات المعارض (Store Sales)
+                </button>
+                {canExportEmployee && (
+                  <button
+                    type="button"
+                    className={`flex-1 py-2 px-3 rounded-xl font-medium text-sm transition ${excelType === 'employee' ? 'bg-orange-500 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}
+                    onClick={() => setExcelType('employee')}
+                  >
+                    مبيعات الموظفين (Employee Sales)
+                  </button>
+                )}
+              </div>
               <div className="flex gap-3">
                 <button type="button" className="flex-1 btn-secondary py-2" onClick={() => setShowExcelModal(false)}>إلغاء</button>
                 <button type="button" className="flex-1 bg-green-600 text-white font-bold py-2 rounded-xl hover:bg-green-700 disabled:opacity-50" onClick={runExcelExport} disabled={excelExporting}>
-                  {excelExporting ? 'جاري التصدير...' : 'تصدير'}
+                  {excelExporting ? 'جاري التصدير...' : 'تصدير (Export)'}
                 </button>
               </div>
             </div>
@@ -1248,9 +1294,94 @@ export default function ReportsPage() {
             <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
               <div className="p-4 border-b border-neutral-100 flex items-center justify-between bg-neutral-50">
                 <h3 className="font-bold text-neutral-900">
-                  {previewReport.type === 'global' ? 'Global Summary - ملخص عام' : 'Employee Performance - أداء الموظفين'}
+                  {previewReport.type === 'global' && 'ملخص عام - Global Summary'}
+                  {previewReport.type === 'stores' && 'تقرير المعارض'}
+                  {previewReport.type === 'employee' && 'أداء الموظفين - Employee Performance'}
                 </h3>
                 <div className="flex items-center gap-2">
+                  {previewReport.type === 'stores' && (
+                    <button
+                      type="button"
+                      className="bg-amber-600 text-white font-bold py-2 px-4 rounded-xl hover:bg-amber-700 transition flex items-center gap-2"
+                      onClick={async () => {
+                        if (!rawMgmt?.sales || !rawMgmt?.stores) return;
+                        const meta = rawMgmt.store_meta || {};
+                        const storesMap = rawMgmt.stores || {};
+                        let storeIds = (previewReport.data as any[]).map((r: any) => r.sid).filter(Boolean);
+                        if (storeIds.length === 0) storeIds = Object.keys(storesMap).filter((sid) => passFilter(sid));
+                        if (storeIds.length === 0) return;
+                        const dates: string[] = [];
+                        let curr = new Date(range.start);
+                        const end = new Date(range.end);
+                        while (curr <= end) {
+                          dates.push(toYMD(curr));
+                          curr.setDate(curr.getDate() + 1);
+                        }
+                        const prevDateMap: Record<string, string> = {};
+                        dates.forEach((dt) => { prevDateMap[dt] = getPrevYearDate(dt); });
+                        const byStore: Record<string, Record<string, { sales: number; trans: number; visitors: number }>> = {};
+                        const byStorePrev: Record<string, Record<string, { sales: number; trans: number; visitors: number }>> = {};
+                        storeIds.forEach((sid) => {
+                          byStore[sid] = {};
+                          byStorePrev[sid] = {};
+                          dates.forEach((dt) => {
+                            byStore[sid][dt] = { sales: 0, trans: 0, visitors: 0 };
+                            byStorePrev[sid][prevDateMap[dt]] = { sales: 0, trans: 0, visitors: 0 };
+                          });
+                        });
+                        (rawMgmt.sales || []).forEach(([d, sid, v]: any[]) => {
+                          const dateStr = String(d).substring(0, 10);
+                          if (!storeIds.includes(sid)) return;
+                          if (byStore[sid]?.[dateStr]) byStore[sid][dateStr].sales += v || 0;
+                          if (byStorePrev[sid]?.[dateStr]) byStorePrev[sid][dateStr].sales += v || 0;
+                        });
+                        (rawMgmt.transactions || []).forEach(([d, sid, v]: any[]) => {
+                          const dateStr = String(d).substring(0, 10);
+                          if (storeIds.includes(sid) && byStore[sid]?.[dateStr]) byStore[sid][dateStr].trans += v || 0;
+                        });
+                        (rawMgmt.visitors || []).forEach(([d, sid, v]: any[]) => {
+                          const dateStr = String(d).substring(0, 10);
+                          if (!storeIds.includes(sid)) return;
+                          if (byStore[sid]?.[dateStr]) byStore[sid][dateStr].visitors += v || 0;
+                          if (byStorePrev[sid]?.[dateStr]) byStorePrev[sid][dateStr].visitors += v || 0;
+                        });
+                        const globalData = dates.map((dt) => {
+                          const prevDt = prevDateMap[dt];
+                          let sales = 0, salesPrev = 0, trans = 0, visitors = 0, visitorsPrev = 0;
+                          storeIds.forEach((sid) => {
+                            sales += byStore[sid]?.[dt]?.sales || 0;
+                            trans += byStore[sid]?.[dt]?.trans || 0;
+                            visitors += byStore[sid]?.[dt]?.visitors || 0;
+                            salesPrev += byStorePrev[sid]?.[prevDt]?.sales || 0;
+                            visitorsPrev += byStorePrev[sid]?.[prevDt]?.visitors || 0;
+                          });
+                          const growth = salesPrev > 0 ? ((sales - salesPrev) / salesPrev * 100) : 0;
+                          const avgInv = trans > 0 ? sales / trans : 0;
+                          const customerValue = visitors > 0 ? sales / visitors : 0;
+                          const conversion = visitors > 0 ? (trans / visitors * 100) : 0;
+                          return { date: dt, sales, salesPrev, growth, trans, avgInv, customerValue, visitors, visitorsPrev, conversion };
+                        });
+                        const storesData = storeIds.map((sid) => {
+                          const storeMeta = meta[sid] || {};
+                          const storeTarget = (rawMgmt.targets || []).filter(([d, s]: any[]) => s === sid && String(d).substring(0, 7) === range.start.substring(0, 7)).reduce((acc: number, [, , v]: any[]) => acc + (v || 0), 0);
+                          const dailyData = dates.map((dt) => {
+                            const prevDt = prevDateMap[dt];
+                            const d = byStore[sid]?.[dt] || { sales: 0, trans: 0, visitors: 0 };
+                            const dPrev = byStorePrev[sid]?.[prevDt] || { sales: 0, trans: 0, visitors: 0 };
+                            const growth = dPrev.sales > 0 ? ((d.sales - dPrev.sales) / dPrev.sales * 100) : 0;
+                            const avgInv = d.trans > 0 ? d.sales / d.trans : 0;
+                            const customerValue = d.visitors > 0 ? d.sales / d.visitors : 0;
+                            const conversion = d.visitors > 0 ? (d.trans / d.visitors * 100) : 0;
+                            return { date: dt, sales: d.sales, salesPrev: dPrev.sales, growth, trans: d.trans, avgInv, customerValue, visitors: d.visitors, visitorsPrev: dPrev.visitors, conversion };
+                          });
+                          return { id: sid, name: storesMap[sid] || sid, manager: storeMeta.manager, target: storeTarget, dailyData };
+                        });
+                        await generateStoreReportWithDaily(globalData, storesData, { start: range.start, end: range.end }, storeIds.length);
+                      }}
+                    >
+                      <span>📑</span> PDF ملخص لكل فرع
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="bg-primary-600 text-white font-bold py-2 px-4 rounded-xl hover:bg-primary-700 transition delay-100 flex items-center gap-2"
@@ -1258,11 +1389,6 @@ export default function ReportsPage() {
                       if (previewReport.type === 'global') {
                         await generateGlobalSalesPDF(previewReport.data, { start: range.start, end: range.end });
                       } else if (previewReport.type === 'stores') {
-                        const today = new Date(); // Or parse from range
-                        // For daily report, we usually want Yesterday vs Last Year
-                        // We can infer dates from the preview data or passed range.
-                        // generateDailyReportPDF(data, { yesterday: 'YYYY-MM-DD', lastYear: 'YYYY-MM-DD' })
-                        // We'll use range.start as the 'yesterday' date since that's what we built the report for.
                         const yDate = range.start;
                         const lyDate = getPrevYearDate(range.start);
                         await generateDailyReportPDF(previewReport.data, { yesterday: yDate, lastYear: lyDate });
@@ -1302,7 +1428,11 @@ export default function ReportsPage() {
                 <div className="report-header flex justify-between items-end">
                   <div>
                     <h1 className="text-2xl font-bold text-neutral-900">Ora Cockpit</h1>
-                    <p className="text-sm text-neutral-500">{previewReport.type === 'global' ? 'Global Summary - ملخص عام' : 'Employee Performance - أداء الموظفين'}</p>
+                    <p className="text-sm text-neutral-500">
+                      {previewReport.type === 'global' && 'ملخص عام'}
+                      {previewReport.type === 'stores' && 'تقرير المعارض - مقارنة المبيعات والنمو'}
+                      {previewReport.type === 'employee' && 'أداء الموظفين'}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold">التاريخ: {range.start} إلى {range.end}</p>
@@ -1378,7 +1508,7 @@ export default function ReportsPage() {
                     </thead>
                     <tbody>
                       {previewReport.data.map((r: any) => (
-                        <tr key={r.name} className="hover:bg-neutral-50 odd:bg-white even:bg-neutral-50">
+                        <tr key={r.sid ?? r.name} className="hover:bg-neutral-50 odd:bg-white even:bg-neutral-50">
                           <td className="p-2 border border-neutral-200 font-bold">{r.name}</td>
                           <td className="p-2 border border-neutral-200">{Math.round(r.sales).toLocaleString()}</td>
                           <td className="p-2 border border-neutral-200 text-neutral-500">{Math.round(r.prevSales).toLocaleString()}</td>

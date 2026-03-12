@@ -716,3 +716,74 @@ export const generateEmployeePerformancePDF = async (data: any[], dateRange: { y
 
     doc.save(`Employees_Report_${new Date().toLocaleDateString('en-CA')}.pdf`);
 };
+
+/**
+ * تقرير تحليل العروض (PDF) - مطابق للريبو الأصلي
+ */
+export const generateOffersPDF = async (
+    offers: { name: string; start?: string; end?: string; periodSales: number; periodDisc: number; periodOps: number; periodEff: number; periodAvgBasket: number }[],
+    dateRange: { start: string; end: string; label?: string }
+) => {
+    if (!offers.length) return;
+    const doc = setupDoc('l');
+    doc.setFontSize(18);
+    doc.text('تقرير تحليل العروض', 148, 15, { align: 'center' });
+    doc.setFontSize(10);
+    doc.text(`الفترة: ${dateRange.start} إلى ${dateRange.end}`, 282, 15, { align: 'right' });
+    const totalSales = offers.reduce((s, o) => s + (o.periodSales || 0), 0);
+    const totalDisc = offers.reduce((s, o) => s + (o.periodDisc || 0), 0);
+    const globalEff = totalSales > 0 ? ((totalDisc / totalSales) * 100).toFixed(1) : '0';
+    doc.setFontSize(11);
+    doc.text(`إجمالي العروض: ${offers.length} | المبيعات: ${Math.round(totalSales).toLocaleString()} | الخصم: ${Math.round(totalDisc).toLocaleString()} | الكفاءة: ${globalEff}%`, 15, 25);
+    const tableData = offers.slice(0, 40).map((o, idx) => [
+        (idx + 1).toString(),
+        (o.name || '').substring(0, 35),
+        (o.start || '-'),
+        (o.end || '-'),
+        (o.periodOps || 0).toLocaleString(),
+        Math.round(o.periodDisc || 0).toLocaleString(),
+        Math.round(o.periodSales || 0).toLocaleString(),
+        (o.periodEff != null ? o.periodEff.toFixed(1) : '0') + '%',
+        Math.round(o.periodAvgBasket || 0).toLocaleString()
+    ]);
+    (doc as any).autoTable({
+        head: [['#', 'العرض', 'البداية', 'النهاية', 'العمليات', 'الخصم', 'المبيعات', 'الكفاءة', 'متوسط السلة']],
+        body: tableData,
+        startY: 30,
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8 },
+        headStyles: { fillColor: [254, 121, 0], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 245, 245] }
+    });
+    doc.save(`تحليل_العروض_${dateRange.start}_${dateRange.end}.pdf`);
+};
+
+/**
+ * تقرير تحليل المنتجات (PDF) - ملخص
+ */
+export const generateProductSummaryPDF = async (
+    rows: { name: string; category?: string; qty: number; amount: number }[],
+    dateRange: { start: string; end: string }
+) => {
+    if (!rows.length) return;
+    const doc = setupDoc('l');
+    doc.setFontSize(18);
+    doc.text('تقرير تحليل المنتجات', 148, 15, { align: 'center' });
+    doc.setFontSize(10);
+    doc.text(`الفترة: ${dateRange.start} إلى ${dateRange.end}`, 282, 15, { align: 'right' });
+    const tableData = rows.slice(0, 50).map((r, idx) => [
+        (idx + 1).toString(),
+        (r.name || '').substring(0, 40),
+        (r.category || '-'),
+        (r.qty || 0).toLocaleString(),
+        Math.round(r.amount || 0).toLocaleString()
+    ]);
+    (doc as any).autoTable({
+        head: [['#', 'المنتج', 'الفئة', 'الكمية', 'المبيعات']],
+        body: tableData,
+        startY: 25,
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8 },
+        headStyles: { fillColor: [254, 121, 0], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 245, 245] }
+    });
+    doc.save(`تحليل_المنتجات_${dateRange.start}_${dateRange.end}.pdf`);
+};

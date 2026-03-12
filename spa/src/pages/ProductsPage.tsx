@@ -5,6 +5,8 @@ import { getCurrentUser } from '../auth/storage';
 import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { CubeIcon, SalesIcon, InvoicesIcon, VisitorsIcon, XIcon } from '../components/Icons';
+import * as XLSX from 'xlsx';
+import { generateProductSummaryPDF } from '../services/pdf/pdfService';
 
 type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest';
 type Metric = 'qty' | 'val';
@@ -22,6 +24,29 @@ function safeNum(x: unknown) {
 
 function formatSAR(val: number) {
   return val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
+}
+
+function getDateRangeForMode(m: PeriodMode): { start: string; end: string } {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const now = new Date();
+  const yest = new Date(now);
+  yest.setDate(now.getDate() - 1);
+  const end = `${yest.getFullYear()}-${pad(yest.getMonth() + 1)}-${pad(yest.getDate())}`;
+  if (m === 'yest') return { start: end, end };
+  if (m === '7d') {
+    const s = new Date(now); s.setDate(now.getDate() - 7);
+    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end };
+  }
+  if (m === '14d') {
+    const s = new Date(now); s.setDate(now.getDate() - 14);
+    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end };
+  }
+  if (m === '30d') {
+    const s = new Date(now); s.setDate(now.getDate() - 30);
+    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end };
+  }
+  const start = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+  return { start, end };
 }
 
 function isAdminOrAuditor(role?: string) {
@@ -540,8 +565,11 @@ export default function ProductsPage() {
       return { duvetKing, duvetFull, pillows, others };
     })();
 
+    const dateRange = getDateRangeForMode(mode);
     return {
       dateRangeLabel: pData?.date_range || '-',
+      dateRangeStart: dateRange.start,
+      dateRangeEnd: dateRange.end,
       managers,
       cities,
       storeOptions,
@@ -582,6 +610,46 @@ export default function ProductsPage() {
     return { best, worst, zeroDays, totalQty, totalAmt, avgAmt, chart, totalStock };
   }, [derived, productId]);
 
+  const exportProductExcel = () => {
+    if (!derived?.filteredCatalog?.length) {
+      alert('لا توجد بيانات للتصدير');
+      return;
+    }
+    const rows = derived.filteredCatalog.map((r: any) => ({
+      'رقم المنتج': r.id,
+      'اسم المنتج': r.name,
+      'الفئة': r.category || '-',
+      'الكمية': r.qty,
+      'المبيعات (ر.س)': r.amount,
+      'الكود القديم': r.old_code || '-',
+      'الكود الجديد': r.dCode || r.alias || '-',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'تحليل المنتجات');
+    XLSX.writeFile(wb, `تحليل_المنتجات_${derived.dateRangeStart}_${derived.dateRangeEnd}.xlsx`);
+  };
+
+  const exportProductPDF = async () => {
+    if (!derived?.filteredCatalog?.length) {
+      alert('لا توجد بيانات للتصدير');
+      return;
+    }
+    try {
+      await generateProductSummaryPDF(
+        derived.filteredCatalog.map((r: any) => ({
+          name: r.name || '',
+          category: r.category,
+          qty: r.qty || 0,
+          amount: r.amount || 0,
+        })),
+        { start: derived.dateRangeStart, end: derived.dateRangeEnd }
+      );
+    } catch (e: any) {
+      alert(e?.message || 'تعذر إنشاء PDF');
+    }
+  };
+
   if (!derived) {
     return <DashboardSkeleton />;
   }
@@ -601,7 +669,23 @@ export default function ProductsPage() {
             <PeriodButton active={mode === 'yest'} label="⏳ أمس" onClick={() => setMode('yest')} />
           </div>
 
-          <div className="text-sm font-semibold text-neutral-700">{derived.dateRangeLabel}</div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-neutral-700">{derived.dateRangeLabel}</span>
+            <button
+              type="button"
+              onClick={exportProductExcel}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-semibold"
+            >
+              📊 تصدير Excel
+            </button>
+            <button
+              type="button"
+              onClick={exportProductPDF}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm font-semibold"
+            >
+              📄 تصدير PDF
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-4">

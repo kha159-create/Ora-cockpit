@@ -4,6 +4,7 @@ import { getCurrentUser } from '../auth/storage';
 import { DownloadIcon, XIcon, TagIcon, SalesIcon, InvoicesIcon, PremiumTargetIcon, CustomerValueIcon, FireIcon } from '../components/Icons';
 import { KPICard } from '../components/DashboardComponents';
 import * as XLSX from 'xlsx';
+import { generateOffersPDF } from '../services/pdf/pdfService';
 
 function formatSAR(val: number) {
   return val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
@@ -324,6 +325,30 @@ export default function OffersPage() {
     XLSX.writeFile(wb, `Offers_Report_${dateRange.start}_${dateRange.end}.xlsx`);
   };
 
+  const exportToPDF = async () => {
+    if (!offers.length) {
+      alert('لا توجد بيانات للتصدير');
+      return;
+    }
+    try {
+      await generateOffersPDF(
+        offers.map((o: any) => ({
+          name: o.name || '',
+          start: o.start_date,
+          end: o.end_date,
+          periodSales: o.periodSales || 0,
+          periodDisc: o.periodDisc || 0,
+          periodOps: o.periodOps || 0,
+          periodEff: o.periodEff ?? 0,
+          periodAvgBasket: o.periodAvgBasket || 0,
+        })),
+        { start: dateRange.start, end: dateRange.end, label: dateRange.label }
+      );
+    } catch (e: any) {
+      alert(e?.message || 'تعذر إنشاء PDF');
+    }
+  };
+
   const top5 = useMemo(() => {
     return [...offers].sort((a: any, b: any) => b.periodSales - a.periodSales).slice(0, 5);
   }, [offers]);
@@ -443,6 +468,13 @@ export default function OffersPage() {
           >
             <DownloadIcon />
             <span className="hidden sm:inline">تصدير Excel</span>
+          </button>
+          <button
+            onClick={exportToPDF}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all font-bold shadow-md text-sm"
+          >
+            <span>📄</span>
+            <span className="hidden sm:inline">تصدير PDF</span>
           </button>
         </div>
       </header>
