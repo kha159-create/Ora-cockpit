@@ -376,6 +376,7 @@ export default function ProductsPage() {
 
     // ===== Catalog (products list) =====
     const catalogRows: CatalogItem[] = [];
+    const q = search.trim().toLowerCase();
     Object.entries(catalog).forEach(([catName, items]) => {
       if (!Array.isArray(items)) return;
       for (const it of items) {
@@ -415,7 +416,9 @@ export default function ProductsPage() {
           computedStock = safeNum(stockEntry?.byStore?.[activeStore]);
         }
 
-        if (qty === 0 && amount === 0) continue;
+        // إذا لم يكن هناك بيع ولا كمية، نتجاهل المنتج في العرض العادي
+        // لكن إذا كان هناك بحث (q) نسمح بظهوره حتى لو بدون مبيعات ليظهر في نتائج البحث.
+        if (!q && qty === 0 && amount === 0) continue;
         catalogRows.push({
           id,
           name: name,
@@ -434,7 +437,6 @@ export default function ProductsPage() {
       }
     });
 
-    const q = search.trim().toLowerCase();
     const catFilter = selectedCategory;
     let filteredCatalog = catalogRows;
     if (catFilter !== 'all') filteredCatalog = filteredCatalog.filter((r) => r.category === catFilter);
