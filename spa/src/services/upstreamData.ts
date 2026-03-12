@@ -172,9 +172,64 @@ export async function loadStockData(forceRefresh = false) {
   return promise;
 }
 
-export function loadProductMapping(forceRefresh = false) {
-  // نفس منطق باقي الملفات: جرّب الريبو الأصلي أولاً ثم fallback للنسخة المحلية.
-  return fetchJson<any[]>('product_mapping.json', forceRefresh).catch(() => []);
+export async function loadProductMapping(forceRefresh = false) {
+  // 1) ابدأ من ملف product_mapping.json (من الريبو الأصلي أو النسخة المحلية)
+  let base: any[] = [];
+  try {
+    const raw = await fetchJson<any[]>('product_mapping.json', forceRefresh);
+    if (Array.isArray(raw)) base = raw;
+  } catch {
+    base = [];
+  }
+
+  const mapping = [...base];
+  const byDCode = new Map<string, any>();
+  const byAlias = new Map<string, any>();
+
+  for (const m of mapping) {
+    if (!m || typeof m !== 'object') continue;
+    const d = String((m as any).dCode || '').trim();
+    const a = String((m as any).alias || '').trim();
+    if (d) byDCode.set(d, m);
+    if (a) byAlias.set(a, m);
+  }
+
+  // 2) عزّز الربط من ملف الكاتالوج products.json (stockRaw من ALAAWF2/catalog)
+  try {
+    const stockRaw: any[] = await loadStockData(forceRefresh);
+    if (Array.isArray(stockRaw)) {
+      for (const item of stockRaw) {
+        if (!item) continue;
+        const code = String(item.code || '').trim();
+        const alias = String(item.alias || '').trim();
+        if (!code && !alias) continue;
+
+        let m = (code && byDCode.get(code)) || (alias && byAlias.get(alias));
+        if (!m) {
+          // إنشاء ربط جديد إذا لم يكن موجوداً في الـ mapping الأصلي
+          m = {
+            id: code || alias,
+            dCode: code || '',
+            alias,
+            cat: item.category,
+            name: item.name,
+          };
+          mapping.push(m);
+        } else {
+          // تأكد أن الحقول مكتملة
+          if (alias && !(m as any).alias) (m as any).alias = alias;
+          if (code && !(m as any).dCode) (m as any).dCode = code;
+        }
+
+        if (code && !byDCode.has(code)) byDCode.set(code, m);
+        if (alias && !byAlias.has(alias)) byAlias.set(alias, m);
+      }
+    }
+  } catch {
+    // لو فشل الكاتالوج، نكتفي بالـ mapping الأساسي
+  }
+
+  return mapping;
 }
 
 /** Refresh all cached data */
