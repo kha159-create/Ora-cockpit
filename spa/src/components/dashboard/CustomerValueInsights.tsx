@@ -432,17 +432,16 @@ export const CustomerValueInsights: React.FC<CustomerValueInsightsProps> = ({
           </div>
         )}
 
-        {isGeminiAvailable() && (
-          <div className="bg-indigo-50/50 rounded-xl p-4 border border-indigo-100">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-bold text-indigo-800">رأي الذكاء الاصطناعي</h4>
-              <button type="button" onClick={handleAskAI} disabled={aiLoading} className="text-xs font-bold text-indigo-600 hover:text-indigo-700 disabled:opacity-50">
-                {aiLoading ? 'جاري التحليل...' : 'اطلب تحليلًا'}
-              </button>
-            </div>
-            {aiInsight && <p className="text-xs text-slate-700 leading-relaxed">{aiInsight}</p>}
+        {/* رأي الذكاء الاصطناعي – يظهر دائماً، ويتحقق من توفر المفتاح عند الضغط */ }
+        <div className="bg-indigo-50/50 rounded-xl p-4 border border-indigo-100">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-bold text-indigo-800">رأي الذكاء الاصطناعي</h4>
+            <button type="button" onClick={handleAskAI} disabled={aiLoading} className="text-xs font-bold text-indigo-600 hover:text-indigo-700 disabled:opacity-50">
+              {aiLoading ? 'جاري التحليل...' : 'اطلب تحليلًا'}
+            </button>
           </div>
-        )}
+          {aiInsight && <p className="text-xs text-slate-700 leading-relaxed">{aiInsight}</p>}
+        </div>
       </div>
 
       <style>{`
