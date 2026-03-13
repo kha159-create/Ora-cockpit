@@ -661,6 +661,8 @@ export default function DashboardPage() {
         achievement: store.achievement,
         customerValue: store.customerValue ?? (store.visitors > 0 ? store.sales / store.visitors : 0),
         prevCustomerValue: store.prevCustomerValue,
+        prevYearSales: store.prevYearSales,
+        prevYearVisitors: store.prevYearVisitors,
       };
     });
   }, [topStoresRank, raw?.store_meta]);
