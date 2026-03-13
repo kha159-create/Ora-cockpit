@@ -11,7 +11,7 @@ import { DailyReportModal } from '../components/dashboard/DailyReportModal';
 import { StoreReportModal } from '../components/dashboard/StoreReportModal';
 import { EmployeeReportModal } from '../components/dashboard/EmployeeReportModal';
 import { DrillDownModal } from '../components/dashboard/DrillDownModal';
-import { AITargetInsights } from '../components/dashboard/AITargetInsights';
+import { CustomerValueInsights } from '../components/dashboard/CustomerValueInsights';
 import { BranchesMap } from '../components/dashboard/BranchesMap';
 import { getStoreLocation } from '../utils/coordinates';
 
@@ -564,6 +564,8 @@ export default function DashboardPage() {
       const growth = v.prevYearSales > 0 ? ((v.sales - v.prevYearSales) / v.prevYearSales) * 100 : 0;
       const achievement = v.target > 0 ? (v.sales / v.target) * 100 : 0;
       const avgInv = v.trans > 0 ? v.sales / v.trans : 0;
+      const customerValue = v.visitors > 0 ? v.sales / v.visitors : 0;
+      const prevCustomerValue = v.prevYearVisitors > 0 ? v.prevYearSales / v.prevYearVisitors : 0;
       return {
         id: sid,
         name: raw.stores?.[sid] || sid,
@@ -574,6 +576,10 @@ export default function DashboardPage() {
         growth,
         achievement,
         avg_inv: avgInv,
+        prevYearSales: v.prevYearSales,
+        prevYearVisitors: v.prevYearVisitors,
+        customerValue,
+        prevCustomerValue,
       };
     });
   }, [raw, inRange, inPrevYearRange, allowedStoreIds]);
@@ -653,6 +659,8 @@ export default function DashboardPage() {
         avg_inv: store.avg_inv,
         growth: store.growth,
         achievement: store.achievement,
+        customerValue: store.customerValue ?? (store.visitors > 0 ? store.sales / store.visitors : 0),
+        prevCustomerValue: store.prevCustomerValue,
       };
     });
   }, [topStoresRank, raw?.store_meta]);
@@ -1234,7 +1242,7 @@ export default function DashboardPage() {
         document.getElementById('daily-report-portal-target')!
       )}
 
-      <AITargetInsights stores={mapBranchesData} formatSAR={formatSAR} mode={mode} />
+      <CustomerValueInsights stores={mapBranchesData} formatSAR={formatSAR} mode={mode} periodLabel={`${range.start} → ${range.end}`} />
 
       {/* خريطة الفروع المباشرة */}
       <div className="bg-white rounded-xl shadow-md border border-neutral-200 p-4">

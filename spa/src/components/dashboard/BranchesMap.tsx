@@ -46,6 +46,8 @@ interface BranchMapData {
     achievement: number;
     avg_inv: number;
     growth: number;
+    customerValue?: number;
+    prevCustomerValue?: number;
 }
 
 interface BranchesMapProps {
@@ -201,6 +203,7 @@ export const BranchesMap: React.FC<BranchesMapProps> = ({ branches, formatSAR })
                                             <KpiBox label="الزوار" val={branch.visitors} cls="text-blue-600" />
                                             <KpiBox label="التحويل" val={(branch.visitors > 0 ? (branch.trans / branch.visitors) * 100 : 0).toFixed(1) + '%'} cls="text-purple-600" />
                                             <KpiBox label="م. الفاتورة" val={formatSAR(branch.avg_inv)} cls="text-amber-600" />
+                                            <KpiBox label="قيمة العميل" val={formatSAR(branch.customerValue ?? (branch.visitors > 0 ? branch.sales / branch.visitors : 0))} cls="text-indigo-600" />
                                             <KpiBox label="النمو" val={(branch.growth > 0 ? '+' : '') + branch.growth.toFixed(1) + '%'} cls={branch.growth > 0 ? 'text-emerald-600' : branch.growth < 0 ? 'text-red-500' : 'text-slate-600'} />
                                         </div>
 
