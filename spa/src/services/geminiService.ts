@@ -7,6 +7,9 @@
 const GEMINI_API_KEY = typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY;
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
+// نماذج متاحة عبر Google AI (generativelanguage.googleapis.com) — نجرّب بالترتيب
+const GEMINI_MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-pro'];
+
 export function isGeminiAvailable(): boolean {
   return Boolean(GEMINI_API_KEY && String(GEMINI_API_KEY).trim().length > 0);
 }
@@ -18,47 +21,55 @@ export interface GeminiGenerateParams {
 }
 
 /**
- * Call Gemini generateContent API (Gemini 1.5 Flash or Pro).
- * Returns plain text reply or null on error / missing key.
+ * Call Gemini generateContent API.
+ * صيغة الطلب حسب توثيق Google: contents بدون role أحياناً، و generationConfig بصيغة صحيحة.
  */
 export async function generateWithGemini(params: GeminiGenerateParams): Promise<string | null> {
   const { prompt, maxTokens = 512, temperature = 0.4 } = params;
   if (!isGeminiAvailable()) return null;
+  if (!prompt || String(prompt).trim().length === 0) return null;
 
-  const url = `${GEMINI_BASE}/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
   const body = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    contents: [{ parts: [{ text: String(prompt).trim() }] }],
     generationConfig: {
-      maxOutputTokens: maxTokens,
-      temperature,
+      maxOutputTokens: Math.min(Math.max(1, maxTokens), 2048),
+      temperature: Math.max(0, Math.min(1, temperature)),
     },
   };
 
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
+  let lastError: string = '';
+  for (const model of GEMINI_MODELS) {
+    const url = `${GEMINI_BASE}/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
       const errText = await res.text();
-      console.warn('Gemini API error', res.status, errText?.substring(0, 100));
-      return null;
-    }
-    const data = await res.json();
-    const candidate = data?.candidates?.[0];
-    if (!candidate?.content?.parts?.length) {
-      if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
-        console.warn('Gemini finishReason', candidate.finishReason);
+      if (res.ok) {
+        const data = JSON.parse(errText);
+        const candidate = data?.candidates?.[0];
+        if (candidate?.content?.parts?.length) {
+          const text = candidate.content.parts[0].text;
+          return typeof text === 'string' ? text.trim() : null;
+        }
+        continue;
       }
-      return null;
+      lastError = errText;
+      try {
+        const errJson = JSON.parse(errText);
+        const msg = errJson?.error?.message || errJson?.message || errText?.substring(0, 200);
+        console.warn(`Gemini ${model} error`, res.status, msg);
+      } catch {
+        console.warn('Gemini API error', res.status, errText?.substring(0, 150));
+      }
+    } catch (e) {
+      lastError = String(e);
+      console.warn('Gemini request failed', model, e);
     }
-    const text = candidate.content.parts[0].text;
-    return typeof text === 'string' ? text.trim() : null;
-  } catch (e) {
-    console.warn('Gemini request failed', e);
-    return null;
   }
+  return null;
 }
 
 /**
