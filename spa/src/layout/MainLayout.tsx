@@ -246,17 +246,7 @@ export default function MainLayout() {
     }
   };
 
-  // Auto-refresh inquiry data every 15 minutes
-  useEffect(() => {
-    // Initial load
-    loadInquiryData();
-
-    const interval = setInterval(() => {
-      loadInquiryData();
-    }, 15 * 60 * 1000); // 15 minutes
-
-    return () => clearInterval(interval);
-  }, []);
+  // لا نحمّل بيانات تحليل المنتجات (~70MB) مع فتح التطبيق — تُحمّل فقط عند فتح نافذة «استعلام المنتج»
 
   const openInquiry = async () => {
     setIsInquiryOpen(true);

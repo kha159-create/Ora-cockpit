@@ -129,11 +129,10 @@ export default function DashboardPage() {
 
   const loadData = useCallback(() => {
     setRefreshing(true);
-    Promise.all([loadManagementData(), loadEmployeesData(), loadProductAnalysisData()])
-      .then(([m, e, p]) => {
+    Promise.all([loadManagementData(), loadEmployeesData()])
+      .then(([m, e]) => {
         setRaw(m);
         setEmpRaw(e);
-        setProdRaw(p);
         setLastUpdate(new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
         setErr(null);
       })
@@ -144,6 +143,15 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // تحميل بيانات تحليل المنتجات بعد أول رسم للوحة (لا نعيق الفتح — الملف كبير ~70MB)
+  useEffect(() => {
+    let cancelled = false;
+    loadProductAnalysisData()
+      .then((p) => { if (!cancelled) setProdRaw(p); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (mode === 'custom') {

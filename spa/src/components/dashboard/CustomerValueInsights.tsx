@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { isGeminiAvailable, getCustomerValueInsight } from '../../services/geminiService';
 
 const SparklesIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
@@ -41,8 +40,6 @@ export const CustomerValueInsights: React.FC<CustomerValueInsightsProps> = ({
   const [expanded, setExpanded] = useState(false);
   const [simTargetCV, setSimTargetCV] = useState<number | ''>('');
   const [simTargetSales, setSimTargetSales] = useState<number | ''>('');
-  const [aiInsight, setAiInsight] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
   const [selectedStoreForSim, setSelectedStoreForSim] = useState<string>('');
   const [simBranchCV, setSimBranchCV] = useState<number | ''>('');
   const [simBranchSales, setSimBranchSales] = useState<number | ''>('');
@@ -197,28 +194,6 @@ export const CustomerValueInsights: React.FC<CustomerValueInsightsProps> = ({
     }
     return out.length ? out : null;
   }, [selectedStore, metrics, simBranchCV, simBranchSales, formatSAR]);
-
-  const handleAskAI = async () => {
-    if (!metrics) return;
-    if (!isGeminiAvailable()) {
-      setAiInsight('مفتاح Gemini غير متوفر في البيئة الحالية. تأكد من ضبط VITE_GEMINI_API_KEY في Vercel ثم أعد النشر.');
-      return;
-    }
-    setAiLoading(true);
-    setAiInsight(null);
-    try {
-      const summary = {
-        bestStores: metrics.best.map(s => ({ name: s.name, customerValue: s.cv, changePct: metrics!.changePct(s) })),
-        worstStores: metrics.worst.map(s => ({ name: s.name, customerValue: s.cv, changePct: metrics!.changePct(s), loss: metrics!.lossFromCV(s) })),
-        avgInvoice: metrics.avgInvoice,
-        periodLabel,
-      };
-      const text = await getCustomerValueInsight(summary);
-      setAiInsight(text || 'تعذر الحصول على تحليل الآن. تحقق من الاتصال أو جرّب لاحقاً.');
-    } finally {
-      setAiLoading(false);
-    }
-  };
 
   const handleSort = (key: TableSortKey) => {
     if (tableSort === key) setTableSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -431,17 +406,6 @@ export const CustomerValueInsights: React.FC<CustomerValueInsightsProps> = ({
             </button>
           </div>
         )}
-
-        {/* رأي الذكاء الاصطناعي – يظهر دائماً، ويتحقق من توفر المفتاح عند الضغط */ }
-        <div className="bg-indigo-50/50 rounded-xl p-4 border border-indigo-100">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-bold text-indigo-800">رأي الذكاء الاصطناعي</h4>
-            <button type="button" onClick={handleAskAI} disabled={aiLoading} className="text-xs font-bold text-indigo-600 hover:text-indigo-700 disabled:opacity-50">
-              {aiLoading ? 'جاري التحليل...' : 'اطلب تحليلًا'}
-            </button>
-          </div>
-          {aiInsight && <p className="text-xs text-slate-700 leading-relaxed">{aiInsight}</p>}
-        </div>
       </div>
 
       <style>{`
