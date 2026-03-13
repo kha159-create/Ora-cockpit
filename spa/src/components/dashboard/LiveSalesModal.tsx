@@ -334,25 +334,25 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                 <div className="flex flex-col items-center bg-amber-50 rounded-xl p-3 border border-amber-100">
                                     <span className="text-lg mb-1">🌅</span>
                                     <span className="text-[11px] font-bold text-amber-700 mb-0.5">الشفت الأول</span>
-                                    <span className="text-[10px] text-amber-500 mb-2">00:00 – 03:00</span>
+                                    <span className="text-[10px] text-amber-500 mb-2">12ص – 3ص</span>
                                     <span className="text-sm font-black text-amber-900" dir="ltr">{formatSAR(globalShifts.shift1)}</span>
                                 </div>
                                 <div className="flex flex-col items-center bg-orange-50 rounded-xl p-3 border border-orange-100">
                                     <span className="text-lg mb-1">☀️</span>
                                     <span className="text-[11px] font-bold text-orange-700 mb-0.5">الشفت الثاني</span>
-                                    <span className="text-[10px] text-orange-500 mb-2">05:00 – 12:00</span>
+                                    <span className="text-[10px] text-orange-500 mb-2">5ص – 12م</span>
                                     <span className="text-sm font-black text-orange-900" dir="ltr">{formatSAR(globalShifts.shift2)}</span>
                                 </div>
                                 <div className="flex flex-col items-center bg-indigo-50 rounded-xl p-3 border border-indigo-100 relative">
                                     <span className="text-lg mb-1">🌙</span>
                                     <span className="text-[11px] font-bold text-indigo-700 mb-0.5">الشفت الثالث</span>
-                                    <span className="text-[10px] text-indigo-500 mb-2">12:00 – 18:00</span>
+                                    <span className="text-[10px] text-indigo-500 mb-2">12م – 6م</span>
                                     <span className="text-sm font-black text-indigo-900" dir="ltr">{formatSAR(globalShifts.shift3)}</span>
                                 </div>
                                 <div className="flex flex-col items-center bg-slate-50 rounded-xl p-3 border border-slate-100 relative">
                                     <span className="text-lg mb-1">🌌</span>
                                     <span className="text-[11px] font-bold text-slate-700 mb-0.5">الشفت الرابع</span>
-                                    <span className="text-[10px] text-slate-500 mb-2">18:00 – 00:00</span>
+                                    <span className="text-[10px] text-slate-500 mb-2">6م – 12ص</span>
                                     <span className="text-sm font-black text-slate-900" dir="ltr">{formatSAR(globalShifts.shift4)}</span>
                                 </div>
                             </div>
@@ -421,22 +421,22 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                                         <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-orange-100 mt-1">
                                                             <div className="flex flex-col items-center bg-amber-50 rounded py-1 border border-amber-100">
                                                                 <span className="text-[9px] text-amber-700 font-bold">ش1 🌅</span>
-                                                                <span className="text-[8px] text-amber-500">00:00 – 03:00</span>
+                                                                <span className="text-[8px] text-amber-500">12ص – 3ص</span>
                                                                 <span className="text-[10px] font-black text-amber-900" dir="ltr">{formatSAR(sh.shift1)}</span>
                                                             </div>
                                                             <div className="flex flex-col items-center bg-orange-50 rounded py-1 border border-orange-100">
                                                                 <span className="text-[9px] text-orange-700 font-bold">ش2 ☀️</span>
-                                                                <span className="text-[8px] text-orange-500">05:00 – 12:00</span>
+                                                                <span className="text-[8px] text-orange-500">5ص – 12م</span>
                                                                 <span className="text-[10px] font-black text-orange-900" dir="ltr">{formatSAR(sh.shift2)}</span>
                                                             </div>
                                                             <div className="flex flex-col items-center bg-indigo-50 rounded py-1 border border-indigo-100">
                                                                 <span className="text-[9px] text-indigo-700 font-bold">ش3 🌙</span>
-                                                                <span className="text-[8px] text-indigo-500">12:00 – 18:00</span>
+                                                                <span className="text-[8px] text-indigo-500">12م – 6م</span>
                                                                 <span className="text-[10px] font-black text-indigo-900" dir="ltr">{formatSAR(sh.shift3)}</span>
                                                             </div>
                                                             <div className="flex flex-col items-center bg-slate-50 rounded py-1 border border-slate-100">
                                                                 <span className="text-[9px] text-slate-700 font-bold">ش4 🌌</span>
-                                                                <span className="text-[8px] text-slate-500">18:00 – 00:00</span>
+                                                                <span className="text-[8px] text-slate-500">6م – 12ص</span>
                                                                 <span className="text-[10px] font-black text-slate-900" dir="ltr">{formatSAR(sh.shift4)}</span>
                                                             </div>
                                                         </div>
