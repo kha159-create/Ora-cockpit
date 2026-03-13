@@ -7,8 +7,8 @@
 const GEMINI_API_KEY = typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY;
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
-// نماذج متاحة عبر Google AI (generativelanguage.googleapis.com) — نجرّب بالترتيب
-const GEMINI_MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-pro'];
+// الموديل الافتراضي يعمل مع المفتاح الحالي؛ والباقي كاحتياطي
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-pro'];
 
 export function isGeminiAvailable(): boolean {
   return Boolean(GEMINI_API_KEY && String(GEMINI_API_KEY).trim().length > 0);
