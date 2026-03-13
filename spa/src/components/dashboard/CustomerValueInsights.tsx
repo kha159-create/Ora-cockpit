@@ -199,7 +199,11 @@ export const CustomerValueInsights: React.FC<CustomerValueInsightsProps> = ({
   }, [selectedStore, metrics, simBranchCV, simBranchSales, formatSAR]);
 
   const handleAskAI = async () => {
-    if (!metrics || !isGeminiAvailable()) return;
+    if (!metrics) return;
+    if (!isGeminiAvailable()) {
+      setAiInsight('مفتاح Gemini غير متوفر في البيئة الحالية. تأكد من ضبط VITE_GEMINI_API_KEY في Vercel ثم أعد النشر.');
+      return;
+    }
     setAiLoading(true);
     setAiInsight(null);
     try {
@@ -296,8 +300,11 @@ export const CustomerValueInsights: React.FC<CustomerValueInsightsProps> = ({
                   const changePct = row.changePct;
                   const loss = row.loss;
                   const gain = row.gain;
+                  const isBest = metrics.best.some((b: any) => b.id === row.id);
+                  const isWorst = metrics.worst.some((w: any) => w.id === row.id);
+                  const rowTone = isWorst ? 'bg-red-50/60' : isBest ? 'bg-emerald-50/60' : '';
                   return (
-                    <tr key={row.id} className="border-b border-neutral-100 hover:bg-orange-50/50">
+                    <tr key={row.id} className={`border-b border-neutral-100 hover:bg-orange-50/70 ${rowTone}`}>
                       <td className="td-table font-semibold text-neutral-900" title={row.name}>{row.name}</td>
                       <td className="td-table" dir="ltr">{formatSAR(row.sales)}</td>
                       <td className="td-table text-neutral-600" dir="ltr">{formatSAR(row.prevYearSales ?? 0)}</td>
