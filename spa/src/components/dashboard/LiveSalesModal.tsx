@@ -53,11 +53,6 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
 
     const isAdminOrAuditor = checkAdmin;
 
-    const isRamadan2026 = useMemo(() => {
-        const now = new Date();
-        return now.getFullYear() === 2026 && now.getMonth() === 2;
-    }, []);
-
     const targetDateStr = React.useMemo(() => {
         if (dateMode === 'yesterday') {
             const d = new Date();
@@ -157,17 +152,16 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
         visitors: enhancedStores.reduce((acc: number, s: any) => acc + (s.visitors || 0), 0),
     }), [enhancedStores]);
 
-    // --- Ramadan Shift Totals (global + per-store) ---
-    // New definition (local time, بعد تصحيح ساعة D365):
-    // ش1: 00:00 - 03:00
-    // ش2: 05:00 - 12:00
-    // ش3: 12:00 - 18:00
-    // ش4: 18:00 - 24:00
+    // --- Normal Shift Totals (global + per-store) ---
+    // ش1: 09:30 - 15:30
+    // ش2: 15:30 - 24:00
     const { globalShifts, storeShifts } = useMemo(() => {
-        const gs = { shift1: 0, shift2: 0, shift3: 0, shift4: 0 };
-        const ss: Record<string, { shift1: number; shift2: number; shift3: number; shift4: number }> = {};
-        const hourlyRows = d365Daily?.salesHourlyRows || raw?.sales_hourly || [];
-        if (!isRamadan2026 || !hourlyRows.length) return { globalShifts: gs, storeShifts: ss };
+        const makeShift = () => ({ sales: 0, trans: 0, visitors: 0 });
+        const gs = { shift1: makeShift(), shift2: makeShift() };
+        const ss: Record<string, { shift1: { sales: number; trans: number; visitors: number }; shift2: { sales: number; trans: number; visitors: number } }> = {};
+        const salesHourlyRows = d365Daily?.salesHourlyRows || raw?.sales_hourly || [];
+        const visitorsHourlyRows = raw?.visitors_hourly || [];
+        if (!salesHourlyRows.length && !visitorsHourlyRows.length) return { globalShifts: gs, storeShifts: ss };
 
         // Target Date
         const targetDateObj = dateMode === 'yesterday'
@@ -182,33 +176,64 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
 
         const useD365 = !!d365Daily?.salesHourlyRows?.length;
         const D365_HOUR_BACK = 5;
-        hourlyRows.forEach(([dt, sid, h, v]: any[]) => {
+        const allocByHour = (hour: number) => {
+            // Half-hour boundaries:
+            // 09:00-10:00 => half to shift1 (09:30-10:00)
+            // 15:00-16:00 => half to shift1 (15:00-15:30), half to shift2 (15:30-16:00)
+            if (hour < 9 || hour >= 24) return { shift1: 0, shift2: 0 };
+            if (hour === 9) return { shift1: 0.5, shift2: 0 };
+            if (hour >= 10 && hour <= 14) return { shift1: 1, shift2: 0 };
+            if (hour === 15) return { shift1: 0.5, shift2: 0.5 };
+            return { shift1: 0, shift2: 1 };
+        };
+
+        const ensureStore = (sid: string) => {
+            if (!ss[sid]) ss[sid] = { shift1: makeShift(), shift2: makeShift() };
+        };
+
+        salesHourlyRows.forEach(([dt, sid, h, v, t]: any[]) => {
             const dtStr = String(dt || '').trim();
             if (!okStore(String(sid))) return;
 
             let sourceHour = Number(h);
             if (!Number.isInteger(sourceHour) || sourceHour < 0 || sourceHour > 23) return;
             if (useD365) sourceHour = (sourceHour - D365_HOUR_BACK + 24) % 24;
-            const val = Number(v) || 0;
-
-            if (!ss[sid]) ss[sid] = { shift1: 0, shift2: 0, shift3: 0, shift4: 0 };
+            const salesVal = Number(v) || 0;
+            const transVal = Number(t) || 0;
 
             if (dtStr !== targetDate) return;
+            ensureStore(String(sid));
+            const alloc = allocByHour(sourceHour);
 
-            // Local hour buckets for Ramadan shifts
-            if (sourceHour >= 0 && sourceHour < 3) {
-                gs.shift1 += val; ss[sid].shift1 += val;
-            } else if (sourceHour >= 5 && sourceHour < 12) {
-                gs.shift2 += val; ss[sid].shift2 += val;
-            } else if (sourceHour >= 12 && sourceHour < 18) {
-                gs.shift3 += val; ss[sid].shift3 += val;
-            } else if (sourceHour >= 18 && sourceHour < 24) {
-                gs.shift4 += val; ss[sid].shift4 += val;
-            }
+            gs.shift1.sales += salesVal * alloc.shift1;
+            gs.shift1.trans += transVal * alloc.shift1;
+            gs.shift2.sales += salesVal * alloc.shift2;
+            gs.shift2.trans += transVal * alloc.shift2;
+
+            ss[sid].shift1.sales += salesVal * alloc.shift1;
+            ss[sid].shift1.trans += transVal * alloc.shift1;
+            ss[sid].shift2.sales += salesVal * alloc.shift2;
+            ss[sid].shift2.trans += transVal * alloc.shift2;
+        });
+
+        visitorsHourlyRows.forEach(([dt, sid, h, v]: any[]) => {
+            const dtStr = String(dt || '').trim();
+            if (dtStr !== targetDate) return;
+            if (!okStore(String(sid))) return;
+            const sourceHour = Number(h);
+            if (!Number.isInteger(sourceHour) || sourceHour < 0 || sourceHour > 23) return;
+            const visitorsVal = Number(v) || 0;
+            ensureStore(String(sid));
+            const alloc = allocByHour(sourceHour);
+
+            gs.shift1.visitors += visitorsVal * alloc.shift1;
+            gs.shift2.visitors += visitorsVal * alloc.shift2;
+            ss[sid].shift1.visitors += visitorsVal * alloc.shift1;
+            ss[sid].shift2.visitors += visitorsVal * alloc.shift2;
         });
 
         return { globalShifts: gs, storeShifts: ss };
-    }, [raw, isRamadan2026, manager, dateMode, d365Daily]);
+    }, [raw, manager, dateMode, d365Daily]);
 
     if (!isOpen) return null;
 
@@ -307,53 +332,45 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                         </div>
                     </div>
 
-                    {/* Ramadan Toggle Button */}
-                    {isRamadan2026 && (
-                        <div className="flex justify-start">
-                            <button
-                                onClick={() => setShowRamadanShifts(!showRamadanShifts)}
-                                className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold border transition-all duration-300 shadow-sm ${showRamadanShifts
-                                    ? 'bg-orange-500 text-white border-orange-500'
-                                    : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'
-                                    }`}
-                            >
-                                <span>🌙</span>
-                                {showRamadanShifts ? 'إخفاء مبيعات الشفتات' : 'إظهار مبيعات شفتات رمضان'}
-                            </button>
-                        </div>
-                    )}
+                    {/* Shift Toggle Button */}
+                    <div className="flex justify-start">
+                        <button
+                            onClick={() => setShowRamadanShifts(!showRamadanShifts)}
+                            className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold border transition-all duration-300 shadow-sm ${showRamadanShifts
+                                ? 'bg-orange-500 text-white border-orange-500'
+                                : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'
+                                }`}
+                        >
+                            <span>🕒</span>
+                            {showRamadanShifts ? 'إخفاء مبيعات الشفتات' : 'إظهار مبيعات الشفتات'}
+                        </button>
+                    </div>
 
-                    {/* Ramadan Global Shift Cards */}
-                    {isRamadan2026 && showRamadanShifts && (
+                    {/* Global Shift Cards */}
+                    {showRamadanShifts && (
                         <div className="bg-white rounded-2xl border border-orange-200 shadow-sm p-4">
                             <div className="flex items-center gap-2 mb-3">
-                                <span className="text-base">🌙</span>
-                                <h4 className="text-sm font-bold text-orange-700">مبيعات الشفتات — رمضان</h4>
+                                <span className="text-base">🕒</span>
+                                <h4 className="text-sm font-bold text-orange-700">مبيعات الشفتات — الدوام الطبيعي</h4>
                             </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div className="flex flex-col items-center bg-amber-50 rounded-xl p-3 border border-amber-100">
                                     <span className="text-lg mb-1">🌅</span>
                                     <span className="text-[11px] font-bold text-amber-700 mb-0.5">الشفت الأول</span>
-                                    <span className="text-[10px] text-amber-500 mb-2">12ص – 3ص</span>
-                                    <span className="text-sm font-black text-amber-900" dir="ltr">{formatSAR(globalShifts.shift1)}</span>
+                                    <span className="text-[10px] text-amber-500 mb-2">9:30ص – 3:30م</span>
+                                    <span className="text-sm font-black text-amber-900" dir="ltr">{formatSAR(globalShifts.shift1.sales)}</span>
+                                    <span className="text-[10px] text-amber-700 mt-1">زوار: {Math.round(globalShifts.shift1.visitors).toLocaleString()}</span>
+                                    <span className="text-[10px] text-amber-700">ATV: {globalShifts.shift1.trans > 0 ? formatSAR(globalShifts.shift1.sales / globalShifts.shift1.trans) : formatSAR(0)}</span>
+                                    <span className="text-[10px] text-amber-700">استحواذ: {globalShifts.shift1.visitors > 0 ? ((globalShifts.shift1.trans / globalShifts.shift1.visitors) * 100).toFixed(1) : '0.0'}%</span>
                                 </div>
                                 <div className="flex flex-col items-center bg-orange-50 rounded-xl p-3 border border-orange-100">
                                     <span className="text-lg mb-1">☀️</span>
                                     <span className="text-[11px] font-bold text-orange-700 mb-0.5">الشفت الثاني</span>
-                                    <span className="text-[10px] text-orange-500 mb-2">5ص – 12م</span>
-                                    <span className="text-sm font-black text-orange-900" dir="ltr">{formatSAR(globalShifts.shift2)}</span>
-                                </div>
-                                <div className="flex flex-col items-center bg-indigo-50 rounded-xl p-3 border border-indigo-100 relative">
-                                    <span className="text-lg mb-1">🌙</span>
-                                    <span className="text-[11px] font-bold text-indigo-700 mb-0.5">الشفت الثالث</span>
-                                    <span className="text-[10px] text-indigo-500 mb-2">12م – 6م</span>
-                                    <span className="text-sm font-black text-indigo-900" dir="ltr">{formatSAR(globalShifts.shift3)}</span>
-                                </div>
-                                <div className="flex flex-col items-center bg-slate-50 rounded-xl p-3 border border-slate-100 relative">
-                                    <span className="text-lg mb-1">🌌</span>
-                                    <span className="text-[11px] font-bold text-slate-700 mb-0.5">الشفت الرابع</span>
-                                    <span className="text-[10px] text-slate-500 mb-2">6م – 12ص</span>
-                                    <span className="text-sm font-black text-slate-900" dir="ltr">{formatSAR(globalShifts.shift4)}</span>
+                                    <span className="text-[10px] text-orange-500 mb-2">3:30م – 12ص</span>
+                                    <span className="text-sm font-black text-orange-900" dir="ltr">{formatSAR(globalShifts.shift2.sales)}</span>
+                                    <span className="text-[10px] text-orange-700 mt-1">زوار: {Math.round(globalShifts.shift2.visitors).toLocaleString()}</span>
+                                    <span className="text-[10px] text-orange-700">ATV: {globalShifts.shift2.trans > 0 ? formatSAR(globalShifts.shift2.sales / globalShifts.shift2.trans) : formatSAR(0)}</span>
+                                    <span className="text-[10px] text-orange-700">استحواذ: {globalShifts.shift2.visitors > 0 ? ((globalShifts.shift2.trans / globalShifts.shift2.visitors) * 100).toFixed(1) : '0.0'}%</span>
                                 </div>
                             </div>
                         </div>
@@ -414,30 +431,29 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                                     <span className="font-bold text-orange-700">{Object.keys(store.employees).length}</span>
                                                 </div>
 
-                                                {/* Store Ramadan Shift Row */}
-                                                {isRamadan2026 && showRamadanShifts && (() => {
-                                                    const sh = storeShifts[store.sid] || { shift1: 0, shift2: 0, shift3: 0, shift4: 0 };
+                                                {/* Store Shift Row */}
+                                                {showRamadanShifts && (() => {
+                                                    const sh = storeShifts[store.sid] || {
+                                                        shift1: { sales: 0, trans: 0, visitors: 0 },
+                                                        shift2: { sales: 0, trans: 0, visitors: 0 }
+                                                    };
                                                     return (
                                                         <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-orange-100 mt-1">
-                                                            <div className="flex flex-col items-center bg-amber-50 rounded py-1 border border-amber-100">
+                                                            <div className="flex flex-col items-center bg-amber-50 rounded py-1 border border-amber-100 px-1">
                                                                 <span className="text-[9px] text-amber-700 font-bold">ش1 🌅</span>
-                                                                <span className="text-[8px] text-amber-500">12ص – 3ص</span>
-                                                                <span className="text-[10px] font-black text-amber-900" dir="ltr">{formatSAR(sh.shift1)}</span>
+                                                                <span className="text-[8px] text-amber-500">9:30ص – 3:30م</span>
+                                                                <span className="text-[10px] font-black text-amber-900" dir="ltr">{formatSAR(sh.shift1.sales)}</span>
+                                                                <span className="text-[8px] text-amber-700">زوار: {Math.round(sh.shift1.visitors)}</span>
+                                                                <span className="text-[8px] text-amber-700">ATV: {sh.shift1.trans > 0 ? formatSAR(sh.shift1.sales / sh.shift1.trans) : formatSAR(0)}</span>
+                                                                <span className="text-[8px] text-amber-700">استحواذ: {sh.shift1.visitors > 0 ? ((sh.shift1.trans / sh.shift1.visitors) * 100).toFixed(1) : '0.0'}%</span>
                                                             </div>
-                                                            <div className="flex flex-col items-center bg-orange-50 rounded py-1 border border-orange-100">
+                                                            <div className="flex flex-col items-center bg-orange-50 rounded py-1 border border-orange-100 px-1">
                                                                 <span className="text-[9px] text-orange-700 font-bold">ش2 ☀️</span>
-                                                                <span className="text-[8px] text-orange-500">5ص – 12م</span>
-                                                                <span className="text-[10px] font-black text-orange-900" dir="ltr">{formatSAR(sh.shift2)}</span>
-                                                            </div>
-                                                            <div className="flex flex-col items-center bg-indigo-50 rounded py-1 border border-indigo-100">
-                                                                <span className="text-[9px] text-indigo-700 font-bold">ش3 🌙</span>
-                                                                <span className="text-[8px] text-indigo-500">12م – 6م</span>
-                                                                <span className="text-[10px] font-black text-indigo-900" dir="ltr">{formatSAR(sh.shift3)}</span>
-                                                            </div>
-                                                            <div className="flex flex-col items-center bg-slate-50 rounded py-1 border border-slate-100">
-                                                                <span className="text-[9px] text-slate-700 font-bold">ش4 🌌</span>
-                                                                <span className="text-[8px] text-slate-500">6م – 12ص</span>
-                                                                <span className="text-[10px] font-black text-slate-900" dir="ltr">{formatSAR(sh.shift4)}</span>
+                                                                <span className="text-[8px] text-orange-500">3:30م – 12ص</span>
+                                                                <span className="text-[10px] font-black text-orange-900" dir="ltr">{formatSAR(sh.shift2.sales)}</span>
+                                                                <span className="text-[8px] text-orange-700">زوار: {Math.round(sh.shift2.visitors)}</span>
+                                                                <span className="text-[8px] text-orange-700">ATV: {sh.shift2.trans > 0 ? formatSAR(sh.shift2.sales / sh.shift2.trans) : formatSAR(0)}</span>
+                                                                <span className="text-[8px] text-orange-700">استحواذ: {sh.shift2.visitors > 0 ? ((sh.shift2.trans / sh.shift2.visitors) * 100).toFixed(1) : '0.0'}%</span>
                                                             </div>
                                                         </div>
                                                     );

@@ -134,12 +134,22 @@ export function getSeasonalPrevDate(dateStr: string): string {
   try {
     const [y, m, d] = dateStr.split('-').map(Number);
     const hijri = gregorianToHijri({ year: y, month: m, day: d });
-    const prevHijri = hijriToGregorian({ year: hijri.year - 1, month: hijri.month, day: Math.min(hijri.day, 30) });
-    return `${prevHijri.year}-${pad(prevHijri.month)}-${pad(prevHijri.day)}`;
+    const prevYear = hijri.year - 1;
+    // Keep Hijri alignment even when previous Hijri month has fewer days (29 vs 30).
+    // Try same Hijri day first, then step down until valid.
+    for (let candidateDay = Math.min(hijri.day, 30); candidateDay >= 1; candidateDay--) {
+      try {
+        const prevHijri = hijriToGregorian({ year: prevYear, month: hijri.month, day: candidateDay });
+        return `${prevHijri.year}-${pad(prevHijri.month)}-${pad(prevHijri.day)}`;
+      } catch {
+        // Try previous day
+      }
+    }
   } catch {
-    // Fallback: subtract 1 Gregorian year
-    return dateStr.replace(/^\d{4}/, (yr) => String(Number(yr) - 1));
+    // Handled below by Gregorian fallback
   }
+  // Fallback: subtract 1 Gregorian year (only if Hijri conversion is entirely unavailable)
+  return dateStr.replace(/^\d{4}/, (yr) => String(Number(yr) - 1));
 }
 
 export function formatHijriDate(dateStr: string): string {
