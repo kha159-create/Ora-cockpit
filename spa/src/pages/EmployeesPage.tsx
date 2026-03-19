@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
+import { loadEmployeesData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { ChartCard, KPICard } from '../components/DashboardComponents';
+import { KPICard } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, PremiumTargetIcon, VisitorsIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
 import EmployeeCompareModal from '../components/EmployeeCompareModal';
-import { getPrevYearDate } from '../utils/seasons';
 
 type Period = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
 type SortKey =
@@ -147,7 +146,6 @@ function EmployeeDetailModal({
   rangeStart,
   rangeEnd,
   targetEnabled,
-  prodRaw, // New prop for product data
   empRaw, // New prop for sales history
 }: {
   open: boolean;
@@ -158,131 +156,9 @@ function EmployeeDetailModal({
   rangeStart: string;
   rangeEnd: string;
   targetEnabled: boolean;
-  prodRaw: any;
   empRaw: any;
   onClose: () => void;
 }) {
-
-
-  // 1. Hook: Sales Evolution
-
-
-  // 2. Hook: Missed Opportunities
-  const missedOpportunities = useMemo(() => {
-    if (!open || !detail || !prodRaw) return [];
-
-    const storeId = detail.storeCode;
-    // Normalize store ID
-    const sidVal = String(storeId || '').trim();
-    const sidNum = Number(sidVal);
-
-    // Try multiple data sources: top-level missed_opportunities, then nested inside periods
-    const sources = [
-      prodRaw?.missed_opportunities,
-      prodRaw?.periods?.mtd?.missed_opportunities,
-      prodRaw?.periods?.yest?.missed_opportunities,
-    ].filter(Boolean);
-
-    let targetStoreData: any[] = [];
-
-    for (const src of sources) {
-      if (targetStoreData.length > 0) break;
-      if (src[sidVal]) { targetStoreData = src[sidVal]; break; }
-      if (!Number.isNaN(sidNum) && src[sidNum]) { targetStoreData = src[sidNum]; break; }
-      const keys = Object.keys(src);
-      const foundKey = keys.find(k => String(k).trim() === sidVal || Number(k) === sidNum);
-      if (foundKey) { targetStoreData = src[foundKey]; break; }
-    }
-
-    if (!Array.isArray(targetStoreData)) return [];
-
-    const empId = String(detail.id || '').trim();
-    const empIdClean = empId.replace(/^0+/, '');
-    const empName = String(detail.name || '').trim();
-
-    const empMissed = targetStoreData.filter((m: any) => {
-      const mId = String(m.employee_id || '').trim();
-      const mIdClean = mId.replace(/^0+/, '');
-      const mName = String(m.employee_name || '').trim();
-
-      if (empIdClean && mIdClean) {
-        if (mIdClean === empIdClean) return true;
-        if (mIdClean.includes(empIdClean)) return true;
-        if (empIdClean.includes(mIdClean)) return true;
-      }
-
-      if (mName === empName) return true;
-      if (mName && empName) {
-        if (mName.includes(empName) || empName.includes(mName)) return true;
-      }
-
-      return false;
-    });
-
-    return empMissed.sort((a: any, b: any) => safeNum(b.total_count) - safeNum(a.total_count));
-  }, [prodRaw, detail, open]);
-
-  // 3. Hook: Aggregated Sold Items (Precise Data from Backend)
-  const soldItems = useMemo(() => {
-    if (!open || !detail || !prodRaw) return [];
-
-    const empId = String(detail.id || '').trim();
-    const empIdClean = empId.replace(/^0+/, ''); // Remove leading zeros if any
-
-    // Determine which period data to use
-    // We try to match the periodLabel to our keys, or default to 'mtd'
-    // 'mtd', 'yest', '30d'.
-    // If periodLabel contains "يوم", likely 'today' or 'yesterday' -> try 'yest'
-    // If periodLabel contains "شهر", likely 'mtd' or '30d' -> try 'mtd'
-
-    // Better approach: Look for the data in all available periods and pick the most populated one?
-    // Or just pick MTD as default if not specified, since that's the most common view.
-
-    let targetData = [];
-
-    // Try to find the exact employee ID in the backend data
-    // We check 'mtd' first as it's the default view
-    const pKeys = ['mtd', '30d', 'yest', '7d', '14d'];
-
-    for (const k of pKeys) {
-      if (prodRaw.periods?.[k]?.employee_sales?.[empId]) {
-        targetData = prodRaw.periods[k].employee_sales[empId];
-        break;
-      }
-      // Try cleaned ID
-      if (prodRaw.periods?.[k]?.employee_sales?.[empIdClean]) {
-        targetData = prodRaw.periods[k].employee_sales[empIdClean];
-        break;
-      }
-    }
-
-    if (targetData.length > 0) {
-      const totalSales = safeNum(detail.sales);
-      return targetData.map((item: any) => ({
-        name: item.name,
-        count: item.qty,
-        estimatedValue: item.amount,
-        variants: [], // Backend gives precise item, so no variants needed usually, but we can pass []
-        contribution: totalSales > 0 ? item.amount / totalSales : 0,
-        id: item.id,
-        alias: item.alias,
-        old_code: item.old_code
-      }));
-    }
-
-    // --- FALLBACK (Old Logic if backend data missing) ---
-    // Create a catalog map for quick lookup by name (fuzzy or exact)
-    // We need to find products that match the 'sold_item' name to estimate price and show variants
-    // ... (rest of old logic omitted for brevity, but could be kept if needed. 
-    // For now we assume backend data will be present)
-    return [];
-
-  }, [prodRaw, detail, open]);
-
-  const [soldItemsPage, setSoldItemsPage] = useState(1);
-  const [soldItemDrillDown, setSoldItemDrillDown] = useState<any>(null);
-  const [soldItemSearch, setSoldItemSearch] = useState('');
-  const SOLD_ITEMS_PER_PAGE = 10;
 
   const employeeDailySales = useMemo(() => {
     if (!open || !detail || !empRaw || !rangeStart || !rangeEnd) return [];
@@ -299,8 +175,6 @@ function EmployeeDetailModal({
     };
 
     const currByDate: Record<string, { sales: number; trans: number; items: number }> = {};
-    const prevByDate: Record<string, number> = {};
-    const currToPrev: Record<string, string> = {};
 
     let d = new Date(rangeStart);
     const end = new Date(rangeEnd);
@@ -310,14 +184,8 @@ function EmployeeDetailModal({
       const day = String(d.getDate()).padStart(2, '0');
       const currDate = `${y}-${m}-${day}`;
       currByDate[currDate] = { sales: 0, trans: 0, items: 0 };
-      currToPrev[currDate] = getPrevYearDate(currDate);
       d.setDate(d.getDate() + 1);
     }
-
-    const prevToCurr: Record<string, string> = {};
-    Object.entries(currToPrev).forEach(([curr, prev]) => {
-      prevToCurr[prev] = curr;
-    });
 
     Object.values(historyData).forEach((records) => {
       (records || []).forEach((rec: any[]) => {
@@ -331,8 +199,6 @@ function EmployeeDetailModal({
           currByDate[recDate].trans += trans;
           currByDate[recDate].items += items;
         }
-        const mappedCurrent = prevToCurr[recDate];
-        if (mappedCurrent) prevByDate[mappedCurrent] = (prevByDate[mappedCurrent] || 0) + sales;
       });
     });
 
@@ -340,15 +206,19 @@ function EmployeeDetailModal({
       .sort((a, b) => a.localeCompare(b))
       .map((date) => {
         const sales = currByDate[date].sales;
-        const prevSales = prevByDate[date] || 0;
-        const growth = prevSales > 0 ? ((sales - prevSales) / prevSales) * 100 : 0;
         const trans = currByDate[date].trans;
         const items = currByDate[date].items;
         const avgTicket = trans > 0 ? sales / trans : 0;
         const itemsPerInv = trans > 0 ? items / trans : 0;
-        return { date, sales, prevSales, growth, growthVal: sales - prevSales, trans, avgTicket, itemsPerInv };
+        const [yy, mm, dd] = date.split('-').map(Number);
+        const monthDays = new Date(yy, mm, 0).getDate() || 30;
+        const targetDaily = detail.target > 0 ? detail.target / monthDays : 0;
+        const dayOfMonth = dd || 1;
+        const cumulativeDailyTarget = targetDaily * dayOfMonth;
+        const dailyAchievement = targetDaily > 0 ? (sales / targetDaily) * 100 : 0;
+        return { date, sales, trans, avgTicket, itemsPerInv, cumulativeDailyTarget, dailyAchievement };
       })
-      .filter((r) => r.sales > 0 || r.prevSales > 0 || r.trans > 0);
+      .filter((r) => r.sales > 0 || r.trans > 0);
   }, [open, detail, empRaw, rangeStart, rangeEnd]);
 
   // Early return NOW, after hooks
@@ -409,105 +279,6 @@ function EmployeeDetailModal({
           </div>
         </div>
 
-        {/* Widgets Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-          {/* Missed Opportunities (Scrollable List) */}
-          <ChartCard title="⚡ الفرص الضائعة (Missed Opportunities)" className="h-[500px] flex flex-col">
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-              {missedOpportunities.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-center p-4">
-                  <div className="text-neutral-400 text-sm">
-                    لا توجد فرص ضائعة مسجلة لهذا الموظف.<br />
-                    <span className="text-xs opacity-70">(تأكد من اختيار نطاق تاريخ صحيح يحتوي على بيانات تحليل)</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {missedOpportunities.map((m: any, idx: number) => {
-                    const topMissed = Array.isArray(m.missed_items) ? m.missed_items[0] : null;
-                    return (
-                      <div key={idx} className="flex items-start justify-between p-3 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors border border-neutral-100">
-                        <div className="flex items-start gap-3">
-                          <div className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs mt-1">{idx + 1}</div>
-                          <div>
-                            <div className="text-sm font-bold text-neutral-900">باع: <span className="text-green-700">{m.sold_item}</span></div>
-                            <div className="text-xs text-red-600 mt-1">
-                              فقد: <span className="font-semibold">{topMissed?.name || 'منتج غير محدد'}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-center min-w-[60px]">
-                          <div className="text-lg font-bold text-orange-600">{m.total_count}</div>
-                          <div className="text-[10px] text-neutral-500">تكرار</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </ChartCard>
-
-          {/* Sold Items Aggregation */}
-          <ChartCard title="📦 الأصناف المباعة (Items Sold)" className="h-[500px] flex flex-col">
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-              {soldItems.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-center p-4">
-                  <div className="text-neutral-400 text-sm">لا توجد بيانات أصناف مباعة مرتبطة بهذا الموظف.</div>
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    {(() => {
-                      const start = (soldItemsPage - 1) * SOLD_ITEMS_PER_PAGE;
-                      const visible = soldItems.slice(start, start + SOLD_ITEMS_PER_PAGE);
-                      return visible.map((item: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg border border-neutral-100 cursor-pointer hover:bg-orange-50 transition-colors"
-                          onClick={() => setSoldItemDrillDown(item)}
-                        >
-                          <div className="flex flex-col overflow-hidden">
-                            <div className="text-sm font-semibold text-neutral-800 truncate" title={item.name}>
-                              {item.name}
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">{item.count} قطعة</span>
-                              <span className="text-[10px] text-neutral-400">{(item.contribution * 100).toFixed(1)}% من المبيعات</span>
-                            </div>
-                          </div>
-                          <div className="text-right pl-1">
-                            <div className="font-bold text-green-700 text-sm">{formatSAR(item.estimatedValue)}</div>
-                          </div>
-                        </div>
-                      ));
-                    })()}
-                  </div>
-                </>
-              )}
-            </div>
-            {soldItems.length > SOLD_ITEMS_PER_PAGE && (
-              <div className="flex items-center justify-between px-2 py-3 border-t border-neutral-100 bg-neutral-50 mt-auto">
-                <button
-                  onClick={() => setSoldItemsPage(p => Math.max(1, p - 1))}
-                  disabled={soldItemsPage <= 1}
-                  className="px-2 py-1 text-xs border rounded bg-white disabled:opacity-50"
-                >
-                  السابق
-                </button>
-                <span className="text-[10px] text-neutral-500">{soldItemsPage} / {Math.ceil(soldItems.length / SOLD_ITEMS_PER_PAGE)}</span>
-                <button
-                  onClick={() => setSoldItemsPage(p => Math.min(Math.ceil(soldItems.length / SOLD_ITEMS_PER_PAGE), p + 1))}
-                  disabled={soldItemsPage >= Math.ceil(soldItems.length / SOLD_ITEMS_PER_PAGE)}
-                  className="px-2 py-1 text-xs border rounded bg-white disabled:opacity-50"
-                >
-                  التالي
-                </button>
-              </div>
-            )}
-          </ChartCard>
-        </div>
-
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden mt-6">
           <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
             <span>📅</span> تفاصيل الأيام ({rangeStart} → {rangeEnd})
@@ -518,9 +289,8 @@ function EmployeeDetailModal({
                 <tr className="bg-neutral-800 text-white">
                   <th className="th text-right">التاريخ</th>
                   <th className="th text-center">المبيعات</th>
-                  <th className="th text-center">العام الماضي</th>
-                  <th className="th text-center">النمو %</th>
-                  <th className="th text-center">قيمة النمو</th>
+                  <th className="th text-center">اليومية المتراكمة</th>
+                  <th className="th text-center">تحقيق اليومية %</th>
                   <th className="th text-center">الفواتير</th>
                   <th className="th text-center">متوسط الفاتورة</th>
                   <th className="th text-center">متوسط القطع</th>
@@ -531,12 +301,9 @@ function EmployeeDetailModal({
                   <tr key={row.date} className="hover:bg-neutral-50 transition-colors">
                     <td className="td font-mono font-medium text-neutral-600">{row.date}</td>
                     <td className="td text-center font-bold text-neutral-900">{formatSAR(row.sales)}</td>
-                    <td className="td text-center text-neutral-400">{formatSAR(row.prevSales)}</td>
-                    <td className={`td text-center font-bold ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      {row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%
-                    </td>
-                    <td className={`td text-center font-medium ${row.growthVal >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      {formatSAR(row.growthVal)}
+                    <td className="td text-center text-neutral-600">{formatSAR(row.cumulativeDailyTarget)}</td>
+                    <td className={`td text-center font-bold ${row.dailyAchievement >= 100 ? 'text-green-600' : 'text-red-500'}`}>
+                      {row.dailyAchievement.toFixed(1)}%
                     </td>
                     <td className="td text-center font-medium text-neutral-700">{Math.round(row.trans)}</td>
                     <td className="td text-center font-medium text-neutral-700">{formatSAR(row.avgTicket)}</td>
@@ -548,19 +315,17 @@ function EmployeeDetailModal({
                 {(() => {
                   if (employeeDailySales.length === 0) return null;
                   const totalSales = employeeDailySales.reduce((a, r) => a + r.sales, 0);
-                  const totalPrevSales = employeeDailySales.reduce((a, r) => a + r.prevSales, 0);
                   const totalTrans = employeeDailySales.reduce((a, r) => a + r.trans, 0);
-                  const totalGrowthVal = employeeDailySales.reduce((a, r) => a + r.growthVal, 0);
-                  const growthPct = totalPrevSales > 0 ? ((totalSales - totalPrevSales) / totalPrevSales) * 100 : 0;
+                  const totalCumTarget = employeeDailySales.reduce((a, r) => a + r.cumulativeDailyTarget, 0);
+                  const totalDailyAchievement = totalCumTarget > 0 ? (totalSales / totalCumTarget) * 100 : 0;
                   const avgInv = totalTrans > 0 ? totalSales / totalTrans : 0;
                   const avgItems = totalTrans > 0 ? employeeDailySales.reduce((a, r) => a + (r.itemsPerInv * r.trans), 0) / totalTrans : 0;
                   return (
                     <tr className="bg-neutral-100 border-t-2 border-neutral-300 font-black">
                       <td className="td font-bold text-neutral-700">الإجمالي</td>
                       <td className="td text-center text-neutral-900">{formatSAR(totalSales)}</td>
-                      <td className="td text-center text-neutral-500">{formatSAR(totalPrevSales)}</td>
-                      <td className={`td text-center ${growthPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>{growthPct >= 0 ? '+' : ''}{growthPct.toFixed(1)}%</td>
-                      <td className={`td text-center ${totalGrowthVal >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatSAR(totalGrowthVal)}</td>
+                      <td className="td text-center text-neutral-600">{formatSAR(totalCumTarget)}</td>
+                      <td className={`td text-center ${totalDailyAchievement >= 100 ? 'text-green-600' : 'text-red-500'}`}>{totalDailyAchievement.toFixed(1)}%</td>
                       <td className="td text-center">{Math.round(totalTrans)}</td>
                       <td className="td text-center">{formatSAR(avgInv)}</td>
                       <td className="td text-center">{avgItems.toFixed(2)}</td>
@@ -579,71 +344,6 @@ function EmployeeDetailModal({
           <button type="button" className="btn-secondary px-6" onClick={onClose}>إغلاق</button>
         </div>
       </div>
-
-      {/* Drill-down Modal for Sold Item */}
-      {soldItemDrillDown && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md" onClick={() => setSoldItemDrillDown(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="p-4 border-b border-neutral-100 flex justify-between items-start bg-neutral-50">
-              <div>
-                <h3 className="font-bold text-lg text-neutral-900">{soldItemDrillDown.name}</h3>
-                <div className="flex gap-4 mt-2 text-sm">
-                  <div>الكمية: <span className="font-bold">{soldItemDrillDown.count}</span></div>
-                  <div>القيمة التقديرية: <span className="font-bold text-green-700">{formatSAR(soldItemDrillDown.estimatedValue)}</span></div>
-                  <div>المساهمة: <span className="font-bold text-blue-600">{(soldItemDrillDown.contribution * 100).toFixed(1)}%</span></div>
-                </div>
-              </div>
-              <button onClick={() => setSoldItemDrillDown(null)} className="text-neutral-400 hover:text-neutral-600 text-xl font-bold">&times;</button>
-            </div>
-
-            <div className="p-4 border-b border-neutral-100">
-              <input
-                type="text"
-                placeholder="🔍 بحث بالكود القديم أو الجديد..."
-                className="input w-full"
-                value={soldItemSearch}
-                onChange={(e) => setSoldItemSearch(e.target.value)}
-              />
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-2">
-              {soldItemDrillDown.variants && soldItemDrillDown.variants.length > 0 ? (
-                <div className="space-y-2">
-                  {soldItemDrillDown.variants
-                    .filter((v: any) => {
-                      if (!soldItemSearch) return true;
-                      const q = soldItemSearch.toLowerCase();
-                      return (v.id && String(v.id).toLowerCase().includes(q)) ||
-                        (v.old_code && String(v.old_code).toLowerCase().includes(q)) ||
-                        (v.alias && String(v.alias).toLowerCase().includes(q));
-                    })
-                    .map((v: any, idx: number) => (
-                      <div key={idx} className="p-3 border border-neutral-200 rounded-xl hover:bg-neutral-50">
-                        <div className="flex justify-between">
-                          <div className="font-bold text-neutral-800">{v.name}</div>
-                          <div className="font-mono text-xs text-neutral-500 bg-neutral-100 px-2 py-1 rounded">{v.id}</div>
-                        </div>
-                        <div className="flex gap-4 mt-2 text-xs text-neutral-600">
-                          <div>Old Code: <span className="font-mono font-bold">{v.old_code || '-'}</span></div>
-                          <div>Alias: <span className="font-mono font-bold">{v.alias || '-'}</span></div>
-                          <div>Avail Stock: <span className="font-bold text-orange-600">{v.stock || '-'}</span></div>
-                        </div>
-                      </div>
-                    ))}
-                  {soldItemDrillDown.variants.length === 0 && <div className="text-center text-neutral-400 py-8">لا توجد منتجات مطابقة في الكتالوج لهذا الصنف.</div>}
-                </div>
-              ) : (
-                <div className="text-center text-neutral-400 py-8">
-                  لا توجد تفاصيل (variations) متاحة لهذا الصنف في الكتالوج الحالي.
-                </div>
-              )}
-            </div>
-            <div className="p-3 border-t border-neutral-100 bg-neutral-50 text-center">
-              <button className="btn-secondary w-full" onClick={() => setSoldItemDrillDown(null)}>إغلاق</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -652,7 +352,6 @@ export default function EmployeesPage() {
   const user = getCurrentUser();
   const [empRaw, setEmpRaw] = useState<any>(null);
   const [mgmtRaw, setMgmtRaw] = useState<any>(null);
-  const [prodRaw, setProdRaw] = useState<any>(null); // New state
   const [err, setErr] = useState<string | null>(null);
 
   const [manager, setManager] = useState<string>('all');
@@ -683,11 +382,10 @@ export default function EmployeesPage() {
   const excelDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    Promise.all([loadEmployeesData(), loadManagementData(), loadProductAnalysisData()])
-      .then(([e, m, p]) => {
+    Promise.all([loadEmployeesData(), loadManagementData()])
+      .then(([e, m]) => {
         setEmpRaw(e);
         setMgmtRaw(m);
-        setProdRaw(p);
       })
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
@@ -1183,7 +881,7 @@ export default function EmployeesPage() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  if (!empRaw || !mgmtRaw || !prodRaw) {
+  if (!empRaw || !mgmtRaw) {
     return <DashboardSkeleton />;
   }
 
@@ -1657,7 +1355,6 @@ export default function EmployeesPage() {
           rangeStart={derived.range.start}
           rangeEnd={derived.range.end}
           targetEnabled={targetEnabled}
-          prodRaw={prodRaw}
           empRaw={empRaw}
         />
       )}
