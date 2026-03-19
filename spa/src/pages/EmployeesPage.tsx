@@ -210,15 +210,19 @@ function EmployeeDetailModal({
         const items = currByDate[date].items;
         const avgTicket = trans > 0 ? sales / trans : 0;
         const itemsPerInv = trans > 0 ? items / trans : 0;
-        const [yy, mm, dd] = date.split('-').map(Number);
-        const monthDays = new Date(yy, mm, 0).getDate() || 30;
-        const targetDaily = detail.target > 0 ? detail.target / monthDays : 0;
-        const dayOfMonth = dd || 1;
-        const cumulativeDailyTarget = targetDaily * dayOfMonth;
-        const dailyAchievement = targetDaily > 0 ? (sales / targetDaily) * 100 : 0;
-        return { date, sales, trans, avgTicket, itemsPerInv, cumulativeDailyTarget, dailyAchievement };
+        return { date, sales, trans, avgTicket, itemsPerInv };
       })
-      .filter((r) => r.sales > 0 || r.trans > 0);
+      .reduce((acc: any[], row: any) => {
+        const [yy, mm, dd] = row.date.split('-').map(Number);
+        const monthDays = new Date(yy, mm, 0).getDate() || 30;
+        const remainingDays = Math.max(1, monthDays - (dd || 1) + 1);
+        const achievedBeforeToday = acc.reduce((s, r) => s + (r.sales || 0), 0);
+        const remainingTargetBeforeToday = Math.max(0, (detail.target || 0) - achievedBeforeToday);
+        const dailyTargetToday = remainingDays > 0 ? remainingTargetBeforeToday / remainingDays : 0;
+        const dailyAchievement = dailyTargetToday > 0 ? (row.sales / dailyTargetToday) * 100 : 0;
+        acc.push({ ...row, dailyTargetToday, dailyAchievement });
+        return acc;
+      }, []);
   }, [open, detail, empRaw, rangeStart, rangeEnd]);
 
   // Early return NOW, after hooks
@@ -289,7 +293,7 @@ function EmployeeDetailModal({
                 <tr className="bg-neutral-800 text-white">
                   <th className="th text-right">التاريخ</th>
                   <th className="th text-center">المبيعات</th>
-                  <th className="th text-center">اليومية المتراكمة</th>
+                  <th className="th text-center">اليومية لهذا اليوم</th>
                   <th className="th text-center">تحقيق اليومية %</th>
                   <th className="th text-center">الفواتير</th>
                   <th className="th text-center">متوسط الفاتورة</th>
@@ -301,7 +305,7 @@ function EmployeeDetailModal({
                   <tr key={row.date} className="hover:bg-neutral-50 transition-colors">
                     <td className="td font-mono font-medium text-neutral-600">{row.date}</td>
                     <td className="td text-center font-bold text-neutral-900">{formatSAR(row.sales)}</td>
-                    <td className="td text-center text-neutral-600">{formatSAR(row.cumulativeDailyTarget)}</td>
+                    <td className="td text-center text-neutral-600">{formatSAR(row.dailyTargetToday)}</td>
                     <td className={`td text-center font-bold ${row.dailyAchievement >= 100 ? 'text-green-600' : 'text-red-500'}`}>
                       {row.dailyAchievement.toFixed(1)}%
                     </td>
@@ -316,15 +320,15 @@ function EmployeeDetailModal({
                   if (employeeDailySales.length === 0) return null;
                   const totalSales = employeeDailySales.reduce((a, r) => a + r.sales, 0);
                   const totalTrans = employeeDailySales.reduce((a, r) => a + r.trans, 0);
-                  const totalCumTarget = employeeDailySales.reduce((a, r) => a + r.cumulativeDailyTarget, 0);
-                  const totalDailyAchievement = totalCumTarget > 0 ? (totalSales / totalCumTarget) * 100 : 0;
+                  const lastDailyTarget = employeeDailySales[employeeDailySales.length - 1]?.dailyTargetToday || 0;
+                  const totalDailyAchievement = detail.target > 0 ? (totalSales / detail.target) * 100 : 0;
                   const avgInv = totalTrans > 0 ? totalSales / totalTrans : 0;
                   const avgItems = totalTrans > 0 ? employeeDailySales.reduce((a, r) => a + (r.itemsPerInv * r.trans), 0) / totalTrans : 0;
                   return (
                     <tr className="bg-neutral-100 border-t-2 border-neutral-300 font-black">
                       <td className="td font-bold text-neutral-700">الإجمالي</td>
                       <td className="td text-center text-neutral-900">{formatSAR(totalSales)}</td>
-                      <td className="td text-center text-neutral-600">{formatSAR(totalCumTarget)}</td>
+                      <td className="td text-center text-neutral-600">{formatSAR(lastDailyTarget)}</td>
                       <td className={`td text-center ${totalDailyAchievement >= 100 ? 'text-green-600' : 'text-red-500'}`}>{totalDailyAchievement.toFixed(1)}%</td>
                       <td className="td text-center">{Math.round(totalTrans)}</td>
                       <td className="td text-center">{formatSAR(avgInv)}</td>
