@@ -261,26 +261,40 @@ export function getSeasonDateRange(seasonId: string, currentGregorianYear?: numb
     if (!season) return null;
 
     try {
-      // Find the equivalent Hijri year by looking at the SAME time of year but in the target Gregorian year
-      const now = new Date();
-      const baseDate = new Date(year, now.getMonth(), now.getDate());
-      const baseHijri = gregorianToHijri({ year: baseDate.getFullYear(), month: baseDate.getMonth() + 1, day: baseDate.getDate() });
-      const currentHijriYear = baseHijri.year;
+      // Select the Hijri year by anchoring to the selected Gregorian year, not today's date.
+      // This keeps Hijri season matching stable even when the current season changes.
+      const jan1Hijri = gregorianToHijri({ year, month: 1, day: 1 });
+      const candidateHijriYears = [jan1Hijri.year - 1, jan1Hijri.year, jan1Hijri.year + 1, jan1Hijri.year + 2];
 
-      const startGreg = hijriToGregorian({ year: currentHijriYear, month: season.hijriMonth, day: season.startDay });
+      const candidates = candidateHijriYears.map((hy) => {
+        const startGreg = hijriToGregorian({ year: hy, month: season.hijriMonth, day: season.startDay });
+        let endGreg;
+        try {
+          endGreg = hijriToGregorian({ year: hy, month: season.hijriMonth, day: season.endDay });
+        } catch {
+          // Fallback for months that might be 29 days instead of 30
+          endGreg = hijriToGregorian({ year: hy, month: season.hijriMonth, day: season.endDay - 1 });
+        }
+        return {
+          start: `${startGreg.year}-${pad(startGreg.month)}-${pad(startGreg.day)}`,
+          end: `${endGreg.year}-${pad(endGreg.month)}-${pad(endGreg.day)}`,
+        };
+      });
 
-      let endGreg;
-      try {
-        endGreg = hijriToGregorian({ year: currentHijriYear, month: season.hijriMonth, day: season.endDay });
-      } catch {
-        // Fallback for months that might be 29 days instead of 30
-        endGreg = hijriToGregorian({ year: currentHijriYear, month: season.hijriMonth, day: season.endDay - 1 });
+      // Prefer season ranges that start inside the selected Gregorian year.
+      const startsInTargetYear = candidates.filter((c) => Number(c.start.slice(0, 4)) === year);
+      if (startsInTargetYear.length > 0) {
+        return startsInTargetYear[0];
       }
 
-      return {
-        start: `${startGreg.year}-${pad(startGreg.month)}-${pad(startGreg.day)}`,
-        end: `${endGreg.year}-${pad(endGreg.month)}-${pad(endGreg.day)}`,
-      };
+      // Fallback: choose the closest start date to mid-year anchor.
+      const midYearTs = new Date(year, 6, 1).getTime();
+      candidates.sort((a, b) => {
+        const da = Math.abs(new Date(a.start).getTime() - midYearTs);
+        const db = Math.abs(new Date(b.start).getTime() - midYearTs);
+        return da - db;
+      });
+      return candidates[0];
     } catch (e) {
       console.error("Error calculating Hijri season date", e);
       return null;

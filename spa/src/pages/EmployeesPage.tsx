@@ -7,6 +7,7 @@ import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, PremiumTargetIcon, VisitorsIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
 import EmployeeCompareModal from '../components/EmployeeCompareModal';
+import { getPrevYearDate } from '../utils/seasons';
 
 type Period = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
 type SortKey =
@@ -143,6 +144,8 @@ function EmployeeDetailModal({
 
   onClose,
   periodLabel,
+  rangeStart,
+  rangeEnd,
   targetEnabled,
   prodRaw, // New prop for product data
   empRaw, // New prop for sales history
@@ -152,6 +155,8 @@ function EmployeeDetailModal({
   branchStats: BranchStats;
 
   periodLabel: string;
+  rangeStart: string;
+  rangeEnd: string;
   targetEnabled: boolean;
   prodRaw: any;
   empRaw: any;
@@ -278,6 +283,73 @@ function EmployeeDetailModal({
   const [soldItemDrillDown, setSoldItemDrillDown] = useState<any>(null);
   const [soldItemSearch, setSoldItemSearch] = useState('');
   const SOLD_ITEMS_PER_PAGE = 10;
+
+  const employeeDailySales = useMemo(() => {
+    if (!open || !detail || !empRaw || !rangeStart || !rangeEnd) return [];
+    const historyData: Record<string, any[]> = empRaw?.history || {};
+    const idRaw = String(detail.id || '').trim();
+    const idClean = idRaw.replace(/^0+/, '');
+    const idPadded = idRaw.padStart(4, '0');
+    const matchesEmployee = (rawName: unknown) => {
+      const raw = String(rawName || '').trim();
+      if (!raw) return false;
+      const empPart = raw.includes('-') ? raw.split('-')[0].trim() : raw;
+      const empClean = empPart.replace(/^0+/, '');
+      return empPart === idRaw || empPart === idPadded || empClean === idClean;
+    };
+
+    const currByDate: Record<string, { sales: number; trans: number; items: number }> = {};
+    const prevByDate: Record<string, number> = {};
+    const currToPrev: Record<string, string> = {};
+
+    let d = new Date(rangeStart);
+    const end = new Date(rangeEnd);
+    while (d <= end) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const currDate = `${y}-${m}-${day}`;
+      currByDate[currDate] = { sales: 0, trans: 0, items: 0 };
+      currToPrev[currDate] = getPrevYearDate(currDate);
+      d.setDate(d.getDate() + 1);
+    }
+
+    const prevToCurr: Record<string, string> = {};
+    Object.entries(currToPrev).forEach(([curr, prev]) => {
+      prevToCurr[prev] = curr;
+    });
+
+    Object.values(historyData).forEach((records) => {
+      (records || []).forEach((rec: any[]) => {
+        const recDate = String(rec?.[0] || '').substring(0, 10);
+        if (!recDate || !matchesEmployee(rec?.[1])) return;
+        const sales = safeNum(rec?.[2]);
+        const trans = safeNum(rec?.[3]);
+        const items = safeNum(rec?.[4]);
+        if (recDate >= rangeStart && recDate <= rangeEnd) {
+          currByDate[recDate].sales += sales;
+          currByDate[recDate].trans += trans;
+          currByDate[recDate].items += items;
+        }
+        const mappedCurrent = prevToCurr[recDate];
+        if (mappedCurrent) prevByDate[mappedCurrent] = (prevByDate[mappedCurrent] || 0) + sales;
+      });
+    });
+
+    return Object.keys(currByDate)
+      .sort((a, b) => a.localeCompare(b))
+      .map((date) => {
+        const sales = currByDate[date].sales;
+        const prevSales = prevByDate[date] || 0;
+        const growth = prevSales > 0 ? ((sales - prevSales) / prevSales) * 100 : 0;
+        const trans = currByDate[date].trans;
+        const items = currByDate[date].items;
+        const avgTicket = trans > 0 ? sales / trans : 0;
+        const itemsPerInv = trans > 0 ? items / trans : 0;
+        return { date, sales, prevSales, growth, growthVal: sales - prevSales, trans, avgTicket, itemsPerInv };
+      })
+      .filter((r) => r.sales > 0 || r.prevSales > 0 || r.trans > 0);
+  }, [open, detail, empRaw, rangeStart, rangeEnd]);
 
   // Early return NOW, after hooks
   if (!open || !detail) return null;
@@ -434,6 +506,73 @@ function EmployeeDetailModal({
               </div>
             )}
           </ChartCard>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden mt-6">
+          <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
+            <span>📅</span> تفاصيل الأيام ({rangeStart} → {rangeEnd})
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="bg-neutral-800 text-white">
+                  <th className="th text-right">التاريخ</th>
+                  <th className="th text-center">المبيعات</th>
+                  <th className="th text-center">العام الماضي</th>
+                  <th className="th text-center">النمو %</th>
+                  <th className="th text-center">قيمة النمو</th>
+                  <th className="th text-center">الفواتير</th>
+                  <th className="th text-center">متوسط الفاتورة</th>
+                  <th className="th text-center">متوسط القطع</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {employeeDailySales.map((row) => (
+                  <tr key={row.date} className="hover:bg-neutral-50 transition-colors">
+                    <td className="td font-mono font-medium text-neutral-600">{row.date}</td>
+                    <td className="td text-center font-bold text-neutral-900">{formatSAR(row.sales)}</td>
+                    <td className="td text-center text-neutral-400">{formatSAR(row.prevSales)}</td>
+                    <td className={`td text-center font-bold ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%
+                    </td>
+                    <td className={`td text-center font-medium ${row.growthVal >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {formatSAR(row.growthVal)}
+                    </td>
+                    <td className="td text-center font-medium text-neutral-700">{Math.round(row.trans)}</td>
+                    <td className="td text-center font-medium text-neutral-700">{formatSAR(row.avgTicket)}</td>
+                    <td className="td text-center font-medium text-neutral-700">{row.itemsPerInv.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                {(() => {
+                  if (employeeDailySales.length === 0) return null;
+                  const totalSales = employeeDailySales.reduce((a, r) => a + r.sales, 0);
+                  const totalPrevSales = employeeDailySales.reduce((a, r) => a + r.prevSales, 0);
+                  const totalTrans = employeeDailySales.reduce((a, r) => a + r.trans, 0);
+                  const totalGrowthVal = employeeDailySales.reduce((a, r) => a + r.growthVal, 0);
+                  const growthPct = totalPrevSales > 0 ? ((totalSales - totalPrevSales) / totalPrevSales) * 100 : 0;
+                  const avgInv = totalTrans > 0 ? totalSales / totalTrans : 0;
+                  const avgItems = totalTrans > 0 ? employeeDailySales.reduce((a, r) => a + (r.itemsPerInv * r.trans), 0) / totalTrans : 0;
+                  return (
+                    <tr className="bg-neutral-100 border-t-2 border-neutral-300 font-black">
+                      <td className="td font-bold text-neutral-700">الإجمالي</td>
+                      <td className="td text-center text-neutral-900">{formatSAR(totalSales)}</td>
+                      <td className="td text-center text-neutral-500">{formatSAR(totalPrevSales)}</td>
+                      <td className={`td text-center ${growthPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>{growthPct >= 0 ? '+' : ''}{growthPct.toFixed(1)}%</td>
+                      <td className={`td text-center ${totalGrowthVal >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatSAR(totalGrowthVal)}</td>
+                      <td className="td text-center">{Math.round(totalTrans)}</td>
+                      <td className="td text-center">{formatSAR(avgInv)}</td>
+                      <td className="td text-center">{avgItems.toFixed(2)}</td>
+                    </tr>
+                  );
+                })()}
+              </tfoot>
+            </table>
+          </div>
+          {employeeDailySales.length === 0 && (
+            <div className="text-center text-neutral-400 py-6">لا توجد بيانات يومية لهذا الموظف ضمن الفترة المحددة.</div>
+          )}
         </div>
 
         <div className="mt-6 flex justify-end">
@@ -973,6 +1112,7 @@ export default function EmployeesPage() {
       totals: { totalSales, totalTarget, totalEmployees, topEmployee },
       top10,
       labels: { todayStr, yesterdayStr },
+      range: { start: rangeStart, end: rangeEnd },
     };
   }, [
     empRaw,
@@ -1514,6 +1654,8 @@ export default function EmployeesPage() {
 
           onClose={() => setSelectedEmployeeId(null)}
           periodLabel={periodLabel}
+          rangeStart={derived.range.start}
+          rangeEnd={derived.range.end}
           targetEnabled={targetEnabled}
           prodRaw={prodRaw}
           empRaw={empRaw}
