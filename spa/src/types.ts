@@ -24,6 +24,10 @@ export interface DailyMetric {
 
 export interface CommissionData {
     storeName: string;
+    /** إجمالي مبيعات الفرع ضمن الفترة المختارة */
+    storeSales: number;
+    /** تارجت الفرع ضمن الفترة (آذار: حسب المرحلة) */
+    storeTarget: number;
     achievement: number; // percentage (0-100+)
     commissionRate: number; // percentage (0.5, 1, 2)
     employees: EmployeeCommission[];

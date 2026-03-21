@@ -159,6 +159,8 @@ export function useCommissions(
             if (storeEmployees.length > 0 || stats.sales > 0) {
                 results.push({
                     storeName: stats.name,
+                    storeSales: stats.sales,
+                    storeTarget: stats.target,
                     achievement: storeAchievement,
                     commissionRate: storeRate,
                     employees: storeEmployees.sort((a, b) => b.totalSales - a.totalSales),

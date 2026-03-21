@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 import { useCommissions, getStoreCommissionRate } from '../hooks/useCommissions';
-import { CommissionData } from '../types';
 import { CalendarIcon, ChevronDownIcon, ChevronUpIcon, CalculatorIcon, XIcon } from '../components/Icons';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { getCurrentUser } from '../auth/storage';
@@ -182,11 +181,17 @@ export default function CommissionsPage() {
     // Calculate Date Range for selected month (use local date to avoid UTC timezone shift)
     const dateRange = React.useMemo(() => {
         const pad = (n: number) => String(n).padStart(2, '0');
+        if (selectedYear === 2026 && selectedMonth === 3) {
+            if (marchPhase === '1') {
+                return { start: '2026-03-01', end: '2026-03-19' };
+            }
+            return { start: '2026-03-20', end: '2026-03-31' };
+        }
         const startStr = `${selectedYear}-${pad(selectedMonth)}-01`;
         const endDate = new Date(selectedYear, selectedMonth, 0); // last day of month
         const endStr = `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())}`;
         return { start: startStr, end: endStr };
-    }, [selectedYear, selectedMonth]);
+    }, [selectedYear, selectedMonth, marchPhase]);
 
     const commissionData = useCommissions(data?.mgmt, data?.emp, dateRange);
 
@@ -252,6 +257,19 @@ export default function CommissionsPage() {
                             ))}
                         </select>
                     </div>
+                    {selectedYear === 2026 && selectedMonth === 3 && (
+                        <div className="flex items-center gap-2 bg-orange-50/80 p-2 rounded-xl border border-orange-200">
+                            <span className="text-xs font-semibold text-orange-800 whitespace-nowrap">فترة آذار</span>
+                            <select
+                                value={marchPhase}
+                                onChange={(e) => setMarchPhase(e.target.value as '1' | '2')}
+                                className="bg-white font-bold text-neutral-800 outline-none rounded-lg border border-orange-200 px-2 py-1 text-sm min-w-[200px]"
+                            >
+                                <option value="1">الفترة الأولى (1–19 آذار)</option>
+                                <option value="2">الفترة الثانية (20–31 آذار)</option>
+                            </select>
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -295,9 +313,25 @@ export default function CommissionsPage() {
                                         }`}>
                                         {Math.round(store.achievement)}%
                                     </div>
-                                    <div>
-                                        <h3 className="font-bold text-lg text-neutral-900">{store.storeName}</h3>
-                                        <div className="flex items-center gap-2 text-sm">
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-2 sm:gap-4">
+                                            <h3 className="font-bold text-lg text-neutral-900">{store.storeName}</h3>
+                                            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+                                                <span className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-100 px-2.5 py-1 border border-neutral-200/80">
+                                                    <span className="text-neutral-500">المبيعات</span>
+                                                    <span className="font-mono font-bold text-neutral-900 tabular-nums">
+                                                        {Math.round(store.storeSales).toLocaleString()} <span className="text-[10px] font-normal text-neutral-500">SAR</span>
+                                                    </span>
+                                                </span>
+                                                <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1 border border-blue-100">
+                                                    <span className="text-blue-700/80">التارجت</span>
+                                                    <span className="font-mono font-bold text-blue-900 tabular-nums">
+                                                        {Math.round(store.storeTarget).toLocaleString()} <span className="text-[10px] font-normal text-blue-600/70">SAR</span>
+                                                    </span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm mt-1">
                                             <span className="text-neutral-500">نسبة الفرع:</span>
                                             <span className={`font-bold px-2 py-0.5 rounded text-xs ${store.commissionRate > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                                                 }`}>
