@@ -519,70 +519,10 @@ export default function EmployeesPage() {
       return 0;
     };
 
-
-
-    const targetsData: Record<string, number> = empRaw?.targets || {};
-    const targetsByMonth: Record<string, Record<string, number>> = normalizeTargetsByMonth(empRaw);
-
-    const resolveTargetForMonth = (empId: string) => {
-      const id = String(empId || '').trim();
-      if (!id) return 0;
-      const unpadded = String(parseInt(id, 10));
-      const padded = id.padStart(4, '0');
-      const candidates = Array.from(new Set([id, padded, unpadded]));
-
-      // Determine the month key to look up (YYYY-MM format)
-      // For 'today', 'yesterday', 'mtd', 'custom' it uses the current actual month or derived period start.
-      // We will prefer the view's selected standard year/month if "month" period is selected.
-      let targetMonthKey = '';
-      if (period === 'month') {
-        if (selMonth === 0) {
-          // If whole year is selected, just use the first month to grab *a* target or sum? 
-          // Usually, targets are per month so if whole year is selected, we might want to scale it.
-          // For now just grab standard current month format or return 0 to avoid massive skew.
-          targetMonthKey = `${selYear}-01`;
-        } else {
-          targetMonthKey = `${selYear}-${pad2(selMonth)}`;
-        }
-      } else if (period === 'custom' && customStart) {
-        targetMonthKey = customStart.substring(0, 7);
-      } else if (period === 'yesterday') {
-        targetMonthKey = toLocalYMD(yesterday).substring(0, 7);
-      } else if (period === 'mtd') {
-        const rangeStartStr = rangeStart || toLocalYMD(today);
-        targetMonthKey = rangeStartStr.substring(0, 7);
-      } else {
-        targetMonthKey = toLocalYMD(today).substring(0, 7);
-      }
-
-
-      // Helper function to check candidates in a specific month
-      const checkTbm = (monthKey: string) => {
-        const tbm = targetsByMonth[monthKey];
-        if (tbm) {
-          for (const c of candidates) {
-            if (tbm[c] != null && !isNaN(tbm[c])) return safeNum(tbm[c]);
-          }
-        }
-        return null;
-      };
-
-      // 1. Try targets_by_month for the selected/current month
-      let target = checkTbm(targetMonthKey);
-      if (target !== null) return target;
-
-      // 2. Check if the employee is tracked monthly AT ALL. If yes, and the target is missing, it means 0.
-      const hasMonthlyTarget = Object.values(targetsByMonth).some((m: any) => candidates.some(c => m[c] != null));
-      if (hasMonthlyTarget) return 0;
-
-      // 3. Fallback to default flat targets object if NOT tracked monthly
-      for (const c of candidates) {
-        const v = targetsData[c];
-        if (v != null && !isNaN(v)) return safeNum(v);
-      }
-
-      return 0;
-    };
+    /** تاريخ مرجعي لمرحلة تارجت آذار 2026 + اختيار تارجت الموظف */
+    const refForEmployeeTarget = period === 'yesterday' ? yesterdayStr : period === 'today' ? todayStr : rangeEnd;
+    const resolveTargetForMonth = (empId: string) =>
+      getEmployeeTargetForEffectiveDate(empRaw, empId, refForEmployeeTarget);
 
     const branchStats: BranchStats = {};
 
