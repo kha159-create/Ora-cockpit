@@ -483,7 +483,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                                 </div>
                                                 <div className="flex justify-between items-center bg-orange-50 px-2 py-1 rounded mt-auto">
                                                     <span className="text-orange-600 text-xs font-semibold">موظفين:</span>
-                                                    <span className="font-bold text-orange-700">{Object.keys(store.employees).length}</span>
+                                                    <span className="font-bold text-orange-700">{Array.isArray(store.employees) ? store.employees.length : 0}</span>
                                                 </div>
 
                                                 {/* Store Shift Row */}
@@ -535,19 +535,27 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                                     </div>
                                                 </div>
 
-                                                {/* Monthly Target */}
-                                                <div className="flex justify-between items-center text-xs text-neutral-500 mt-1">
-                                                    <span>الهدف الشهري: {formatSAR(store.monthTarget)}</span>
-                                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${store.monthSales >= store.monthTarget ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                                                        {store.monthTarget > 0 ? ((store.monthSales / store.monthTarget) * 100).toFixed(1) : 0}%
-                                                    </span>
+                                                {/* Monthly Target: هدف + مبيعات شهرية + نسبة */}
+                                                <div className="flex flex-col gap-1 text-xs text-neutral-500 mt-1">
+                                                    <div className="flex justify-between items-center gap-2 flex-wrap">
+                                                        <span className="text-neutral-600">
+                                                            الهدف الشهري: <span className="font-semibold text-neutral-800" dir="ltr">{formatSAR(store.monthTarget || 0)}</span>
+                                                        </span>
+                                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${(store.monthSales || 0) >= (store.monthTarget || 0) && (store.monthTarget || 0) > 0 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                            {store.monthTarget > 0 ? ((store.monthSales / store.monthTarget) * 100).toFixed(1) : 0}%
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex justify-between text-[10px] text-neutral-400">
+                                                        <span>مبيعات الشهر (تراكمي)</span>
+                                                        <span className="font-bold text-neutral-700" dir="ltr">{formatSAR(store.monthSales || 0)}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
                                     </button>
 
-                                    {/* Employees Section */}
-                                    {isExpanded && store.employees.length > 0 && (
+                                    {/* Employees Section — يظهر لكل من باع اليوم حتى بعد إكمال التارجت */}
+                                    {isExpanded && Array.isArray(store.employees) && store.employees.length > 0 && (
                                         <div className="border-t border-neutral-100 bg-neutral-50 divide-y divide-neutral-100 transition-all duration-300 animate-in slide-in-from-top-2">
                                             {store.employees.sort((a: any, b: any) => b.sales - a.sales).map((emp: any) => (
                                                 <div key={emp.id} className="flex flex-col">
@@ -567,9 +575,21 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                                             {/* Compact Metrics Row */}
                                                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-neutral-500">
                                                                 <div className="flex items-center gap-1 bg-orange-50 px-1.5 py-0.5 rounded text-orange-700 font-medium">
-                                                                    <span>تارجت:</span>
+                                                                    <span>يومي:</span>
                                                                     <span dir="ltr">{formatSAR(emp.dailyTarget || 0)}</span>
+                                                                    {(emp.monthTarget || 0) > 0 && (emp.monthSales || 0) >= (emp.monthTarget || 0) && (
+                                                                        <span className="text-[9px] text-green-600 font-bold mr-0.5">محقق الشهري</span>
+                                                                    )}
                                                                 </div>
+                                                                {(emp.monthTarget || 0) > 0 && (
+                                                                    <div className="flex items-center gap-1 bg-neutral-100 px-1.5 py-0.5 rounded text-neutral-700 font-medium">
+                                                                        <span>شهري:</span>
+                                                                        <span dir="ltr">{formatSAR(emp.monthSales || 0)} / {formatSAR(emp.monthTarget || 0)}</span>
+                                                                        <span className="text-[9px] text-orange-600">
+                                                                            ({(emp.monthTarget || 0) > 0 ? (((emp.monthSales || 0) / (emp.monthTarget || 1)) * 100).toFixed(1) : '0'}%)
+                                                                        </span>
+                                                                    </div>
+                                                                )}
                                                                 <div className="flex items-center gap-1">
                                                                     <span className="opacity-70">مساهمة:</span>
                                                                     <span className="font-bold text-neutral-700">{store.sales > 0 ? ((emp.sales / store.sales) * 100).toFixed(1) : '0'}%</span>

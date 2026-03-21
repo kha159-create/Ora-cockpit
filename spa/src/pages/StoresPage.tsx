@@ -8,7 +8,13 @@ import { SalesIcon, InvoicesIcon, VisitorsIcon, FireIcon, CustomerValueIcon } fr
 import { runProductValueAnalysis, safeNum } from '../services/analysisHelpers';
 import StoreCompareModal from '../components/StoreCompareModal';
 import { getPrevYearRange, getPrevYearDate } from '../utils/seasons';
-import { getMarch2026TargetMetrics } from '../utils/march2026Targets';
+import {
+  getMarch2026TargetMetrics,
+  sumManagementTargetsForMonth,
+  getMarch2026PhaseSalesBounds,
+  march2026TargetRowMatchesReference,
+  getEmployeeTargetForEffectiveDate,
+} from '../utils/march2026Targets';
 
 type Mode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
 
@@ -201,9 +207,13 @@ function StoreDetailsModal({
 
     const resolveTargetForRange = (empId: string) => {
       if (!empId) return 0;
+      const mkStart = rangeStart.substring(0, 7);
+      const mkEnd = rangeEnd.substring(0, 7);
+      if (mkStart === mkEnd) {
+        return getEmployeeTargetForEffectiveDate(employeesJson, empId, rangeEnd);
+      }
       const id = String(empId).trim();
       const cands = [id, id.padStart(4, '0')];
-
       let sumT = 0;
       if (monthKeys.length > 0) {
         for (const mk of monthKeys) {
@@ -223,7 +233,6 @@ function StoreDetailsModal({
         }
         if (sumT > 0) return sumT;
       }
-
       for (const c of cands) {
         if (targets[c] != null) return safeNum(targets[c]);
       }
@@ -734,14 +743,24 @@ export default function StoresPage() {
     const branchMonthSales: Record<string, number> = {};
     const branchMonthTarget: Record<string, number> = {};
     const todayNow = new Date();
-    const curMonthStart = `${toLocalYMD(todayNow).substring(0, 8)}01`;
+    const ymdToday = toLocalYMD(todayNow);
+    const curMonthStart = `${ymdToday.substring(0, 8)}01`;
+    const refForPhase = range.endYMD <= ymdToday ? range.endYMD : ymdToday;
+    const phaseSalesBounds = getMarch2026PhaseSalesBounds(ymdToday);
+    const mtdSalesStart = phaseSalesBounds?.start ?? curMonthStart;
+    const mtdSalesEnd = phaseSalesBounds?.end ?? ymdToday;
+    const monthKey = ymdToday.substring(0, 7);
+    const phaseMonthTargets = sumManagementTargetsForMonth(raw.targets, monthKey, ymdToday);
+    Object.entries(phaseMonthTargets).forEach(([s, v]) => {
+      branchMonthTarget[s] = safeNum(v);
+    });
 
     (raw.sales || []).forEach((x: any[]) => {
       const [d, s, v] = x;
       const ds = normDate(d);
       if (inRange(d)) branchSales[s] = (branchSales[s] || 0) + safeNum(v);
       if (inPrev(d)) prevSales[s] = (prevSales[s] || 0) + safeNum(v);
-      if (ds >= curMonthStart && ds <= toLocalYMD(todayNow)) {
+      if (ds >= mtdSalesStart && ds <= mtdSalesEnd) {
         branchMonthSales[s] = (branchMonthSales[s] || 0) + safeNum(v);
       }
     });
@@ -752,9 +771,8 @@ export default function StoresPage() {
     (raw.targets || []).forEach((x: any[]) => {
       const [d, s, v] = x;
       const ds = normDate(d);
-      if (inRange(d)) branchTarget[s] = (branchTarget[s] || 0) + safeNum(v);
-      if (ds >= curMonthStart && ds <= toLocalYMD(new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0))) {
-        branchMonthTarget[s] = (branchMonthTarget[s] || 0) + safeNum(v);
+      if (inRange(d) && march2026TargetRowMatchesReference(ds, refForPhase)) {
+        branchTarget[s] = (branchTarget[s] || 0) + safeNum(v);
       }
     });
     (raw.visitors || []).forEach((x: any[]) => {

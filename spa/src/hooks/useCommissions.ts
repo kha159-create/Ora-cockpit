@@ -1,5 +1,10 @@
 import { useMemo } from 'react';
 import { CommissionData, EmployeeCommission } from '../types';
+import {
+    sumManagementTargetsForMonth,
+    getEmployeeTargetForEffectiveDate,
+    dateWithinMarchPhaseSalesBounds,
+} from '../utils/march2026Targets';
 
 // Commission Rules based on Store Achievement
 export const getStoreCommissionRate = (achievement: number): number => {
@@ -26,18 +31,17 @@ export function useCommissions(
 
         (rawMgmt.sales || []).forEach(([d, sid, amt]: any[]) => {
             const dateStr = String(d).substring(0, 10);
-            if (dateStr >= start && dateStr <= end) {
-                if (!storeStats[sid]) storeStats[sid] = { sales: 0, target: 0, name: storesMap[sid] || sid };
-                storeStats[sid].sales += (amt || 0);
-            }
+            if (dateStr < start || dateStr > end) return;
+            if (end.startsWith('2026-03') && !dateWithinMarchPhaseSalesBounds(dateStr, end)) return;
+            if (!storeStats[sid]) storeStats[sid] = { sales: 0, target: 0, name: storesMap[sid] || sid };
+            storeStats[sid].sales += (amt || 0);
         });
 
-        (rawMgmt.targets || []).forEach(([d, sid, amt]: any[]) => {
-            const dateStr = String(d).substring(0, 10);
-            if (dateStr >= start && dateStr <= end) {
-                if (!storeStats[sid]) storeStats[sid] = { sales: 0, target: 0, name: storesMap[sid] || sid };
-                storeStats[sid].target += (amt || 0);
-            }
+        const monthKey = end.substring(0, 7);
+        const storeTargetMap = sumManagementTargetsForMonth(rawMgmt.targets, monthKey, end);
+        Object.entries(storeTargetMap).forEach(([sid, t]) => {
+            if (!storeStats[sid]) storeStats[sid] = { sales: 0, target: 0, name: storesMap[sid] || sid };
+            storeStats[sid].target = t;
         });
 
         // ===== 2. Aggregate employee data across ALL stores =====
@@ -54,6 +58,7 @@ export function useCommissions(
             (records || []).forEach(rec => {
                 const date = String(rec[0]).substring(0, 10);
                 if (date < start || date > end) return;
+                if (end.startsWith('2026-03') && !dateWithinMarchPhaseSalesBounds(date, end)) return;
 
                 const rawId = rec[1];
                 let empId = String(rawId || '').trim();
@@ -118,47 +123,9 @@ export function useCommissions(
             });
         });
 
-        // ===== 4. Resolve employee target for the selected month =====
-        const targetsByMonth = rawEmp.targets_by_month || {};
-        const monthlyTargets = rawEmp.monthly_targets || {};
-        const flatTargets = rawEmp.targets || {};
-        const monthKey = start.substring(0, 7); // YYYY-MM
-        const monthKeyFull = `${monthKey}-01`;
-
-        const resolveTargetForMonth = (empId: string) => {
-            const id = String(empId).trim();
-            // id can be '134', '0134', or name. Check unpadded and padded versions.
-            const unpadded = String(parseInt(id, 10));
-            const padded = id.padStart(4, '0');
-            const cands = Array.from(new Set([id, padded, unpadded]));
-
-            // 1. Try targets_by_month[YYYY-MM][empId]
-            const hasMonthlyTbm = Object.values(targetsByMonth).some((m: any) => cands.some(c => m[c] != null));
-            const hasMonthlyMt = cands.some(c => monthlyTargets[c] != null);
-
-            if (hasMonthlyTbm || hasMonthlyMt) {
-                const tbm = targetsByMonth[monthKey];
-                if (tbm) {
-                    for (const c of cands) {
-                        if (tbm[c] != null) return Number(tbm[c]) || 0;
-                    }
-                }
-                for (const c of cands) {
-                    const mt = monthlyTargets[c];
-                    if (mt && typeof mt === 'object') {
-                        const targetVal = mt[monthKeyFull];
-                        if (targetVal != null) return Number(targetVal) || 0;
-                    }
-                }
-                return 0; // Tracked monthly, but no target for this specific month = 0
-            }
-
-            // 3. Flat targets from targets object ONLY if not tracked monthly
-            for (const c of cands) {
-                if (flatTargets[c] != null) return Number(flatTargets[c]) || 0;
-            }
-            return 0;
-        };
+        // ===== 4. Resolve employee target (مرحلتي آذار 2026 مثل الفروع) =====
+        const resolveTargetForMonth = (empId: string) =>
+            getEmployeeTargetForEffectiveDate(rawEmp, empId, end);
 
         // ===== 5. Assemble results =====
         const results: CommissionData[] = [];

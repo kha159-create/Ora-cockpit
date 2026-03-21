@@ -1,7 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { loadManagementData, loadEmployeesData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { getMarch2026TargetMetrics } from '../utils/march2026Targets';
+import {
+    getMarch2026TargetMetrics,
+    getMarch2026PhaseSalesBounds,
+    sumManagementTargetsForMonth,
+    getEmployeeTargetForEffectiveDate,
+} from '../utils/march2026Targets';
 
 function toYMD(d: Date) {
     const y = d.getFullYear();
@@ -79,7 +84,6 @@ export function useLiveSalesData() {
         const storesMap = raw.stores || {};
         const historyData: Record<string, any[]> = empRaw.history || {};
         const names: Record<string, string> = empRaw.employee_names || {};
-        const empTargets: Record<string, number> = empRaw.targets || {};
 
         const effectiveManager = isAdminOrAuditor(user?.role) ? manager : (user?.name || manager);
 
@@ -118,11 +122,15 @@ export function useLiveSalesData() {
         const daysInMonth = targetM.periodLength;
         const remainingDays = targetM.remainingDaysInclusive;
 
+        const phaseBounds = getMarch2026PhaseSalesBounds(effectiveDateStr);
+        const mtdStartStr = phaseBounds?.start ?? startOfMonthStr;
+        const mtdEndStr = phaseBounds?.end ?? effectiveDateStr;
+
         const empMTDSales: Record<string, number> = {};
         Object.values(historyData).forEach((records) => {
             (records || []).forEach((rec: any) => {
                 const dt = rec?.[0];
-                if (dt < startOfMonthStr || dt > effectiveDateStr) return;
+                if (String(dt) < mtdStartStr || String(dt) > mtdEndStr) return;
                 const rawId = rec?.[1];
                 const sales = Number(rec?.[2]) || 0;
                 let id = String(rawId || '').trim().split('-')[0].trim();
@@ -137,7 +145,7 @@ export function useLiveSalesData() {
 
         (raw.sales || []).forEach(([d, sid, v]: any[]) => {
             const dateStr = String(d).substring(0, 10);
-            if (dateStr >= startOfMonthStr && dateStr <= effectiveDateStr) {
+            if (dateStr >= mtdStartStr && dateStr <= mtdEndStr) {
                 ensureStore(sid);
                 byStore[sid].monthSales += v || 0;
 
@@ -147,12 +155,10 @@ export function useLiveSalesData() {
             }
         });
 
-        (raw.targets || []).forEach(([d, sid, v]: any[]) => {
-            const dateStr = String(d).substring(0, 10);
-            if (dateStr.startsWith(currentMonthKey)) {
-                ensureStore(sid);
-                byStore[sid].monthTarget += v || 0;
-            }
+        const storeTargetsMap = sumManagementTargetsForMonth(raw.targets, currentMonthKey, effectiveDateStr);
+        Object.entries(storeTargetsMap).forEach(([sid, mt]) => {
+            ensureStore(sid);
+            byStore[sid].monthTarget = mt;
         });
 
         (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
@@ -190,7 +196,7 @@ export function useLiveSalesData() {
                 if (!id || id === 'مرتجع') continue;
 
                 const name = names[id] || names[id.padStart(4, '0')] || id;
-                const eTarget = empTargets[id] || empTargets[id.padStart(4, '0')] || 0;
+                const eTarget = getEmployeeTargetForEffectiveDate(empRaw, id, effectiveDateStr);
                 const eMTDSales = empMTDSales[id] || 0;
                 // Remaining Daily Logic
                 const eDailyTarget = (eTarget > eMTDSales && remainingDays > 0) ? (eTarget - eMTDSales) / remainingDays : 0;
@@ -198,10 +204,22 @@ export function useLiveSalesData() {
                 const effectiveDailyTarget = eDailyTarget > 0 ? eDailyTarget : (eTarget / daysInMonth);
                 const eAchievement = effectiveDailyTarget > 0 ? (sales / effectiveDailyTarget) * 100 : 0;
 
-                if (!byStore[storeCode].employees[id]) byStore[storeCode].employees[id] = { sales: 0, trans: 0, name, achievement: 0, dailyTarget: effectiveDailyTarget };
+                if (!byStore[storeCode].employees[id]) {
+                    byStore[storeCode].employees[id] = {
+                        sales: 0,
+                        trans: 0,
+                        name,
+                        achievement: 0,
+                        dailyTarget: effectiveDailyTarget,
+                        monthTarget: eTarget,
+                    };
+                }
                 byStore[storeCode].employees[id].sales += sales;
                 byStore[storeCode].employees[id].trans += trans;
-                byStore[storeCode].employees[id].achievement = eAchievement; // Update with latest sales
+                byStore[storeCode].employees[id].achievement = eAchievement;
+                byStore[storeCode].employees[id].dailyTarget = effectiveDailyTarget;
+                byStore[storeCode].employees[id].monthTarget = eTarget;
+                byStore[storeCode].employees[id].monthSales = empMTDSales[id] || 0;
             }
         });
 
@@ -209,7 +227,9 @@ export function useLiveSalesData() {
         const storeList = Object.entries(byStore)
             .filter(([sid]) => {
                 if (!allowedStoreIds.has(sid)) return false;
-                return (byStore[sid].sales > 0 || byStore[sid].trans > 0);
+                const v = byStore[sid];
+                const hasEmpToday = Object.keys(v.employees || {}).length > 0;
+                return (v.sales > 0 || v.trans > 0 || hasEmpToday);
             })
             .map(([sid, v]) => ({
                 sid,
@@ -231,7 +251,9 @@ export function useLiveSalesData() {
                         trans: e.trans,
                         avgInv: e.trans > 0 ? e.sales / e.trans : 0,
                         dailyTarget: e.dailyTarget,
-                        achievement: e.achievement
+                        achievement: e.achievement,
+                        monthSales: (e as any).monthSales ?? empMTDSales[id] ?? 0,
+                        monthTarget: (e as any).monthTarget ?? 0,
                     }))
                     .sort((a, b) => b.sales - a.sales),
             }))

@@ -7,7 +7,11 @@ import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, PremiumTargetIcon, VisitorsIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
 import EmployeeCompareModal from '../components/EmployeeCompareModal';
-import { getMarch2026TargetMetrics } from '../utils/march2026Targets';
+import {
+  getMarch2026TargetMetrics,
+  getEmployeeTargetForEffectiveDate,
+  dateWithinMarchPhaseSalesBounds,
+} from '../utils/march2026Targets';
 
 type Period = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
 type SortKey =
@@ -68,29 +72,6 @@ function formatSAR(val: number) {
 
 function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
-}
-
-function normalizeTargetsByMonth(employeesJson: any) {
-  // Supports 2 formats:
-  // 1) targets_by_month: { "YYYY-MM": { empId: target, ... } }
-  // 2) monthly_targets: { empId: { "YYYY-MM-01": target, ... } }
-  const direct = employeesJson?.targets_by_month;
-  if (direct && typeof direct === 'object') return direct as Record<string, Record<string, number>>;
-
-  const monthlyTargets = employeesJson?.monthly_targets;
-  const byMonth: Record<string, Record<string, number>> = {};
-  if (monthlyTargets && typeof monthlyTargets === 'object') {
-    for (const [empIdRaw, mp] of Object.entries(monthlyTargets)) {
-      if (!mp || typeof mp !== 'object') continue;
-      const empId = String(empIdRaw);
-      for (const [monthStart, val] of Object.entries(mp as Record<string, number>)) {
-        const monthKey = String(monthStart).substring(0, 7); // YYYY-MM
-        if (!byMonth[monthKey]) byMonth[monthKey] = {};
-        byMonth[monthKey][empId] = safeNum(val);
-      }
-    }
-  }
-  return byMonth;
 }
 
 function resolveEmployeeName(rawId: string, fallbackName: string, employeeNames: Record<string, string>) {
@@ -628,7 +609,10 @@ export default function EmployeesPage() {
         const pStatus = checkPeriod(dObj, dNorm);
         if (pStatus === 0) continue;
 
-        if (pStatus === 1) {
+        const skipMarchCurrent =
+          refForEmployeeTarget.startsWith('2026-03') && !dateWithinMarchPhaseSalesBounds(dNorm, refForEmployeeTarget);
+
+        if (pStatus === 1 && !skipMarchCurrent) {
           branchStats[storeCode].current += sales;
           branchStats[storeCode].transactions += trans;
           branchStats[storeCode].items += items;
@@ -667,7 +651,7 @@ export default function EmployeesPage() {
         }
 
         // Track store stats for primary-store detection (transfers)
-        if (pStatus === 1) {
+        if (pStatus === 1 && !skipMarchCurrent) {
           if (!empAgg[key].storeStats[storeCode]) empAgg[key].storeStats[storeCode] = 0;
           empAgg[key].storeStats[storeCode] += sales;
           if (sales > 0) {
@@ -677,7 +661,7 @@ export default function EmployeesPage() {
           }
         }
 
-        if (pStatus === 1) {
+        if (pStatus === 1 && !skipMarchCurrent) {
           empAgg[key].sales += sales;
           empAgg[key].transactions += trans;
           empAgg[key].items += items;

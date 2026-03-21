@@ -6,7 +6,13 @@ import { loadManagementData, loadEmployeesData } from '../services/upstreamData'
 
 import { getCurrentUser } from '../auth/storage';
 import { getPrevYearDate, getPrevYearRange } from '../utils/seasons';
-import { getMarch2026TargetMetrics } from '../utils/march2026Targets';
+import {
+  getMarch2026TargetMetrics,
+  sumManagementTargetsForMonth,
+  march2026TargetRowMatchesReference,
+  getEmployeeTargetForEffectiveDate,
+  getMarch2026PhaseSalesBounds,
+} from '../utils/march2026Targets';
 import * as XLSX from 'xlsx';
 
 type FilterMode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
@@ -58,26 +64,6 @@ function getRange(
   let end = new Date(y, m, 0);
   if (end > today) end = new Date(today);
   return { start: toYMD(start), end: toYMD(end) };
-}
-
-function normalizeTargetsByMonth(employeesJson: any) {
-  const direct = employeesJson?.targets_by_month;
-  if (direct && typeof direct === 'object') return direct as Record<string, Record<string, number>>;
-
-  const monthlyTargets = employeesJson?.monthly_targets;
-  const byMonth: Record<string, Record<string, number>> = {};
-  if (monthlyTargets && typeof monthlyTargets === 'object') {
-    for (const [empIdRaw, mp] of Object.entries(monthlyTargets)) {
-      if (!mp || typeof mp !== 'object') continue;
-      const empId = String(empIdRaw);
-      for (const [monthStart, val] of Object.entries(mp as Record<string, number>)) {
-        const monthKey = String(monthStart).substring(0, 7);
-        if (!byMonth[monthKey]) byMonth[monthKey] = {};
-        byMonth[monthKey][empId] = Number(val) || 0;
-      }
-    }
-  }
-  return byMonth;
 }
 
 export default function ReportsPage() {
@@ -302,8 +288,6 @@ export default function ReportsPage() {
     if (!rawMgmt || !rawEmp) return;
     const history = rawEmp.history || {};
     const names = rawEmp.employee_names || {};
-    const targets = rawEmp.targets || {};
-    const targetsByMonth = normalizeTargetsByMonth(rawEmp);
     const storesMap = rawMgmt.stores || {};
 
     const today = new Date();
@@ -316,22 +300,11 @@ export default function ReportsPage() {
     const mtdEndObj = yesterday.getMonth() !== today.getMonth() ? today : yesterday;
     const mtdStart = toYMD(mtdStartObj);
     const mtdEndStr = toYMD(mtdEndObj);
+    const marchMtd = getMarch2026PhaseSalesBounds(mtdEndStr);
+    const effMtdStart = marchMtd?.start ?? mtdStart;
+    const effMtdEnd = marchMtd?.end ?? mtdEndStr;
 
-    const targetMonthKey = range.start.substring(0, 7);
-    const getTarget = (rawId: string) => {
-      const id = String(rawId || '').split('-')[0].trim();
-      const padded = id.padStart(4, '0');
-      // Check if employee is tracked in monthly targets at all
-      const hasMonthlyTarget = Object.values(targetsByMonth).some(m => m[id] != null || m[padded] != null);
-      if (hasMonthlyTarget) {
-        if (targetsByMonth[targetMonthKey]) {
-          if (targetsByMonth[targetMonthKey][id] != null) return targetsByMonth[targetMonthKey][id];
-          if (targetsByMonth[targetMonthKey][padded] != null) return targetsByMonth[targetMonthKey][padded];
-        }
-        return 0; // Tracked monthly, but no target for this specific month = 0
-      }
-      return targets[id] || targets[padded] || 0;
-    };
+    const getTarget = (rawId: string) => getEmployeeTargetForEffectiveDate(rawEmp, rawId, mtdEndStr);
 
     // Group employees by store
     const byStore: Record<string, Record<string, any>> = {};
@@ -356,7 +329,7 @@ export default function ReportsPage() {
           byStore[sid][empId].ySales += s || 0;
           byStore[sid][empId].yTrans += t || 0;
         }
-        if (dt >= mtdStart && dt <= mtdEndStr) {
+        if (dt >= effMtdStart && dt <= effMtdEnd) {
           byStore[sid][empId].mSales += s || 0;
           byStore[sid][empId].mTrans += t || 0;
         }
@@ -411,14 +384,6 @@ export default function ReportsPage() {
     if (!rawMgmt || !rawEmp) return;
     const history = rawEmp.history || {};
     const empNames = rawEmp.employee_names || {};
-    const targetsByMonth = normalizeTargetsByMonth(rawEmp);
-    const monthKey = range.start.substring(0, 7);
-    const getTarget = (id: string) => {
-      const padded = id.padStart(4, '0');
-      const m = targetsByMonth[monthKey];
-      if (m && (m[id] != null || m[padded] != null)) return m[id] ?? m[padded] ?? 0;
-      return (rawEmp.targets || {})[id] ?? (rawEmp.targets || {})[padded] ?? 0;
-    };
     const prevYearDate = (d: string) => d.replace(/^\d{4}/, (y) => String(Number(y) - 1));
     const empSalesByDateId: Record<string, number> = {};
     Object.entries(history).forEach(([sid, recs]) => {
@@ -447,7 +412,7 @@ export default function ReportsPage() {
             if (nameFromParts) name = nameFromParts;
           }
           const prevSales = empSalesByDateId[`${prevYearDate(date)}_${idPart}`] || 0;
-          const targetVal = getTarget(idPart);
+          const targetVal = getEmployeeTargetForEffectiveDate(rawEmp, idPart, String(date).substring(0, 10));
           rows.push({
             'التاريخ': date,
             'المعرض': storeName,
@@ -571,14 +536,16 @@ export default function ReportsPage() {
         if (inRange(d)) dataMap[s].visitors += v || 0;
         if (inPrevRange(d)) dataMap[s].prevVisitors += v || 0;
       });
+      const today2 = new Date();
+      const refEnd = range.end <= toYMD(today2) ? range.end : toYMD(today2);
       (rawMgmt.targets || []).forEach(([d, s, v]: any[]) => {
-        if (inRange(d) && passFilter(s)) {
-          if (!dataMap[s]) dataMap[s] = { name: rawMgmt.stores?.[s] || s, sales: 0, prevSales: 0, trans: 0, visitors: 0, prevVisitors: 0, target: 0 };
-          dataMap[s].target += v || 0;
-        }
+        if (!inRange(d) || !passFilter(s)) return;
+        const ds = String(d).substring(0, 10);
+        if (!march2026TargetRowMatchesReference(ds, refEnd)) return;
+        if (!dataMap[s]) dataMap[s] = { name: rawMgmt.stores?.[s] || s, sales: 0, prevSales: 0, trans: 0, visitors: 0, prevVisitors: 0, target: 0 };
+        dataMap[s].target += v || 0;
       });
 
-      const today2 = new Date();
       const remainingDays2 = getMarch2026TargetMetrics(today2).remainingDaysInclusive;
 
       rows = Object.entries(dataMap).map(([sid, r]) => {
@@ -606,28 +573,16 @@ export default function ReportsPage() {
       title = `أداء الموظفين (أمس vs MTD)`;
       const history = rawEmp?.history || {};
       const names = rawEmp?.employee_names || {};
-      const targets = rawEmp?.targets || {};
-      const targetsByMonth = normalizeTargetsByMonth(rawEmp);
       const selectedIdsArray = Array.from(selectedEmpIds);
       const storesMap = rawMgmt.stores || {};
 
       const mtdEndObj = yesterdayDate.getMonth() !== today.getMonth() ? today : yesterdayDate;
       const mtdEndStr = toYMD(mtdEndObj);
-      const targetMonthKey = range.start.substring(0, 7);
+      const marchMtdYe = getMarch2026PhaseSalesBounds(mtdEndStr);
+      const effMtdStartYe = marchMtdYe?.start ?? mtdStartYMD;
+      const effMtdEndYe = marchMtdYe?.end ?? mtdEndStr;
 
-      const getTarget = (rawId: string) => {
-        const id = String(rawId || '').split('-')[0].trim();
-        const padded = id.padStart(4, '0');
-        const hasMonthlyTarget = Object.values(targetsByMonth).some(m => m[id] != null || m[padded] != null);
-        if (hasMonthlyTarget) {
-          if (targetsByMonth[targetMonthKey]) {
-            if (targetsByMonth[targetMonthKey][id] != null) return targetsByMonth[targetMonthKey][id];
-            if (targetsByMonth[targetMonthKey][padded] != null) return targetsByMonth[targetMonthKey][padded];
-          }
-          return 0;
-        }
-        return targets[id] || targets[padded] || 0;
-      };
+      const getTarget = (rawId: string) => getEmployeeTargetForEffectiveDate(rawEmp, rawId, mtdEndStr);
 
       // Group by store → employees (same structure as generateEmployeePerformance)
       const byStore: Record<string, Record<string, any>> = {};
@@ -658,7 +613,7 @@ export default function ReportsPage() {
             byStore[sid][id].ySales += sales;
             byStore[sid][id].yTrans += trans;
           }
-          if (d >= mtdStartYMD && d <= mtdEndStr) {
+          if (d >= effMtdStartYe && d <= effMtdEndYe) {
             byStore[sid][id].mSales += sales;
             byStore[sid][id].mTrans += trans;
           }
@@ -708,8 +663,6 @@ export default function ReportsPage() {
     if (!rawEmp || !rawMgmt) return;
     const history = rawEmp.history || {};
     const names = rawEmp.employee_names || {};
-    const targets = rawEmp.targets || {};
-    const targetsByMonth = normalizeTargetsByMonth(rawEmp);
     const storesMap = rawMgmt.stores || {};
 
     const today = new Date();
@@ -719,17 +672,11 @@ export default function ReportsPage() {
     const mtdStart = toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
     const mtdEndObj = yesterday.getMonth() !== today.getMonth() ? today : yesterday;
     const mtdEndStr = toYMD(mtdEndObj);
-    const targetMonthKey = range.start.substring(0, 7);
+    const marchTpl = getMarch2026PhaseSalesBounds(mtdEndStr);
+    const effTplStart = marchTpl?.start ?? mtdStart;
+    const effTplEnd = marchTpl?.end ?? mtdEndStr;
 
-    const getTarget = (rawId: string) => {
-      const id = String(rawId || '').split('-')[0].trim();
-      const padded = id.padStart(4, '0');
-      if (targetsByMonth[targetMonthKey]) {
-        if (targetsByMonth[targetMonthKey][id] != null) return targetsByMonth[targetMonthKey][id];
-        if (targetsByMonth[targetMonthKey][padded] != null) return targetsByMonth[targetMonthKey][padded];
-      }
-      return targets[id] || targets[padded] || 0;
-    };
+    const getTarget = (rawId: string) => getEmployeeTargetForEffectiveDate(rawEmp, rawId, mtdEndStr);
 
     // Build employee list with MTD sales + عدد الأيام الفعلية التي باع فيها الموظف
     const empMap: Record<string, any> = {};
@@ -756,7 +703,7 @@ export default function ReportsPage() {
             active: false,
           };
         }
-        if (d >= mtdStart && d <= mtdEndStr) {
+        if (d >= effTplStart && d <= effTplEnd) {
           empMap[id].mtdSales += sales;
           empMap[id].mtdTrans += trans;
           if (sales > 0) {
@@ -1358,7 +1305,9 @@ export default function ReportsPage() {
                         });
                         const storesData = storeIds.map((sid) => {
                           const storeMeta = meta[sid] || {};
-                          const storeTarget = (rawMgmt.targets || []).filter(([d, s]: any[]) => s === sid && String(d).substring(0, 7) === range.start.substring(0, 7)).reduce((acc: number, [, , v]: any[]) => acc + (v || 0), 0);
+                          const refPdf = range.end <= toYMD(new Date()) ? range.end : toYMD(new Date());
+                          const storeTargetsPdf = sumManagementTargetsForMonth(rawMgmt.targets, range.start.substring(0, 7), refPdf);
+                          const storeTarget = storeTargetsPdf[sid] || 0;
                           const dailyData = dates.map((dt) => {
                             const prevDt = prevDateMap[dt];
                             const d = byStore[sid]?.[dt] || { sales: 0, trans: 0, visitors: 0 };

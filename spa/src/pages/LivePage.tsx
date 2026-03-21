@@ -3,7 +3,12 @@ import { loadManagementData, loadEmployeesData } from '../services/upstreamData'
 import { KPICard } from '../components/DashboardComponents';
 import { SalesIcon, InvoicesIcon, ChevronDownIcon, VisitorsIcon } from '../components/Icons';
 import { getCurrentUser } from '../auth/storage';
-import { getMarch2026TargetMetrics, isMarch2026TargetMonth } from '../utils/march2026Targets';
+import {
+  getMarch2026TargetMetrics,
+  isMarch2026TargetMonth,
+  sumManagementTargetsForMonth,
+  getEmployeeTargetForEffectiveDate,
+} from '../utils/march2026Targets';
 
 function toYMD(d: Date) {
   const y = d.getFullYear();
@@ -155,17 +160,11 @@ export default function LivePage() {
 
     const historyData: Record<string, any[]> = empRaw?.history || {};
     const names: Record<string, string> = empRaw?.employee_names || {};
-    const empTargets: Record<string, number> = empRaw?.targets || {};
-    const storeTargets: Record<string, number> = {};
-
-    // Extract store targets from management data
-    (raw.targets || []).forEach(([d, sid, v]: any[]) => {
-      // Assume targets are monthly, we take the one for current month if multiple, 
-      // but usually there's one entry per month
-      if (String(d).startsWith(today.substring(0, 7))) {
-        storeTargets[sid] = (storeTargets[sid] || 0) + (v || 0);
-      }
-    });
+    const storeTargets: Record<string, number> = sumManagementTargetsForMonth(
+      raw.targets,
+      today.substring(0, 7),
+      today
+    );
 
     Object.entries(historyData).forEach(([storeCode, records]) => {
       if (!byStore[storeCode]) byStore[storeCode] = { sales: 0, trans: 0, visitors: 0, shift1: 0, shift2: 0, shift3: 0, employees: {} };
@@ -214,7 +213,7 @@ export default function LivePage() {
           achievement,
           employees: Object.entries(v.employees)
             .map(([id, e]) => {
-              const eTarget = empTargets[id] || empTargets[id.padStart(4, '0')] || 0;
+              const eTarget = getEmployeeTargetForEffectiveDate(empRaw, id, today);
               const eDailyTarget = eTarget / daysInfo.total;
               const eAchievement = eDailyTarget > 0 ? (e.sales / eDailyTarget) * 100 : 0;
               return {

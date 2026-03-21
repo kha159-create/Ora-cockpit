@@ -17,7 +17,13 @@ import { getStoreLocation } from '../utils/coordinates';
 
 import { generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
 import { getPrevYearRange, getPrevYearDate } from '../utils/seasons';
-import { getMarch2026TargetMetrics } from '../utils/march2026Targets';
+import {
+  getMarch2026TargetMetrics,
+  sumManagementTargetsForMonth,
+  getEmployeeTargetForEffectiveDate,
+  dateWithinMarchPhaseSalesBounds,
+  getMarch2026PhaseSalesBounds,
+} from '../utils/march2026Targets';
 
 function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
@@ -41,26 +47,6 @@ function getEffectiveDate() {
     return d;
   }
   return now;
-}
-
-function normalizeTargetsByMonth(employeesJson: any) {
-  const direct = employeesJson?.targets_by_month;
-  if (direct && typeof direct === 'object') return direct as Record<string, Record<string, number>>;
-
-  const monthlyTargets = employeesJson?.monthly_targets;
-  const byMonth: Record<string, Record<string, number>> = {};
-  if (monthlyTargets && typeof monthlyTargets === 'object') {
-    for (const [empIdRaw, mp] of Object.entries(monthlyTargets)) {
-      if (!mp || typeof mp !== 'object') continue;
-      const empId = String(empIdRaw);
-      for (const [monthStart, val] of Object.entries(mp as Record<string, number>)) {
-        const monthKey = String(monthStart).substring(0, 7);
-        if (!byMonth[monthKey]) byMonth[monthKey] = {};
-        byMonth[monthKey][empId] = Number(val) || 0;
-      }
-    }
-  }
-  return byMonth;
 }
 
 function getDefaultRange(mode: Mode, selYear?: number, selMonth?: number) {
@@ -271,7 +257,9 @@ export default function DashboardPage() {
     const storesData = includeAllPages ? storeIds.map(sid => {
       const storeName = storesMap[sid] || sid;
       const storeMeta = meta[sid] || {};
-      const storeTarget = (raw.targets || []).filter(([d, s]: any[]) => s === sid && String(d).substring(0, 7) === startOfMonth.substring(0, 7)).reduce((acc: number, [, , v]: any[]) => acc + (v || 0), 0);
+      const monthKey = startOfMonth.substring(0, 7);
+      const storeTargetsMap = sumManagementTargetsForMonth(raw.targets, monthKey, yesterdayStr);
+      const storeTarget = storeTargetsMap[sid] || 0;
 
       const dailyData = dates.map(dt => {
         const prevDt = prevDateMap[dt];
@@ -313,10 +301,12 @@ export default function DashboardPage() {
 
     const historyData: Record<string, any[]> = empRaw.history;
     const names: Record<string, string> = empRaw.employee_names;
-    const targets: Record<string, number> = empRaw.targets || {};
     const storesMap = raw.stores || {};
     const norm = (s: unknown) => String(s || '').substring(0, 10);
     const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
+    const marchBounds = getMarch2026PhaseSalesBounds(yesterdayStr);
+    const mtdStart = marchBounds?.start ?? startOfMonth;
+    const mtdEnd = marchBounds?.end ?? yesterdayStr;
 
     // Group employees by their PRIMARY store (the one where they last made a sale in the current period)
     const empPrimaryStore: Record<string, string> = {};
@@ -326,7 +316,7 @@ export default function DashboardPage() {
       if (!allowedStoreIds.has(storeId)) return;
       for (const rec of records || []) {
         const dateStr = norm(rec?.[0]);
-        if (dateStr < startOfMonth || dateStr > yesterdayStr) continue;
+        if (dateStr < mtdStart || dateStr > mtdEnd) continue;
         const rawId = rec?.[1];
         let id = String(rawId || '').split('-')[0].trim();
         if (!id || id === 'مرتجع') continue;
@@ -346,7 +336,7 @@ export default function DashboardPage() {
 
       for (const rec of records || []) {
         const dateStr = norm(rec?.[0]);
-        if (dateStr < startOfMonth || dateStr > yesterdayStr) continue;
+        if (dateStr < mtdStart || dateStr > mtdEnd) continue;
 
         const rawId = rec?.[1];
         let id = String(rawId || '').split('-')[0].trim();
@@ -356,7 +346,7 @@ export default function DashboardPage() {
         if (selectedEmployees.size > 0 && !selectedEmployees.has(id)) continue;
 
         const empName = names[id] || names[id.padStart(4, '0')] || id;
-        const target = targets[id] ?? targets[id.padStart(4, '0')] ?? 0;
+        const target = getEmployeeTargetForEffectiveDate(empRaw, id, yesterdayStr);
         const sales = Number(rec?.[2]) || 0;
         const trans = Number(rec?.[3]) || 0;
 
@@ -376,7 +366,7 @@ export default function DashboardPage() {
           byStore[destinationStoreId][id].ySales += sales;
           byStore[destinationStoreId][id].yTrans += trans;
         }
-        if (dateStr >= startOfMonth && dateStr <= yesterdayStr) {
+        if (dateStr >= mtdStart && dateStr <= mtdEnd) {
           byStore[destinationStoreId][id].mSales += sales;
           byStore[destinationStoreId][id].mTrans += trans;
         }
@@ -596,26 +586,12 @@ export default function DashboardPage() {
     if (!empRaw?.history || !empRaw?.employee_names) return [];
     const historyData: Record<string, any[]> = empRaw.history;
     const names: Record<string, string> = empRaw.employee_names;
-    const targets: Record<string, number> = empRaw.targets || {};
-    const targetsByMonth = normalizeTargetsByMonth(empRaw);
     const storeMeta: Record<string, any> = raw?.store_meta || {};
     const norm = (s: unknown) => String(s || '').substring(0, 10);
     const agg: Record<string, { sales: number; trans: number; target: number; name: string }> = {};
 
-    const targetMonthKey = range.start.substring(0, 7);
-    const getTarget = (rawId: string) => {
-      const id = String(rawId || '').split('-')[0].trim();
-      const padded = id.padStart(4, '0');
-      const hasMonthlyTarget = Object.values(targetsByMonth).some(m => m[id] != null || m[padded] != null);
-      if (hasMonthlyTarget) {
-        if (targetsByMonth[targetMonthKey]) {
-          if (targetsByMonth[targetMonthKey][id] != null) return targetsByMonth[targetMonthKey][id];
-          if (targetsByMonth[targetMonthKey][padded] != null) return targetsByMonth[targetMonthKey][padded];
-        }
-        return 0;
-      }
-      return targets[id] || targets[padded] || 0;
-    };
+    const refEnd = range.end;
+    const getTarget = (rawId: string) => getEmployeeTargetForEffectiveDate(empRaw, rawId, refEnd);
 
     Object.entries(historyData).forEach(([storeId, records]) => {
       if (!allowedStoreIds.has(storeId)) return;
@@ -627,7 +603,9 @@ export default function DashboardPage() {
         const rawId = rec?.[1];
         const sales = Number(rec?.[2]) || 0;
         const trans = Number(rec?.[3]) || 0;
-        if (!norm(date) || norm(date) < range.start || norm(date) > range.end) continue;
+        const dStr = norm(date);
+        if (!dStr || dStr < range.start || dStr > range.end) continue;
+        if (refEnd.startsWith('2026-03') && !dateWithinMarchPhaseSalesBounds(dStr, refEnd)) continue;
         let id = String(rawId || '').trim();
         let empName = id;
         if (id.includes('-')) {
