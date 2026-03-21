@@ -8,6 +8,7 @@ import { SalesIcon, InvoicesIcon, VisitorsIcon, FireIcon, CustomerValueIcon } fr
 import { runProductValueAnalysis, safeNum } from '../services/analysisHelpers';
 import StoreCompareModal from '../components/StoreCompareModal';
 import { getPrevYearRange, getPrevYearDate } from '../utils/seasons';
+import { getMarch2026TargetMetrics } from '../utils/march2026Targets';
 
 type Mode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
 
@@ -472,9 +473,9 @@ function StoreDetailsModal({
               icon={<FireIcon />}
               subtitle={`اليومية المطلوبة: ${formatSAR((() => {
                 const todayNow = new Date();
-                const isMarch2026 = todayNow.getFullYear() === 2026 && todayNow.getMonth() === 2;
-                const daysInM = isMarch2026 ? 19 : new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0).getDate();
-                const remDays = Math.max(0, daysInM - (isMarch2026 ? Math.min(todayNow.getDate(), 19) : todayNow.getDate()) + 1);
+                const targetM = getMarch2026TargetMetrics(todayNow);
+                const daysInM = targetM.periodLength;
+                const remDays = targetM.remainingDaysInclusive;
                 const rem = Math.max(0, (store.target || 0) - store.val);
                 return remDays > 0 ? rem / remDays : 0;
               })())}`}
@@ -488,9 +489,9 @@ function StoreDetailsModal({
               icon={<SalesIcon />}
               subtitle={`اليومية المطلوبة: ${formatSAR((() => {
                 const todayNow = new Date();
-                const isMarch2026 = todayNow.getFullYear() === 2026 && todayNow.getMonth() === 2;
-                const daysInM = isMarch2026 ? 19 : new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0).getDate();
-                const remDays = Math.max(0, daysInM - (isMarch2026 ? Math.min(todayNow.getDate(), 19) : todayNow.getDate()) + 1);
+                const targetM = getMarch2026TargetMetrics(todayNow);
+                const daysInM = targetM.periodLength;
+                const remDays = targetM.remainingDaysInclusive;
                 const rem = Math.max(0, ((store.target || 0) * 0.9) - store.val);
                 return remDays > 0 ? rem / remDays : 0;
               })())}`}
@@ -801,9 +802,9 @@ export default function StoresPage() {
       const customerValue = visitorsVal > 0 ? val / visitorsVal : 0;
       const avgInv = transVal > 0 ? val / transVal : 0;
 
-      const isMarch2026 = todayNow.getFullYear() === 2026 && todayNow.getMonth() === 2;
-      const daysInM = isMarch2026 ? 19 : new Date(todayNow.getFullYear(), todayNow.getMonth() + 1, 0).getDate();
-      const remDays = Math.max(0, daysInM - (isMarch2026 ? Math.min(todayNow.getDate(), 19) : todayNow.getDate()) + 1);
+      const targetM = getMarch2026TargetMetrics(todayNow);
+      const daysInM = targetM.periodLength;
+      const remDays = targetM.remainingDaysInclusive;
       const mTarget = branchMonthTarget[sid] || targetVal || 0;
       const mSales = branchMonthSales[sid] || 0;
       const dailyReq = remDays > 0 && mTarget > mSales ? (mTarget - mSales) / remDays : 0;

@@ -9,6 +9,9 @@ __pycache__/
 .venv/
 venv/
 
+# Cursor IDE
+.cursor/
+
 # نظام
 .DS_Store
 Thumbs.db

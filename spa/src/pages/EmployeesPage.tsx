@@ -7,6 +7,7 @@ import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, PremiumTargetIcon, VisitorsIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
 import EmployeeCompareModal from '../components/EmployeeCompareModal';
+import { getMarch2026TargetMetrics } from '../utils/march2026Targets';
 
 type Period = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
 type SortKey =
@@ -759,9 +760,8 @@ export default function EmployeesPage() {
 
     // Daily req logic (only meaningful for current month)
     const todayForDaily = new Date();
-    const isMarch2026 = todayForDaily.getFullYear() === 2026 && todayForDaily.getMonth() === 2;
-    const lastDayOfMonth = isMarch2026 ? 19 : new Date(todayForDaily.getFullYear(), todayForDaily.getMonth() + 1, 0).getDate();
-    let remainingDays = Math.max(0, lastDayOfMonth - (isMarch2026 ? Math.min(todayForDaily.getDate(), 19) : todayForDaily.getDate()) + 1);
+    const targetM = getMarch2026TargetMetrics(todayForDaily);
+    let remainingDays = targetM.remainingDaysInclusive;
     if (period === 'month' && (selYear !== todayForDaily.getFullYear() || selMonth !== todayForDaily.getMonth() + 1)) remainingDays = 0;
     empList = empList.map((e) => {
       if ((period === 'mtd' || period === 'month') && e.target > e.sales && remainingDays > 0) {

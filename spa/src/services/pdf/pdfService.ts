@@ -1,4 +1,5 @@
 import { amiriFontBase64 } from './amiriFont';
+import { getMarch2026TargetMetrics } from '../../utils/march2026Targets';
 
 // Extend window to include jspdf and jspdf-autotable from CDN
 declare global {
@@ -199,10 +200,8 @@ export const generateStoreReportWithDaily = async (
         if (store.target && store.target > 0) {
             const achievement = (storeTotals.sales / store.target * 100);
             const endDateObj = new Date(dateRange.end);
-            const isMarch2026 = endDateObj.getFullYear() === 2026 && endDateObj.getMonth() === 2;
-            const daysInMonth = isMarch2026 ? 19 : new Date(endDateObj.getFullYear(), endDateObj.getMonth() + 1, 0).getDate();
-            const daysPassed = isMarch2026 ? Math.min(endDateObj.getDate(), 19) : endDateObj.getDate();
-            const remainingDays = Math.max(0, daysInMonth - daysPassed);
+            const targetM = getMarch2026TargetMetrics(endDateObj);
+            const remainingDays = targetM.remainingKPIGridStyle;
             const dailyReq = remainingDays > 0 ? (store.target - storeTotals.sales) / remainingDays : 0;
 
             doc.setFontSize(9);

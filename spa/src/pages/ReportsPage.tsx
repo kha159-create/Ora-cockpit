@@ -6,6 +6,7 @@ import { loadManagementData, loadEmployeesData } from '../services/upstreamData'
 
 import { getCurrentUser } from '../auth/storage';
 import { getPrevYearDate, getPrevYearRange } from '../utils/seasons';
+import { getMarch2026TargetMetrics } from '../utils/march2026Targets';
 import * as XLSX from 'xlsx';
 
 type FilterMode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
@@ -362,9 +363,7 @@ export default function ReportsPage() {
       });
     });
 
-    const isMarch2026 = today.getFullYear() === 2026 && today.getMonth() === 2;
-    const daysInMonth = isMarch2026 ? 19 : new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    const remainingDays = Math.max(0, daysInMonth - (isMarch2026 ? Math.min(yesterday.getDate(), 19) : yesterday.getDate()));
+    const remainingDays = getMarch2026TargetMetrics(yesterday).remainingDaysExclusive;
 
     // Build store employee data
     const storesData = Object.entries(byStore)
@@ -580,9 +579,7 @@ export default function ReportsPage() {
       });
 
       const today2 = new Date();
-      const isMarch2026 = today2.getFullYear() === 2026 && today2.getMonth() === 2;
-      const daysInMonth2 = isMarch2026 ? 19 : new Date(today2.getFullYear(), today2.getMonth() + 1, 0).getDate();
-      const remainingDays2 = Math.max(0, daysInMonth2 - (isMarch2026 ? Math.min(today2.getDate(), 19) : today2.getDate()) + 1);
+      const remainingDays2 = getMarch2026TargetMetrics(today2).remainingDaysInclusive;
 
       rows = Object.entries(dataMap).map(([sid, r]) => {
         const remaining = Math.max(0, r.target - r.sales);
@@ -668,9 +665,7 @@ export default function ReportsPage() {
         });
       });
 
-      const isMarch2026 = today.getFullYear() === 2026 && today.getMonth() === 2;
-      const daysInMonth = isMarch2026 ? 19 : new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-      const remainingDays3 = Math.max(0, daysInMonth - (isMarch2026 ? Math.min(yesterdayDate.getDate(), 19) : yesterdayDate.getDate()));
+      const remainingDays3 = getMarch2026TargetMetrics(yesterdayDate).remainingDaysExclusive;
 
       const storesData = Object.entries(byStore)
         .filter(([, emps]) => Object.keys(emps).length > 0)

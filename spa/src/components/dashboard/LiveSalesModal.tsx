@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { SalesIcon, InvoicesIcon, ChevronDownIcon, VisitorsIcon } from '../Icons';
 import { useLiveSalesData } from '../../hooks/useLiveSalesData';
 import { loadD365SalesRange } from '../../services/d365Live';
+import { getCurrentUser } from '../../auth/storage';
 
 function KPICard({ title, value, format, icon, trendValue, className }: any) {
     return (
@@ -134,17 +135,71 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     // The liveData.stores already has most fields. 
     // We need to ensure 'visitors' is handled (it's in the interface).
 
+    // عندما لا تُحدَّث مبيعات اليوم في JSON بعد، liveData.stores تكون فارغة رغم نجاح D365.
+    // ندمج صفوف D365 حتى تظهر المبيعات كما في صفحة الساعة.
     const enhancedStores = useMemo(() => {
-        if (!d365Daily) return liveData.stores;
-        return (liveData.stores || []).map((s: any) => {
-            const sid = String(s.sid || '');
-            return {
-                ...s,
-                sales: d365Daily.salesByStore[sid] ?? s.sales,
-                trans: d365Daily.transByStore[sid] ?? s.trans,
-            };
-        });
-    }, [liveData.stores, d365Daily]);
+        const storesMap = raw?.stores || {};
+        const meta = raw?.store_meta || {};
+        const user = getCurrentUser();
+        const effectiveManager = isAdminOrAuditor ? manager : (user?.name || manager);
+
+        const passesStoreFilter = (sid: string) => {
+            const m = meta[sid];
+            if (effectiveManager !== 'all') {
+                if (!m || String(m?.manager || '') !== effectiveManager) return false;
+            }
+            return true;
+        };
+
+        const baseList = liveData.stores || [];
+        const bySid = new Map<string, any>();
+        baseList.forEach((s: any) => bySid.set(String(s.sid), { ...s }));
+
+        if (!d365Daily) {
+            return baseList;
+        }
+
+        const mergeD365Row = (sid: string) => {
+            sid = String(sid);
+            if (!passesStoreFilter(sid)) return;
+            const hasSales = Object.prototype.hasOwnProperty.call(d365Daily.salesByStore, sid);
+            const hasTrans = Object.prototype.hasOwnProperty.call(d365Daily.transByStore, sid);
+            const sales = hasSales ? Number(d365Daily.salesByStore[sid]) : undefined;
+            const trans = hasTrans ? Number(d365Daily.transByStore[sid]) : undefined;
+            const existing = bySid.get(sid);
+            if (existing) {
+                bySid.set(sid, {
+                    ...existing,
+                    ...(sales !== undefined ? { sales } : {}),
+                    ...(trans !== undefined ? { trans } : {}),
+                });
+            } else {
+                const sVal = sales ?? 0;
+                const tVal = trans ?? 0;
+                if (sVal > 0 || tVal > 0) {
+                    bySid.set(sid, {
+                        sid,
+                        name: storesMap[sid] || sid,
+                        sales: sVal,
+                        trans: tVal,
+                        visitors: 0,
+                        target: 0,
+                        monthSales: 0,
+                        monthTarget: 0,
+                        dailyReq: 0,
+                        remainingDays: baseList[0]?.remainingDays ?? 0,
+                        achievement: 0,
+                        employees: [],
+                    });
+                }
+            }
+        };
+
+        Object.keys(d365Daily.salesByStore || {}).forEach(mergeD365Row);
+        Object.keys(d365Daily.transByStore || {}).forEach(mergeD365Row);
+
+        return Array.from(bySid.values()).sort((a, b) => (b.sales || 0) - (a.sales || 0));
+    }, [liveData.stores, d365Daily, raw, manager, isAdminOrAuditor]);
 
     const todayTotals = useMemo(() => ({
         sales: enhancedStores.reduce((acc: number, s: any) => acc + (s.sales || 0), 0),

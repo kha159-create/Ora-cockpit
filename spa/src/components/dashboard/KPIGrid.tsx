@@ -1,5 +1,6 @@
 import React from 'react';
 import { KPICard } from '../DashboardComponents';
+import { getMarch2026TargetMetrics } from '../../utils/march2026Targets';
 
 // Premium KPI Icons - clean, modern line art
 const SalesIcon = () => (
@@ -54,10 +55,10 @@ export const KPIGrid: React.FC<KPIGridProps> = ({ totals, prevYearTotals, monthl
     // Remaining to target
     const remaining = Math.max(totals.target - totals.sales, 0);
     const today = new Date();
-    const isMarch2026 = today.getFullYear() === 2026 && today.getMonth() === 2;
-    const daysInMonth = isMarch2026 ? 19 : new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    const daysPassed = isMarch2026 ? Math.min(today.getDate(), 19) : today.getDate();
-    const daysRemaining = Math.max(0, daysInMonth - daysPassed);
+    const targetM = getMarch2026TargetMetrics(today);
+    const daysInMonth = targetM.periodLength;
+    const daysPassed = targetM.dayOfPeriod;
+    const daysRemaining = targetM.remainingKPIGridStyle;
     const dailyRequired = daysRemaining > 0 ? remaining / daysRemaining : 0;
 
     return (

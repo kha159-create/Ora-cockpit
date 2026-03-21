@@ -3,6 +3,7 @@ import { loadManagementData, loadEmployeesData } from '../services/upstreamData'
 import { KPICard } from '../components/DashboardComponents';
 import { SalesIcon, InvoicesIcon, ChevronDownIcon, VisitorsIcon } from '../components/Icons';
 import { getCurrentUser } from '../auth/storage';
+import { getMarch2026TargetMetrics, isMarch2026TargetMonth } from '../utils/march2026Targets';
 
 function toYMD(d: Date) {
   const y = d.getFullYear();
@@ -66,9 +67,9 @@ export default function LivePage() {
       shiftTotals: { shift1: 0, shift2: 0, shift3: 0 }
     };
     const now = new Date();
-    const isMarch2026 = now.getFullYear() === 2026 && now.getMonth() === 2;
-    const total = isMarch2026 ? 19 : new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const current = isMarch2026 ? Math.min(now.getDate(), 19) : now.getDate();
+    const targetM = getMarch2026TargetMetrics(now);
+    const total = targetM.periodLength;
+    const current = targetM.dayOfPeriod;
 
     const meta = raw.store_meta || {};
     const inRange = (d: string) => String(d).startsWith(today);
@@ -87,7 +88,7 @@ export default function LivePage() {
     // Shift 2 (ظهري):   12:00 - 17:59 (Local AST) -> 07:00 - 12:59 (GMT)
     // Shift 3 (مسائي):  18:00 - 05:59 (Local AST) -> 13:00 - 00:59 (GMT)
     let shift1 = 0, shift2 = 0, shift3 = 0;
-    if (isMarch2026) {
+    if (isMarch2026TargetMonth(now)) {
       (raw.sales_hourly || []).forEach(([dt, sid, h, v]: any[]) => {
         const dtStr = String(dt || '');
         if (!dtStr.startsWith(today)) return;
@@ -137,8 +138,7 @@ export default function LivePage() {
       }
     });
 
-    const isMarch2026 = new Date().getFullYear() === 2026 && new Date().getMonth() === 2;
-    if (isMarch2026) {
+    if (isMarch2026TargetMonth(new Date())) {
       (raw.sales_hourly || []).forEach(([dt, sid, h, v]: any[]) => {
         const dtStr = String(dt || '');
         if (!dtStr.startsWith(today)) return;
