@@ -142,6 +142,8 @@ export default function CommissionsPage() {
     const [expandedStore, setExpandedStore] = useState<string | null>(null);
     const [manager, setManager] = useState<string>('all');
     const [storeFilter, setStoreFilter] = useState<string>(user?.storeId || 'all');
+    /** آذار 2026 فقط: الفترة الأولى (1–19) أو الثانية (20–31) */
+    const [marchPhase, setMarchPhase] = useState<'1' | '2'>('1');
 
     // Simulation State
     const [simModalOpen, setSimModalOpen] = useState(false);
