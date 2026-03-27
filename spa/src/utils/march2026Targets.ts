@@ -179,15 +179,18 @@ export function getEmployeeTargetForEffectiveDate(empRaw: any, empId: string, ef
         if (mk[padded] != null) return Number(mk[padded]) || 0;
     }
 
-    const flat = empRaw?.targets || {};
-    if (flat[id] != null) return Number(flat[id]) || 0;
-    if (flat[padded] != null) return Number(flat[padded]) || 0;
-
+    // مفاتيح monthly_targets المؤرّقة لنفس الشهر (مثلاً 2026-02-01) قبل targets المسطّحة —
+    // وإلا قيمة flat غالباً تكون آخر تارجت مُزامَن (مثل آذار المرحلة 1) وتُطبَّق على شهور أخرى بالخطأ.
     if (monthlyMap && typeof monthlyMap === 'object') {
         for (const [mStart, val] of Object.entries(monthlyMap as Record<string, number>)) {
             if (String(mStart).startsWith(monthKey)) return Number(val) || 0;
         }
     }
+
+    const flat = empRaw?.targets || {};
+    if (flat[id] != null) return Number(flat[id]) || 0;
+    if (flat[padded] != null) return Number(flat[padded]) || 0;
+
     return 0;
 }
 

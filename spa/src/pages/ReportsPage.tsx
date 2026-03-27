@@ -66,6 +66,69 @@ function getRange(
   return { start: toYMD(start), end: toYMD(end) };
 }
 
+type EmpActivityFilterMode = 'all' | 'active' | 'inactive';
+
+/** نشاط الموظف في النطاق: ≥3 أيام فيها مبيعات و≥1% من مبيعات فرعه (نفس منطق قالب التارجت). */
+function computeEmployeeActivityInRange(
+  rawEmp: any,
+  passFilter: (sid: string) => boolean,
+  rangeStart: string,
+  rangeEnd: string
+): Record<string, boolean> {
+  const history = rawEmp?.history || {};
+  const empAgg: Record<string, { storeId: string; sales: number }> = {};
+  const empDaysMap: Record<string, Set<string>> = {};
+
+  Object.entries(history).forEach(([sid, recs]: [string, any]) => {
+    if (!passFilter(sid)) return;
+    (recs || []).forEach((rec: any[]) => {
+      const d = String(rec[0]).substring(0, 10);
+      if (d < rangeStart || d > rangeEnd) return;
+      const rawId = String(rec[1] || '').split('-')[0].trim();
+      if (!rawId || rawId === 'مرتجع') return;
+      const id4 = rawId.padStart(4, '0');
+      const sales = Number(rec[2]) || 0;
+
+      if (!empAgg[id4]) empAgg[id4] = { storeId: sid, sales: 0 };
+      empAgg[id4].sales += sales;
+      if (sales > 0) {
+        if (!empDaysMap[id4]) empDaysMap[id4] = new Set();
+        empDaysMap[id4].add(d);
+      }
+    });
+  });
+
+  const storeTotals: Record<string, number> = {};
+  Object.values(empAgg).forEach((e) => {
+    storeTotals[e.storeId] = (storeTotals[e.storeId] || 0) + e.sales;
+  });
+
+  const out: Record<string, boolean> = {};
+  Object.entries(empAgg).forEach(([id4, e]) => {
+    const daysCount = empDaysMap[id4]?.size || 0;
+    const storeTotal = storeTotals[e.storeId] || 0;
+    const share = storeTotal > 0 ? e.sales / storeTotal : 0;
+    const active = daysCount >= 3 && share >= 0.01;
+    out[id4] = active;
+    const n = parseInt(id4, 10);
+    if (!Number.isNaN(n) && String(n).padStart(4, '0') === id4) out[String(n)] = active;
+  });
+  return out;
+}
+
+function employeeMatchesActivityFilter(
+  rawId: string,
+  mode: EmpActivityFilterMode,
+  activity: Record<string, boolean>
+): boolean {
+  if (mode === 'all') return true;
+  const id = String(rawId || '').trim().split('-')[0].trim();
+  if (!id) return true;
+  const padded = id.padStart(4, '0');
+  const active = activity[padded] ?? activity[id] ?? false;
+  return mode === 'active' ? active : !active;
+}
+
 export default function ReportsPage() {
   const user = getCurrentUser();
   const [rawMgmt, setRawMgmt] = useState<any>(null);
@@ -89,6 +152,8 @@ export default function ReportsPage() {
   const [previewReport, setPreviewReport] = useState<{ type: string; data: any } | null>(null);
 
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
+  /** تقارير الموظفين: تصفية النشط / غير النشط ضمن الفترة ذات الصلة */
+  const [empActivityFilter, setEmpActivityFilter] = useState<EmpActivityFilterMode>('all');
   const [showTargetModal, setShowTargetModal] = useState(false);
   const [targetEmpList, setTargetEmpList] = useState<any[]>([]);
   const [targetSelected, setTargetSelected] = useState<Set<string>>(new Set());
@@ -306,6 +371,8 @@ export default function ReportsPage() {
 
     const getTarget = (rawId: string) => getEmployeeTargetForEffectiveDate(rawEmp, rawId, mtdEndStr);
 
+    const empActivityMtd = computeEmployeeActivityInRange(rawEmp, passFilter, effMtdStart, effMtdEnd);
+
     // Group employees by store
     const byStore: Record<string, Record<string, any>> = {};
 
@@ -316,6 +383,7 @@ export default function ReportsPage() {
       (recs || []).forEach(([dt, eid, s, t]: any[]) => {
         const empId = String(eid || '').split('-')[0].trim();
         if (!empId || empId === 'مرتجع') return;
+        if (!employeeMatchesActivityFilter(empId, empActivityFilter, empActivityMtd)) return;
 
         if (!byStore[sid][empId]) {
           byStore[sid][empId] = {
@@ -397,6 +465,7 @@ export default function ReportsPage() {
       });
     });
     let targetStoreIds = Object.keys(history).filter((sid) => passFilter(sid));
+    const empActivityExcel = computeEmployeeActivityInRange(rawEmp, passFilter, range.start, range.end);
     const rows: any[] = [];
     targetStoreIds.forEach((sid) => {
       const recs = history[sid] || [];
@@ -405,6 +474,7 @@ export default function ReportsPage() {
         const [date, empId, sales, trans] = rec;
         if (date >= range.start && date <= range.end) {
           const idPart = String(empId || '').split('-')[0].trim();
+          if (!employeeMatchesActivityFilter(idPart, empActivityFilter, empActivityExcel)) return;
           let name = empNames[idPart] || empNames[idPart?.padStart(4, '0')] || empId;
           if (empId && String(empId).includes('-')) {
             const parts = String(empId).split('-');
@@ -582,6 +652,8 @@ export default function ReportsPage() {
       const effMtdStartYe = marchMtdYe?.start ?? mtdStartYMD;
       const effMtdEndYe = marchMtdYe?.end ?? mtdEndStr;
 
+      const empActivityYe = computeEmployeeActivityInRange(rawEmp, passFilter, effMtdStartYe, effMtdEndYe);
+
       const getTarget = (rawId: string) => getEmployeeTargetForEffectiveDate(rawEmp, rawId, mtdEndStr);
 
       // Group by store → employees (same structure as generateEmployeePerformance)
@@ -597,6 +669,7 @@ export default function ReportsPage() {
           if (!rawId || rawId === 'مرتجع') return;
           const id = rawId.padStart(4, '0');
           if (selectedIdsArray.length > 0 && !selectedIdsArray.includes(id) && !selectedIdsArray.includes(rawId)) return;
+          if (!employeeMatchesActivityFilter(rawId, empActivityFilter, empActivityYe)) return;
 
           if (!byStore[sid][id]) {
             byStore[sid][id] = {
@@ -975,6 +1048,18 @@ export default function ReportsPage() {
         <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
           <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">👥 تقارير الموظفين</h3>
           <p className="text-sm text-neutral-500 mb-4">أداء الموظفين (أمس + الشهر الحالي)، تقرير أمس، تصدير Excel، قالب تارجت الشهر القادم.</p>
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50/80 p-3">
+            <span className="text-xs font-semibold text-neutral-600 sm:shrink-0">تصفية الموظفين:</span>
+            <select
+              className="input text-sm sm:max-w-xl"
+              value={empActivityFilter}
+              onChange={(e) => setEmpActivityFilter(e.target.value as EmpActivityFilterMode)}
+            >
+              <option value="all">الكل — جميع من تظهر حركاتهم في الفترة</option>
+              <option value="active">النشطون فقط — 3+ أيام بمبيعات وحصة ≥ 1% من مبيعات الفرع</option>
+              <option value="inactive">غير النشطين</option>
+            </select>
+          </div>
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
