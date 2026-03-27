@@ -94,3 +94,96 @@ export function sumEmployeeSalesForTargetMonth(
   });
   return sum;
 }
+
+// ----- فرص ضائعة (نفس مصدر صفحة المنتجات) — ربط موظف ↔ صنف مباع (sold_item) -----
+
+export type MissedOppRow = {
+  employee_id?: string;
+  employee_name?: string;
+  sold_item?: string;
+  missed_items?: { name: string; count: number }[];
+  total_count?: number;
+};
+
+export function employeeIdMatchesRow(rowEmployeeId: unknown, targetEmployeeId: string): boolean {
+  const t = String(targetEmployeeId || '').trim();
+  if (!t) return false;
+  const r = String(rowEmployeeId || '').trim();
+  const tp = t.padStart(4, '0');
+  const tClean = t.replace(/^0+/, '') || t;
+  const rClean = r.replace(/^0+/, '') || r;
+  if (r === t || r === tp) return true;
+  if (rClean === tClean && tClean.length > 0) return true;
+  const digitsR = r.replace(/\D/g, '');
+  const digitsT = t.replace(/\D/g, '');
+  if (digitsR && digitsT && digitsR === digitsT) return true;
+  return false;
+}
+
+export function missedOpportunitiesRowsForStore(prodRaw: any, storeCode: string): MissedOppRow[] {
+  const pData = pickProductAnalysisPeriod(prodRaw);
+  const mo = pData?.missed_opportunities?.[String(storeCode)];
+  return Array.isArray(mo) ? (mo as MissedOppRow[]) : [];
+}
+
+export function missedOpportunitiesForEmployee(rows: MissedOppRow[], employeeId: string): MissedOppRow[] {
+  return rows.filter((r) => employeeIdMatchesRow(r.employee_id, employeeId));
+}
+
+/**
+ * تصنيف نص المنتج المباع (sold_item) لمجموعات عرض — نفس فكرة تمييز اللحاف في المنتجات.
+ */
+export function deriveProductGroupFromSoldItem(soldItem: string): string {
+  const s0 = String(soldItem || '');
+  const t = s0.toLowerCase();
+  if (/مخد|وساد|pillow|sham/.test(t)) return 'مخدات ووسائد';
+  if (/كيس لحاف/.test(t)) return 'أغطية لحاف (كيس)';
+  const kingHint = /كينغ|كنج|\bking\b|240|260/.test(t) || /كينغ/.test(s0);
+  if ((/طقم لحاف|لحاف|مفرش/.test(t) || /duvet/.test(t)) && kingHint) return 'أطقم لحاف كينغ';
+  if (/طقم لحاف|لحاف|مفرش|duvet/.test(t)) return 'أطقم لحاف فل / عام';
+  if (/غطاء سرير|لباد|شرشف|طقم غطاء/.test(t)) return 'ملحقات سرير';
+  return 'أخرى';
+}
+
+/** تجميع أوزان total_count حسب مجموعة المنتج المباع. */
+export function aggregateMissedRowsByProductGroup(rows: MissedOppRow[]): { name: string; value: number }[] {
+  const m: Record<string, number> = {};
+  for (const r of rows) {
+    const g = deriveProductGroupFromSoldItem(String(r.sold_item || ''));
+    m[g] = (m[g] || 0) + safeNum(r.total_count);
+  }
+  return Object.entries(m)
+    .map(([name, value]) => ({ name, value }))
+    .filter((x) => x.value > 0)
+    .sort((a, b) => b.value - a.value);
+}
+
+export function aggregateSoldItemsInMissedGroup(
+  rows: MissedOppRow[],
+  groupName: string
+): { name: string; soldQty: number }[] {
+  const acc: Record<string, number> = {};
+  for (const r of rows) {
+    if (deriveProductGroupFromSoldItem(String(r.sold_item || '')) !== groupName) continue;
+    const k = String(r.sold_item || '').trim();
+    if (!k) continue;
+    acc[k] = (acc[k] || 0) + safeNum(r.total_count);
+  }
+  return Object.entries(acc)
+    .map(([name, soldQty]) => ({ name, soldQty }))
+    .sort((a, b) => b.soldQty - a.soldQty)
+    .slice(0, 15);
+}
+
+/** مجاميع لحاف/كيس من صفوف الموظف في فرص ضائعة (وزن عددي not SAR). */
+export function duvetGroupsFromMissedEmployeeRows(rows: MissedOppRow[]): { label: string; qty: number }[] {
+  const allow = new Set(['أطقم لحاف كينغ', 'أطقم لحاف فل / عام', 'أغطية لحاف (كيس)']);
+  return aggregateMissedRowsByProductGroup(rows)
+    .filter((a) => allow.has(a.name))
+    .map((a) => ({ label: a.name, qty: Math.round(a.value) }))
+    .filter((x) => x.qty > 0);
+}
+
+export function totalDuvetWeightFromMissed(groups: { label: string; qty: number }[]): number {
+  return groups.reduce((s, g) => s + g.qty, 0);
+}
