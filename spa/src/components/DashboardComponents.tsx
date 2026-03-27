@@ -655,7 +655,7 @@ export const PieChart: React.FC<{
     valueDisplay === 'number'
       ? Math.round(v).toLocaleString('en-US')
       : v.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
-  const valueAxisLabel = valueDisplay === 'number' ? 'الوزن' : 'Value';
+  const valueAxisLabel = valueDisplay === 'number' ? 'الوزن' : 'القيمة';
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<{ content: string; x: number; y: number } | null>(null);
   if (!data || data.length === 0) return <div className="flex items-center justify-center h-full text-zinc-500">No data to display</div>;
@@ -725,14 +725,14 @@ export const PieChart: React.FC<{
                   <span className="text-sm font-bold text-neutral-900">{fmtPieValue(item.value)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-2 mt-1">
-                  <span className="text-xs text-neutral-600">Share:</span>
+                  <span className="text-xs text-neutral-600">الحصة:</span>
                   <span className="text-sm font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md">
                     {((item.value / total) * 100).toFixed(1)}%
                   </span>
                 </div>
                 {item.count !== undefined && valueDisplay === 'currency' && (
                   <div className="flex items-center justify-between gap-2 mt-1">
-                    <span className="text-xs text-neutral-600">Count:</span>
+                    <span className="text-xs text-neutral-600">العدد:</span>
                     <span className="text-sm font-bold text-neutral-900">{item.count.toLocaleString('en-US')}</span>
                   </div>
                 )}

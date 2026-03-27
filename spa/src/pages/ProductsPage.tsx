@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { loadManagementData, loadProductAnalysisData, loadStagnantData, loadStockData, loadProductMapping } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
+import { ChartCard, KPICard, LineChart, PieChart } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { CubeIcon, SalesIcon, InvoicesIcon, VisitorsIcon, XIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
@@ -79,6 +79,63 @@ type CatalogItem = {
   stockByStore?: Record<string, number>;
   totalStock?: number;
 };
+
+type ValueAnalysisBucket = {
+  low: { qty: number; amount: number; count: number };
+  medium: { qty: number; amount: number; count: number };
+  high: { qty: number; amount: number; count: number };
+  total: { qty: number; amount: number; count: number };
+};
+
+function ValueTierGroup({
+  title,
+  bucket,
+  tierLabels,
+  totalUnitsLabel,
+}: {
+  title: string;
+  bucket: ValueAnalysisBucket;
+  tierLabels: [string, string, string];
+  totalUnitsLabel: string;
+}) {
+  const totalQty = bucket.total.qty;
+  const safeTotal = Math.max(1, totalQty);
+  const rows: { key: string; label: string; qty: number }[] = [
+    { key: 'low', label: tierLabels[0], qty: bucket.low.qty },
+    { key: 'medium', label: tierLabels[1], qty: bucket.medium.qty },
+    { key: 'high', label: tierLabels[2], qty: bucket.high.qty },
+  ];
+  return (
+    <div className="space-y-3 pb-4 border-b border-neutral-100 last:border-0 last:pb-0">
+      <h4 className="text-sm font-bold text-neutral-900">{title}</h4>
+      {rows.map((row) => {
+        const pct = (row.qty / safeTotal) * 100;
+        const showBar = row.qty > 0;
+        return (
+          <div key={row.key}>
+            <div className="flex justify-between gap-2 text-xs text-neutral-600 mb-1">
+              <span className=" leading-snug">{row.label}</span>
+              <span className="tabular-nums font-semibold text-neutral-800 dir-ltr whitespace-nowrap shrink-0">
+                {Math.round(row.qty).toLocaleString('en-US')}{' '}
+                <span className="text-neutral-500 font-normal">({pct.toFixed(1)}%)</span>
+              </span>
+            </div>
+            <div className="w-full bg-neutral-200 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-l from-orange-500 to-orange-400 transition-all"
+                style={{ width: `${showBar ? Math.max(pct, 2) : 0}%` }}
+              />
+            </div>
+          </div>
+        );
+      })}
+      <div className="flex justify-between items-baseline text-sm pt-1 gap-2">
+        <span className="font-bold text-neutral-900">{totalUnitsLabel}</span>
+        <span className="font-bold text-orange-700 tabular-nums dir-ltr">{Math.round(totalQty).toLocaleString('en-US')}</span>
+      </div>
+    </div>
+  );
+}
 
 function PeriodButton({
   active,
@@ -399,6 +456,33 @@ export default function ProductsPage() {
 
     categoriesAgg.sort((a, b) => (metric === 'qty' ? b.qty - a.qty : b.amount - a.amount));
 
+    const categoryShareByValue = categoriesAgg
+      .map((c) => ({
+        category: c.category,
+        qty: c.qty,
+        amount: c.amount,
+        sharePercentByAmount: (c.amount / Math.max(1, totalAmt)) * 100,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    const TOP_CAT_SLICES = 5;
+    const categorySharePieSlices = (() => {
+      const sorted = [...categoryShareByValue];
+      const top = sorted.slice(0, TOP_CAT_SLICES);
+      const rest = sorted.slice(TOP_CAT_SLICES);
+      const restAmt = rest.reduce((s, x) => s + x.amount, 0);
+      const restQty = rest.reduce((s, x) => s + x.qty, 0);
+      const mapRow = (r: (typeof categoryShareByValue)[number]) => ({
+        name: r.category,
+        value: r.amount,
+        count: r.qty,
+        sharePercent: r.sharePercentByAmount,
+      });
+      if (restAmt <= 0) return top.map(mapRow);
+      const restShare = (restAmt / Math.max(1, totalAmt)) * 100;
+      return [...top.map(mapRow), { name: 'أخرى', value: restAmt, count: restQty, sharePercent: restShare }];
+    })();
+
     // ===== Catalog (products list) =====
     const catalogRows: CatalogItem[] = [];
     const q = search.trim().toLowerCase();
@@ -584,6 +668,7 @@ export default function ProductsPage() {
       selectedPairs,
       storesMap,
       valueAnalysis,
+      categorySharePieSlices,
     };
   }, [city, effectiveManager, mgmt, mode, productId, raw, search, selectedCategory, store, metric, user?.name, user?.role]);
 
@@ -767,7 +852,56 @@ export default function ProductsPage() {
         <KPICard title="عدد المنتجات (بعد الفلترة)" value={derived.totals.productsCount} format={(v) => Math.round(v).toLocaleString()} icon={<InvoicesIcon />} />
       </div>
 
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-stretch mt-2">
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-5 flex flex-col min-h-0">
+          <div className="border-b border-neutral-100 pb-3 mb-4 shrink-0">
+            <h3 className="text-lg font-bold text-neutral-900">تحليل المبيعات حسب القيمة</h3>
+            <p className="text-xs text-neutral-500 mt-1">
+              متوسط سعر القطعة يحدد الشريحة — الفترة: <span className="font-semibold text-neutral-700">{derived.dateRangeLabel}</span>
+            </p>
+          </div>
+          <div className="space-y-2 overflow-y-auto max-h-[620px] pr-1 custom-scrollbar flex-1">
+            <ValueTierGroup
+              title="لحاف كينج"
+              bucket={derived.valueAnalysis.duvetKing}
+              tierLabels={['قيمة منخفضة (99–300 ر.س)', 'قيمة متوسطة (301–600 ر.س)', 'قيمة عالية (أكثر من 600 ر.س)']}
+              totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
+            />
+            <ValueTierGroup
+              title="لحاف فل"
+              bucket={derived.valueAnalysis.duvetFull}
+              tierLabels={['قيمة منخفضة (حتى 300 ر.س)', 'قيمة متوسطة (301–499 ر.س)', 'قيمة عالية (500 ر.س فأكثر)']}
+              totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
+            />
+            <ValueTierGroup
+              title="مخدات"
+              bucket={derived.valueAnalysis.pillows}
+              tierLabels={['قيمة منخفضة (حتى 99 ر.س)', 'قيمة متوسطة (100–189 ر.س)', 'قيمة عالية (190 ر.س فأكثر)']}
+              totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
+            />
+          </div>
+        </div>
 
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-5 flex flex-col min-h-[480px]">
+          <div className="border-b border-neutral-100 pb-3 mb-4 shrink-0">
+            <h3 className="text-lg font-bold text-neutral-900">حصة الفئة</h3>
+            <p className="text-xs text-neutral-500 mt-1">
+              <span className="font-semibold text-neutral-700">القيمة</span> و<span className="font-semibold text-neutral-700">الحصة</span> من إجمالي
+              مبيعات الفئات (ر.س) — <span className="font-semibold text-neutral-700">العدد</span> قطع مباعة
+            </p>
+          </div>
+          {derived.categorySharePieSlices.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center text-neutral-500 text-sm py-16">لا توجد فئات في نطاق الفلترة</div>
+          ) : (
+            <div className="flex-1 min-h-0">
+              <PieChart
+                vertical
+                data={derived.categorySharePieSlices.map((s) => ({ name: s.name, value: s.value, count: s.count }))}
+              />
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Category performance */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
+import { loadEmployeesData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { ChartCard, KPICard, PieChart, BarChart } from '../components/DashboardComponents';
+import { KPICard } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, PremiumTargetIcon, VisitorsIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
@@ -12,20 +12,6 @@ import {
   getEmployeeTargetForEffectiveDate,
   dateWithinMarchPhaseSalesBounds,
 } from '../utils/march2026Targets';
-import {
-  pickProductAnalysisPeriod,
-  productAnalysisPeriodLabel,
-  storeCategoriesFromAnalysis,
-  duvetQtyByPriceBand,
-  totalDuvetQtyInCategories,
-  sumEmployeeSalesForTargetMonth,
-  missedOpportunitiesRowsForStore,
-  missedOpportunitiesForEmployee,
-  aggregateMissedRowsByProductGroup,
-  aggregateSoldItemsInMissedGroup,
-  duvetGroupsFromMissedEmployeeRows,
-  totalDuvetWeightFromMissed,
-} from '../utils/employee360Helpers';
 
 type Period = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
 type SortKey =
@@ -131,7 +117,7 @@ function SortableTh({
   );
 }
 
-/** نافذة منبثقة في وسط الصفحة لتفاصيل الموظف — مطابق تصميم الموظف 360 */
+/** نافذة منبثقة لتفاصيل الموظف */
 function EmployeeDetailModal({
   open,
   employee: detail,
@@ -221,140 +207,6 @@ function EmployeeDetailModal({
       }, []);
   }, [open, detail, empRaw, rangeStart, rangeEnd]);
 
-  const [prodRaw, setProdRaw] = useState<any>(null);
-  const [prodErr, setProdErr] = useState<string | null>(null);
-  const [selectedCat360, setSelectedCat360] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) {
-      setProdRaw(null);
-      setProdErr(null);
-      setSelectedCat360(null);
-      return;
-    }
-    let cancel = false;
-    setProdErr(null);
-    loadProductAnalysisData()
-      .then((d) => {
-        if (!cancel) setProdRaw(d);
-      })
-      .catch((e) => {
-        if (!cancel) setProdErr(e?.message || String(e));
-      });
-    return () => {
-      cancel = true;
-    };
-  }, [open]);
-
-  const storeCats360 = useMemo(() => {
-    if (!open || !detail || !prodRaw) return [];
-    return storeCategoriesFromAnalysis(detail.storeCode, prodRaw);
-  }, [open, detail, prodRaw]);
-
-  const categoryPieData360 = useMemo(
-    () => storeCats360.map((c) => ({ name: c.name, value: c.value, count: c.qty })),
-    [storeCats360]
-  );
-
-  /** صفوف فرص ضائعة لنفس الفرع والموظف — مصدر بطاقة المنتجات */
-  const missedRowsForEmployee = useMemo(() => {
-    if (!open || !detail || !prodRaw) return [];
-    const all = missedOpportunitiesRowsForStore(prodRaw, detail.storeCode);
-    return missedOpportunitiesForEmployee(all, detail.id);
-  }, [open, detail, prodRaw]);
-
-  const empMissedGroupPie = useMemo(
-    () => aggregateMissedRowsByProductGroup(missedRowsForEmployee),
-    [missedRowsForEmployee]
-  );
-
-  const useEmployeeMissedPie = useMemo(
-    () => empMissedGroupPie.reduce((s, x) => s + x.value, 0) > 0,
-    [empMissedGroupPie]
-  );
-
-  const effectiveCategoryPie360 = useMemo(
-    () =>
-      useEmployeeMissedPie
-        ? empMissedGroupPie.map((x) => ({ name: x.name, value: x.value, count: x.value }))
-        : categoryPieData360,
-    [useEmployeeMissedPie, empMissedGroupPie, categoryPieData360]
-  );
-
-  const duvetBandsFromMissed = useMemo(
-    () => duvetGroupsFromMissedEmployeeRows(missedRowsForEmployee),
-    [missedRowsForEmployee]
-  );
-
-  const totalMissedDuvetWeight = useMemo(
-    () => totalDuvetWeightFromMissed(duvetBandsFromMissed),
-    [duvetBandsFromMissed]
-  );
-
-  const duvetBands360 = useMemo(() => duvetQtyByPriceBand(storeCats360), [storeCats360]);
-  const storeDuvetQty360 = useMemo(() => totalDuvetQtyInCategories(storeCats360), [storeCats360]);
-
-  const empEstDuvetQty360 = useMemo(() => {
-    if (!detail) return 0;
-    const br = branchStats[detail.storeCode];
-    if (!br || br.current <= 0 || storeDuvetQty360 <= 0) return 0;
-    return Math.round(storeDuvetQty360 * (detail.sales / br.current));
-  }, [detail, branchStats, storeDuvetQty360]);
-
-  const employee360Dynamic = useMemo(() => {
-    if (!open || !detail || !empRaw || !rangeEnd) return null;
-    const idRaw = String(detail.id || '').trim();
-    const idClean = idRaw.replace(/^0+/, '');
-    const idPadded = idRaw.padStart(4, '0');
-    const matchesEmployee = (rawName: unknown) => {
-      const raw = String(rawName || '').trim();
-      if (!raw) return false;
-      const empPart = raw.includes('-') ? raw.split('-')[0].trim() : raw;
-      const empClean = empPart.replace(/^0+/, '');
-      return empPart === idRaw || empPart === idPadded || empClean === idClean;
-    };
-
-    const monthTarget = getEmployeeTargetForEffectiveDate(empRaw, detail.id, rangeEnd);
-    const salesMonth = sumEmployeeSalesForTargetMonth(empRaw.history || {}, matchesEmployee, rangeEnd);
-    const remainingTarget = monthTarget - salesMonth;
-    const refD = new Date(rangeEnd + 'T12:00:00');
-    const metrics = getMarch2026TargetMetrics(refD);
-    const remainingDays = Math.max(1, metrics.remainingDaysInclusive);
-    const requiredDaily = remainingTarget > 0 ? remainingTarget / remainingDays : 0;
-    const rem90 = monthTarget * 0.9 - salesMonth;
-    const requiredDaily90 = rem90 > 0 ? rem90 / remainingDays : 0;
-    return {
-      monthTarget,
-      salesMonth,
-      remainingTarget,
-      remainingDays,
-      requiredDaily,
-      requiredDaily90,
-    };
-  }, [open, detail, empRaw, rangeEnd]);
-
-  const topItemsInSelectedCat360 = useMemo(() => {
-    if (!selectedCat360 || !detail) return [];
-    if (useEmployeeMissedPie) {
-      return aggregateSoldItemsInMissedGroup(missedRowsForEmployee, selectedCat360);
-    }
-    if (!prodRaw) return [];
-    const pData = pickProductAnalysisPeriod(prodRaw);
-    const items = pData?.catalog?.[selectedCat360];
-    if (!Array.isArray(items)) return [];
-    const sid = String(detail.storeCode);
-    return items
-      .map((it: any) => ({
-        name: String(it?.name || it?.id || ''),
-        soldQty: Number(it?.stores?.[sid]?.q) || 0,
-      }))
-      .filter((x: { name: string; soldQty: number }) => x.soldQty > 0 && x.name)
-      .sort((a: { soldQty: number }, b: { soldQty: number }) => b.soldQty - a.soldQty)
-      .slice(0, 10);
-  }, [selectedCat360, prodRaw, detail, useEmployeeMissedPie, missedRowsForEmployee]);
-
-  const analysisPeriodHint = useMemo(() => productAnalysisPeriodLabel(prodRaw), [prodRaw]);
-
   // Early return NOW, after hooks
   if (!open || !detail) return null;
 
@@ -365,7 +217,7 @@ function EmployeeDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" onClick={onClose} role="dialog" aria-label="تفاصيل الموظف">
-      <div className="modal-content max-w-6xl w-full my-4 max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-neutral-200 p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content max-w-5xl w-full my-4 max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-neutral-200 p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4 border-b border-neutral-200 pb-4">
           <div className="min-w-0">
             <h2 className="text-xl font-bold text-neutral-900 truncate">{detail.name}</h2>
@@ -411,189 +263,6 @@ function EmployeeDetailModal({
             <div className="text-neutral-500 text-sm">مساهمة مبيعات الفرع</div>
             <div className="text-2xl font-bold text-neutral-900 mt-1">{detail.branchShare.toFixed(1)}%</div>
           </div>
-        </div>
-
-        {/* لوحة 360 — فرص ضائعة = ربط موظف↔صنف مباع من product_analysis؛ وإلا توزيع الفرع */}
-        <div className="mt-6 border-r-4 border-orange-500 bg-orange-50/40 rounded-r-xl pr-4 py-3">
-          <h3 className="text-base font-bold text-neutral-900">تحليل إضافي (360)</h3>
-          <p className="text-xs text-neutral-600 mt-1 leading-relaxed">
-            عندما تتوفر بيانات <span className="font-semibold">فرص ضائعة (missed_opportunities)</span> لفرع الموظف، تُستخدم
-            نفسها كما في صفحة المنتجات: لكل موظف صفوف فيها <span className="font-semibold">المنتج المباع (sold_item)</span> ووزن
-            <span className="font-semibold"> total_count</span> — أي أرقام مربوطة بالموظف فعلياً من التحليل المركزي (ليست مبالغ
-            مبيعات بالضرورة). إن لم توجد صفوف لهذا الموظف، يُعرض توزيع فئات <span className="font-semibold">الفرع كاملاً</span>{' '}
-            من التحليل، مع تقدير لحاف بنسبة حصة الموظف من مبيعات الفرع.
-            {analysisPeriodHint ? (
-              <span className="block mt-1 font-mono text-[11px] text-neutral-500">فترة التحليل: {analysisPeriodHint}</span>
-            ) : null}
-          </p>
-        </div>
-
-        {prodErr && (
-          <div className="mt-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-            تعذر تحميل تحليل المنتجات: {prodErr}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
-          <ChartCard
-            title={
-              selectedCat360
-                ? useEmployeeMissedPie
-                  ? `أصناف ضمن «${selectedCat360}» — الموظف (فرص ضائعة)`
-                  : `أعلى أصناف في «${selectedCat360}» (الفرع)`
-                : useEmployeeMissedPie
-                  ? 'توزيع المنتج المباع — الموظف (فرص ضائعة)'
-                  : 'المبيعات حسب فئة المنتج (الفرع)'
-            }
-            className="min-h-[320px]"
-          >
-            {selectedCat360 ? (
-              <div className="space-y-3">
-                <button type="button" className="btn-secondary text-xs py-1 px-2" onClick={() => setSelectedCat360(null)}>
-                  ← عرض الفئات
-                </button>
-                <BarChart
-                  data={topItemsInSelectedCat360}
-                  dataKey="soldQty"
-                  nameKey="name"
-                  format={(v) => `${v} ${useEmployeeMissedPie ? '(وزن)' : 'قطعة'}`}
-                />
-              </div>
-            ) : (
-              <div className="h-[280px]">
-                <PieChart
-                  vertical
-                  valueDisplay={useEmployeeMissedPie ? 'number' : 'currency'}
-                  data={effectiveCategoryPie360}
-                  onSliceClick={(name) => setSelectedCat360((p) => (p === name ? null : name))}
-                />
-              </div>
-            )}
-            {!prodRaw && !prodErr && (
-              <div className="absolute inset-0 flex items-center justify-center bg-white/70 text-sm text-neutral-500">جاري التحميل…</div>
-            )}
-            {prodRaw && effectiveCategoryPie360.length === 0 && (
-              <div className="text-center text-sm text-neutral-500 py-8">لا توجد فئات لهذا الفرع في ملف التحليل.</div>
-            )}
-          </ChartCard>
-
-          <ChartCard
-            title={
-              totalMissedDuvetWeight > 0
-                ? 'لحاف / كيس — الموظف (من فرص ضائعة)'
-                : 'تحليل مبيعات اللحاف (متوسط سعر الفئة — الفرع)'
-            }
-            className="min-h-[320px]"
-          >
-            {totalMissedDuvetWeight > 0 ? (
-              <div className="space-y-2 p-1 flex flex-col justify-center h-full">
-                {(() => {
-                  const total = totalMissedDuvetWeight;
-                  return duvetBandsFromMissed.map((cat) => {
-                    const pct = total > 0 ? (cat.qty / total) * 100 : 0;
-                    return (
-                      <div key={cat.label}>
-                        <div className="flex justify-between text-xs font-medium text-neutral-600 mb-1">
-                          <span>{cat.label}</span>
-                          <span>
-                            {cat.qty} ({pct.toFixed(1)}%)
-                          </span>
-                        </div>
-                        <div className="w-full bg-neutral-200 rounded-full h-2.5">
-                          <div className="bg-sky-500 h-2.5 rounded-full transition-all" style={{ width: `${Math.max(pct, 2)}%` }} />
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-                <div className="mt-4 pt-3 border-t border-neutral-200 space-y-1 text-xs">
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-neutral-700">مجموع أوزان اللحاف/الكيس (الموظف)</span>
-                    <span className="font-bold text-orange-800">{totalMissedDuvetWeight}</span>
-                  </div>
-                  <p className="text-[10px] text-neutral-500 leading-snug mt-2">
-                    الوزن = مجموع <span className="font-mono">total_count</span> لصفوف فرص ضائعة حيث المنتج المباع ينتمي لفئة
-                    لحاف/كيس (تصنيف نصّي لـ sold_item). للمقارنة مع بطاقة «فرص ضائعة» في صفحة المنتجات.
-                  </p>
-                </div>
-              </div>
-            ) : duvetBands360.length > 0 ? (
-              <div className="space-y-2 p-1 flex flex-col justify-center h-full">
-                {(() => {
-                  const total = duvetBands360.reduce((s, x) => s + x.qty, 0);
-                  return duvetBands360.map((cat) => {
-                    const pct = total > 0 ? (cat.qty / total) * 100 : 0;
-                    return (
-                      <div key={cat.label}>
-                        <div className="flex justify-between text-xs font-medium text-neutral-600 mb-1">
-                          <span>{cat.label}</span>
-                          <span>
-                            {cat.qty} قطعة ({pct.toFixed(1)}%)
-                          </span>
-                        </div>
-                        <div className="w-full bg-neutral-200 rounded-full h-2.5">
-                          <div className="bg-sky-500 h-2.5 rounded-full transition-all" style={{ width: `${Math.max(pct, 2)}%` }} />
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-                <div className="mt-4 pt-3 border-t border-neutral-200 space-y-1 text-xs">
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-neutral-700">إجمالي قطع اللحاف (الفرع)</span>
-                    <span className="font-bold">{storeDuvetQty360}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-neutral-700">تقدير للموظف (نسبة مبيعات)</span>
-                    <span className="font-bold text-orange-700">{empEstDuvetQty360}</span>
-                  </div>
-                  <p className="text-[10px] text-neutral-500 leading-snug mt-2">
-                    لا صفوف فرص ضائعة لهذا الموظف أو لا لحاف فيها — عُرض توزيع الفرع مع تقدير بالنسبة.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-40 text-sm text-neutral-500">لا بيانات لحاف/فئة مطابقة في التحليل.</div>
-            )}
-          </ChartCard>
-
-          <ChartCard title="التارجت اليومي الديناميكي (الموظف — شهر التقويم للمرجع)" className="min-h-[320px]">
-            {employee360Dynamic ? (
-              <div className="space-y-2 text-sm h-full flex flex-col justify-center">
-                <div className="flex justify-between gap-2">
-                  <span className="text-neutral-600">مبيعات الشهر (حتى آخر يوم في المرجع)</span>
-                  <span className="font-semibold tabular-nums">{formatSAR(employee360Dynamic.salesMonth)}</span>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-neutral-600">تارجت الشهر</span>
-                  <span className="font-semibold tabular-nums">{formatSAR(employee360Dynamic.monthTarget)}</span>
-                </div>
-                <div className="flex justify-between gap-2 border-t border-neutral-100 pt-2 mt-1">
-                  <span className="font-bold">المتبقي من التارجت</span>
-                  <span className={`font-bold tabular-nums ${employee360Dynamic.remainingTarget > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {employee360Dynamic.remainingTarget > 0 ? formatSAR(employee360Dynamic.remainingTarget) : 'تم الإنجاز'}
-                  </span>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-neutral-600">أيام متبقية (فترة التارجت)</span>
-                  <span className="font-semibold">{employee360Dynamic.remainingDays}</span>
-                </div>
-                <div className="flex justify-between items-center bg-orange-50 p-2 rounded-lg mt-2 gap-2">
-                  <span className="font-bold text-orange-800">معدل يومي مطلوب</span>
-                  <span className="font-bold text-orange-800 tabular-nums">{formatSAR(employee360Dynamic.requiredDaily)}</span>
-                </div>
-                <div className="flex justify-between items-center bg-amber-50/90 p-2 rounded-lg gap-2">
-                  <span className="font-bold text-amber-900">معدل يومي مطلوب (90% من التارجت)</span>
-                  <span className="font-bold text-amber-900 tabular-nums">{formatSAR(employee360Dynamic.requiredDaily90)}</span>
-                </div>
-                <p className="text-[10px] text-neutral-500 mt-2 leading-snug">
-                  المرجع: آخر يوم في فترة العرض ({rangeEnd}). لآذار 2026 يُحتسب ضمن مرحلة التارجت الحالية فقط.
-                </p>
-              </div>
-            ) : (
-              <div className="text-neutral-500 text-sm">—</div>
-            )}
-          </ChartCard>
         </div>
 
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden mt-6">
