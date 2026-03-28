@@ -463,7 +463,11 @@ export default function EmployeesPage() {
         const endOfMonth = new Date(selYear, selMonth, 0);
         return { start: toLocalYMD(startOfMonth), end: toLocalYMD(endOfMonth) };
       }
-      // Fallback for custom or other modes
+      if (mode === 'custom') {
+        const start = new Date(today);
+        start.setDate(1);
+        return { start: toLocalYMD(start), end: toLocalYMD(today) };
+      }
       return { start: toLocalYMD(today), end: toLocalYMD(today) };
     }
 
@@ -549,8 +553,11 @@ export default function EmployeesPage() {
         const pStatus = checkPeriod(dObj, dNorm);
         if (pStatus === 0) continue;
 
+        // فترة مخصصة: نجمع كل المبيعات ضمن [rangeStart, rangeEnd] فقط — لا نطبّق تقسيم مراحل آذار 2026
         const skipMarchCurrent =
-          refForEmployeeTarget.startsWith('2026-03') && !dateWithinMarchPhaseSalesBounds(dNorm, refForEmployeeTarget);
+          period !== 'custom' &&
+          refForEmployeeTarget.startsWith('2026-03') &&
+          !dateWithinMarchPhaseSalesBounds(dNorm, refForEmployeeTarget);
 
         if (pStatus === 1 && !skipMarchCurrent) {
           branchStats[storeCode].current += sales;
@@ -757,6 +764,9 @@ export default function EmployeesPage() {
     sortDir,
     chartMetric,
     chartOrder,
+    user?.role,
+    user?.storeId,
+    storeType,
   ]);
 
   // Handle eid param from global search
