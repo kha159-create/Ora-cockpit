@@ -23,6 +23,8 @@ import {
   getEmployeeTargetForEffectiveDate,
   dateWithinMarchPhaseSalesBounds,
   getMarch2026PhaseSalesBounds,
+  sumEmployeeTargetForDateRange,
+  sumManagementTargetsForDateRange,
 } from '../utils/march2026Targets';
 
 function isAdminOrAuditor(role?: string) {
@@ -93,6 +95,8 @@ export default function DashboardPage() {
   const [selectedStoreType, setSelectedStoreType] = useState<string>('all');
   const [selYear, setSelYear] = useState<number>(() => new Date().getFullYear());
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1);
+  /** آذار 2026 + MTD: الفترة 1 (1–19) أو 2 (20–31) — مثل المعارض/الموظفين */
+  const [marchMtdPhase, setMarchMtdPhase] = useState<'1' | '2'>('1');
   const [dailyReportModalOpen, setDailyReportModalOpen] = useState(false);
   const [drillDownDate, setDrillDownDate] = useState<string | null>(null);
   const [chartMode, setChartMode] = useState<'SALES' | 'VISITORS' | 'TARGET'>('SALES');
@@ -156,9 +160,31 @@ export default function DashboardPage() {
   }, [mode]);
 
   const range = useMemo(() => {
-    if (mode === 'custom') return { start: customStart, end: customEnd };
-    return getDefaultRange(mode, selYear, selMonth);
-  }, [mode, customStart, customEnd, selYear, selMonth]);
+    let start: string;
+    let end: string;
+    if (mode === 'custom') {
+      start = customStart;
+      end = customEnd;
+    } else {
+      const r = getDefaultRange(mode, selYear, selMonth);
+      start = r.start;
+      end = r.end;
+    }
+    const now = new Date();
+    if (mode === 'mtd' && now.getFullYear() === 2026 && now.getMonth() === 2) {
+      const maxDateStr = (a: string, b: string) => (a >= b ? a : b);
+      const minDateStr = (a: string, b: string) => (a <= b ? a : b);
+      const endMtd = end;
+      if (marchMtdPhase === '1') {
+        start = maxDateStr('2026-03-01', start);
+        end = minDateStr('2026-03-19', endMtd);
+      } else {
+        start = maxDateStr('2026-03-20', start);
+        end = minDateStr('2026-03-31', endMtd);
+      }
+    }
+    return { start, end };
+  }, [mode, customStart, customEnd, selYear, selMonth, marchMtdPhase]);
 
   const handlePrintDailyReport = () => {
     // Open store report modal
@@ -486,9 +512,16 @@ export default function DashboardPage() {
     (raw.sales || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) sales += (v || 0); });
     (raw.transactions || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) trans += (v || 0); });
     (raw.visitors || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) visitors += (v || 0); });
-    (raw.targets || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) target += (v || 0); });
+    if (mode === 'custom' && range.start && range.end) {
+      const summed = sumManagementTargetsForDateRange(raw.targets, range.start, range.end);
+      Object.entries(summed).forEach(([sid, v]) => {
+        if (allow(sid)) target += v || 0;
+      });
+    } else {
+      (raw.targets || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) target += (v || 0); });
+    }
     return { sales, trans, visitors, target };
-  }, [raw, range.start, range.end, allowedStoreIds]);
+  }, [raw, range.start, range.end, allowedStoreIds, mode]);
 
   // نفس الفترة من السنة الماضية للمقارنة (مع دعم المواسم الهجرية)
   const prevYearRange = useMemo(() => {
@@ -506,9 +539,16 @@ export default function DashboardPage() {
     (raw.sales || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) sales += (v || 0); });
     (raw.transactions || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) trans += (v || 0); });
     (raw.visitors || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) visitors += (v || 0); });
-    (raw.targets || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) target += (v || 0); });
+    if (mode === 'custom' && prevYearRange.start && prevYearRange.end) {
+      const summed = sumManagementTargetsForDateRange(raw.targets, prevYearRange.start, prevYearRange.end);
+      Object.entries(summed).forEach(([sid, v]) => {
+        if (allow(sid)) target += v || 0;
+      });
+    } else {
+      (raw.targets || []).forEach(([d, s, v]: any[]) => { if (inRange(d) && allow(s)) target += (v || 0); });
+    }
     return { sales, trans, visitors, target };
-  }, [raw, prevYearRange.start, prevYearRange.end, allowedStoreIds]);
+  }, [raw, prevYearRange.start, prevYearRange.end, allowedStoreIds, mode]);
 
   const inRange = useMemo(
     () => (d: string) => {
@@ -552,11 +592,20 @@ export default function DashboardPage() {
       // مقارنة زوار نفس الفترة من السنة السابقة
       if (inPrevYearRange(d)) byStore[s].prevYearVisitors += v || 0;
     });
-    (raw.targets || []).forEach(([d, s, v]: any[]) => {
-      if (!allow(s) || isOnlineStore(s)) return;
-      if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevYearSales: 0, prevYearVisitors: 0 };
-      if (inRange(d)) byStore[s].target += v || 0;
-    });
+    if (mode === 'custom' && range.start && range.end) {
+      const summed = sumManagementTargetsForDateRange(raw.targets, range.start, range.end);
+      Object.entries(summed).forEach(([sid, t]) => {
+        if (!allow(sid) || isOnlineStore(sid)) return;
+        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, target: 0, prevYearSales: 0, prevYearVisitors: 0 };
+        byStore[sid].target = t || 0;
+      });
+    } else {
+      (raw.targets || []).forEach(([d, s, v]: any[]) => {
+        if (!allow(s) || isOnlineStore(s)) return;
+        if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevYearSales: 0, prevYearVisitors: 0 };
+        if (inRange(d)) byStore[s].target += v || 0;
+      });
+    }
     return Object.entries(byStore).map(([sid, v]) => {
       // النمو: الفترة الحالية مقابل نفس الفترة من السنة السابقة
       const growth = v.prevYearSales > 0 ? ((v.sales - v.prevYearSales) / v.prevYearSales) * 100 : 0;
@@ -580,7 +629,7 @@ export default function DashboardPage() {
         prevCustomerValue,
       };
     });
-  }, [raw, inRange, inPrevYearRange, allowedStoreIds]);
+  }, [raw, inRange, inPrevYearRange, allowedStoreIds, mode, range.start, range.end]);
 
   const topEmployeesRank = useMemo(() => {
     if (!empRaw?.history || !empRaw?.employee_names) return [];
@@ -591,7 +640,10 @@ export default function DashboardPage() {
     const agg: Record<string, { sales: number; trans: number; target: number; name: string }> = {};
 
     const refEnd = range.end;
-    const getTarget = (rawId: string) => getEmployeeTargetForEffectiveDate(empRaw, rawId, refEnd);
+    const getTarget = (rawId: string) =>
+      mode === 'custom'
+        ? sumEmployeeTargetForDateRange(empRaw, rawId, range.start, range.end)
+        : getEmployeeTargetForEffectiveDate(empRaw, rawId, refEnd);
 
     Object.entries(historyData).forEach(([storeId, records]) => {
       if (!allowedStoreIds.has(storeId)) return;
@@ -605,7 +657,7 @@ export default function DashboardPage() {
         const trans = Number(rec?.[3]) || 0;
         const dStr = norm(date);
         if (!dStr || dStr < range.start || dStr > range.end) continue;
-        if (refEnd.startsWith('2026-03') && !dateWithinMarchPhaseSalesBounds(dStr, refEnd)) continue;
+        if (mode !== 'custom' && refEnd.startsWith('2026-03') && !dateWithinMarchPhaseSalesBounds(dStr, refEnd)) continue;
         let id = String(rawId || '').trim();
         let empName = id;
         if (id.includes('-')) {
@@ -626,7 +678,7 @@ export default function DashboardPage() {
       avg_inv: v.trans > 0 ? v.sales / v.trans : 0,
       achievement: v.target > 0 ? (v.sales / v.target) * 100 : 0,
     }));
-  }, [empRaw, range.start, range.end, allowedStoreIds, raw?.store_meta]);
+  }, [empRaw, range.start, range.end, allowedStoreIds, raw?.store_meta, mode]);
 
   const mapBranchesData = useMemo(() => {
     return topStoresRank.map(store => {
@@ -653,14 +705,11 @@ export default function DashboardPage() {
     });
   }, [topStoresRank, raw?.store_meta]);
 
-  if (err) {
-    return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
-  }
-  // Move calculations before early returns to satisfy React Hook rules
-  // Daily Report data (yesterday vs last year) - Standard
+  // أمس + مقارنة العام الماضي — قبل أي return حتى تبقى hooks أسفلها صالحة
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = toYMD(yesterday);
+  const lastYearYesterdayStr = getPrevYearDate(yesterdayStr);
 
   const handlePrintEmployeeReport = () => {
     // Initialize employee selection with all active employees
@@ -719,8 +768,6 @@ export default function DashboardPage() {
     return Object.values(empData).sort((a, b) => b.sales - a.sales);
   }, [empRaw, raw, yesterdayStr, allowedStoreIds]);
 
-  const lastYearYesterdayStr = getPrevYearDate(yesterdayStr);
-
   const dailyReportData = useMemo(() => {
     if (!raw) return [];
     const meta = raw.store_meta || {};
@@ -742,6 +789,27 @@ export default function DashboardPage() {
     const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
     const startOfLastYearMonth = `${lastYearYesterdayStr.substring(0, 8)}01`;
 
+    const nowForPhase = new Date();
+    const useMarchPhase =
+      mode === 'mtd' &&
+      nowForPhase.getFullYear() === 2026 &&
+      nowForPhase.getMonth() === 2 &&
+      yesterdayStr.startsWith('2026-03');
+
+    const maxDateStr = (a: string, b: string) => (a >= b ? a : b);
+    const minDateStr = (a: string, b: string) => (a <= b ? a : b);
+    let mtdStart = startOfMonth;
+    let mtdEnd = yesterdayStr;
+    if (useMarchPhase) {
+      if (marchMtdPhase === '1') {
+        mtdStart = maxDateStr(startOfMonth, '2026-03-01');
+        mtdEnd = minDateStr(yesterdayStr, '2026-03-19');
+      } else {
+        mtdStart = maxDateStr(startOfMonth, '2026-03-20');
+        mtdEnd = minDateStr(yesterdayStr, '2026-03-31');
+      }
+    }
+
     (raw.sales || []).forEach(([d, sid, v]: any[]) => {
       const dateStr = String(d).substring(0, 10);
       if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevYesterdaySales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
@@ -750,8 +818,7 @@ export default function DashboardPage() {
         byStore[sid].yesterdaySales += v || 0;
       }
 
-      // Sales is now MTD Sales for other calcs if needed, but report wants Yesterday
-      if (dateStr >= startOfMonth && dateStr <= yesterdayStr) {
+      if (dateStr >= mtdStart && dateStr <= mtdEnd) {
         byStore[sid].sales += v || 0;
         byStore[sid].totalMonthSales += v || 0;
       }
@@ -780,13 +847,33 @@ export default function DashboardPage() {
       if (dateStr === lastYearYesterdayStr) byStore[sid].prevVisitors += v || 0;
     });
 
-    (raw.targets || []).forEach(([d, sid, v]: any[]) => {
-      const dateStr = String(d).substring(0, 10);
-      if (!byStore[sid]) byStore[sid] = { sales: 0, yesterdaySales: 0, totalMonthSales: 0, trans: 0, visitors: 0, avgInv: 0, prevSales: 0, prevYesterdaySales: 0, prevVisitors: 0, dailyReq: 0, target: 0, ach: 0 };
-      if (dateStr.startsWith(yesterdayStr.substring(0, 7))) {
-        const target = v || 0;
-        byStore[sid].target += target;
+    const monthKey = yesterdayStr.substring(0, 7);
+    const targetRef =
+      useMarchPhase
+        ? marchMtdPhase === '1'
+          ? '2026-03-10'
+          : '2026-03-25'
+        : yesterdayStr;
+    const phaseTargets = sumManagementTargetsForMonth(raw.targets, monthKey, targetRef);
+    const allTargetSids = new Set([...Object.keys(byStore), ...Object.keys(phaseTargets)]);
+    allTargetSids.forEach((sid) => {
+      if (!byStore[sid]) {
+        byStore[sid] = {
+          sales: 0,
+          yesterdaySales: 0,
+          totalMonthSales: 0,
+          trans: 0,
+          visitors: 0,
+          avgInv: 0,
+          prevSales: 0,
+          prevYesterdaySales: 0,
+          prevVisitors: 0,
+          dailyReq: 0,
+          target: 0,
+          ach: 0,
+        };
       }
+      byStore[sid].target = phaseTargets[sid] || 0;
     });
 
     // Post-aggregation calculation loop
@@ -794,10 +881,17 @@ export default function DashboardPage() {
       const v = byStore[sid];
       const remaining = Math.max(0, v.target - v.sales); // Remaining is based on MTD sales vs Month Target
 
-      const nowForReq = new Date();
-      const lastDayOfMonth = new Date(nowForReq.getFullYear(), nowForReq.getMonth() + 1, 0).getDate();
-      let remainingDays = lastDayOfMonth - nowForReq.getDate() + 1;
-      if (remainingDays < 1) remainingDays = 1;
+      let remainingDays = 1;
+      if (yesterdayStr.startsWith('2026-03')) {
+        remainingDays = Math.max(
+          1,
+          getMarch2026TargetMetrics(new Date(`${mtdEnd}T12:00:00`)).remainingDaysInclusive
+        );
+      } else {
+        const nowForReq = new Date();
+        const lastDayOfMonth = new Date(nowForReq.getFullYear(), nowForReq.getMonth() + 1, 0).getDate();
+        remainingDays = Math.max(1, lastDayOfMonth - nowForReq.getDate() + 1);
+      }
 
       v.dailyReq = remainingDays > 0 ? remaining / remainingDays : 0;
       v.ach = v.target > 0 ? (v.sales / v.target) * 100 : 0; // Achievement is usually MTD vs Target
@@ -834,7 +928,7 @@ export default function DashboardPage() {
         };
       })
       .sort((a, b) => b.sales - a.sales);
-  }, [raw, yesterdayStr, lastYearYesterdayStr, effectiveManager, allowedStoreIds]);
+  }, [raw, yesterdayStr, lastYearYesterdayStr, effectiveManager, allowedStoreIds, marchMtdPhase, mode]);
 
   // Chart data - adapts to selected period and filters
   const isFullYearView = mode === 'month';
@@ -1078,9 +1172,9 @@ export default function DashboardPage() {
   // Pagination for Top Selling Widget
   const [topSellingPage, setTopSellingPage] = useState(1);
 
-
-
-
+  if (err) {
+    return <div className="p-6 bg-white rounded-xl border border-neutral-200 text-red-600 font-semibold">{err}</div>;
+  }
 
   if (!raw) {
     return (
@@ -1154,6 +1248,22 @@ export default function DashboardPage() {
               <option value="custom">فترة مخصصة</option>
             </select>
           </div>
+          {mode === 'mtd' && new Date().getFullYear() === 2026 && new Date().getMonth() === 2 && (
+            <div className="md:col-span-2">
+              <div className="text-xs font-semibold text-neutral-500 mb-1">فترة آذار (مثل العمولات)</div>
+              <div className="flex items-center gap-2 bg-orange-50/80 p-2 rounded-xl border border-orange-200">
+                <span className="text-xs font-semibold text-orange-800 whitespace-nowrap shrink-0">تقسيم الشهر</span>
+                <select
+                  className="input flex-1 min-w-0 bg-white font-semibold text-neutral-800 border-orange-200"
+                  value={marchMtdPhase}
+                  onChange={(e) => setMarchMtdPhase(e.target.value as '1' | '2')}
+                >
+                  <option value="1">الفترة الأولى (1–19 آذار)</option>
+                  <option value="2">الفترة الثانية (20–31 آذار)</option>
+                </select>
+              </div>
+            </div>
+          )}
           {mode === 'month' && (
             <>
               <div>
@@ -1264,6 +1374,16 @@ export default function DashboardPage() {
           formatSAR={formatSAR}
           onPrintDailyReport={handlePrintDailyReport}
           onPrintEmployeeReport={handlePrintEmployeeReport}
+          marchPeriodNote={
+            mode === 'mtd' &&
+            new Date().getFullYear() === 2026 &&
+            new Date().getMonth() === 2 &&
+            yesterdayStr.startsWith('2026-03')
+              ? marchMtdPhase === '1'
+                ? 'مبيعات ومتطلبات التارجت (MTD): الفترة الأولى 1–19 آذار'
+                : 'مبيعات ومتطلبات التارجت (MTD): الفترة الثانية 20–31 آذار'
+              : undefined
+          }
         />
       }
 

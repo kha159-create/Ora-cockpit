@@ -10,6 +10,8 @@ interface DailyReportModalProps {
     formatSAR: (val: number) => string;
     onPrintDailyReport: () => void;
     onPrintEmployeeReport: () => void;
+    /** عند تقسيم آذار 2026 (MTD + مرحلة) — يوضح أن أعمدة المبيعات/المتبقي تتبع الفترة */
+    marchPeriodNote?: string;
 }
 
 export const DailyReportModal: React.FC<DailyReportModalProps> = ({
@@ -21,6 +23,7 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({
     formatSAR,
     onPrintDailyReport,
     onPrintEmployeeReport,
+    marchPeriodNote,
 }) => {
     if (!isOpen) return null;
 
@@ -36,6 +39,11 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({
                                 <span className="text-[10px] sm:text-sm text-gray-500 font-normal mt-1">
                                     تقرير الأمس <span className="font-mono dir-ltr inline">({yesterdayStr})</span> مقارنة بـ <span className="font-mono dir-ltr inline">({lastYearYesterdayStr})</span>
                                 </span>
+                                {marchPeriodNote && (
+                                    <span className="text-[10px] sm:text-sm text-orange-700 font-semibold mt-1 block">
+                                        {marchPeriodNote}
+                                    </span>
+                                )}
                             </div>
                         </div>
                     </div>
