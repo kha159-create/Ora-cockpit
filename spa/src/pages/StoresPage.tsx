@@ -94,7 +94,14 @@ function normDate(s: unknown) {
   return String(s || '').substring(0, 10);
 }
 
-function getRange(mode: Mode, standardYear: number, standardMonth: string, customStart: string, customEnd: string) {
+function getRange(
+  mode: Mode,
+  standardYear: number,
+  standardMonth: string,
+  customStart: string,
+  customEnd: string,
+  marchMtdPhase: '1' | '2' = '1',
+) {
   const now = new Date();
   const today = new Date(now);
   if (now.getHours() < 1) {
@@ -138,8 +145,24 @@ function getRange(mode: Mode, standardYear: number, standardMonth: string, custo
     if (currEnd > today) currEnd = new Date(today);
   }
 
-  const startYMD = toLocalYMD(currStart);
-  const endYMD = toLocalYMD(currEnd);
+  let startYMD = toLocalYMD(currStart);
+  let endYMD = toLocalYMD(currEnd);
+
+  /** آذار 2026 + MTD: نفس تقسيم صفحة العمولات / الموظفين */
+  if (mode === 'mtd' && today.getFullYear() === 2026 && today.getMonth() === 2) {
+    const maxDateStr = (a: string, b: string) => (a >= b ? a : b);
+    const minDateStr = (a: string, b: string) => (a <= b ? a : b);
+    const endMtd = endYMD;
+    if (marchMtdPhase === '1') {
+      startYMD = maxDateStr('2026-03-01', startYMD);
+      endYMD = minDateStr('2026-03-19', endMtd);
+    } else {
+      startYMD = maxDateStr('2026-03-20', startYMD);
+      endYMD = minDateStr('2026-03-31', endMtd);
+    }
+    currStart = new Date(startYMD + 'T00:00:00');
+    currEnd = new Date(endYMD + 'T23:59:59');
+  }
 
   // Use seasonal prev-year range (Hijri-aligned when in season)
   const seasonalPrev = getPrevYearRange(startYMD, endYMD);
@@ -643,6 +666,8 @@ export default function StoresPage() {
   const [standardMonth, setStandardMonth] = useState<string>('all');
   const [customStart, setCustomStart] = useState<string>('');
   const [customEnd, setCustomEnd] = useState<string>('');
+  /** آذار 2026 + MTD: الفترة 1 (1–19) أو 2 (20–31) — مثل العمولات */
+  const [marchMtdPhase, setMarchMtdPhase] = useState<'1' | '2'>('1');
 
   const [manager, setManager] = useState<string>('all');
   const [city, setCity] = useState<string>('all');
@@ -668,7 +693,10 @@ export default function StoresPage() {
   const [prodRaw, setProdRaw] = useState<any>(null);
   const [storeSortKey, setStoreSortKey] = useState<StoreSortKey>('val');
   const [storeSortDir, setStoreSortDir] = useState<'asc' | 'desc'>('desc');
-  const range = useMemo(() => getRange(mode, standardYear, standardMonth, customStart, customEnd), [customEnd, customStart, mode, standardMonth, standardYear]);
+  const range = useMemo(
+    () => getRange(mode, standardYear, standardMonth, customStart, customEnd, marchMtdPhase),
+    [customEnd, customStart, marchMtdPhase, mode, standardMonth, standardYear],
+  );
 
   const handleStoreSort = (key: StoreSortKey) => {
     if (storeSortKey === key) {
@@ -870,8 +898,23 @@ export default function StoresPage() {
       })
       .sort((a, b) => (stores[a] || a).localeCompare(stores[b] || b, 'ar'));
 
-    return { managers: managersList, cities: citiesList, branches: branchesList, list, totals: totalsValues, achTotal, rangeLabel: range.startYMD === range.endYMD ? range.startYMD : `${range.startYMD} → ${range.endYMD} ` };
-  }, [branch, city, effectiveManager, manager, mgmtRaw, range, type, user?.name, user?.role]);
+    const marchNote =
+      mode === 'mtd' && new Date().getFullYear() === 2026 && new Date().getMonth() === 2
+        ? marchMtdPhase === '1'
+          ? 'الفترة الأولى (1–19 آذار) · '
+          : 'الفترة الثانية (20–31 آذار) · '
+        : '';
+    const rangeCore = range.startYMD === range.endYMD ? range.startYMD : `${range.startYMD} → ${range.endYMD} `;
+    return {
+      managers: managersList,
+      cities: citiesList,
+      branches: branchesList,
+      list,
+      totals: totalsValues,
+      achTotal,
+      rangeLabel: `${marchNote}${rangeCore}`,
+    };
+  }, [branch, city, effectiveManager, manager, marchMtdPhase, mgmtRaw, mode, range, type, user?.name, user?.role]);
 
   useEffect(() => {
     const sid = searchParams.get('sid');
@@ -928,6 +971,23 @@ export default function StoresPage() {
                 <option value="custom">فترة مخصصة</option>
               </select>
             </div>
+
+            {mode === 'mtd' && new Date().getFullYear() === 2026 && new Date().getMonth() === 2 && (
+              <div className="min-w-[220px]">
+                <div className="text-xs font-semibold text-neutral-500 mb-1">فترة آذار (مثل العمولات)</div>
+                <div className="flex items-center gap-2 bg-orange-50/80 p-2 rounded-xl border border-orange-200">
+                  <span className="text-xs font-semibold text-orange-800 whitespace-nowrap shrink-0">تقسيم الشهر</span>
+                  <select
+                    className="input flex-1 min-w-0 bg-white font-semibold text-neutral-800 border-orange-200"
+                    value={marchMtdPhase}
+                    onChange={(e) => setMarchMtdPhase(e.target.value as '1' | '2')}
+                  >
+                    <option value="1">الفترة الأولى (1–19 آذار)</option>
+                    <option value="2">الفترة الثانية (20–31 آذار)</option>
+                  </select>
+                </div>
+              </div>
+            )}
 
             {mode === 'standard' && (
               <>
