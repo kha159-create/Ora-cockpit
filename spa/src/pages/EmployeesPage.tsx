@@ -349,6 +349,8 @@ export default function EmployeesPage() {
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1); // 1-12
   const [customStart, setCustomStart] = useState<string>('');
   const [customEnd, setCustomEnd] = useState<string>('');
+  /** آذار 2026 + MTD: نفس تقسيم صفحة العمولات — الفترة 1 (1–19) أو 2 (20–31) */
+  const [marchMtdPhase, setMarchMtdPhase] = useState<'1' | '2'>('1');
   const [search, setSearch] = useState<string>('');
 
   const [sortKey, setSortKey] = useState<SortKey>('sales');
@@ -471,7 +473,21 @@ export default function EmployeesPage() {
       return { start: toLocalYMD(today), end: toLocalYMD(today) };
     }
 
-    const { start: defaultRangeStart, end: defaultRangeEnd } = getDefaultRange(period, selYear, selMonth);
+    let { start: defaultRangeStart, end: defaultRangeEnd } = getDefaultRange(period, selYear, selMonth);
+
+    const maxDateStr = (a: string, b: string) => (a >= b ? a : b);
+    const minDateStr = (a: string, b: string) => (a <= b ? a : b);
+
+    if (period === 'mtd' && todayYear === 2026 && todayMonth0 === 2) {
+      const endMtd = defaultRangeEnd;
+      if (marchMtdPhase === '1') {
+        defaultRangeStart = maxDateStr('2026-03-01', defaultRangeStart);
+        defaultRangeEnd = minDateStr('2026-03-19', endMtd);
+      } else {
+        defaultRangeStart = maxDateStr('2026-03-20', defaultRangeStart);
+        defaultRangeEnd = minDateStr('2026-03-31', endMtd);
+      }
+    }
 
     const rangeStart = (period === 'custom' && customStart) ? customStart : defaultRangeStart;
     const rangeEnd = (period === 'custom' && customEnd) ? customEnd : defaultRangeEnd;
@@ -493,7 +509,7 @@ export default function EmployeesPage() {
       const dVal = dYear * 10000 + (dMonth0 + 1) * 100 + dDay;
 
       if (period === 'mtd') {
-        if (dYear === todayYear && dMonth0 === todayMonth0 && dVal <= todayVal) return 1;
+        if (dNorm >= rangeStart && dNorm <= rangeEnd) return 1;
       } else if (period === 'month') {
         if (selMonth === 0) {
           // Yearly logic
@@ -758,6 +774,7 @@ export default function EmployeesPage() {
     selMonth,
     customStart,
     customEnd,
+    marchMtdPhase,
 
     search,
     sortKey,
@@ -794,10 +811,31 @@ export default function EmployeesPage() {
   const periodLabel = useMemo(() => {
     if (period === 'today') return `اليوم (${derived.labels.todayStr})`;
     if (period === 'yesterday') return `أمس (${derived.labels.yesterdayStr})`;
-    if (period === 'mtd') return 'الشهر الحالي (MTD)';
+    if (period === 'mtd') {
+      const now = new Date();
+      if (now.getFullYear() === 2026 && now.getMonth() === 2) {
+        const rs = derived.range?.start;
+        const re = derived.range?.end;
+        const phaseLabel = marchMtdPhase === '1' ? 'الفترة الأولى (1–19 آذار)' : 'الفترة الثانية (20–31 آذار)';
+        return `الشهر الحالي — ${phaseLabel}${rs && re ? ` · ${rs} → ${re}` : ''}`;
+      }
+      return 'الشهر الحالي (MTD)';
+    }
     if (period === 'custom') return `فترة مخصصة: ${customStart || '...'} → ${customEnd || '...'}`;
     return `شهر محدد: ${monthsAr[selMonth - 1] || selMonth} ${selYear}`;
-  }, [customEnd, customStart, derived.labels.todayStr, derived.labels.yesterdayStr, monthsAr, period, selMonth, selYear]);
+  }, [
+    customEnd,
+    customStart,
+    derived.labels.todayStr,
+    derived.labels.yesterdayStr,
+    derived.range?.end,
+    derived.range?.start,
+    marchMtdPhase,
+    monthsAr,
+    period,
+    selMonth,
+    selYear,
+  ]);
 
   useEffect(() => {
     if (period === 'custom' && (!customStart || !customEnd)) {
@@ -1012,6 +1050,23 @@ export default function EmployeesPage() {
               <option value="custom">فترة مخصصة</option>
             </select>
           </div>
+
+          {period === 'mtd' && new Date().getFullYear() === 2026 && new Date().getMonth() === 2 && (
+            <div className="md:col-span-2">
+              <div className="text-xs font-semibold text-neutral-500 mb-1">فترة آذار (مثل العمولات)</div>
+              <div className="flex items-center gap-2 bg-orange-50/80 p-2 rounded-xl border border-orange-200">
+                <span className="text-xs font-semibold text-orange-800 whitespace-nowrap shrink-0">تقسيم الشهر</span>
+                <select
+                  className="input flex-1 min-w-0 bg-white font-semibold text-neutral-800 border-orange-200"
+                  value={marchMtdPhase}
+                  onChange={(e) => setMarchMtdPhase(e.target.value as '1' | '2')}
+                >
+                  <option value="1">الفترة الأولى (1–19 آذار)</option>
+                  <option value="2">الفترة الثانية (20–31 آذار)</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           {period === 'month' ? (
             <>
