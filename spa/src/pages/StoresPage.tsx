@@ -14,6 +14,8 @@ import {
   getMarch2026PhaseSalesBounds,
   march2026TargetRowMatchesReference,
   getEmployeeTargetForEffectiveDate,
+  sumEmployeeTargetForDateRange,
+  sumManagementTargetsForDateRange,
 } from '../utils/march2026Targets';
 
 type Mode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
@@ -230,6 +232,9 @@ function StoreDetailsModal({
 
     const resolveTargetForRange = (empId: string) => {
       if (!empId) return 0;
+      if (mode === 'custom') {
+        return sumEmployeeTargetForDateRange(employeesJson, empId, rangeStart, rangeEnd);
+      }
       const mkStart = rangeStart.substring(0, 7);
       const mkEnd = rangeEnd.substring(0, 7);
       if (mkStart === mkEnd) {
@@ -796,13 +801,20 @@ export default function StoresPage() {
       const [d, s, v] = x;
       if (inRange(d)) branchTrans[s] = (branchTrans[s] || 0) + safeNum(v);
     });
-    (raw.targets || []).forEach((x: any[]) => {
-      const [d, s, v] = x;
-      const ds = normDate(d);
-      if (inRange(d) && march2026TargetRowMatchesReference(ds, refForPhase)) {
-        branchTarget[s] = (branchTarget[s] || 0) + safeNum(v);
-      }
-    });
+    if (mode === 'custom') {
+      const summed = sumManagementTargetsForDateRange(raw.targets, range.startYMD, range.endYMD);
+      Object.keys(summed).forEach((sid) => {
+        branchTarget[sid] = safeNum(summed[sid]);
+      });
+    } else {
+      (raw.targets || []).forEach((x: any[]) => {
+        const [d, s, v] = x;
+        const ds = normDate(d);
+        if (inRange(d) && march2026TargetRowMatchesReference(ds, refForPhase)) {
+          branchTarget[s] = (branchTarget[s] || 0) + safeNum(v);
+        }
+      });
+    }
     (raw.visitors || []).forEach((x: any[]) => {
       const [d, s, v] = x;
       if (inRange(d)) branchVisitors[s] = (branchVisitors[s] || 0) + safeNum(v);

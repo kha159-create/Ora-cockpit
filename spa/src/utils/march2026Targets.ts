@@ -208,3 +208,129 @@ export function march2026TargetRowMatchesReference(rowDateStr: string, reference
     const phRow: 1 | 2 = rowDay <= 19 ? 1 : 2;
     return phRow === phRef;
 }
+
+function maxYMD(a: string, b: string): string {
+    return a >= b ? a : b;
+}
+function minYMD(a: string, b: string): string {
+    return a <= b ? a : b;
+}
+
+/** عدد الأيام بين تاريخين YYYY-MM-DD (شامل). */
+function daysInclusiveYMD(start: string, end: string): number {
+    if (!start || !end || start > end) return 0;
+    const t = new Date(start + 'T12:00:00').getTime();
+    const u = new Date(end + 'T12:00:00').getTime();
+    return Math.floor((u - t) / 86400000) + 1;
+}
+
+/**
+ * جمع تارجت موظف على فترة مخصصة (شهور متعددة): لكل شهر نسبة من التارجت الشهري،
+ * وآذار 2026 يُقسَّم إلى مرحلتين (1–19 و 20–31) مثل باقي المنطق.
+ */
+export function sumEmployeeTargetForDateRange(empRaw: any, empId: string, rangeStart: string, rangeEnd: string): number {
+    if (!empRaw || !rangeStart || !rangeEnd || rangeStart > rangeEnd) return 0;
+    let total = 0;
+    const rs = new Date(rangeStart + 'T12:00:00');
+    const re = new Date(rangeEnd + 'T12:00:00');
+    let cur = new Date(rs.getFullYear(), rs.getMonth(), 1);
+    const endMonth = new Date(re.getFullYear(), re.getMonth(), 1);
+
+    while (cur.getTime() <= endMonth.getTime()) {
+        const y = cur.getFullYear();
+        const m0 = cur.getMonth();
+        const monthEnd = new Date(y, m0 + 1, 0);
+        const dim = monthEnd.getDate();
+        const ms = `${y}-${String(m0 + 1).padStart(2, '0')}-01`;
+        const me = `${y}-${String(m0 + 1).padStart(2, '0')}-${String(dim).padStart(2, '0')}`;
+        const overlapS = maxYMD(rangeStart, ms);
+        const overlapE = minYMD(rangeEnd, me);
+        if (overlapS <= overlapE) {
+            const daysOverlap = daysInclusiveYMD(overlapS, overlapE);
+            if (y === 2026 && m0 === 2) {
+                const p1s = maxYMD(overlapS, '2026-03-01');
+                const p1e = minYMD(overlapE, '2026-03-19');
+                if (p1s <= p1e && p1s <= '2026-03-19' && p1e >= '2026-03-01') {
+                    const d1 = daysInclusiveYMD(p1s, p1e);
+                    const t1 = getEmployeeTargetForEffectiveDate(empRaw, empId, '2026-03-10');
+                    total += t1 * (d1 / 19);
+                }
+                const p2s = maxYMD(overlapS, '2026-03-20');
+                const p2e = minYMD(overlapE, '2026-03-31');
+                if (p2s <= p2e && p2s >= '2026-03-20') {
+                    const d2 = daysInclusiveYMD(p2s, p2e);
+                    const t2 = getEmployeeTargetForEffectiveDate(empRaw, empId, '2026-03-25');
+                    total += t2 * (d2 / 12);
+                }
+            } else {
+                const refEff = overlapE;
+                const monthTarget = getEmployeeTargetForEffectiveDate(empRaw, empId, refEff);
+                total += monthTarget * (daysOverlap / dim);
+            }
+        }
+        cur.setMonth(cur.getMonth() + 1);
+    }
+    return total;
+}
+
+/**
+ * جمع تارجت الفروع من management.targets على فترة مخصصة (شهور متعددة)، مع نفس منطق آذار 2026.
+ */
+export function sumManagementTargetsForDateRange(
+    targetRows: any[] | undefined,
+    rangeStart: string,
+    rangeEnd: string,
+): Record<string, number> {
+    const out: Record<string, number> = {};
+    if (!targetRows?.length || !rangeStart || !rangeEnd || rangeStart > rangeEnd) return out;
+
+    const rs = new Date(rangeStart + 'T12:00:00');
+    const re = new Date(rangeEnd + 'T12:00:00');
+    let cur = new Date(rs.getFullYear(), rs.getMonth(), 1);
+    const endMonth = new Date(re.getFullYear(), re.getMonth(), 1);
+
+    while (cur.getTime() <= endMonth.getTime()) {
+        const y = cur.getFullYear();
+        const m0 = cur.getMonth();
+        const monthEnd = new Date(y, m0 + 1, 0);
+        const dim = monthEnd.getDate();
+        const ms = `${y}-${String(m0 + 1).padStart(2, '0')}-01`;
+        const me = `${y}-${String(m0 + 1).padStart(2, '0')}-${String(dim).padStart(2, '0')}`;
+        const overlapS = maxYMD(rangeStart, ms);
+        const overlapE = minYMD(rangeEnd, me);
+        if (overlapS <= overlapE) {
+            const daysOverlap = daysInclusiveYMD(overlapS, overlapE);
+            if (y === 2026 && m0 === 2) {
+                const p1s = maxYMD(overlapS, '2026-03-01');
+                const p1e = minYMD(overlapE, '2026-03-19');
+                if (p1s <= p1e && p1s <= '2026-03-19' && p1e >= '2026-03-01') {
+                    const d1 = daysInclusiveYMD(p1s, p1e);
+                    const t1 = sumManagementTargetsForMonth(targetRows, '2026-03', '2026-03-10');
+                    const f = d1 / 19;
+                    for (const [sid, v] of Object.entries(t1)) {
+                        out[sid] = (out[sid] || 0) + v * f;
+                    }
+                }
+                const p2s = maxYMD(overlapS, '2026-03-20');
+                const p2e = minYMD(overlapE, '2026-03-31');
+                if (p2s <= p2e && p2s >= '2026-03-20') {
+                    const d2 = daysInclusiveYMD(p2s, p2e);
+                    const t2 = sumManagementTargetsForMonth(targetRows, '2026-03', '2026-03-25');
+                    const f2 = d2 / 12;
+                    for (const [sid, v] of Object.entries(t2)) {
+                        out[sid] = (out[sid] || 0) + v * f2;
+                    }
+                }
+            } else {
+                const monthKey = `${y}-${String(m0 + 1).padStart(2, '0')}`;
+                const tm = sumManagementTargetsForMonth(targetRows, monthKey, overlapE);
+                const frac = daysOverlap / dim;
+                for (const [sid, v] of Object.entries(tm)) {
+                    out[sid] = (out[sid] || 0) + v * frac;
+                }
+            }
+        }
+        cur.setMonth(cur.getMonth() + 1);
+    }
+    return out;
+}

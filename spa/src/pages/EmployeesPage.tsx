@@ -11,6 +11,7 @@ import {
   getMarch2026TargetMetrics,
   getEmployeeTargetForEffectiveDate,
   dateWithinMarchPhaseSalesBounds,
+  sumEmployeeTargetForDateRange,
 } from '../utils/march2026Targets';
 
 type Period = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
@@ -542,7 +543,9 @@ export default function EmployeesPage() {
     /** تاريخ مرجعي لمرحلة تارجت آذار 2026 + اختيار تارجت الموظف */
     const refForEmployeeTarget = period === 'yesterday' ? yesterdayStr : period === 'today' ? todayStr : rangeEnd;
     const resolveTargetForMonth = (empId: string) =>
-      getEmployeeTargetForEffectiveDate(empRaw, empId, refForEmployeeTarget);
+      period === 'custom'
+        ? sumEmployeeTargetForDateRange(empRaw, empId, rangeStart, rangeEnd)
+        : getEmployeeTargetForEffectiveDate(empRaw, empId, refForEmployeeTarget);
 
     const branchStats: BranchStats = {};
 
