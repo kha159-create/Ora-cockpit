@@ -20,6 +20,7 @@ const CommissionsPage = React.lazy(() => import('./pages/CommissionsPage'));
 const ComparisonPage = React.lazy(() => import('./pages/ComparisonPage'));
 const HourlyPage = React.lazy(() => import('./pages/HourlyPage'));
 const TVPage = React.lazy(() => import('./pages/TVPage'));
+const TargetSplitPage = React.lazy(() => import('./pages/TargetSplitPage'));
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const u = getCurrentUser();
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="commissions" element={<PageWrap><CommissionsPage /></PageWrap>} />
         <Route path="comparison" element={<PageWrap><ComparisonPage /></PageWrap>} />
         <Route path="hourly" element={<PageWrap><HourlyPage /></PageWrap>} />
+        <Route path="target-split" element={<PageWrap><TargetSplitPage /></PageWrap>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

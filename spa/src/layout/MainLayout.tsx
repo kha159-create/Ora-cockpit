@@ -14,6 +14,7 @@ import {
   SwitchHorizontalIcon,
   TagIcon,
   TargetIcon,
+  PremiumTargetIcon,
   UserGroupIcon,
   SearchIcon,
   FireIcon, // Added
@@ -30,6 +31,7 @@ const baseNavItems = [
   { to: '/stores', label: 'المعارض', icon: <OfficeBuildingIcon /> },
   { to: '/comparison', label: 'المقارنات', icon: <SwitchHorizontalIcon /> },
   { to: '/employees', label: 'الموظفين', icon: <UserGroupIcon /> },
+  { to: '/target-split', label: 'تقسيمة التارجت', icon: <PremiumTargetIcon className="w-5 h-5" /> },
   { to: '/commissions', label: 'العمولات', icon: <CashIcon /> },
   { to: '/hourly', label: 'المبيعات بالساعه', icon: <ClockIcon /> },
   { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
