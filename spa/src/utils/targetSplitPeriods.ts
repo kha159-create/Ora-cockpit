@@ -27,6 +27,81 @@ export function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }
 
+export function maxYMD(a: string, b: string): string {
+  return a >= b ? a : b;
+}
+
+/** عدد الأيام بين تاريخين (شامل) */
+export function daysInclusiveYMD(startYmd: string, endYmd: string): number {
+  if (!startYmd || !endYmd || startYmd > endYmd) return 0;
+  const a = new Date(startYmd + 'T12:00:00').getTime();
+  const b = new Date(endYmd + 'T12:00:00').getTime();
+  return Math.floor((b - a) / 86400000) + 1;
+}
+
+/**
+ * فترات «تقسيمة التارجت»: آذار 2026 = مرحلتان (1–19 و 20–31) مثل باقي الشاشات.
+ * غير ذلك: شهر واحد كامل.
+ */
+export function getTargetSplitPhases(
+  selYear: number,
+  selMonth: number,
+  monthStart: string,
+  monthEnd: string,
+): { key: string; label: string; start: string; end: string }[] {
+  if (selYear === 2026 && selMonth === 3) {
+    return [
+      { key: 'm26-p1', label: 'المرحلة الأولى (1–19 آذار)', start: '2026-03-01', end: '2026-03-19' },
+      { key: 'm26-p2', label: 'المرحلة الثانية (20–31 آذار)', start: '2026-03-20', end: '2026-03-31' },
+    ];
+  }
+  return [{ key: 'month', label: '', start: monthStart, end: monthEnd }];
+}
+
+/** نوافذ يوم/10/15 ضمن [rangeStart, rangeEnd] فقط — ترحيل النوافذ لا يعبر بين مرحلتي آذار */
+export function buildBucketsForDateRange(
+  rangeStart: string,
+  rangeEnd: string,
+  g: SplitGranularity,
+  idPrefix = '',
+): TargetBucket[] {
+  if (!rangeStart || !rangeEnd || rangeStart > rangeEnd) return [];
+  const days: string[] = [];
+  for (
+    let t = new Date(rangeStart + 'T12:00:00'), end = new Date(rangeEnd + 'T12:00:00');
+    t <= end;
+    t.setDate(t.getDate() + 1)
+  ) {
+    days.push(`${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`);
+  }
+  if (days.length === 0) return [];
+  const dim = days.length;
+  if (g === 'day') {
+    return days.map((ds) => ({
+      id: `${idPrefix}d-${ds}`,
+      label: ds,
+      start: ds,
+      end: ds,
+      dayCount: 1,
+    }));
+  }
+  const step = g === '10' ? 10 : 15;
+  const ranges = buildMergedTailWindows(dim, step);
+  return ranges.map(({ start, end }) => {
+    const i = start - 1;
+    const j = end - 1;
+    const s = days[i];
+    const e = days[j];
+    return {
+      id: `${idPrefix}b-${s}-${e}`,
+      label: `${s} — ${e}`,
+      start: s,
+      end: e,
+      dayCount: j - i + 1,
+    };
+  });
+}
+
 /** بناء فترات الشهر حسب نوع التقسيم */
 export function buildTargetBuckets(year: number, month: number, g: SplitGranularity): TargetBucket[] {
   const dim = daysInMonth(year, month);

@@ -1,16 +1,33 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { loadEmployeesData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { sumEmployeeTargetForDateRange, sumManagementTargetsForDateRange } from '../utils/march2026Targets';
 import {
-  buildTargetBuckets,
-  clampBucket,
+  buildBucketsForDateRange,
   daysInMonth,
+  daysInclusiveYMD,
+  getTargetSplitPhases,
   SplitGranularity,
   TargetBucket,
   ymd,
 } from '../utils/targetSplitPeriods';
+
+const MONTHS_AR = [
+  'يناير',
+  'فبراير',
+  'مارس',
+  'أبريل',
+  'مايو',
+  'يونيو',
+  'يوليو',
+  'أغسطس',
+  'سبتمبر',
+  'أكتوبر',
+  'نوفمبر',
+  'ديسمبر',
+];
 
 function pad2(n: number) {
   return String(n).padStart(2, '0');
@@ -266,6 +283,8 @@ export default function TargetSplitPage() {
   const [granularity, setGranularity] = useState<SplitGranularity>('10');
   const [expandedStores, setExpandedStores] = useState<Set<string>>(new Set());
   const [showEmpDetails, setShowEmpDetails] = useState<Set<string>>(new Set());
+  type StoreSortKey = 'monthTarget' | 'monthSales' | 'monthAch' | 'gap';
+  const [storeSort, setStoreSort] = useState<{ key: StoreSortKey; dir: 'asc' | 'desc' } | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -314,14 +333,20 @@ export default function TargetSplitPage() {
     return monthEnd;
   }, [selYear, selMonth, now, yesterdayStr, monthStart, monthEnd]);
 
-  /** نوافذ 10 و15: نعرض كل فترات الشهر كاملة (مع مبيعات جزئية حتى آخر يوم متاح) */
-  const buckets = useMemo(() => {
-    const rawBuckets = buildTargetBuckets(selYear, selMonth, granularity);
-    if (granularity === '10' || granularity === '15') {
-      return rawBuckets;
-    }
-    return rawBuckets.map((b) => clampBucket(b, lastAvailableInMonth)).filter((x): x is TargetBucket => x != null);
-  }, [selYear, selMonth, granularity, lastAvailableInMonth]);
+  /**
+   * آذار 2026: مرحلتان مستقلتان (1–19 و 20–31) — نوافذ 10/15/يوم تُبنى داخل كل مرحلة ولا يمر الترحيل بينهما.
+   * غير ذلك: مرحلة واحدة = الشهر كامل.
+   */
+  const bucketPhaseGroups = useMemo(() => {
+    const phases = getTargetSplitPhases(selYear, selMonth, monthStart, monthEnd);
+    return phases.map((p) => ({
+      key: p.key,
+      label: p.label,
+      rangeStart: p.start,
+      rangeEnd: p.end,
+      buckets: buildBucketsForDateRange(p.start, p.end, granularity, `${p.key}-`),
+    }));
+  }, [selYear, selMonth, monthStart, monthEnd, granularity]);
 
   const filtersDerived = useMemo(() => {
     if (!raw?.store_meta) {
@@ -418,13 +443,21 @@ export default function TargetSplitPage() {
       monthSales: number;
       monthAch: number;
       gap: number;
-      buckets: { bucket: TargetBucket; metrics: PeriodMetrics }[];
+      bucketBlocks: {
+        key: string;
+        label: string;
+        buckets: { bucket: TargetBucket; metrics: PeriodMetrics }[];
+      }[];
       employees: {
         id: string;
         name: string;
         monthTarget: number;
         monthSales: number;
-        buckets: { bucket: TargetBucket; metrics: EmployeePeriodMetrics }[];
+        bucketBlocks: {
+          key: string;
+          label: string;
+          buckets: { bucket: TargetBucket; metrics: EmployeePeriodMetrics }[];
+        }[];
       }[];
     }[] = [];
 
@@ -446,56 +479,74 @@ export default function TargetSplitPage() {
       const monthAgg = aggregateMgmtForRange(raw, storeIds, monthStart, lastAvailableInMonth);
       const monthAch = monthT > 0 ? (monthAgg.sales / monthT) * 100 : 0;
 
-      const salesByDate = buildSalesByDateForStore(raw, sid, monthStart, lastAvailableInMonth);
       const fullMonthTarget =
         sumManagementTargetsForDateRange(targetsRows, monthStart, monthEnd)[sid] ||
         sumManagementTargetsForDateRange(targetsRows, monthStart, lastAvailableInMonth)[sid] ||
         0;
 
-      const bucketMetrics: { bucket: TargetBucket; metrics: PeriodMetrics }[] = [];
-      const dim = daysInMonth(selYear, selMonth);
+      const bucketBlocks: (typeof list)[0]['bucketBlocks'] = [];
 
-      if (granularity === '10' || granularity === '15') {
-        const chain = applyWindowCarryChain(
-          buckets,
-          lastAvailableInMonth,
-          (s, e) => sumManagementTargetsForDateRange(targetsRows, s, e)[sid] || 0,
-          (s, e) => aggregateMgmtForRange(raw, storeIds, s, e).sales,
-        );
-        buckets.forEach((b, i) => {
-          const { eff, sales } = chain[i];
-          const effEnd = minYMD(b.end, lastAvailableInMonth);
-          const agg =
-            b.start <= lastAvailableInMonth
-              ? aggregateMgmtForRange(raw, storeIds, b.start, effEnd)
-              : { sales: 0, trans: 0, visitors: 0 };
-          const mtdThrough =
-            b.start <= lastAvailableInMonth
-              ? aggregateMgmtForRange(raw, storeIds, monthStart, effEnd).sales
-              : aggregateMgmtForRange(raw, storeIds, monthStart, lastAvailableInMonth).sales;
-          const gap = enrichGap(sales, eff, fullMonthTarget, mtdThrough, dim, effEnd);
-          bucketMetrics.push({
-            bucket: b,
-            metrics: metricsFromAgg(eff, sales, agg.trans, agg.visitors, undefined, gap),
-          });
-        });
-      } else {
-        for (const b of buckets) {
-          const effStart = b.start;
-          const effEnd = b.end <= lastAvailableInMonth ? b.end : lastAvailableInMonth;
-          if (effStart > effEnd) continue;
-          const agg = aggregateMgmtForRange(raw, storeIds, effStart, effEnd);
-          const mtdThrough = aggregateMgmtForRange(raw, storeIds, monthStart, effEnd).sales;
+      for (const phase of bucketPhaseGroups) {
+        const pr = phase.rangeStart;
+        const pe = phase.rangeEnd;
+        const phaseBuckets = phase.buckets;
+        const dimPhase = daysInclusiveYMD(pr, pe);
+        const fullPhaseTarget =
+          sumManagementTargetsForDateRange(targetsRows, pr, pe)[sid] ||
+          sumManagementTargetsForDateRange(targetsRows, pr, minYMD(pe, lastAvailableInMonth))[sid] ||
+          0;
+        const salesByDatePhase = buildSalesByDateForStore(raw, sid, pr, pe);
 
-          if (granularity === 'day') {
-            const rd = rollingDailyForDay(fullMonthTarget, monthStart, effStart, dim, salesByDate);
-            const gap = enrichGap(rd.daySales, rd.dailyTarget, fullMonthTarget, mtdThrough, dim, effEnd);
+        const bucketMetrics: { bucket: TargetBucket; metrics: PeriodMetrics }[] = [];
+
+        if (granularity === '10' || granularity === '15') {
+          const chain = applyWindowCarryChain(
+            phaseBuckets,
+            lastAvailableInMonth,
+            (s, e) => sumManagementTargetsForDateRange(targetsRows, s, e)[sid] || 0,
+            (s, e) => aggregateMgmtForRange(raw, storeIds, s, e).sales,
+          );
+          phaseBuckets.forEach((b, i) => {
+            const { eff, sales } = chain[i];
+            const effEnd = minYMD(b.end, lastAvailableInMonth);
+            const agg =
+              b.start <= lastAvailableInMonth
+                ? aggregateMgmtForRange(raw, storeIds, b.start, effEnd)
+                : { sales: 0, trans: 0, visitors: 0 };
+            const mtdThrough =
+              b.start <= lastAvailableInMonth
+                ? aggregateMgmtForRange(raw, storeIds, pr, effEnd).sales
+                : aggregateMgmtForRange(raw, storeIds, pr, lastAvailableInMonth).sales;
+            const gap = enrichGap(sales, eff, fullPhaseTarget, mtdThrough, dimPhase, effEnd);
             bucketMetrics.push({
               bucket: b,
-              metrics: metricsFromAgg(monthT, rd.daySales, agg.trans, agg.visitors, rd.dailyTarget, gap),
+              metrics: metricsFromAgg(eff, sales, agg.trans, agg.visitors, undefined, gap),
             });
+          });
+        } else {
+          for (const b of phaseBuckets) {
+            const effStart = b.start;
+            const effEnd = b.end <= lastAvailableInMonth ? b.end : lastAvailableInMonth;
+            if (effStart > effEnd) continue;
+            const agg = aggregateMgmtForRange(raw, storeIds, effStart, effEnd);
+            const mtdThrough = aggregateMgmtForRange(raw, storeIds, pr, effEnd).sales;
+
+            if (granularity === 'day') {
+              const rd = rollingDailyForDay(fullPhaseTarget, pr, effStart, dimPhase, salesByDatePhase);
+              const gap = enrichGap(rd.daySales, rd.dailyTarget, fullPhaseTarget, mtdThrough, dimPhase, effEnd);
+              bucketMetrics.push({
+                bucket: b,
+                metrics: metricsFromAgg(fullPhaseTarget, rd.daySales, agg.trans, agg.visitors, rd.dailyTarget, gap),
+              });
+            }
           }
         }
+
+        bucketBlocks.push({
+          key: phase.key,
+          label: phase.label,
+          buckets: bucketMetrics,
+        });
       }
 
       const emps: typeof list[0]['employees'] = [];
@@ -518,10 +569,6 @@ export default function TargetSplitPage() {
           }
         });
 
-        const empFullMonthT = sumEmployeeTargetForDateRange(empRaw, eid, monthStart, monthEnd);
-        const eb: { bucket: TargetBucket; metrics: EmployeePeriodMetrics }[] = [];
-        const dimEmp = daysInMonth(selYear, selMonth);
-
         const collectEmpBucket = (effStart: string, effEnd: string) => {
           let es = 0,
             et = 0,
@@ -541,67 +588,85 @@ export default function TargetSplitPage() {
           return { es, et, items };
         };
 
-        if (granularity === '10' || granularity === '15') {
-          const chain = applyWindowCarryChain(
-            buckets,
-            lastAvailableInMonth,
-            (s, e) => sumEmployeeTargetForDateRange(empRaw, eid, s, e) || 0,
-            (s, e) => {
-              let sum = 0;
-              Object.values(history).forEach((records: any) => {
-                for (const rec of records || []) {
-                  const dt = String(rec?.[0] || '').substring(0, 10);
-                  if (dt < s || dt > e) continue;
-                  let id = String(rec?.[1] || '');
-                  if (id.includes('-')) id = id.split('-')[0].trim();
-                  if (id !== eid) continue;
-                  sum += safeNum(rec?.[2]);
-                }
-              });
-              return sum;
-            },
-          );
-          buckets.forEach((b, i) => {
-            const { eff, sales: es } = chain[i];
-            const effEnd = minYMD(b.end, lastAvailableInMonth);
-            if (b.start > lastAvailableInMonth) {
-              const empMtd = sumSalesBetween(empSalesByDate, monthStart, lastAvailableInMonth);
-              const gap = enrichGap(0, eff, empFullMonthT, empMtd, dimEmp, effEnd);
-              eb.push({
-                bucket: b,
-                metrics: employeeMetricsFromAgg(eff, 0, 0, 0, undefined, 0, 0, gap),
-              });
-              return;
-            }
-            const { et, items } = collectEmpBucket(b.start, effEnd);
-            const storeBucket = aggregateMgmtForRange(raw, new Set([sid]), b.start, effEnd);
-            const ev = storeBucket.sales > 0 ? storeBucket.visitors * (es / storeBucket.sales) : 0;
-            const empMtdThrough = sumSalesBetween(empSalesByDate, monthStart, effEnd);
-            const gap = enrichGap(es, eff, empFullMonthT, empMtdThrough, dimEmp, effEnd);
-            eb.push({
-              bucket: b,
-              metrics: employeeMetricsFromAgg(eff, es, et, ev, undefined, items, storeBucket.sales, gap),
-            });
-          });
-        } else {
-          for (const b of buckets) {
-            const effStart = b.start;
-            const effEnd = b.end <= lastAvailableInMonth ? b.end : lastAvailableInMonth;
-            if (effStart > effEnd) continue;
-            const { es, et, items } = collectEmpBucket(effStart, effEnd);
-            const storeBucket = aggregateMgmtForRange(raw, new Set([sid]), effStart, effEnd);
-            const ev = storeBucket.sales > 0 ? storeBucket.visitors * (es / storeBucket.sales) : 0;
-            const empMtdThrough = sumSalesBetween(empSalesByDate, monthStart, effEnd);
+        const empBucketBlocks: (typeof list)[0]['employees'][0]['bucketBlocks'] = [];
 
-            if (granularity === 'day') {
-              const rd = rollingDailyForDay(empFullMonthT, monthStart, effStart, dimEmp, empSalesByDate);
-              const gap = enrichGap(rd.daySales, rd.dailyTarget, empFullMonthT, empMtdThrough, dimEmp, effEnd);
+        for (const phase of bucketPhaseGroups) {
+          const pr = phase.rangeStart;
+          const pe = phase.rangeEnd;
+          const phaseBuckets = phase.buckets;
+          const dimEmp = daysInclusiveYMD(pr, pe);
+          const empPhaseFullT = sumEmployeeTargetForDateRange(empRaw, eid, pr, pe) || 0;
+          const empSalesByDatePhase: Record<string, number> = {};
+          Object.keys(empSalesByDate).forEach((dt) => {
+            if (dt >= pr && dt <= pe) empSalesByDatePhase[dt] = empSalesByDate[dt];
+          });
+
+          const eb: { bucket: TargetBucket; metrics: EmployeePeriodMetrics }[] = [];
+
+          if (granularity === '10' || granularity === '15') {
+            const chain = applyWindowCarryChain(
+              phaseBuckets,
+              lastAvailableInMonth,
+              (s, e) => sumEmployeeTargetForDateRange(empRaw, eid, s, e) || 0,
+              (s, e) => {
+                let sum = 0;
+                Object.values(history).forEach((records: any) => {
+                  for (const rec of records || []) {
+                    const dt = String(rec?.[0] || '').substring(0, 10);
+                    if (dt < s || dt > e) continue;
+                    let id = String(rec?.[1] || '');
+                    if (id.includes('-')) id = id.split('-')[0].trim();
+                    if (id !== eid) continue;
+                    sum += safeNum(rec?.[2]);
+                  }
+                });
+                return sum;
+              },
+            );
+            phaseBuckets.forEach((b, i) => {
+              const { eff, sales: es } = chain[i];
+              const effEnd = minYMD(b.end, lastAvailableInMonth);
+              if (b.start > lastAvailableInMonth) {
+                const empMtd = sumSalesBetween(empSalesByDate, pr, lastAvailableInMonth);
+                const gap = enrichGap(0, eff, empPhaseFullT, empMtd, dimEmp, effEnd);
+                eb.push({
+                  bucket: b,
+                  metrics: employeeMetricsFromAgg(eff, 0, 0, 0, undefined, 0, 0, gap),
+                });
+                return;
+              }
+              const { et, items } = collectEmpBucket(b.start, effEnd);
+              const storeBucket = aggregateMgmtForRange(raw, new Set([sid]), b.start, effEnd);
+              const ev = storeBucket.sales > 0 ? storeBucket.visitors * (es / storeBucket.sales) : 0;
+              const empMtdThrough = sumSalesBetween(empSalesByDate, pr, effEnd);
+              const gap = enrichGap(es, eff, empPhaseFullT, empMtdThrough, dimEmp, effEnd);
               eb.push({
                 bucket: b,
-                metrics: employeeMetricsFromAgg(mt, rd.daySales, et, ev, rd.dailyTarget, items, storeBucket.sales, gap),
+                metrics: employeeMetricsFromAgg(eff, es, et, ev, undefined, items, storeBucket.sales, gap),
               });
+            });
+          } else {
+            for (const b of phaseBuckets) {
+              const effStart = b.start;
+              const effEnd = b.end <= lastAvailableInMonth ? b.end : lastAvailableInMonth;
+              if (effStart > effEnd) continue;
+              const { es, et, items } = collectEmpBucket(effStart, effEnd);
+              const storeBucket = aggregateMgmtForRange(raw, new Set([sid]), effStart, effEnd);
+              const ev = storeBucket.sales > 0 ? storeBucket.visitors * (es / storeBucket.sales) : 0;
+              const empMtdThrough = sumSalesBetween(empSalesByDate, pr, effEnd);
+
+              if (granularity === 'day') {
+                const rd = rollingDailyForDay(empPhaseFullT, pr, effStart, dimEmp, empSalesByDatePhase);
+                const gap = enrichGap(rd.daySales, rd.dailyTarget, empPhaseFullT, empMtdThrough, dimEmp, effEnd);
+                eb.push({
+                  bucket: b,
+                  metrics: employeeMetricsFromAgg(empPhaseFullT, rd.daySales, et, ev, rd.dailyTarget, items, storeBucket.sales, gap),
+                });
+              }
             }
           }
+
+          empBucketBlocks.push({ key: phase.key, label: phase.label, buckets: eb });
         }
 
         emps.push({
@@ -609,7 +674,7 @@ export default function TargetSplitPage() {
           name: pinfo.name,
           monthTarget: mt,
           monthSales: ms,
-          buckets: eb,
+          bucketBlocks: empBucketBlocks,
         });
       }
 
@@ -623,7 +688,7 @@ export default function TargetSplitPage() {
         monthSales: monthAgg.sales,
         monthAch,
         gap: monthT - monthAgg.sales,
-        buckets: bucketMetrics,
+        bucketBlocks,
         employees: emps,
       });
     }
@@ -638,7 +703,7 @@ export default function TargetSplitPage() {
     effectiveManager,
     city,
     storeType,
-    buckets,
+    bucketPhaseGroups,
     granularity,
     monthStart,
     monthEnd,
@@ -646,6 +711,243 @@ export default function TargetSplitPage() {
     selYear,
     selMonth,
     employeePrimaryStore,
+  ]);
+
+  const sortedStoreRows = useMemo(() => {
+    if (!storeSort) return storeRows;
+    const mult = storeSort.dir === 'asc' ? 1 : -1;
+    return [...storeRows].sort((a, b) => {
+      const va = a[storeSort.key];
+      const vb = b[storeSort.key];
+      if (va !== vb) return va < vb ? -1 * mult : 1 * mult;
+      return (a.name || '').localeCompare(b.name || '', 'ar');
+    });
+  }, [storeRows, storeSort]);
+
+  const toggleStoreSort = useCallback((key: StoreSortKey) => {
+    setStoreSort((prev) => {
+      if (prev?.key === key) return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
+      return { key, dir: 'desc' };
+    });
+  }, []);
+
+  const exportTargetSplitExcel = useCallback(() => {
+    if (!storeRows.length) return;
+
+    const granLabel =
+      granularity === 'day' ? 'يومي' : granularity === '10' ? 'نوافذ 10 أيام' : 'نوافذ 15 يوماً';
+
+    const usedNames = new Set<string>();
+    const makeSheetName = (displayName: string, sid: string) => {
+      let base = displayName.replace(/[/\\:*?[\]]/g, ' ').trim();
+      if (!base) base = String(sid);
+      let name = base.slice(0, 31);
+      let n = 1;
+      while (usedNames.has(name)) {
+        const suf = `_${n++}`;
+        name = (base + suf).slice(0, 31);
+      }
+      usedNames.add(name);
+      return name;
+    };
+
+    const wb = XLSX.utils.book_new();
+
+    for (const row of storeRows) {
+      const cityStr = raw?.store_meta?.[row.sid]?.city != null ? String(raw.store_meta[row.sid].city) : '—';
+      const aoa: unknown[][] = [];
+      const cellFmt: { r: number; c: number; z: string }[] = [];
+      const fz = (r: number, c: number, z: string) => cellFmt.push({ r, c, z });
+
+      let rIdx = 0;
+      aoa.push([`تقسيمة التارجت — ${row.name}`]);
+      rIdx++;
+      aoa.push(['كود الفرع', row.sid, 'مدير المنطقة', row.manager, 'المدينة', cityStr]);
+      rIdx++;
+      aoa.push([
+        'الشهر',
+        `${MONTHS_AR[selMonth - 1]} ${selYear}`,
+        'البيانات حتى',
+        lastAvailableInMonth,
+        'التقسيم',
+        granLabel,
+      ]);
+      rIdx++;
+      aoa.push([]);
+      rIdx++;
+      aoa.push(['— ملخص الشهر —']);
+      rIdx++;
+      aoa.push(['تارجت الشهر', 'مبيعات', 'تحقيق %', 'الفجوة']);
+      rIdx++;
+      const sumRow = rIdx;
+      aoa.push([row.monthTarget, row.monthSales, row.monthAch / 100, Math.max(0, row.gap)]);
+      fz(sumRow, 0, '#,##0');
+      fz(sumRow, 1, '#,##0');
+      fz(sumRow, 2, '0.0%');
+      fz(sumRow, 3, '#,##0');
+      rIdx++;
+
+      aoa.push([]);
+      rIdx++;
+      aoa.push(['— فترات التارجت (المعرض) —']);
+      rIdx++;
+      aoa.push([
+        'المرحلة',
+        'الفترة',
+        'تارجت الفترة',
+        'مبيعات',
+        'تحقيق %',
+        'معدل فاتورة',
+        'تحويل %',
+        'قيمة عميل',
+        'متبقي للفترة',
+        'مطلوب يومياً لإغلاق الشهر',
+      ]);
+      rIdx++;
+
+      for (const block of row.bucketBlocks) {
+        if (block.label) {
+          aoa.push([block.label]);
+          rIdx++;
+        }
+        for (const { bucket, metrics } of block.buckets) {
+          const periodTarget =
+            granularity === 'day' ? (metrics.dailyTargetDynamic ?? metrics.target) : metrics.target;
+          const cur = rIdx;
+          aoa.push([
+            block.label || '',
+            bucket.label,
+            periodTarget,
+            metrics.sales,
+            metrics.achievement / 100,
+            metrics.avgInv,
+            metrics.conversion / 100,
+            metrics.customerValue,
+            metrics.shortfallPeriod,
+            metrics.closeMonthDaily,
+          ]);
+          fz(cur, 2, '#,##0');
+          fz(cur, 3, '#,##0');
+          fz(cur, 4, '0.0%');
+          fz(cur, 5, '#,##0');
+          fz(cur, 6, '0.0%');
+          fz(cur, 7, '#,##0');
+          fz(cur, 8, '#,##0');
+          fz(cur, 9, '#,##0');
+          rIdx++;
+        }
+      }
+
+      if (row.employees.length > 0) {
+        aoa.push([]);
+        rIdx++;
+        aoa.push(['— الموظفون —']);
+        rIdx++;
+
+        for (const emp of row.employees) {
+          aoa.push([`الموظف: ${emp.name} (${emp.id})`]);
+          rIdx++;
+          aoa.push(['تارجت الشهر', 'مبيعات الشهر', 'تحقيق %']);
+          rIdx++;
+          const empSumR = rIdx;
+          const achFrac = emp.monthTarget > 0 ? emp.monthSales / emp.monthTarget : 0;
+          aoa.push([emp.monthTarget, emp.monthSales, achFrac]);
+          fz(empSumR, 0, '#,##0');
+          fz(empSumR, 1, '#,##0');
+          fz(empSumR, 2, '0.0%');
+          rIdx++;
+          aoa.push([]);
+          rIdx++;
+          aoa.push([
+            'المرحلة',
+            'الفترة',
+            'تارجت الفترة',
+            'مبيعات',
+            'تحقيق %',
+            'ATV',
+            'مساهمة %',
+            'قطع',
+            'قيمة عميل',
+            'متبقي للفترة',
+            'مطلوب يومياً',
+          ]);
+          rIdx++;
+
+          for (const eb of emp.bucketBlocks) {
+            if (eb.label) {
+              aoa.push([eb.label]);
+              rIdx++;
+            }
+            for (const { bucket, metrics } of eb.buckets) {
+              const pt =
+                granularity === 'day' ? (metrics.dailyTargetDynamic ?? metrics.target) : metrics.target;
+              const cur = rIdx;
+              aoa.push([
+                eb.label || '',
+                bucket.label,
+                pt,
+                metrics.sales,
+                metrics.achievement / 100,
+                metrics.avgInv,
+                metrics.contributionPct / 100,
+                metrics.items,
+                metrics.customerValue,
+                metrics.shortfallPeriod,
+                metrics.closeMonthDaily,
+              ]);
+              fz(cur, 2, '#,##0');
+              fz(cur, 3, '#,##0');
+              fz(cur, 4, '0.0%');
+              fz(cur, 5, '#,##0');
+              fz(cur, 6, '0.0%');
+              fz(cur, 7, '#,##0');
+              fz(cur, 8, '#,##0');
+              fz(cur, 9, '#,##0');
+              fz(cur, 10, '#,##0');
+              rIdx++;
+            }
+          }
+          aoa.push([]);
+          rIdx++;
+        }
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      for (const { r, c, z } of cellFmt) {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        const cell = ws[addr];
+        if (cell) cell.z = z;
+      }
+      ws['!cols'] = [
+        { wch: 22 },
+        { wch: 26 },
+        { wch: 16 },
+        { wch: 14 },
+        { wch: 11 },
+        { wch: 14 },
+        { wch: 11 },
+        { wch: 14 },
+        { wch: 16 },
+        { wch: 20 },
+        { wch: 22 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, makeSheetName(row.name || row.sid, row.sid));
+    }
+
+    const mgrPart =
+      effectiveManager === 'all'
+        ? 'all-managers'
+        : String(effectiveManager).replace(/[/\\:*?"<>|]/g, '_').replace(/\s+/g, '_').slice(0, 48);
+    const filename = `TargetSplit_${selYear}-${pad2(selMonth)}_${mgrPart}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  }, [
+    storeRows,
+    raw,
+    granularity,
+    selMonth,
+    selYear,
+    lastAvailableInMonth,
+    effectiveManager,
   ]);
 
   const insights = useMemo(() => {
@@ -690,8 +992,6 @@ export default function TargetSplitPage() {
       </div>
     );
   }
-
-  const monthsAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
   return (
     <div className="space-y-5 pb-10">
@@ -775,7 +1075,7 @@ export default function TargetSplitPage() {
             <div className="text-xs font-semibold text-neutral-500 mb-1">الشهر</div>
             <div className="flex gap-2">
               <select className="input flex-1 min-w-0" value={selMonth} onChange={(e) => setSelMonth(Number(e.target.value))}>
-                {monthsAr.map((m, i) => (
+                {MONTHS_AR.map((m, i) => (
                   <option key={m} value={i + 1}>
                     {m}
                   </option>
@@ -833,7 +1133,17 @@ export default function TargetSplitPage() {
       <div className="bg-white rounded-2xl border border-neutral-200 shadow-md overflow-hidden">
         <div className="px-4 py-3 border-b border-neutral-100 bg-neutral-50/80 flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-lg font-bold text-neutral-900">المعارض</h2>
-          <span className="text-xs text-neutral-500">{storeRows.length} فرع</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-neutral-500">{storeRows.length} فرع</span>
+            <button
+              type="button"
+              disabled={!storeRows.length}
+              onClick={exportTargetSplitExcel}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              تصدير Excel (شيت لكل معرض)
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
@@ -841,14 +1151,62 @@ export default function TargetSplitPage() {
               <tr className="bg-neutral-900 text-white">
                 <th className="th text-right w-10" />
                 <th className="th text-right">المعرض</th>
-                <th className="th text-center">تارجت الشهر</th>
-                <th className="th text-center">مبيعات</th>
-                <th className="th text-center">تحقيق</th>
-                <th className="th text-center">الفجوة</th>
+                <th className="th text-center">
+                  <button
+                    type="button"
+                    className="inline-flex w-full items-center justify-center gap-1 font-semibold hover:text-orange-200"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleStoreSort('monthTarget');
+                    }}
+                  >
+                    تارجت الشهر
+                    {storeSort?.key === 'monthTarget' ? (storeSort.dir === 'asc' ? ' ↑' : ' ↓') : ''}
+                  </button>
+                </th>
+                <th className="th text-center">
+                  <button
+                    type="button"
+                    className="inline-flex w-full items-center justify-center gap-1 font-semibold hover:text-orange-200"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleStoreSort('monthSales');
+                    }}
+                  >
+                    مبيعات
+                    {storeSort?.key === 'monthSales' ? (storeSort.dir === 'asc' ? ' ↑' : ' ↓') : ''}
+                  </button>
+                </th>
+                <th className="th text-center">
+                  <button
+                    type="button"
+                    className="inline-flex w-full items-center justify-center gap-1 font-semibold hover:text-orange-200"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleStoreSort('monthAch');
+                    }}
+                  >
+                    تحقيق
+                    {storeSort?.key === 'monthAch' ? (storeSort.dir === 'asc' ? ' ↑' : ' ↓') : ''}
+                  </button>
+                </th>
+                <th className="th text-center">
+                  <button
+                    type="button"
+                    className="inline-flex w-full items-center justify-center gap-1 font-semibold hover:text-orange-200"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleStoreSort('gap');
+                    }}
+                  >
+                    الفجوة
+                    {storeSort?.key === 'gap' ? (storeSort.dir === 'asc' ? ' ↑' : ' ↓') : ''}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {storeRows.map((row) => {
+              {sortedStoreRows.map((row) => {
                 const open = expandedStores.has(row.sid);
                 return (
                   <React.Fragment key={row.sid}>
@@ -910,40 +1268,51 @@ export default function TargetSplitPage() {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {row.buckets.map(({ bucket, metrics }) => (
-                                      <React.Fragment key={bucket.id}>
-                                        <tr className="border-b border-neutral-100 hover:bg-white">
-                                          <td className="td font-mono text-neutral-700 whitespace-nowrap">{bucket.label}</td>
-                                          <td className="td text-center dir-ltr">
-                                            {formatSAR(granularity === 'day' ? metrics.dailyTargetDynamic || 0 : metrics.target)}
-                                          </td>
-                                          <td className="td text-center dir-ltr font-semibold">{formatSAR(metrics.sales)}</td>
-                                          <td className="td text-center">
-                                            <span
-                                              className={`font-bold ${
-                                                metrics.achievement >= 100 ? 'text-emerald-600' : metrics.achievement >= 85 ? 'text-amber-700' : 'text-red-600'
-                                              }`}
-                                            >
-                                              {metrics.achievement.toFixed(1)}%
-                                            </span>
-                                          </td>
-                                          <td className="td text-center dir-ltr">{formatSAR(metrics.avgInv)}</td>
-                                          <td className="td text-center">{metrics.conversion.toFixed(1)}%</td>
-                                          <td className="td text-center dir-ltr">{Math.round(metrics.customerValue).toLocaleString()}</td>
-                                        </tr>
-                                        {metrics.achievement < 100 && (
-                                          <tr className="bg-rose-50/90 border-b border-rose-100">
-                                            <td colSpan={7} className="py-2 px-3 text-[11px] text-rose-900 leading-relaxed">
-                                              <span className="font-semibold">لم يُحقَّق كامل التارجت:</span>{' '}
-                                              <span className="dir-ltr inline-block">متبقي للفترة {formatSAR(metrics.shortfallPeriod)}</span>
-                                              {' · '}
-                                              <span className="text-neutral-700">
-                                                مطلوب يومياً لإغلاق تارجت الشهر:{' '}
-                                                <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
-                                              </span>
+                                    {row.bucketBlocks.map((block) => (
+                                      <React.Fragment key={block.key}>
+                                        {block.label ? (
+                                          <tr className="bg-orange-100/90 border-b border-orange-200/80">
+                                            <td colSpan={7} className="td py-2 px-3 text-right font-bold text-orange-950">
+                                              {block.label}
                                             </td>
                                           </tr>
-                                        )}
+                                        ) : null}
+                                        {block.buckets.map(({ bucket, metrics }) => (
+                                          <React.Fragment key={bucket.id}>
+                                            <tr className="border-b border-neutral-100 hover:bg-white">
+                                              <td className="td font-mono text-neutral-700 whitespace-nowrap">{bucket.label}</td>
+                                              <td className="td text-center dir-ltr">
+                                                {formatSAR(granularity === 'day' ? metrics.dailyTargetDynamic || 0 : metrics.target)}
+                                              </td>
+                                              <td className="td text-center dir-ltr font-semibold">{formatSAR(metrics.sales)}</td>
+                                              <td className="td text-center">
+                                                <span
+                                                  className={`font-bold ${
+                                                    metrics.achievement >= 100 ? 'text-emerald-600' : metrics.achievement >= 85 ? 'text-amber-700' : 'text-red-600'
+                                                  }`}
+                                                >
+                                                  {metrics.achievement.toFixed(1)}%
+                                                </span>
+                                              </td>
+                                              <td className="td text-center dir-ltr">{formatSAR(metrics.avgInv)}</td>
+                                              <td className="td text-center">{metrics.conversion.toFixed(1)}%</td>
+                                              <td className="td text-center dir-ltr">{Math.round(metrics.customerValue).toLocaleString()}</td>
+                                            </tr>
+                                            {metrics.achievement < 100 && (
+                                              <tr className="bg-rose-50/90 border-b border-rose-100">
+                                                <td colSpan={7} className="py-2 px-3 text-[11px] text-rose-900 leading-relaxed">
+                                                  <span className="font-semibold">لم يُحقَّق كامل التارجت:</span>{' '}
+                                                  <span className="dir-ltr inline-block">متبقي للفترة {formatSAR(metrics.shortfallPeriod)}</span>
+                                                  {' · '}
+                                                  <span className="text-neutral-700">
+                                                    مطلوب يومياً لإغلاق تارجت الشهر:{' '}
+                                                    <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
+                                                  </span>
+                                                </td>
+                                              </tr>
+                                            )}
+                                          </React.Fragment>
+                                        ))}
                                       </React.Fragment>
                                     ))}
                                   </tbody>
@@ -1009,41 +1378,52 @@ export default function TargetSplitPage() {
                                                 </tr>
                                               </thead>
                                               <tbody>
-                                                {emp.buckets.map(({ bucket, metrics }) => (
-                                                  <React.Fragment key={bucket.id}>
-                                                    <tr className="border-b border-neutral-100">
-                                                      <td className="td font-mono">{bucket.label}</td>
-                                                      <td className="td text-center dir-ltr">
-                                                        {formatSAR(granularity === 'day' ? metrics.dailyTargetDynamic || 0 : metrics.target)}
-                                                      </td>
-                                                      <td className="td text-center dir-ltr">{formatSAR(metrics.sales)}</td>
-                                                      <td className="td text-center">
-                                                        <span
-                                                          className={`font-bold ${
-                                                            metrics.achievement >= 100 ? 'text-emerald-600' : metrics.achievement >= 85 ? 'text-amber-700' : 'text-red-600'
-                                                          }`}
-                                                        >
-                                                          {metrics.achievement.toFixed(1)}%
-                                                        </span>
-                                                      </td>
-                                                      <td className="td text-center dir-ltr">{formatSAR(metrics.avgInv)}</td>
-                                                      <td className="td text-center font-medium">{metrics.contributionPct.toFixed(1)}%</td>
-                                                      <td className="td text-center">{Math.round(metrics.items).toLocaleString()}</td>
-                                                      <td className="td text-center dir-ltr">{Math.round(metrics.customerValue).toLocaleString()}</td>
-                                                    </tr>
-                                                    {metrics.achievement < 100 && (
-                                                      <tr className="bg-rose-50/90 border-b border-rose-100">
-                                                        <td colSpan={8} className="py-2 px-3 text-[10px] text-rose-900 leading-relaxed">
-                                                          <span className="font-semibold">لم يُحقَّق كامل التارجت:</span>{' '}
-                                                          <span className="dir-ltr inline-block">متبقي للفترة {formatSAR(metrics.shortfallPeriod)}</span>
-                                                          {' · '}
-                                                          <span className="text-neutral-700">
-                                                            مطلوب يومياً لإغلاق تارجت الشهر:{' '}
-                                                            <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
-                                                          </span>
+                                                {emp.bucketBlocks.map((block) => (
+                                                  <React.Fragment key={block.key}>
+                                                    {block.label ? (
+                                                      <tr className="bg-slate-200/80 border-b border-slate-300/80">
+                                                        <td colSpan={8} className="td py-1.5 px-2 text-right font-bold text-slate-900">
+                                                          {block.label}
                                                         </td>
                                                       </tr>
-                                                    )}
+                                                    ) : null}
+                                                    {block.buckets.map(({ bucket, metrics }) => (
+                                                      <React.Fragment key={bucket.id}>
+                                                        <tr className="border-b border-neutral-100">
+                                                          <td className="td font-mono">{bucket.label}</td>
+                                                          <td className="td text-center dir-ltr">
+                                                            {formatSAR(granularity === 'day' ? metrics.dailyTargetDynamic || 0 : metrics.target)}
+                                                          </td>
+                                                          <td className="td text-center dir-ltr">{formatSAR(metrics.sales)}</td>
+                                                          <td className="td text-center">
+                                                            <span
+                                                              className={`font-bold ${
+                                                                metrics.achievement >= 100 ? 'text-emerald-600' : metrics.achievement >= 85 ? 'text-amber-700' : 'text-red-600'
+                                                              }`}
+                                                            >
+                                                              {metrics.achievement.toFixed(1)}%
+                                                            </span>
+                                                          </td>
+                                                          <td className="td text-center dir-ltr">{formatSAR(metrics.avgInv)}</td>
+                                                          <td className="td text-center font-medium">{metrics.contributionPct.toFixed(1)}%</td>
+                                                          <td className="td text-center">{Math.round(metrics.items).toLocaleString()}</td>
+                                                          <td className="td text-center dir-ltr">{Math.round(metrics.customerValue).toLocaleString()}</td>
+                                                        </tr>
+                                                        {metrics.achievement < 100 && (
+                                                          <tr className="bg-rose-50/90 border-b border-rose-100">
+                                                            <td colSpan={8} className="py-2 px-3 text-[10px] text-rose-900 leading-relaxed">
+                                                              <span className="font-semibold">لم يُحقَّق كامل التارجت:</span>{' '}
+                                                              <span className="dir-ltr inline-block">متبقي للفترة {formatSAR(metrics.shortfallPeriod)}</span>
+                                                              {' · '}
+                                                              <span className="text-neutral-700">
+                                                                مطلوب يومياً لإغلاق تارجت الشهر:{' '}
+                                                                <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
+                                                              </span>
+                                                            </td>
+                                                          </tr>
+                                                        )}
+                                                      </React.Fragment>
+                                                    ))}
                                                   </React.Fragment>
                                                 ))}
                                               </tbody>
