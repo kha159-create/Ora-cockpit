@@ -70,6 +70,42 @@ function sumSalesBetween(salesByDate: Record<string, number>, start: string, end
   return s;
 }
 
+function minYMD(a: string, b: string) {
+  return a <= b ? a : b;
+}
+
+/**
+ * نوافذ 10/15 يوماً: التارجت الفعّال = الأساس + ترحيل من النافذة السابقة.
+ * فائض/عجز النافذة السابقة يُنقص/يُضاف للنافذة التالية مباشرة.
+ * النافذة التي بعد «آخر نافذة بدأت» تحصل على الترحيل مرة واحدة؛ ما بعدها = تارجت أساسي حتى تُغلق السابقة.
+ */
+function applyWindowCarryChain(
+  buckets: TargetBucket[],
+  lastAvail: string,
+  getBase: (start: string, end: string) => number,
+  getSales: (start: string, end: string) => number,
+): { eff: number; base: number; sales: number }[] {
+  const lastStartedIdx = buckets.reduce((acc, b, i) => (b.start <= lastAvail ? i : acc), -1);
+  let carry = 0;
+  return buckets.map((b, i) => {
+    const base = getBase(b.start, b.end);
+    const salesEnd = minYMD(b.end, lastAvail);
+    const sales = b.start <= lastAvail ? getSales(b.start, salesEnd) : 0;
+    let eff: number;
+    if (lastStartedIdx < 0) {
+      eff = base;
+    } else if (i <= lastStartedIdx) {
+      eff = base + carry;
+      carry = eff - sales;
+    } else if (i === lastStartedIdx + 1) {
+      eff = base + carry;
+    } else {
+      eff = base;
+    }
+    return { eff, base, sales };
+  });
+}
+
 function enrichGap(
   sales: number,
   periodExpected: number,
@@ -278,8 +314,12 @@ export default function TargetSplitPage() {
     return monthEnd;
   }, [selYear, selMonth, now, yesterdayStr, monthStart, monthEnd]);
 
+  /** نوافذ 10 و15: نعرض كل فترات الشهر كاملة (مع مبيعات جزئية حتى آخر يوم متاح) */
   const buckets = useMemo(() => {
     const rawBuckets = buildTargetBuckets(selYear, selMonth, granularity);
+    if (granularity === '10' || granularity === '15') {
+      return rawBuckets;
+    }
     return rawBuckets.map((b) => clampBucket(b, lastAvailableInMonth)).filter((x): x is TargetBucket => x != null);
   }, [selYear, selMonth, granularity, lastAvailableInMonth]);
 
@@ -415,27 +455,46 @@ export default function TargetSplitPage() {
       const bucketMetrics: { bucket: TargetBucket; metrics: PeriodMetrics }[] = [];
       const dim = daysInMonth(selYear, selMonth);
 
-      for (const b of buckets) {
-        const effStart = b.start;
-        const effEnd = b.end <= lastAvailableInMonth ? b.end : lastAvailableInMonth;
-        if (effStart > effEnd) continue;
-        const t = sumManagementTargetsForDateRange(targetsRows, effStart, effEnd)[sid] || 0;
-        const agg = aggregateMgmtForRange(raw, storeIds, effStart, effEnd);
-        const mtdThrough = aggregateMgmtForRange(raw, storeIds, monthStart, effEnd).sales;
+      if (granularity === '10' || granularity === '15') {
+        const chain = applyWindowCarryChain(
+          buckets,
+          lastAvailableInMonth,
+          (s, e) => sumManagementTargetsForDateRange(targetsRows, s, e)[sid] || 0,
+          (s, e) => aggregateMgmtForRange(raw, storeIds, s, e).sales,
+        );
+        buckets.forEach((b, i) => {
+          const { eff, sales } = chain[i];
+          const effEnd = minYMD(b.end, lastAvailableInMonth);
+          const agg =
+            b.start <= lastAvailableInMonth
+              ? aggregateMgmtForRange(raw, storeIds, b.start, effEnd)
+              : { sales: 0, trans: 0, visitors: 0 };
+          const mtdThrough =
+            b.start <= lastAvailableInMonth
+              ? aggregateMgmtForRange(raw, storeIds, monthStart, effEnd).sales
+              : aggregateMgmtForRange(raw, storeIds, monthStart, lastAvailableInMonth).sales;
+          const gap = enrichGap(sales, eff, fullMonthTarget, mtdThrough, dim, effEnd);
+          bucketMetrics.push({
+            bucket: b,
+            metrics: metricsFromAgg(eff, sales, agg.trans, agg.visitors, undefined, gap),
+          });
+        });
+      } else {
+        for (const b of buckets) {
+          const effStart = b.start;
+          const effEnd = b.end <= lastAvailableInMonth ? b.end : lastAvailableInMonth;
+          if (effStart > effEnd) continue;
+          const agg = aggregateMgmtForRange(raw, storeIds, effStart, effEnd);
+          const mtdThrough = aggregateMgmtForRange(raw, storeIds, monthStart, effEnd).sales;
 
-        if (granularity === 'day') {
-          const rd = rollingDailyForDay(fullMonthTarget, monthStart, effStart, dim, salesByDate);
-          const gap = enrichGap(rd.daySales, rd.dailyTarget, fullMonthTarget, mtdThrough, dim, effEnd);
-          bucketMetrics.push({
-            bucket: b,
-            metrics: metricsFromAgg(monthT, rd.daySales, agg.trans, agg.visitors, rd.dailyTarget, gap),
-          });
-        } else {
-          const gap = enrichGap(agg.sales, t, fullMonthTarget, mtdThrough, dim, effEnd);
-          bucketMetrics.push({
-            bucket: b,
-            metrics: metricsFromAgg(t, agg.sales, agg.trans, agg.visitors, undefined, gap),
-          });
+          if (granularity === 'day') {
+            const rd = rollingDailyForDay(fullMonthTarget, monthStart, effStart, dim, salesByDate);
+            const gap = enrichGap(rd.daySales, rd.dailyTarget, fullMonthTarget, mtdThrough, dim, effEnd);
+            bucketMetrics.push({
+              bucket: b,
+              metrics: metricsFromAgg(monthT, rd.daySales, agg.trans, agg.visitors, rd.dailyTarget, gap),
+            });
+          }
         }
       }
 
@@ -462,11 +521,8 @@ export default function TargetSplitPage() {
         const empFullMonthT = sumEmployeeTargetForDateRange(empRaw, eid, monthStart, monthEnd);
         const eb: { bucket: TargetBucket; metrics: EmployeePeriodMetrics }[] = [];
         const dimEmp = daysInMonth(selYear, selMonth);
-        for (const b of buckets) {
-          const effStart = b.start;
-          const effEnd = b.end <= lastAvailableInMonth ? b.end : lastAvailableInMonth;
-          if (effStart > effEnd) continue;
-          const tt = sumEmployeeTargetForDateRange(empRaw, eid, effStart, effEnd);
+
+        const collectEmpBucket = (effStart: string, effEnd: string) => {
           let es = 0,
             et = 0,
             items = 0;
@@ -482,23 +538,69 @@ export default function TargetSplitPage() {
               items += safeNum(rec?.[4]);
             }
           });
-          const storeBucket = aggregateMgmtForRange(raw, new Set([sid]), effStart, effEnd);
-          const ev = storeBucket.sales > 0 ? storeBucket.visitors * (es / storeBucket.sales) : 0;
-          const empMtdThrough = sumSalesBetween(empSalesByDate, monthStart, effEnd);
+          return { es, et, items };
+        };
 
-          if (granularity === 'day') {
-            const rd = rollingDailyForDay(empFullMonthT, monthStart, effStart, dimEmp, empSalesByDate);
-            const gap = enrichGap(rd.daySales, rd.dailyTarget, empFullMonthT, empMtdThrough, dimEmp, effEnd);
+        if (granularity === '10' || granularity === '15') {
+          const chain = applyWindowCarryChain(
+            buckets,
+            lastAvailableInMonth,
+            (s, e) => sumEmployeeTargetForDateRange(empRaw, eid, s, e) || 0,
+            (s, e) => {
+              let sum = 0;
+              Object.values(history).forEach((records: any) => {
+                for (const rec of records || []) {
+                  const dt = String(rec?.[0] || '').substring(0, 10);
+                  if (dt < s || dt > e) continue;
+                  let id = String(rec?.[1] || '');
+                  if (id.includes('-')) id = id.split('-')[0].trim();
+                  if (id !== eid) continue;
+                  sum += safeNum(rec?.[2]);
+                }
+              });
+              return sum;
+            },
+          );
+          buckets.forEach((b, i) => {
+            const { eff, sales: es } = chain[i];
+            const effEnd = minYMD(b.end, lastAvailableInMonth);
+            if (b.start > lastAvailableInMonth) {
+              const empMtd = sumSalesBetween(empSalesByDate, monthStart, lastAvailableInMonth);
+              const gap = enrichGap(0, eff, empFullMonthT, empMtd, dimEmp, effEnd);
+              eb.push({
+                bucket: b,
+                metrics: employeeMetricsFromAgg(eff, 0, 0, 0, undefined, 0, 0, gap),
+              });
+              return;
+            }
+            const { et, items } = collectEmpBucket(b.start, effEnd);
+            const storeBucket = aggregateMgmtForRange(raw, new Set([sid]), b.start, effEnd);
+            const ev = storeBucket.sales > 0 ? storeBucket.visitors * (es / storeBucket.sales) : 0;
+            const empMtdThrough = sumSalesBetween(empSalesByDate, monthStart, effEnd);
+            const gap = enrichGap(es, eff, empFullMonthT, empMtdThrough, dimEmp, effEnd);
             eb.push({
               bucket: b,
-              metrics: employeeMetricsFromAgg(mt, rd.daySales, et, ev, rd.dailyTarget, items, storeBucket.sales, gap),
+              metrics: employeeMetricsFromAgg(eff, es, et, ev, undefined, items, storeBucket.sales, gap),
             });
-          } else {
-            const gap = enrichGap(es, tt, empFullMonthT, empMtdThrough, dimEmp, effEnd);
-            eb.push({
-              bucket: b,
-              metrics: employeeMetricsFromAgg(tt, es, et, ev, undefined, items, storeBucket.sales, gap),
-            });
+          });
+        } else {
+          for (const b of buckets) {
+            const effStart = b.start;
+            const effEnd = b.end <= lastAvailableInMonth ? b.end : lastAvailableInMonth;
+            if (effStart > effEnd) continue;
+            const { es, et, items } = collectEmpBucket(effStart, effEnd);
+            const storeBucket = aggregateMgmtForRange(raw, new Set([sid]), effStart, effEnd);
+            const ev = storeBucket.sales > 0 ? storeBucket.visitors * (es / storeBucket.sales) : 0;
+            const empMtdThrough = sumSalesBetween(empSalesByDate, monthStart, effEnd);
+
+            if (granularity === 'day') {
+              const rd = rollingDailyForDay(empFullMonthT, monthStart, effStart, dimEmp, empSalesByDate);
+              const gap = enrichGap(rd.daySales, rd.dailyTarget, empFullMonthT, empMtdThrough, dimEmp, effEnd);
+              eb.push({
+                bucket: b,
+                metrics: employeeMetricsFromAgg(mt, rd.daySales, et, ev, rd.dailyTarget, items, storeBucket.sales, gap),
+              });
+            }
           }
         }
 
@@ -781,13 +883,24 @@ export default function TargetSplitPage() {
                                 <span className="h-1 w-8 rounded-full bg-orange-500" />
                                 فترات التارجت — {granularity === 'day' ? 'يومي' : granularity === '10' ? 'كل 10 أيام' : 'كل 15 يوماً'}
                               </h3>
+                              {(granularity === '10' || granularity === '15') && (
+                                <p className="text-xs text-orange-900/85 mb-2 leading-relaxed max-w-4xl">
+                                  التارجت المعروض لكل فترة = الأساس الموزَّع على الأيام + ترحيل من الفترة السابقة: إن زدت عن
+                                  التارجت تُنقص الزيادة من مطلوب الفترة التالية، وإن قصّرت تُضاف الفجوة إليها. تُعرض كل
+                                  فترات الشهر حتى المستقبلية (بدون مبيعات بعد) لمعرفة المطلوب مسبقاً.
+                                </p>
+                              )}
                               <div className="overflow-x-auto max-h-[420px] overflow-y-auto rounded-xl border border-neutral-200">
                                 <table className="min-w-full text-xs">
                                   <thead>
                                     <tr className="bg-orange-600 text-white">
                                       <th className="th text-right whitespace-nowrap">الفترة</th>
                                       <th className="th text-center whitespace-nowrap">
-                                        {granularity === 'day' ? 'اليومية المطلوبة' : 'تارجت الفترة'}
+                                        {granularity === 'day'
+                                          ? 'اليومية المطلوبة'
+                                          : granularity === '10' || granularity === '15'
+                                            ? 'تارجت الفترة (بعد الترحيل)'
+                                            : 'تارجت الفترة'}
                                       </th>
                                       <th className="th text-center">مبيعات</th>
                                       <th className="th text-center">تحقيق</th>
@@ -880,7 +993,13 @@ export default function TargetSplitPage() {
                                               <thead>
                                                 <tr className="bg-slate-700 text-white">
                                                   <th className="th text-right">الفترة</th>
-                                                  <th className="th text-center">{granularity === 'day' ? 'اليومية' : 'تارجت'}</th>
+                                                  <th className="th text-center">
+                                                    {granularity === 'day'
+                                                      ? 'اليومية'
+                                                      : granularity === '10' || granularity === '15'
+                                                        ? 'تارجت (ترحيل)'
+                                                        : 'تارجت'}
+                                                  </th>
                                                   <th className="th text-center">مبيعات</th>
                                                   <th className="th text-center">تحقيق</th>
                                                   <th className="th text-center">ATV</th>
