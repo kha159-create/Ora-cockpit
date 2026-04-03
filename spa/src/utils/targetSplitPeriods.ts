@@ -38,21 +38,41 @@ export function buildTargetBuckets(year: number, month: number, g: SplitGranular
     });
   }
   const step = g === '10' ? 10 : 15;
-  const out: TargetBucket[] = [];
-  let cur = 1;
-  while (cur <= dim) {
-    const end = Math.min(cur + step - 1, dim);
-    const startStr = ymd(year, month, cur);
+  /** باقي أيام الشهر بعد قسمة كاملة على step تُضاف لآخر فترة (مثلاً 31 يوماً بخطوة 10 → 10 + 10 + 11) */
+  const ranges = buildMergedTailWindows(dim, step);
+  return ranges.map(({ start, end }) => {
+    const startStr = ymd(year, month, start);
     const endStr = ymd(year, month, end);
-    out.push({
-      id: `b-${cur}-${end}`,
+    return {
+      id: `b-${start}-${end}`,
       label: `${startStr} — ${endStr}`,
       start: startStr,
       end: endStr,
-      dayCount: end - cur + 1,
-    });
-    cur = end + 1;
+      dayCount: end - start + 1,
+    };
+  });
+}
+
+/** نوافذ بعرض `step` مع دمج الباقي في آخر نافذة */
+export function buildMergedTailWindows(dim: number, step: number): { start: number; end: number }[] {
+  const nFull = Math.floor(dim / step);
+  const rem = dim % step;
+  if (rem === 0) {
+    return Array.from({ length: nFull }, (_, i) => ({
+      start: i * step + 1,
+      end: (i + 1) * step,
+    }));
   }
+  if (nFull === 0) {
+    return [{ start: 1, end: dim }];
+  }
+  const out: { start: number; end: number }[] = [];
+  for (let i = 0; i < nFull - 1; i++) {
+    const s = i * step + 1;
+    out.push({ start: s, end: s + step - 1 });
+  }
+  const lastStart = (nFull - 1) * step + 1;
+  out.push({ start: lastStart, end: dim });
   return out;
 }
 

@@ -40,7 +40,51 @@ type PeriodMetrics = {
   customerValue: number;
   /** للوضع «يوم» — اليومية المطلوبة لهذا اليوم (ديناميكي) */
   dailyTargetDynamic?: number;
+  /** متبقي تحقيق الفترة (تارجت الفترة − مبيعات) */
+  shortfallPeriod: number;
+  /** مطلوب يومياً لإغلاق تارجت الشهر بعد نهاية الفترة */
+  closeMonthDaily: number;
 };
+
+type EmployeePeriodMetrics = {
+  target: number;
+  sales: number;
+  trans: number;
+  achievement: number;
+  avgInv: number;
+  customerValue: number;
+  dailyTargetDynamic?: number;
+  items: number;
+  contributionPct: number;
+  shortfallPeriod: number;
+  closeMonthDaily: number;
+};
+
+function sumSalesBetween(salesByDate: Record<string, number>, start: string, end: string): number {
+  let s = 0;
+  const a = new Date(start + 'T12:00:00');
+  const b = new Date(end + 'T12:00:00');
+  for (let w = new Date(a); w <= b; w.setDate(w.getDate() + 1)) {
+    s += salesByDate[toYMD(w)] || 0;
+  }
+  return s;
+}
+
+function enrichGap(
+  sales: number,
+  periodExpected: number,
+  fullMonthTarget: number,
+  mtdSalesThroughPeriodEnd: number,
+  dim: number,
+  periodEndYmd: string,
+): { shortfallPeriod: number; closeMonthDaily: number } {
+  const dayNum = parseInt(periodEndYmd.slice(8, 10), 10);
+  const remainingDays = Math.max(1, dim - dayNum + 1);
+  const remainingMonthTarget = Math.max(0, fullMonthTarget - mtdSalesThroughPeriodEnd);
+  const closeMonthDaily = remainingMonthTarget / remainingDays;
+  const shortfallPeriod = Math.max(0, periodExpected - sales);
+  return { shortfallPeriod, closeMonthDaily };
+}
 
 function aggregateMgmtForRange(
   raw: any,
@@ -102,8 +146,15 @@ function rollingDailyForDay(
   return { dailyTarget, achievement, daySales };
 }
 
-function metricsFromAgg(target: number, sales: number, trans: number, visitors: number, dailyTargetDynamic?: number): PeriodMetrics {
-  const achievement = target > 0 ? (sales / target) * 100 : 0;
+function metricsFromAgg(
+  target: number,
+  sales: number,
+  trans: number,
+  visitors: number,
+  dailyTargetDynamic: number | undefined,
+  gap: { shortfallPeriod: number; closeMonthDaily: number },
+): PeriodMetrics {
+  const achievementBase = target > 0 ? (sales / target) * 100 : 0;
   const avgInv = trans > 0 ? sales / trans : 0;
   const conversion = visitors > 0 ? (trans / visitors) * 100 : 0;
   const customerValue = visitors > 0 ? sales / visitors : 0;
@@ -112,13 +163,44 @@ function metricsFromAgg(target: number, sales: number, trans: number, visitors: 
     sales,
     trans,
     visitors,
-    achievement: dailyTargetDynamic != null && dailyTargetDynamic > 0 ? (sales / dailyTargetDynamic) * 100 : achievement,
+    achievement: dailyTargetDynamic != null && dailyTargetDynamic > 0 ? (sales / dailyTargetDynamic) * 100 : achievementBase,
     avgInv,
     conversion,
     customerValue,
+    shortfallPeriod: gap.shortfallPeriod,
+    closeMonthDaily: gap.closeMonthDaily,
   };
   if (dailyTargetDynamic != null) out.dailyTargetDynamic = dailyTargetDynamic;
   return out;
+}
+
+function employeeMetricsFromAgg(
+  target: number,
+  sales: number,
+  trans: number,
+  visitorsProrated: number,
+  dailyTargetDynamic: number | undefined,
+  items: number,
+  storeSalesInBucket: number,
+  gap: { shortfallPeriod: number; closeMonthDaily: number },
+): EmployeePeriodMetrics {
+  const achievementBase = target > 0 ? (sales / target) * 100 : 0;
+  const avgInv = trans > 0 ? sales / trans : 0;
+  const customerValue = visitorsProrated > 0 ? sales / visitorsProrated : 0;
+  const contributionPct = storeSalesInBucket > 0 ? (sales / storeSalesInBucket) * 100 : 0;
+  return {
+    target,
+    sales,
+    trans,
+    achievement: dailyTargetDynamic != null && dailyTargetDynamic > 0 ? (sales / dailyTargetDynamic) * 100 : achievementBase,
+    avgInv,
+    customerValue,
+    dailyTargetDynamic,
+    items,
+    contributionPct,
+    shortfallPeriod: gap.shortfallPeriod,
+    closeMonthDaily: gap.closeMonthDaily,
+  };
 }
 
 function resolveEmployeeName(rawId: string, fallback: string, names: Record<string, string>) {
@@ -302,7 +384,7 @@ export default function TargetSplitPage() {
         name: string;
         monthTarget: number;
         monthSales: number;
-        buckets: { bucket: TargetBucket; metrics: PeriodMetrics }[];
+        buckets: { bucket: TargetBucket; metrics: EmployeePeriodMetrics }[];
       }[];
     }[] = [];
 
@@ -331,23 +413,28 @@ export default function TargetSplitPage() {
         0;
 
       const bucketMetrics: { bucket: TargetBucket; metrics: PeriodMetrics }[] = [];
+      const dim = daysInMonth(selYear, selMonth);
 
       for (const b of buckets) {
         const effStart = b.start;
-        const effEnd = b.end;
+        const effEnd = b.end <= lastAvailableInMonth ? b.end : lastAvailableInMonth;
+        if (effStart > effEnd) continue;
         const t = sumManagementTargetsForDateRange(targetsRows, effStart, effEnd)[sid] || 0;
         const agg = aggregateMgmtForRange(raw, storeIds, effStart, effEnd);
+        const mtdThrough = aggregateMgmtForRange(raw, storeIds, monthStart, effEnd).sales;
 
         if (granularity === 'day') {
-          const rd = rollingDailyForDay(fullMonthTarget, monthStart, effStart, daysInMonth(selYear, selMonth), salesByDate);
+          const rd = rollingDailyForDay(fullMonthTarget, monthStart, effStart, dim, salesByDate);
+          const gap = enrichGap(rd.daySales, rd.dailyTarget, fullMonthTarget, mtdThrough, dim, effEnd);
           bucketMetrics.push({
             bucket: b,
-            metrics: metricsFromAgg(monthT, rd.daySales, agg.trans, agg.visitors, rd.dailyTarget),
+            metrics: metricsFromAgg(monthT, rd.daySales, agg.trans, agg.visitors, rd.dailyTarget, gap),
           });
         } else {
+          const gap = enrichGap(agg.sales, t, fullMonthTarget, mtdThrough, dim, effEnd);
           bucketMetrics.push({
             bucket: b,
-            metrics: metricsFromAgg(t, agg.sales, agg.trans, agg.visitors),
+            metrics: metricsFromAgg(t, agg.sales, agg.trans, agg.visitors, undefined, gap),
           });
         }
       }
@@ -373,13 +460,16 @@ export default function TargetSplitPage() {
         });
 
         const empFullMonthT = sumEmployeeTargetForDateRange(empRaw, eid, monthStart, monthEnd);
-        const eb: { bucket: TargetBucket; metrics: PeriodMetrics }[] = [];
+        const eb: { bucket: TargetBucket; metrics: EmployeePeriodMetrics }[] = [];
+        const dimEmp = daysInMonth(selYear, selMonth);
         for (const b of buckets) {
           const effStart = b.start;
-          const effEnd = b.end;
+          const effEnd = b.end <= lastAvailableInMonth ? b.end : lastAvailableInMonth;
+          if (effStart > effEnd) continue;
           const tt = sumEmployeeTargetForDateRange(empRaw, eid, effStart, effEnd);
           let es = 0,
-            et = 0;
+            et = 0,
+            items = 0;
           Object.values(history).forEach((records: any) => {
             for (const rec of records || []) {
               const dt = String(rec?.[0] || '').substring(0, 10);
@@ -389,22 +479,25 @@ export default function TargetSplitPage() {
               if (id !== eid) continue;
               es += safeNum(rec?.[2]);
               et += safeNum(rec?.[3]);
+              items += safeNum(rec?.[4]);
             }
           });
           const storeBucket = aggregateMgmtForRange(raw, new Set([sid]), effStart, effEnd);
-          const ev =
-            storeBucket.sales > 0 ? storeBucket.visitors * (es / storeBucket.sales) : 0;
+          const ev = storeBucket.sales > 0 ? storeBucket.visitors * (es / storeBucket.sales) : 0;
+          const empMtdThrough = sumSalesBetween(empSalesByDate, monthStart, effEnd);
 
           if (granularity === 'day') {
-            const rd = rollingDailyForDay(empFullMonthT, monthStart, effStart, daysInMonth(selYear, selMonth), empSalesByDate);
+            const rd = rollingDailyForDay(empFullMonthT, monthStart, effStart, dimEmp, empSalesByDate);
+            const gap = enrichGap(rd.daySales, rd.dailyTarget, empFullMonthT, empMtdThrough, dimEmp, effEnd);
             eb.push({
               bucket: b,
-              metrics: metricsFromAgg(mt, rd.daySales, et, ev, rd.dailyTarget),
+              metrics: employeeMetricsFromAgg(mt, rd.daySales, et, ev, rd.dailyTarget, items, storeBucket.sales, gap),
             });
           } else {
+            const gap = enrichGap(es, tt, empFullMonthT, empMtdThrough, dimEmp, effEnd);
             eb.push({
               bucket: b,
-              metrics: metricsFromAgg(tt, es, et, ev),
+              metrics: employeeMetricsFromAgg(tt, es, et, ev, undefined, items, storeBucket.sales, gap),
             });
           }
         }
@@ -705,25 +798,40 @@ export default function TargetSplitPage() {
                                   </thead>
                                   <tbody>
                                     {row.buckets.map(({ bucket, metrics }) => (
-                                      <tr key={bucket.id} className="border-b border-neutral-100 hover:bg-white">
-                                        <td className="td font-mono text-neutral-700 whitespace-nowrap">{bucket.label}</td>
-                                        <td className="td text-center dir-ltr">
-                                          {formatSAR(granularity === 'day' ? metrics.dailyTargetDynamic || 0 : metrics.target)}
-                                        </td>
-                                        <td className="td text-center dir-ltr font-semibold">{formatSAR(metrics.sales)}</td>
-                                        <td className="td text-center">
-                                          <span
-                                            className={`font-bold ${
-                                              metrics.achievement >= 100 ? 'text-emerald-600' : metrics.achievement >= 85 ? 'text-amber-700' : 'text-red-600'
-                                            }`}
-                                          >
-                                            {metrics.achievement.toFixed(1)}%
-                                          </span>
-                                        </td>
-                                        <td className="td text-center dir-ltr">{formatSAR(metrics.avgInv)}</td>
-                                        <td className="td text-center">{metrics.conversion.toFixed(1)}%</td>
-                                        <td className="td text-center dir-ltr">{Math.round(metrics.customerValue).toLocaleString()}</td>
-                                      </tr>
+                                      <React.Fragment key={bucket.id}>
+                                        <tr className="border-b border-neutral-100 hover:bg-white">
+                                          <td className="td font-mono text-neutral-700 whitespace-nowrap">{bucket.label}</td>
+                                          <td className="td text-center dir-ltr">
+                                            {formatSAR(granularity === 'day' ? metrics.dailyTargetDynamic || 0 : metrics.target)}
+                                          </td>
+                                          <td className="td text-center dir-ltr font-semibold">{formatSAR(metrics.sales)}</td>
+                                          <td className="td text-center">
+                                            <span
+                                              className={`font-bold ${
+                                                metrics.achievement >= 100 ? 'text-emerald-600' : metrics.achievement >= 85 ? 'text-amber-700' : 'text-red-600'
+                                              }`}
+                                            >
+                                              {metrics.achievement.toFixed(1)}%
+                                            </span>
+                                          </td>
+                                          <td className="td text-center dir-ltr">{formatSAR(metrics.avgInv)}</td>
+                                          <td className="td text-center">{metrics.conversion.toFixed(1)}%</td>
+                                          <td className="td text-center dir-ltr">{Math.round(metrics.customerValue).toLocaleString()}</td>
+                                        </tr>
+                                        {metrics.achievement < 100 && (
+                                          <tr className="bg-rose-50/90 border-b border-rose-100">
+                                            <td colSpan={7} className="py-2 px-3 text-[11px] text-rose-900 leading-relaxed">
+                                              <span className="font-semibold">لم يُحقَّق كامل التارجت:</span>{' '}
+                                              <span className="dir-ltr inline-block">متبقي للفترة {formatSAR(metrics.shortfallPeriod)}</span>
+                                              {' · '}
+                                              <span className="text-neutral-700">
+                                                مطلوب يومياً لإغلاق تارجت الشهر:{' '}
+                                                <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </React.Fragment>
                                     ))}
                                   </tbody>
                                 </table>
@@ -776,23 +884,48 @@ export default function TargetSplitPage() {
                                                   <th className="th text-center">مبيعات</th>
                                                   <th className="th text-center">تحقيق</th>
                                                   <th className="th text-center">ATV</th>
-                                                  <th className="th text-center">تحويل</th>
+                                                  <th className="th text-center">مساهمة %</th>
+                                                  <th className="th text-center">قطع</th>
                                                   <th className="th text-center">قيمة عميل</th>
                                                 </tr>
                                               </thead>
                                               <tbody>
                                                 {emp.buckets.map(({ bucket, metrics }) => (
-                                                  <tr key={bucket.id} className="border-b border-neutral-100">
-                                                    <td className="td font-mono">{bucket.label}</td>
-                                                    <td className="td text-center dir-ltr">
-                                                      {formatSAR(granularity === 'day' ? metrics.dailyTargetDynamic || 0 : metrics.target)}
-                                                    </td>
-                                                    <td className="td text-center dir-ltr">{formatSAR(metrics.sales)}</td>
-                                                    <td className="td text-center font-bold text-orange-700">{metrics.achievement.toFixed(1)}%</td>
-                                                    <td className="td text-center dir-ltr">{formatSAR(metrics.avgInv)}</td>
-                                                    <td className="td text-center">{metrics.conversion.toFixed(1)}%</td>
-                                                    <td className="td text-center dir-ltr">{Math.round(metrics.customerValue).toLocaleString()}</td>
-                                                  </tr>
+                                                  <React.Fragment key={bucket.id}>
+                                                    <tr className="border-b border-neutral-100">
+                                                      <td className="td font-mono">{bucket.label}</td>
+                                                      <td className="td text-center dir-ltr">
+                                                        {formatSAR(granularity === 'day' ? metrics.dailyTargetDynamic || 0 : metrics.target)}
+                                                      </td>
+                                                      <td className="td text-center dir-ltr">{formatSAR(metrics.sales)}</td>
+                                                      <td className="td text-center">
+                                                        <span
+                                                          className={`font-bold ${
+                                                            metrics.achievement >= 100 ? 'text-emerald-600' : metrics.achievement >= 85 ? 'text-amber-700' : 'text-red-600'
+                                                          }`}
+                                                        >
+                                                          {metrics.achievement.toFixed(1)}%
+                                                        </span>
+                                                      </td>
+                                                      <td className="td text-center dir-ltr">{formatSAR(metrics.avgInv)}</td>
+                                                      <td className="td text-center font-medium">{metrics.contributionPct.toFixed(1)}%</td>
+                                                      <td className="td text-center">{Math.round(metrics.items).toLocaleString()}</td>
+                                                      <td className="td text-center dir-ltr">{Math.round(metrics.customerValue).toLocaleString()}</td>
+                                                    </tr>
+                                                    {metrics.achievement < 100 && (
+                                                      <tr className="bg-rose-50/90 border-b border-rose-100">
+                                                        <td colSpan={8} className="py-2 px-3 text-[10px] text-rose-900 leading-relaxed">
+                                                          <span className="font-semibold">لم يُحقَّق كامل التارجت:</span>{' '}
+                                                          <span className="dir-ltr inline-block">متبقي للفترة {formatSAR(metrics.shortfallPeriod)}</span>
+                                                          {' · '}
+                                                          <span className="text-neutral-700">
+                                                            مطلوب يومياً لإغلاق تارجت الشهر:{' '}
+                                                            <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
+                                                          </span>
+                                                        </td>
+                                                      </tr>
+                                                    )}
+                                                  </React.Fragment>
                                                 ))}
                                               </tbody>
                                             </table>
