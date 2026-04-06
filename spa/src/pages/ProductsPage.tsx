@@ -873,7 +873,11 @@ export default function ProductsPage() {
             <p className="text-xs text-neutral-500 mt-1">
               متوسط سعر القطعة يحدد الشريحة — الفترة: <span className="font-semibold text-neutral-700">{derived.dateRangeLabel}</span>
             </p>
-            <p className="text-xs text-neutral-500 mt-1">الفرع: <span className="font-semibold text-neutral-700">{derived.selectedStoreLabel}</span></p>
+            <div className="mt-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 px-3 py-1 text-xs font-extrabold text-white shadow-md shadow-orange-200">
+                🏪 الفرع: {derived.selectedStoreLabel}
+              </span>
+            </div>
           </div>
           <div className="space-y-2 overflow-y-auto max-h-[620px] pr-1 custom-scrollbar flex-1">
             <ValueTierGroup
@@ -903,7 +907,11 @@ export default function ProductsPage() {
             <p className="text-xs text-neutral-500 mt-1">
               الفئات المعروضة فقط: لحافات كينغ، لحافات فل، مخدات كينغ، مخدات ستاندر، لباد كينج، لباد فل
             </p>
-            <p className="text-xs text-neutral-500 mt-1">الفرع: <span className="font-semibold text-neutral-700">{derived.selectedStoreLabel}</span></p>
+            <div className="mt-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 px-3 py-1 text-xs font-extrabold text-white shadow-md shadow-orange-200">
+                🏪 الفرع: {derived.selectedStoreLabel}
+              </span>
+            </div>
           </div>
           {derived.categorySharePieSlices.length === 0 ? (
             <div className="flex-1 flex items-center justify-center text-neutral-500 text-sm py-16">لا توجد فئات في نطاق الفلترة</div>
