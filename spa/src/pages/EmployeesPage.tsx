@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { loadEmployeeProductsData, loadEmployeesData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { ChartCard, KPICard } from '../components/DashboardComponents';
+import { ChartCard, KPICard, PieChart } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, PremiumTargetIcon, VisitorsIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
@@ -95,6 +95,17 @@ function canonicalTop6Category(v: string) {
   if (isPillow && (t.includes('ستاندر') || t.includes('standard') || isFull)) return 'مخدات ستاندر';
   if (isPad && isKing) return 'لباد كينج';
   if (isPad && isFull) return 'لباد فل';
+  return null;
+}
+
+function inferDuvetTypeFromName(v: string): 'king' | 'full' | null {
+  const t = normCategoryText(v);
+  const isDuvet = t.includes('لحاف') || t.includes('لحافات') || t.includes('duvet');
+  if (!isDuvet) return null;
+  const isKing = t.includes('king') || t.includes('كينغ') || t.includes('كنج') || t.includes('240') || t.includes('260') || t.includes('280');
+  const isFullLike = t.includes('full') || t.includes('فل') || t.includes('twin') || t.includes('توين') || t.includes('200') || t.includes('220');
+  if (isKing) return 'king';
+  if (isFullLike) return 'full';
   return null;
 }
 
@@ -274,8 +285,8 @@ function EmployeeDetailModal({
     };
     (employeeProductsSnapshot.items || []).forEach((it: any) => {
       const name = String(it?.name || '');
-      const can = canonicalTop6Category(name);
-      if (can !== 'لحافات كينغ') return;
+      const duvetType = inferDuvetTypeFromName(name);
+      if (duvetType !== 'king') return;
       const qty = safeNum(it?.qty);
       const amt = safeNum(it?.amt);
       if (qty <= 0) return;
@@ -285,8 +296,16 @@ function EmployeeDetailModal({
       else if (avg <= 600) out.medium.qty += qty;
       else out.high.qty += qty;
     });
+    // Ensure displayed king total always matches the category-based source of truth.
+    const kingTotalFromCategory = categoryShareRows
+      .filter((c: any) => canonicalTop6Category(c.name) === 'لحافات كينغ')
+      .reduce((s: number, c: any) => s + safeNum(c.qty), 0);
+    if (kingTotalFromCategory > out.total) {
+      out.low.qty += kingTotalFromCategory - out.total;
+      out.total = kingTotalFromCategory;
+    }
     return out;
-  }, [employeeProductsSnapshot.items]);
+  }, [employeeProductsSnapshot.items, categoryShareRows]);
 
   const dynamicCard = useMemo(() => {
     const end = new Date(rangeEnd + 'T12:00:00');
@@ -362,29 +381,25 @@ function EmployeeDetailModal({
         </div>
 
         <div className="mt-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <ChartCard title="نسب الفئات (العدد والنسبة)" className="min-h-[340px]">
+          <div className="grid grid-cols-1 gap-4">
+            <ChartCard title="نسب الفئات (العدد والنسبة)" className="min-h-[420px]">
               {categoryShareRows.length === 0 ? (
                 <div className="text-center text-neutral-400 py-10">لا توجد بيانات فئات ضمن الفترة.</div>
               ) : (
-                <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
-                  {categoryShareRows.map((r: any) => (
-                    <div key={r.name} className="rounded-lg border border-neutral-200 p-2.5 bg-white">
-                      <div className="flex items-center justify-between gap-2 text-sm">
-                        <span className="font-semibold text-neutral-800 truncate" title={r.name}>{r.name}</span>
-                        <span className="dir-ltr text-xs font-bold text-neutral-700 whitespace-nowrap">
-                          {Math.round(r.qty).toLocaleString()} ({r.pct.toFixed(1)}%)
-                        </span>
-                      </div>
-                      <div className="mt-1.5 h-2 w-full bg-neutral-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-orange-400 to-orange-600" style={{ width: `${Math.min(100, Math.max(0, r.pct))}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <PieChart
+                  vertical
+                  valueDisplay="number"
+                  data={categoryShareRows.map((r: any) => ({
+                    name: r.name,
+                    value: r.qty,
+                    count: r.qty,
+                  }))}
+                />
               )}
             </ChartCard>
+          </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
             <ChartCard title="تحليل الألحفة الكينج حسب القيمة" className="min-h-[340px]">
               <div className="text-xs text-neutral-500 mb-2">التصنيف خاص بـ لحافات كينغ فقط</div>
               <div className="space-y-3">
