@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { loadManagementData, loadProductAnalysisData, loadStagnantData, loadStockData, loadProductMapping } from '../services/upstreamData';
+import { loadManagementData, loadProductAnalysisData, loadStockData, loadProductMapping } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { ChartCard, KPICard, LineChart, PieChart } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
@@ -13,9 +13,17 @@ type Metric = 'qty' | 'val';
 
 const BASKET_PER_PAGE = 10;
 const MISSED_PER_PAGE = 10;
-const STAGNANT_PER_PAGE = 10;
-const CAT_SHARE_PER_PAGE = 10;
 const ITEMS_PER_PAGE = 10;
+
+const TARGET_CATEGORY_ORDER = [
+  'لحافات كينغ',
+  'لحافات فل',
+  'مخدات كينغ',
+  'مخدات ستاندر',
+  'لباد كينج',
+  'لباد فل',
+] as const;
+type TargetCategoryName = (typeof TARGET_CATEGORY_ORDER)[number];
 
 function safeNum(x: unknown) {
   const n = Number(x);
@@ -53,17 +61,6 @@ function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
 }
 
-type CategoryRow = {
-  category: string;
-  qty: number;
-  amount: number;
-  sharePercent: number;
-  topItemId: string;
-  topItemName: string;
-  topItemQty: number;
-  topItemAmount: number;
-};
-
 type CatalogItem = {
   id: string;
   name: string;
@@ -86,6 +83,40 @@ type ValueAnalysisBucket = {
   high: { qty: number; amount: number; count: number };
   total: { qty: number; amount: number; count: number };
 };
+
+function normText(v: string) {
+  return String(v || '')
+    .toLowerCase()
+    .replace(/[\u064B-\u065F]/g, '')
+    .replace(/إ|أ|آ/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/ـ/g, '')
+    .trim();
+}
+
+function isKingToken(v: string) {
+  return v.includes('king') || v.includes('كينغ') || v.includes('كنج');
+}
+
+function isFullToken(v: string) {
+  return v.includes('full') || v.includes('فل');
+}
+
+function canonicalTargetCategory(v: string): TargetCategoryName | null {
+  const t = normText(v);
+  const isDuvet = t.includes('لحاف') || t.includes('لحافات') || t.includes('duvet');
+  const isPillow = t.includes('مخده') || t.includes('مخدات') || t.includes('pillow');
+  const isPad = t.includes('لباد') || t.includes('لبده') || t.includes('mattress');
+
+  if (isDuvet && isKingToken(t)) return 'لحافات كينغ';
+  if (isDuvet && isFullToken(t)) return 'لحافات فل';
+  if (isPillow && isKingToken(t)) return 'مخدات كينغ';
+  if (isPillow && (t.includes('ستاندر') || t.includes('standard') || isFullToken(t))) return 'مخدات ستاندر';
+  if (isPad && isKingToken(t)) return 'لباد كينج';
+  if (isPad && isFullToken(t)) return 'لباد فل';
+  return null;
+}
 
 function ValueTierGroup({
   title,
@@ -217,13 +248,10 @@ export default function ProductsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [basketPage, setBasketPage] = useState(1);
   const [missedPage, setMissedPage] = useState(1);
-  const [stagnantPage, setStagnantPage] = useState(1);
-  const [catSharePage, setCatSharePage] = useState(1);
   const [missedOpen, setMissedOpen] = useState(false);
   const [missedRow, setMissedRow] = useState<any>(null);
 
   // Stock Data State
-  const [stagnantRaw, setStagnantRaw] = useState<any>(null);
   const [stockRaw, setStockRaw] = useState<any>(null);
 
   // Handle URL param for direct product view
@@ -239,14 +267,12 @@ export default function ProductsPage() {
     Promise.all([
       loadProductAnalysisData(),
       loadManagementData(),
-      loadStagnantData(),
       loadStockData(),
       loadProductMapping(),
     ])
-      .then(([p, m, stag, stock, mapping]) => {
+      .then(([p, m, stock, mapping]) => {
         setRaw(p);
         setMgmt(m);
-        setStagnantRaw(stag);
         setStockRaw(stock);
         const mapObj: Record<string, any> = {};
         (mapping || []).forEach((item: any) => {
@@ -398,7 +424,10 @@ export default function ProductsPage() {
     };
 
     // ===== Aggregate categories from analysis =====
-    const catMap = new Map<string, { qty: number; amount: number; top: any }>();
+    const targetCategoryMap = new Map<TargetCategoryName, { qty: number; amount: number }>();
+    TARGET_CATEGORY_ORDER.forEach((name) => {
+      targetCategoryMap.set(name, { qty: 0, amount: 0 });
+    });
     let totalQty = 0;
     let totalAmt = 0;
     let totalStores = 0;
@@ -418,70 +447,28 @@ export default function ProductsPage() {
         totalQty += qty;
         totalAmt += amount;
 
-        const prev = catMap.get(catName) || { qty: 0, amount: 0, top: null as any };
-        prev.qty += qty;
-        prev.amount += amount;
-
-        // Merge "top item" by chosen metric (qty or amount)
-        const topCandidate = {
-          top_item_id: String(c.top_item_id || ''),
-          top_item_name: String(c.top_item_name || ''),
-          top_item_qty: safeNum(c.top_item_qty),
-          top_item_amount: safeNum(c.top_item_amount),
-        };
-
-        const prevTop = prev.top;
-        const candidateScore = metric === 'qty' ? topCandidate.top_item_qty : topCandidate.top_item_amount;
-        const prevScore = prevTop ? (metric === 'qty' ? safeNum(prevTop.top_item_qty) : safeNum(prevTop.top_item_amount)) : -1;
-        if (!prevTop || candidateScore > prevScore) prev.top = topCandidate;
-
-        catMap.set(catName, prev);
+        const canonical = canonicalTargetCategory(catName);
+        if (canonical) {
+          const agg = targetCategoryMap.get(canonical) || { qty: 0, amount: 0 };
+          agg.qty += qty;
+          agg.amount += amount;
+          targetCategoryMap.set(canonical, agg);
+        }
       });
     });
-
-    const denom = metric === 'qty' ? Math.max(1, totalQty) : Math.max(1, totalAmt);
-    const categoriesAgg: CategoryRow[] = Array.from(catMap.entries()).map(([category, data]) => {
-      const sharePercent = ((metric === 'qty' ? data.qty : data.amount) / denom) * 100;
-      return {
-        category,
-        qty: data.qty,
-        amount: data.amount,
-        sharePercent,
-        topItemId: data.top?.top_item_id || '',
-        topItemName: data.top?.top_item_name || '',
-        topItemQty: safeNum(data.top?.top_item_qty),
-        topItemAmount: safeNum(data.top?.top_item_amount),
-      };
-    });
-
-    categoriesAgg.sort((a, b) => (metric === 'qty' ? b.qty - a.qty : b.amount - a.amount));
-
-    const categoryShareByValue = categoriesAgg
-      .map((c) => ({
-        category: c.category,
-        qty: c.qty,
-        amount: c.amount,
-        sharePercentByAmount: (c.amount / Math.max(1, totalAmt)) * 100,
-      }))
-      .sort((a, b) => b.amount - a.amount);
-
-    const TOP_CAT_SLICES = 5;
-    const categorySharePieSlices = (() => {
-      const sorted = [...categoryShareByValue];
-      const top = sorted.slice(0, TOP_CAT_SLICES);
-      const rest = sorted.slice(TOP_CAT_SLICES);
-      const restAmt = rest.reduce((s, x) => s + x.amount, 0);
-      const restQty = rest.reduce((s, x) => s + x.qty, 0);
-      const mapRow = (r: (typeof categoryShareByValue)[number]) => ({
-        name: r.category,
-        value: r.amount,
-        count: r.qty,
-        sharePercent: r.sharePercentByAmount,
-      });
-      if (restAmt <= 0) return top.map(mapRow);
-      const restShare = (restAmt / Math.max(1, totalAmt)) * 100;
-      return [...top.map(mapRow), { name: 'أخرى', value: restAmt, count: restQty, sharePercent: restShare }];
-    })();
+    const categoryShareTargetOnly = TARGET_CATEGORY_ORDER
+      .map((name) => {
+        const row = targetCategoryMap.get(name) || { qty: 0, amount: 0 };
+        return { category: name, qty: row.qty, amount: row.amount };
+      })
+      .filter((r) => r.qty > 0 || r.amount > 0);
+    const categoryTargetDenomAmt = Math.max(1, categoryShareTargetOnly.reduce((s, r) => s + r.amount, 0));
+    const categorySharePieSlices = categoryShareTargetOnly.map((r) => ({
+      name: r.category,
+      value: r.amount,
+      count: r.qty,
+      sharePercent: (r.amount / categoryTargetDenomAmt) * 100,
+    }));
 
     // ===== Catalog (products list) =====
     const catalogRows: CatalogItem[] = [];
@@ -559,6 +546,15 @@ export default function ProductsPage() {
       );
     }
     filteredCatalog.sort((a, b) => (metric === 'qty' ? b.qty - a.qty : b.amount - a.amount));
+    const catalogQtyAll = catalogRows.reduce((s, p) => s + (p.qty || 0), 0);
+    const catalogAmountAll = catalogRows.reduce((s, p) => s + (p.amount || 0), 0);
+    const categoryScope = selectedCategory === 'all' ? catalogRows : catalogRows.filter((p) => p.category === selectedCategory);
+    const categoryScopeQty = categoryScope.reduce((s, p) => s + (p.qty || 0), 0);
+    const categoryScopeAmount = categoryScope.reduce((s, p) => s + (p.amount || 0), 0);
+    const categorySharePercent =
+      metric === 'qty'
+        ? (categoryScopeQty / Math.max(1, catalogQtyAll)) * 100
+        : (categoryScopeAmount / Math.max(1, catalogAmountAll)) * 100;
 
     // ===== Market basket =====
     const basket = activeStore === 'all' ? (marketBasketAll['all'] || []) : (marketBasketAll[activeStore] || []);
@@ -603,25 +599,21 @@ export default function ProductsPage() {
 
       catalogRows.forEach(item => {
         const avgPrice = item.qty > 0 ? item.amount / item.qty : 0;
-        const catLower = (item.category || '').toLowerCase();
-        const nameLower = (item.name || '').toLowerCase();
-        const combined = catLower + ' ' + nameLower;
+        const catText = `${item.category || ''} ${item.name || ''}`;
+        const canon = canonicalTargetCategory(catText);
 
         let bucket: ValueBucket;
         let ranges: [number, number, number]; // low max, medium max
 
-        if (combined.includes('pillow') || combined.includes('مخد') || combined.includes('وساد')) {
+        if (canon === 'مخدات كينغ' || canon === 'مخدات ستاندر') {
           bucket = pillows;
           ranges = [99, 189, 999999]; // Low <=99, Med 100-189, High 190+
-        } else if (combined.includes('duvet') || combined.includes('لحاف') || combined.includes('مفرش')) {
-          // Check if King or Full
-          if (combined.includes('king') || combined.includes('كنج') || combined.includes('كبير') || combined.includes('240') || combined.includes('260')) {
-            bucket = duvetKing;
-            ranges = [300, 600, 999999]; // Low <=300, Med 301-600, High 600+
-          } else {
-            bucket = duvetFull;
-            ranges = [300, 499, 999999]; // Low <=300, Med 301-499, High 500+
-          }
+        } else if (canon === 'لحافات كينغ') {
+          bucket = duvetKing;
+          ranges = [300, 600, 999999]; // Low <=300, Med 301-600, High 600+
+        } else if (canon === 'لحافات فل') {
+          bucket = duvetFull;
+          ranges = [300, 499, 999999]; // Low <=300, Med 301-499, High 500+
         } else {
           bucket = others;
           ranges = [200, 500, 999999];
@@ -658,8 +650,8 @@ export default function ProductsPage() {
       cities,
       storeOptions,
       allowedStoreIds,
-      categoriesAgg,
       totals: { totalQty, totalAmt, totalStores, productsCount: filteredCatalog.length },
+      categorySharePercent,
       catalogCategories: Object.keys(catalog).sort((a, b) => a.localeCompare(b, 'ar')),
       filteredCatalog,
       basket,
@@ -886,8 +878,7 @@ export default function ProductsPage() {
           <div className="border-b border-neutral-100 pb-3 mb-4 shrink-0">
             <h3 className="text-lg font-bold text-neutral-900">حصة الفئة</h3>
             <p className="text-xs text-neutral-500 mt-1">
-              <span className="font-semibold text-neutral-700">القيمة</span> و<span className="font-semibold text-neutral-700">الحصة</span> من إجمالي
-              مبيعات الفئات (ر.س) — <span className="font-semibold text-neutral-700">العدد</span> قطع مباعة
+              الفئات المعروضة فقط: لحافات كينغ، لحافات فل، مخدات كينغ، مخدات ستاندر، لباد كينج، لباد فل
             </p>
           </div>
           {derived.categorySharePieSlices.length === 0 ? (
@@ -901,197 +892,6 @@ export default function ProductsPage() {
             </div>
           )}
         </div>
-      </div>
-
-      {/* Category performance */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-        {/* Bar Chart Card */}
-        {/* Stagnant Products Widget (Replaces Bar Chart) */}
-        {/* Stagnant Products Widget (Replaces Bar Chart) */}
-        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden h-[500px] flex flex-col">
-          <div className="p-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
-            <h3 className="font-bold text-neutral-800">⚠️ المنتجات الراكدة (Stagnant)</h3>
-            <span className="text-xs text-neutral-500 bg-white border border-neutral-200 px-2 py-1 rounded-lg">
-              {(() => {
-                if (!stagnantRaw?.data) return 0;
-                // This logic is tentative, real logic is below in variable definition
-                return '...';
-              })() && ''}
-              نظرة عامة
-            </span>
-          </div>
-
-          <div className="flex-1 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-white sticky top-0 z-10">
-                <tr className="border-b border-neutral-100 text-neutral-500">
-                  <th className="py-2 px-3 text-right font-semibold">المنتج</th>
-                  <th className="py-2 px-3 text-center font-semibold">الكمية</th>
-                  <th className="py-2 px-3 text-left font-semibold">المعرض</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-50">
-                {(() => {
-                  // Calculate Stagnant List on the fly or use memo below
-                  // Getting allowedStoreIds from derived
-                  const allowed = derived?.allowedStoreIds;
-                  if (!stagnantRaw?.data || !allowed) {
-                    return <tr><td colSpan={3} className="p-4 text-center text-neutral-400">جاري التحميل...</td></tr>;
-                  }
-
-                  let allItems: any[] = [];
-                  const dataMap = stagnantRaw.data as Record<string, any[]>;
-
-                  // Filter by derived allowed stores
-                  Object.entries(dataMap).forEach(([sid, arr]) => {
-                    if (allowed.has(sid)) {
-                      (Array.isArray(arr) ? arr : []).forEach(i => allItems.push({ ...i, _storeName: derived.storesMap[sid] || sid }));
-                    }
-                  });
-
-                  if (allItems.length === 0) {
-                    return <tr><td colSpan={3} className="p-4 text-center text-neutral-400">لا توجد منتجات راكدة.</td></tr>;
-                  }
-
-                  // Sorting (High qty first?)
-                  allItems.sort((a, b) => safeNum(b.qty ?? b.count) - safeNum(a.qty ?? a.count));
-
-                  const totalPages = Math.ceil(allItems.length / STAGNANT_PER_PAGE);
-                  const safePage = Math.min(stagnantPage, totalPages);
-                  const start = (safePage - 1) * STAGNANT_PER_PAGE;
-                  const visible = allItems.slice(start, start + STAGNANT_PER_PAGE);
-
-                  return (
-                    <>
-                      {visible.map((it, idx) => (
-                        <tr key={idx} className="hover:bg-red-50/10">
-                          <td className="py-2 px-3 font-medium text-neutral-800">
-                            <div className="truncate max-w-[120px] sm:max-w-[180px]" title={it.name || it.item_name}>
-                              {it.name || it.item_name || '-'}
-                            </div>
-                            <div className="text-[10px] text-neutral-400 font-mono">{it.id}</div>
-                          </td>
-                          <td className="py-2 px-3 text-center font-bold text-red-600 dir-ltr">{Number(it.qty ?? it.count).toLocaleString()}</td>
-                          <td className="py-2 px-3 text-left text-xs text-neutral-500 truncate max-w-[100px]">{it._storeName}</td>
-                        </tr>
-                      ))}
-                      {/* Pagination internal logic to update outer state? No, render controls below table */}
-                    </>
-                  );
-                })()}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination Footer */}
-          {(() => {
-            const allowed = derived?.allowedStoreIds;
-            if (!stagnantRaw?.data || !allowed) return null;
-            let count = 0;
-            Object.entries(stagnantRaw.data).forEach(([sid, arr]) => {
-              if (allowed.has(sid)) count += (arr as any[]).length;
-            });
-            if (count <= STAGNANT_PER_PAGE) return null;
-
-            const totalPages = Math.ceil(count / STAGNANT_PER_PAGE);
-            const safePage = Math.min(stagnantPage, totalPages);
-
-            return (
-              <div className="flex items-center justify-between px-3 py-2 border-t border-neutral-100 bg-neutral-50 text-xs">
-                <button
-                  onClick={() => setStagnantPage(Math.max(1, safePage - 1))}
-                  disabled={safePage <= 1}
-                  className="px-2 py-1 border rounded bg-white disabled:opacity-50 hover:bg-neutral-100"
-                >
-                  السابق
-                </button>
-                <span className="text-neutral-500">{safePage} / {totalPages}</span>
-                <button
-                  onClick={() => setStagnantPage(Math.min(totalPages, safePage + 1))}
-                  disabled={safePage >= totalPages}
-                  className="px-2 py-1 border rounded bg-white disabled:opacity-50 hover:bg-neutral-100"
-                >
-                  التالي
-                </button>
-              </div>
-            );
-          })()}
-        </div>
-
-        {/* Categories Share List (Replaces Overlapping Pie/Stats) */}
-        <ChartCard title="نسبة الفئات (Category Share)" className="h-[500px] flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-x-auto custom-scrollbar pr-1 relative">
-            <table className="w-full">
-              <thead className="sticky top-0 bg-white z-10">
-                <tr className="text-xs text-neutral-500 border-b border-neutral-100">
-                  <th className="font-medium text-right pb-2">الفئة</th>
-                  <th className="font-medium text-center pb-2">التفاصيل</th>
-                  <th className="font-medium text-center pb-2">النسبة</th>
-                  <th className="font-medium text-left pb-2 w-1/4">المساهمة</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-50">
-                {(() => {
-                  const page = catSharePage;
-                  const perPage = CAT_SHARE_PER_PAGE;
-                  const start = (page - 1) * perPage;
-                  const visible = derived.categoriesAgg.slice(start, start + perPage);
-
-                  return visible.map((c, idx) => (
-                    <tr key={c.category} className="group hover:bg-orange-50/50 transition-colors">
-                      <td className="py-2.5 text-xs sm:text-sm font-bold text-neutral-700">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${['bg-blue-500', 'bg-orange-500', 'bg-emerald-500', 'bg-purple-500'][idx % 4]}`} />
-                          <span className="truncate max-w-[150px]" title={c.category}>{c.category}</span>
-                        </div>
-                      </td>
-                      <td className="py-2.5 text-center">
-                        <span className="text-[10px] sm:text-xs text-neutral-500 font-bold bg-neutral-50 px-2 py-0.5 rounded border border-neutral-100">
-                          {metric === 'qty' ? Math.round(c.qty).toLocaleString() : formatSAR(c.amount)}
-                        </span>
-                      </td>
-                      <td className="py-2.5 text-center">
-                        <span className="inline-block bg-neutral-100 text-neutral-700 text-[10px] font-bold px-1.5 py-0.5 rounded dir-ltr">
-                          {c.sharePercent.toFixed(1)}%
-                        </span>
-                      </td>
-                      <td className="py-2.5 text-left dir-ltr">
-                        <div className="h-1.5 w-full bg-neutral-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-orange-500 rounded-full" style={{ width: `${c.sharePercent}%` }} />
-                        </div>
-                      </td>
-                    </tr>
-                  ));
-                })()}
-              </tbody>
-            </table>
-          </div>
-          {/* Pagination for Category Share */}
-          {(() => {
-            const total = derived.categoriesAgg.length;
-            if (total <= CAT_SHARE_PER_PAGE) return null;
-            const totalPages = Math.ceil(total / CAT_SHARE_PER_PAGE);
-            return (
-              <div className="flex items-center justify-between px-3 py-2 border-t border-neutral-100 bg-neutral-50 text-xs mt-auto">
-                <button
-                  onClick={() => setCatSharePage(Math.max(1, catSharePage - 1))}
-                  disabled={catSharePage <= 1}
-                  className="px-2 py-1 border rounded bg-white disabled:opacity-50 hover:bg-neutral-100"
-                >
-                  السابق
-                </button>
-                <span className="text-neutral-500">{catSharePage} / {totalPages}</span>
-                <button
-                  onClick={() => setCatSharePage(Math.min(totalPages, catSharePage + 1))}
-                  disabled={catSharePage >= totalPages}
-                  className="px-2 py-1 border rounded bg-white disabled:opacity-50 hover:bg-neutral-100"
-                >
-                  التالي
-                </button>
-              </div>
-            );
-          })()}
-        </ChartCard>
       </div>
 
       {/* Catalog list */}
@@ -1125,6 +925,9 @@ export default function ProductsPage() {
           <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-sm font-bold">عدد المنتجات: {derived.filteredCatalog.length.toLocaleString()}</span>
           <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-bold">إجمالي الكمية: {Math.round(derived.filteredCatalog.reduce((s: number, p: any) => s + (p.qty || 0), 0)).toLocaleString()}</span>
           <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-bold">إجمالي القيمة: {formatSAR(derived.filteredCatalog.reduce((s: number, p: any) => s + (p.amount || 0), 0))}</span>
+          <span className="bg-violet-100 text-violet-700 px-3 py-1 rounded-full text-sm font-bold">
+            نسبة الفئة ({metric === 'qty' ? 'بالكمية' : 'بالقيمة'}): {derived.categorySharePercent.toFixed(1)}%
+          </span>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full">
