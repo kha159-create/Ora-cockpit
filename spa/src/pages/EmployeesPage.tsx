@@ -279,11 +279,11 @@ function EmployeeDetailModal({
     let otherQty = 0;
     let otherAmt = 0;
 
-    // Source of truth: item-level data to keep category cards, drilldown, and duvet analysis aligned.
-    (employeeProductsSnapshot.items || []).forEach((it: any) => {
-      const rawName = String(it?.name || '');
-      const qty = safeNum(it?.qty);
-      const amt = safeNum(it?.amt);
+    // Source of truth for category shares: upstream aggregated categories.
+    (employeeProductsSnapshot.categories || []).forEach((c: any) => {
+      const rawName = String(c?.name || 'غير مصنف');
+      const qty = safeNum(c?.qty);
+      const amt = safeNum(c?.amt);
       if (qty <= 0 && amt <= 0) return;
       const mapped = canonicalTop6Category(rawName);
       if (mapped) {
@@ -311,7 +311,7 @@ function EmployeeDetailModal({
       ...r,
       pct: totalQty > 0 ? (r.qty / totalQty) * 100 : 0,
     }));
-  }, [employeeProductsSnapshot.items]);
+  }, [employeeProductsSnapshot.categories]);
 
   const selectedCategoryItems = useMemo(() => {
     if (!selectedCategoryName) return [];
