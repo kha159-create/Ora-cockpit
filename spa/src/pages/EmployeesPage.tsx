@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { loadEmployeeProductsData, loadEmployeesData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { KPICard } from '../components/DashboardComponents';
+import { ChartCard, KPICard, PieChart } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, PremiumTargetIcon, VisitorsIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
@@ -69,6 +69,33 @@ function safeNum(x: unknown) {
 
 function formatSAR(val: number) {
   return val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
+}
+
+function normCategoryText(v: string) {
+  return String(v || '')
+    .toLowerCase()
+    .replace(/[\u064B-\u065F]/g, '')
+    .replace(/إ|أ|آ/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/ـ/g, '')
+    .trim();
+}
+
+function canonicalTop6Category(v: string) {
+  const t = normCategoryText(v);
+  const isKing = t.includes('king') || t.includes('كينغ') || t.includes('كنج');
+  const isFull = t.includes('full') || t.includes('فل') || t.includes('twin') || t.includes('توين');
+  const isPillow = t.includes('مخده') || t.includes('مخدات') || t.includes('pillow');
+  const isDuvet = t.includes('لحاف') || t.includes('لحافات') || t.includes('duvet');
+  const isPad = t.includes('لباد') || t.includes('لبده') || t.includes('mattress');
+  if (isDuvet && isKing) return 'لحافات كينغ';
+  if (isDuvet && isFull) return 'لحافات فل';
+  if (isPillow && isKing) return 'مخدات كينغ';
+  if (isPillow && (t.includes('ستاندر') || t.includes('standard') || isFull)) return 'مخدات ستاندر';
+  if (isPad && isKing) return 'لباد كينج';
+  if (isPad && isFull) return 'لباد فل';
+  return null;
 }
 
 function isAdminOrAuditor(role?: string) {
@@ -222,6 +249,59 @@ function EmployeeDetailModal({
     return { categories, items };
   }, [open, detail, empProductsRaw, productsPeriodKey]);
 
+  const top6Categories = useMemo(() => {
+    const names = ['لحافات كينغ', 'لحافات فل', 'مخدات كينغ', 'مخدات ستاندر', 'لباد كينج', 'لباد فل'];
+    const agg = new Map<string, { qty: number; amt: number }>();
+    names.forEach((n) => agg.set(n, { qty: 0, amt: 0 }));
+    (employeeProductsSnapshot.categories || []).forEach((c: any) => {
+      const can = canonicalTop6Category(String(c?.name || ''));
+      if (!can) return;
+      const r = agg.get(can)!;
+      r.qty += safeNum(c?.qty);
+      r.amt += safeNum(c?.amt);
+      agg.set(can, r);
+    });
+    return names.map((name) => ({ name, qty: agg.get(name)!.qty, amt: agg.get(name)!.amt }));
+  }, [employeeProductsSnapshot.categories]);
+
+  const duvetValueBands = useMemo(() => {
+    const out = {
+      low: { qty: 0, label: 'Low Value (99-300)' },
+      medium: { qty: 0, label: 'Medium Value (301-600)' },
+      high: { qty: 0, label: 'High Value (600+)' },
+      total: 0,
+    };
+    (employeeProductsSnapshot.items || []).forEach((it: any) => {
+      const name = String(it?.name || '');
+      const can = canonicalTop6Category(name);
+      if (can !== 'لحافات كينغ' && can !== 'لحافات فل') return;
+      const qty = safeNum(it?.qty);
+      const amt = safeNum(it?.amt);
+      if (qty <= 0) return;
+      const avg = amt / qty;
+      out.total += qty;
+      if (avg <= 300) out.low.qty += qty;
+      else if (avg <= 600) out.medium.qty += qty;
+      else out.high.qty += qty;
+    });
+    return out;
+  }, [employeeProductsSnapshot.items]);
+
+  const dynamicCard = useMemo(() => {
+    const end = new Date(rangeEnd + 'T12:00:00');
+    const dim = new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate();
+    const day = end.getDate();
+    const remainingDays = Math.max(1, dim - day + 1);
+    const monthlyTarget = safeNum(detail?.target);
+    const salesMtd = safeNum(detail?.sales);
+    const remainingTarget = Math.max(0, monthlyTarget - salesMtd);
+    const requiredDaily = remainingDays > 0 ? remainingTarget / remainingDays : 0;
+    const target90 = monthlyTarget * 0.9;
+    const remaining90 = Math.max(0, target90 - salesMtd);
+    const requiredDaily90 = remainingDays > 0 ? remaining90 / remainingDays : 0;
+    return { salesMtd, monthlyTarget, remainingTarget, remainingDays, requiredDaily, requiredDaily90 };
+  }, [detail, rangeEnd]);
+
   // Early return NOW, after hooks
   if (!open || !detail) return null;
 
@@ -280,44 +360,67 @@ function EmployeeDetailModal({
           </div>
         </div>
 
+        <div className="mt-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <ChartCard title="Sales by Product Category" className="min-h-[340px]">
+              {top6Categories.every((c) => c.amt <= 0) ? (
+                <div className="text-center text-neutral-400 py-10">لا توجد بيانات فئات ضمن الفترة.</div>
+              ) : (
+                <PieChart
+                  data={top6Categories.filter((c) => c.amt > 0).map((c) => ({ name: c.name, value: c.amt, count: c.qty }))}
+                />
+              )}
+            </ChartCard>
+
+            <ChartCard title="Duvet Sales Analysis by Value" className="min-h-[340px]">
+              <div className="space-y-3">
+                {[duvetValueBands.low, duvetValueBands.medium, duvetValueBands.high].map((b) => {
+                  const pct = duvetValueBands.total > 0 ? (b.qty / duvetValueBands.total) * 100 : 0;
+                  return (
+                    <div key={b.label}>
+                      <div className="flex justify-between text-xs text-neutral-600 mb-1">
+                        <span>{b.label}</span>
+                        <span className="dir-ltr">{Math.round(b.qty)} units ({pct.toFixed(1)}%)</span>
+                      </div>
+                      <div className="w-full bg-neutral-200 rounded-full h-2.5 overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-sky-400 to-sky-600" style={{ width: `${Math.max(0, pct)}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="pt-3 border-t border-neutral-200 text-sm space-y-1">
+                  <div className="flex justify-between"><span className="font-semibold text-neutral-600">Monthly Duvet Target</span><span className="font-bold">0</span></div>
+                  <div className="flex justify-between"><span className="font-semibold text-neutral-600">Sold (MTD)</span><span className="font-bold">{Math.round(duvetValueBands.total)}</span></div>
+                  <div className="flex justify-between"><span className="font-semibold text-emerald-700">Achievement (MTD)</span><span className="font-extrabold text-emerald-600">0.0%</span></div>
+                </div>
+              </div>
+            </ChartCard>
+
+            <ChartCard title="Dynamic Daily Target" className="min-h-[340px]">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span>Sales This Month (MTD)</span><span className="dir-ltr font-semibold">{formatSAR(dynamicCard.salesMtd)}</span></div>
+                <div className="flex justify-between"><span>Monthly Target</span><span className="dir-ltr font-semibold">{formatSAR(dynamicCard.monthlyTarget)}</span></div>
+                <div className="flex justify-between border-t border-neutral-200 pt-2 mt-2">
+                  <span className="font-bold">Remaining Target</span>
+                  <span className={`dir-ltr font-bold ${dynamicCard.remainingTarget > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {dynamicCard.remainingTarget > 0 ? formatSAR(dynamicCard.remainingTarget) : 'Achieved'}
+                  </span>
+                </div>
+                <div className="flex justify-between"><span>Remaining Days</span><span className="font-semibold">{dynamicCard.remainingDays}</span></div>
+                <div className="flex justify-between items-center bg-orange-50 p-2 rounded-lg mt-2">
+                  <span className="font-bold text-orange-700">Required Daily Avg</span>
+                  <span className="dir-ltr font-bold text-orange-700">{formatSAR(dynamicCard.requiredDaily)}</span>
+                </div>
+                <div className="flex justify-between items-center bg-amber-50 p-2 rounded-lg">
+                  <span className="font-bold text-amber-700">Required Daily Avg (90%)</span>
+                  <span className="dir-ltr font-bold text-amber-700">{formatSAR(dynamicCard.requiredDaily90)}</span>
+                </div>
+              </div>
+            </ChartCard>
+          </div>
+        </div>
+
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden mt-6">
-          <h3 className="text-lg font-bold text-neutral-900 mb-4">تحليل الموظف 360 — الفئات والمنتجات</h3>
-          {employeeProductsSnapshot.categories.length === 0 && employeeProductsSnapshot.items.length === 0 ? (
-            <div className="text-center text-neutral-400 py-6">لا توجد بيانات منتجات لهذا الموظف ضمن الفترة.</div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-              <div className="rounded-xl border border-neutral-200 overflow-hidden">
-                <div className="px-3 py-2 bg-neutral-50 border-b border-neutral-200 font-semibold text-neutral-800">Top 5 الفئات</div>
-                <div className="p-3 space-y-2">
-                  {employeeProductsSnapshot.categories
-                    .slice()
-                    .sort((a: any, b: any) => safeNum(b.qty) - safeNum(a.qty))
-                    .slice(0, 5)
-                    .map((c: any, idx: number) => (
-                      <div key={`${c?.name || idx}`} className="flex items-center justify-between text-sm">
-                        <span className="text-neutral-700 truncate">{String(c?.name || '-')}</span>
-                        <span className="font-bold text-neutral-900 dir-ltr">{Math.round(safeNum(c?.qty)).toLocaleString()}</span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-              <div className="rounded-xl border border-neutral-200 overflow-hidden">
-                <div className="px-3 py-2 bg-neutral-50 border-b border-neutral-200 font-semibold text-neutral-800">Top 5 المنتجات</div>
-                <div className="p-3 space-y-2">
-                  {employeeProductsSnapshot.items
-                    .slice()
-                    .sort((a: any, b: any) => safeNum(b.qty) - safeNum(a.qty))
-                    .slice(0, 5)
-                    .map((it: any, idx: number) => (
-                      <div key={`${it?.id || idx}`} className="flex items-center justify-between gap-3 text-sm">
-                        <span className="text-neutral-700 truncate" title={String(it?.name || '-')}>{String(it?.name || '-')}</span>
-                        <span className="font-bold text-neutral-900 dir-ltr whitespace-nowrap">{Math.round(safeNum(it?.qty)).toLocaleString()}</span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </div>
-          )}
 
           <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
             <span>📅</span> تفاصيل الأيام ({rangeStart} → {rangeEnd})
