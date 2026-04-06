@@ -140,6 +140,10 @@ export function loadStagnantData(forceRefresh = false) {
   return fetchJson<any>('stagnant_data.json', forceRefresh);
 }
 
+export function loadEmployeeProductsData(forceRefresh = false) {
+  return fetchJson<any>('employee_products_data.json', forceRefresh);
+}
+
 // Load Accurate Stock Data from ALAAWF2 Catalog
 export async function loadStockData(forceRefresh = false) {
   const fileKey = 'ALAAWF2_products.json';

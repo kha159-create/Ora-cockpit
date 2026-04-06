@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { loadEmployeesData, loadManagementData } from '../services/upstreamData';
+import { loadEmployeeProductsData, loadEmployeesData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { KPICard } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
@@ -130,6 +130,8 @@ function EmployeeDetailModal({
   rangeEnd,
   targetEnabled,
   empRaw, // New prop for sales history
+  empProductsRaw,
+  productsPeriodKey,
 }: {
   open: boolean;
   employee: EmployeeAgg | null;
@@ -140,6 +142,8 @@ function EmployeeDetailModal({
   rangeEnd: string;
   targetEnabled: boolean;
   empRaw: any;
+  empProductsRaw: any;
+  productsPeriodKey: 'mtd' | 'yest' | '7d' | '14d' | '30d';
   onClose: () => void;
 }) {
 
@@ -208,6 +212,16 @@ function EmployeeDetailModal({
       }, []);
   }, [open, detail, empRaw, rangeStart, rangeEnd]);
 
+  const employeeProductsSnapshot = useMemo(() => {
+    if (!open || !detail || !empProductsRaw?.periods) return { categories: [], items: [] };
+    const periods = empProductsRaw.periods || {};
+    const scoped = periods[productsPeriodKey] || periods.mtd || {};
+    const empBlock = scoped?.[String(detail.id)] || scoped?.[String(detail.id).padStart(4, '0')] || null;
+    const categories = Array.isArray(empBlock?.categories) ? empBlock.categories : [];
+    const items = Array.isArray(empBlock?.items) ? empBlock.items : [];
+    return { categories, items };
+  }, [open, detail, empProductsRaw, productsPeriodKey]);
+
   // Early return NOW, after hooks
   if (!open || !detail) return null;
 
@@ -267,6 +281,44 @@ function EmployeeDetailModal({
         </div>
 
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-100 overflow-hidden mt-6">
+          <h3 className="text-lg font-bold text-neutral-900 mb-4">تحليل الموظف 360 — الفئات والمنتجات</h3>
+          {employeeProductsSnapshot.categories.length === 0 && employeeProductsSnapshot.items.length === 0 ? (
+            <div className="text-center text-neutral-400 py-6">لا توجد بيانات منتجات لهذا الموظف ضمن الفترة.</div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+              <div className="rounded-xl border border-neutral-200 overflow-hidden">
+                <div className="px-3 py-2 bg-neutral-50 border-b border-neutral-200 font-semibold text-neutral-800">Top 5 الفئات</div>
+                <div className="p-3 space-y-2">
+                  {employeeProductsSnapshot.categories
+                    .slice()
+                    .sort((a: any, b: any) => safeNum(b.qty) - safeNum(a.qty))
+                    .slice(0, 5)
+                    .map((c: any, idx: number) => (
+                      <div key={`${c?.name || idx}`} className="flex items-center justify-between text-sm">
+                        <span className="text-neutral-700 truncate">{String(c?.name || '-')}</span>
+                        <span className="font-bold text-neutral-900 dir-ltr">{Math.round(safeNum(c?.qty)).toLocaleString()}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+              <div className="rounded-xl border border-neutral-200 overflow-hidden">
+                <div className="px-3 py-2 bg-neutral-50 border-b border-neutral-200 font-semibold text-neutral-800">Top 5 المنتجات</div>
+                <div className="p-3 space-y-2">
+                  {employeeProductsSnapshot.items
+                    .slice()
+                    .sort((a: any, b: any) => safeNum(b.qty) - safeNum(a.qty))
+                    .slice(0, 5)
+                    .map((it: any, idx: number) => (
+                      <div key={`${it?.id || idx}`} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-neutral-700 truncate" title={String(it?.name || '-')}>{String(it?.name || '-')}</span>
+                        <span className="font-bold text-neutral-900 dir-ltr whitespace-nowrap">{Math.round(safeNum(it?.qty)).toLocaleString()}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
             <span>📅</span> تفاصيل الأيام ({rangeStart} → {rangeEnd})
           </h3>
@@ -339,6 +391,7 @@ export default function EmployeesPage() {
   const user = getCurrentUser();
   const [empRaw, setEmpRaw] = useState<any>(null);
   const [mgmtRaw, setMgmtRaw] = useState<any>(null);
+  const [empProductsRaw, setEmpProductsRaw] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const [manager, setManager] = useState<string>('all');
@@ -371,10 +424,11 @@ export default function EmployeesPage() {
   const excelDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    Promise.all([loadEmployeesData(), loadManagementData()])
-      .then(([e, m]) => {
+    Promise.all([loadEmployeesData(), loadManagementData(), loadEmployeeProductsData()])
+      .then(([e, m, ep]) => {
         setEmpRaw(e);
         setMgmtRaw(m);
+        setEmpProductsRaw(ep);
       })
       .catch((e) => setErr(e?.message || String(e)));
   }, []);
@@ -811,6 +865,8 @@ export default function EmployeesPage() {
   }, [derived.employees, selectedEmployeeId]);
 
   const targetEnabled = period === 'mtd' || period === 'month' || period === 'custom';
+  const productsPeriodKey: 'mtd' | 'yest' | '7d' | '14d' | '30d' =
+    period === 'yesterday' ? 'yest' : period === 'today' ? 'yest' : period === 'custom' ? 'mtd' : period === 'month' ? 'mtd' : period;
   const periodLabel = useMemo(() => {
     if (period === 'today') return `اليوم (${derived.labels.todayStr})`;
     if (period === 'yesterday') return `أمس (${derived.labels.yesterdayStr})`;
@@ -1352,6 +1408,8 @@ export default function EmployeesPage() {
           rangeEnd={derived.range.end}
           targetEnabled={targetEnabled}
           empRaw={empRaw}
+          empProductsRaw={empProductsRaw}
+          productsPeriodKey={productsPeriodKey}
         />
       )}
 

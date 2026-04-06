@@ -103,6 +103,10 @@ function isFullToken(v: string) {
   return v.includes('full') || v.includes('فل');
 }
 
+function isTwinToken(v: string) {
+  return v.includes('twin') || v.includes('توين');
+}
+
 function canonicalTargetCategory(v: string): TargetCategoryName | null {
   const t = normText(v);
   const isDuvet = t.includes('لحاف') || t.includes('لحافات') || t.includes('duvet');
@@ -110,7 +114,7 @@ function canonicalTargetCategory(v: string): TargetCategoryName | null {
   const isPad = t.includes('لباد') || t.includes('لبده') || t.includes('mattress');
 
   if (isDuvet && isKingToken(t)) return 'لحافات كينغ';
-  if (isDuvet && isFullToken(t)) return 'لحافات فل';
+  if (isDuvet && (isFullToken(t) || isTwinToken(t))) return 'لحافات فل';
   if (isPillow && isKingToken(t)) return 'مخدات كينغ';
   if (isPillow && (t.includes('ستاندر') || t.includes('standard') || isFullToken(t))) return 'مخدات ستاندر';
   if (isPad && isKingToken(t)) return 'لباد كينج';
