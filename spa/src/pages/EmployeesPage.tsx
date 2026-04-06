@@ -740,8 +740,8 @@ export default function EmployeesPage() {
       if (mode === 'today') return { start: toLocalYMD(today), end: toLocalYMD(today) };
       if (mode === 'yesterday') return { start: toLocalYMD(yesterday), end: toLocalYMD(yesterday) };
       if (mode === 'mtd') {
-        // Match upstream employees view: MTD includes current day.
-        return { start: toLocalYMD(startOfCurrentMonth), end: toLocalYMD(today) };
+        const endMtd = yesterday.getMonth() !== startOfCurrentMonth.getMonth() ? today : yesterday;
+        return { start: toLocalYMD(startOfCurrentMonth), end: toLocalYMD(endMtd) };
       }
       if (mode === 'month' && selYear && selMonth) {
         const startOfMonth = new Date(selYear, selMonth - 1, 1);
