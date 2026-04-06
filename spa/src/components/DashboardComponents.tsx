@@ -712,7 +712,8 @@ export const PieChart: React.FC<{
             {data.slice(0, 10).map((item, index) => (
               <div
                 key={item.name}
-                className="bg-neutral-50 p-3 rounded-lg border border-neutral-200 hover:bg-neutral-100 transition-all duration-200"
+                className={`bg-neutral-50 p-3 rounded-lg border border-neutral-200 hover:bg-neutral-100 transition-all duration-200 ${onSliceClick ? 'cursor-pointer' : ''}`}
+                onClick={() => onSliceClick && onSliceClick(item.name)}
               >
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-4 h-4 rounded-full shadow-sm flex-shrink-0" style={{ backgroundColor: colors[index % colors.length] }}></div>
@@ -788,7 +789,11 @@ export const PieChart: React.FC<{
       <div className="flex-grow overflow-y-auto h-full w-full">
         <ul className="space-y-2">
           {data.slice(0, 10).map((item, index) => (
-            <li key={item.name} className="flex items-center text-sm group hover:bg-neutral-50 p-2 rounded-lg transition-all duration-200">
+            <li
+              key={item.name}
+              className={`flex items-center text-sm group hover:bg-neutral-50 p-2 rounded-lg transition-all duration-200 ${onSliceClick ? 'cursor-pointer' : ''}`}
+              onClick={() => onSliceClick && onSliceClick(item.name)}
+            >
               <div className="w-4 h-4 rounded-full mr-3 shadow-sm" style={{ backgroundColor: colors[index % colors.length] }}></div>
               <span className="text-neutral-700 flex-grow font-medium whitespace-nowrap" title={item.name}>
                 {item.name}

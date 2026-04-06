@@ -257,10 +257,12 @@ function EmployeeDetailModal({
     let otherQty = 0;
     let otherAmt = 0;
 
-    (employeeProductsSnapshot.categories || []).forEach((c: any) => {
-      const rawName = String(c?.name || 'غير مصنف');
-      const qty = safeNum(c?.qty);
-      const amt = safeNum(c?.amt);
+    // Source of truth: item-level data to keep category cards, drilldown, and duvet analysis aligned.
+    (employeeProductsSnapshot.items || []).forEach((it: any) => {
+      const rawName = String(it?.name || '');
+      const qty = safeNum(it?.qty);
+      const amt = safeNum(it?.amt);
+      if (qty <= 0 && amt <= 0) return;
       const mapped = canonicalTop6Category(rawName);
       if (mapped) {
         const prev = coreMap.get(mapped)!;
@@ -287,7 +289,7 @@ function EmployeeDetailModal({
       ...r,
       pct: totalQty > 0 ? (r.qty / totalQty) * 100 : 0,
     }));
-  }, [employeeProductsSnapshot.categories]);
+  }, [employeeProductsSnapshot.items]);
 
   const selectedCategoryItems = useMemo(() => {
     if (!selectedCategoryName) return [];
@@ -414,51 +416,16 @@ function EmployeeDetailModal({
                 <div className="text-center text-neutral-400 py-10">لا توجد بيانات فئات ضمن الفترة.</div>
               ) : (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                        {categoryShareRows.map((r: any) => (
-                          <button
-                            type="button"
-                            key={r.name}
-                            onClick={() => setSelectedCategoryName((prev) => (prev === r.name ? null : r.name))}
-                            className={`rounded-xl border p-2.5 text-right transition ${
-                              selectedCategoryName === r.name
-                                ? 'border-orange-400 bg-orange-50'
-                                : 'border-neutral-200 bg-white hover:bg-neutral-50'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2 mb-1">
-                              <span className="font-bold text-neutral-800 truncate">{r.name}</span>
-                              <span className={`h-3 w-3 rounded-full ${r.isOther ? 'bg-blue-500' : 'bg-orange-500'}`} />
-                            </div>
-                            <div className="text-xs text-neutral-600 flex justify-between">
-                              <span>الوزن:</span>
-                              <span className="dir-ltr font-bold text-neutral-800">{Math.round(r.qty).toLocaleString()}</span>
-                            </div>
-                            <div className="text-xs text-neutral-600 flex justify-between mt-0.5">
-                              <span>الحصة:</span>
-                              <span className="dir-ltr font-bold text-orange-600">{r.pct.toFixed(1)}%</span>
-                            </div>
-                            <div className="mt-1.5 h-1.5 w-full bg-neutral-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-gradient-to-r from-orange-400 to-orange-600" style={{ width: `${Math.min(100, Math.max(0, r.pct))}%` }} />
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="lg:sticky lg:top-2">
-                      <PieChart
-                        vertical
-                        valueDisplay="number"
-                        data={categoryShareRows.filter((r: any) => r.qty > 0).map((r: any) => ({
-                          name: r.name,
-                          value: r.qty,
-                          count: r.qty,
-                        }))}
-                      />
-                    </div>
-                  </div>
+                  <PieChart
+                    vertical
+                    valueDisplay="number"
+                    onSliceClick={(name) => setSelectedCategoryName((prev) => (prev === name ? null : name))}
+                    data={categoryShareRows.filter((r: any) => r.qty > 0).map((r: any) => ({
+                      name: r.name,
+                      value: r.qty,
+                      count: r.qty,
+                    }))}
+                  />
                   {selectedCategoryName && (
                     <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
                       <div className="flex items-center justify-between mb-2">
