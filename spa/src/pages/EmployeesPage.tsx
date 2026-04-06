@@ -98,17 +98,6 @@ function canonicalTop6Category(v: string) {
   return null;
 }
 
-function inferDuvetTypeFromName(v: string): 'king' | 'full' | null {
-  const t = normCategoryText(v);
-  const isDuvet = t.includes('لحاف') || t.includes('لحافات') || t.includes('duvet');
-  if (!isDuvet) return null;
-  const isKing = t.includes('king') || t.includes('كينغ') || t.includes('كنج') || t.includes('240') || t.includes('260') || t.includes('280');
-  const isFullLike = t.includes('full') || t.includes('فل') || t.includes('twin') || t.includes('توين') || t.includes('200') || t.includes('220');
-  if (isKing) return 'king';
-  if (isFullLike) return 'full';
-  return null;
-}
-
 function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
 }
@@ -332,8 +321,7 @@ function EmployeeDetailModal({
     };
     (employeeProductsSnapshot.items || []).forEach((it: any) => {
       const name = String(it?.name || '');
-      const duvetType = inferDuvetTypeFromName(name);
-      if (duvetType !== 'king') return;
+      if (canonicalTop6Category(name) !== 'لحافات كينغ') return;
       const qty = safeNum(it?.qty);
       const amt = safeNum(it?.amt);
       if (qty <= 0) return;
@@ -343,16 +331,8 @@ function EmployeeDetailModal({
       else if (avg <= 600) out.medium.qty += qty;
       else out.high.qty += qty;
     });
-    // Ensure displayed king total always matches the category-based source of truth.
-    const kingTotalFromCategory = categoryShareRows
-      .filter((c: any) => canonicalTop6Category(c.name) === 'لحافات كينغ')
-      .reduce((s: number, c: any) => s + safeNum(c.qty), 0);
-    if (kingTotalFromCategory > out.total) {
-      out.low.qty += kingTotalFromCategory - out.total;
-      out.total = kingTotalFromCategory;
-    }
     return out;
-  }, [employeeProductsSnapshot.items, categoryShareRows]);
+  }, [employeeProductsSnapshot.items]);
 
   const dynamicCard = useMemo(() => {
     const end = new Date(rangeEnd + 'T12:00:00');
@@ -436,28 +416,33 @@ function EmployeeDetailModal({
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
                     <div className="space-y-3">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                         {categoryShareRows.map((r: any) => (
                           <button
                             type="button"
                             key={r.name}
                             onClick={() => setSelectedCategoryName((prev) => (prev === r.name ? null : r.name))}
-                            className={`rounded-xl border p-3 text-right transition ${
+                            className={`rounded-xl border p-2.5 text-right transition ${
                               selectedCategoryName === r.name
                                 ? 'border-orange-400 bg-orange-50'
                                 : 'border-neutral-200 bg-white hover:bg-neutral-50'
                             }`}
                           >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-bold text-neutral-800">{r.name}</span>
-                              <span className="dir-ltr text-xs font-bold text-neutral-700">
-                                {Math.round(r.qty).toLocaleString()}
-                              </span>
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="font-bold text-neutral-800 truncate">{r.name}</span>
+                              <span className={`h-3 w-3 rounded-full ${r.isOther ? 'bg-blue-500' : 'bg-orange-500'}`} />
                             </div>
-                            <div className="mt-2 h-2 w-full bg-neutral-100 rounded-full overflow-hidden">
+                            <div className="text-xs text-neutral-600 flex justify-between">
+                              <span>الوزن:</span>
+                              <span className="dir-ltr font-bold text-neutral-800">{Math.round(r.qty).toLocaleString()}</span>
+                            </div>
+                            <div className="text-xs text-neutral-600 flex justify-between mt-0.5">
+                              <span>الحصة:</span>
+                              <span className="dir-ltr font-bold text-orange-600">{r.pct.toFixed(1)}%</span>
+                            </div>
+                            <div className="mt-1.5 h-1.5 w-full bg-neutral-100 rounded-full overflow-hidden">
                               <div className="h-full bg-gradient-to-r from-orange-400 to-orange-600" style={{ width: `${Math.min(100, Math.max(0, r.pct))}%` }} />
                             </div>
-                            <div className="mt-1 text-xs font-bold text-orange-600 dir-ltr">{r.pct.toFixed(1)}%</div>
                           </button>
                         ))}
                       </div>
