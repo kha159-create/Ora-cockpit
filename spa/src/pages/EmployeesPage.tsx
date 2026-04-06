@@ -1204,6 +1204,20 @@ export default function EmployeesPage() {
     selYear,
   ]);
 
+  const kingDuvetSalesByEmployee = useMemo(() => {
+    const out: Record<string, number> = {};
+    const scoped = empProductsRaw?.periods?.[productsPeriodKey] || {};
+    Object.entries(scoped).forEach(([empKey, block]: [string, any]) => {
+      const norm = normalizeEmpId(empKey);
+      const categories = Array.isArray(block?.categories) ? block.categories : [];
+      const kingAmt = categories
+        .filter((c: any) => canonicalTop6Category(String(c?.name || '')) === 'لحافات كينغ')
+        .reduce((s: number, c: any) => s + safeNum(c?.amt), 0);
+      out[norm] = (out[norm] || 0) + kingAmt;
+    });
+    return out;
+  }, [empProductsRaw, productsPeriodKey]);
+
   useEffect(() => {
     if (period === 'custom' && (!customStart || !customEnd)) {
       const start = new Date();
@@ -1252,6 +1266,7 @@ export default function EmployeesPage() {
       'التارجت': Math.round(emp.target),
       'نسبة التحقيق %': emp.target > 0 ? Number(((emp.sales / emp.target) * 100).toFixed(1)) : 0,
       'المطلوب يومياً': Math.round(emp.dailyReq),
+      'مبيعات لحافات كينغ (ر.س)': Math.round(kingDuvetSalesByEmployee[normalizeEmpId(emp.id)] || 0),
     }));
 
     const ws = XLSX.utils.json_to_sheet(rows);

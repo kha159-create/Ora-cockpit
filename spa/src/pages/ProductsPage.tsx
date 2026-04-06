@@ -244,6 +244,8 @@ export default function ProductsPage() {
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [priceMin, setPriceMin] = useState<string>('');
+  const [priceMax, setPriceMax] = useState<string>('');
   const [catalogOpen, setCatalogOpen] = useState(false);
 
   // State Definitions moved up to avoid hoisting/TDZ issues
@@ -289,7 +291,7 @@ export default function ProductsPage() {
   }, []);
 
   // Reset page to 1 when filters change
-  useEffect(() => { setCurrentPage(1); }, [mode, manager, city, store, search, selectedCategory, metric]);
+  useEffect(() => { setCurrentPage(1); }, [mode, manager, city, store, search, selectedCategory, metric, priceMin, priceMax]);
 
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -421,6 +423,10 @@ export default function ProductsPage() {
     }
 
     const activeStore = store !== 'all' ? store : 'all';
+    const selectedStoreLabel =
+      activeStore === 'all'
+        ? 'كل المعارض'
+        : (storeOptions.find((s) => String(s.id) === String(activeStore))?.name || storesMap[activeStore] || activeStore);
     const storeInScope = (sid: string) => {
       if (!allowedStoreIds.has(sid)) return false;
       if (activeStore !== 'all') return String(sid) === String(activeStore);
@@ -549,6 +555,16 @@ export default function ProductsPage() {
         String(r.dCode || '').toLowerCase().includes(q)
       );
     }
+    const minVal = safeNum(priceMin);
+    const maxVal = safeNum(priceMax);
+    if (priceMin || priceMax) {
+      filteredCatalog = filteredCatalog.filter((r) => {
+        const unitPrice = r.qty > 0 ? (r.amount / r.qty) : 0;
+        if (priceMin && unitPrice < minVal) return false;
+        if (priceMax && unitPrice > maxVal) return false;
+        return true;
+      });
+    }
     filteredCatalog.sort((a, b) => (metric === 'qty' ? b.qty - a.qty : b.amount - a.amount));
     const catalogQtyAll = catalogRows.reduce((s, p) => s + (p.qty || 0), 0);
     const catalogAmountAll = catalogRows.reduce((s, p) => s + (p.amount || 0), 0);
@@ -666,8 +682,9 @@ export default function ProductsPage() {
       storesMap,
       valueAnalysis,
       categorySharePieSlices,
+      selectedStoreLabel,
     };
-  }, [city, effectiveManager, mgmt, mode, productId, raw, search, selectedCategory, store, metric, user?.name, user?.role]);
+  }, [city, effectiveManager, mgmt, mode, priceMax, priceMin, productId, raw, search, selectedCategory, store, metric, user?.name, user?.role]);
 
   const productKpis = useMemo(() => {
     if (!derived || !productId) return null;
@@ -856,6 +873,7 @@ export default function ProductsPage() {
             <p className="text-xs text-neutral-500 mt-1">
               متوسط سعر القطعة يحدد الشريحة — الفترة: <span className="font-semibold text-neutral-700">{derived.dateRangeLabel}</span>
             </p>
+            <p className="text-xs text-neutral-500 mt-1">الفرع: <span className="font-semibold text-neutral-700">{derived.selectedStoreLabel}</span></p>
           </div>
           <div className="space-y-2 overflow-y-auto max-h-[620px] pr-1 custom-scrollbar flex-1">
             <ValueTierGroup
@@ -885,6 +903,7 @@ export default function ProductsPage() {
             <p className="text-xs text-neutral-500 mt-1">
               الفئات المعروضة فقط: لحافات كينغ، لحافات فل، مخدات كينغ، مخدات ستاندر، لباد كينج، لباد فل
             </p>
+            <p className="text-xs text-neutral-500 mt-1">الفرع: <span className="font-semibold text-neutral-700">{derived.selectedStoreLabel}</span></p>
           </div>
           {derived.categorySharePieSlices.length === 0 ? (
             <div className="flex-1 flex items-center justify-center text-neutral-500 text-sm py-16">لا توجد فئات في نطاق الفلترة</div>
@@ -913,6 +932,22 @@ export default function ProductsPage() {
                 placeholder="🔍 الكود القديم، الجديد، أو اسم المنتج"
                 title="بحث بالكود القديم أو الجديد أو اسم المنتج"
               />
+              <input
+                type="number"
+                className="input w-[120px]"
+                value={priceMin}
+                onChange={(e) => setPriceMin(e.target.value)}
+                placeholder="السعر من"
+                min={0}
+              />
+              <input
+                type="number"
+                className="input w-[120px]"
+                value={priceMax}
+                onChange={(e) => setPriceMax(e.target.value)}
+                placeholder="السعر إلى"
+                min={0}
+              />
               <select className="input" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
                 <option value="all">كل الأقسام</option>
                 {derived.catalogCategories.map((c) => (
@@ -935,6 +970,9 @@ export default function ProductsPage() {
           </span>
           <span className="bg-fuchsia-100 text-fuchsia-700 px-3 py-1 rounded-full text-sm font-bold">
             نسبة الفئة بالقيمة: {derived.categorySharePercentByValue.toFixed(1)}%
+          </span>
+          <span className="bg-neutral-100 text-neutral-700 px-3 py-1 rounded-full text-sm font-bold">
+            الفرع: {derived.selectedStoreLabel}
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -1064,7 +1102,7 @@ export default function ProductsPage() {
       </div>
 
       {/* Market basket */}
-      <ChartCard title="🧺 الأنماط الشرائية (Market Basket)">
+      <ChartCard title={`🧺 الأنماط الشرائية (Market Basket) — ${derived.selectedStoreLabel}`}>
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
@@ -1155,7 +1193,7 @@ export default function ProductsPage() {
       </ChartCard>
 
       {/* Missed opportunities */}
-      <ChartCard title="❗ فرص ضائعة (Missed Opportunities)">
+      <ChartCard title={`❗ فرص ضائعة (Missed Opportunities) — ${derived.selectedStoreLabel}`}>
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
