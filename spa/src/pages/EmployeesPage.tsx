@@ -184,6 +184,7 @@ function EmployeeDetailModal({
   productsPeriodKey: 'mtd' | 'yest' | '7d' | '14d' | '30d';
   onClose: () => void;
 }) {
+  const [selectedCategoryName, setSelectedCategoryName] = useState<string | null>(null);
 
   const employeeDailySales = useMemo(() => {
     if (!open || !detail || !empRaw || !rangeStart || !rangeEnd) return [];
@@ -275,6 +276,29 @@ function EmployeeDetailModal({
       pct: totalQty > 0 ? (r.qty / totalQty) * 100 : 0,
     }));
   }, [employeeProductsSnapshot.categories]);
+
+  const selectedCategoryItems = useMemo(() => {
+    if (!selectedCategoryName) return [];
+    const normSel = normCategoryText(selectedCategoryName);
+    const rows = (employeeProductsSnapshot.items || [])
+      .filter((it: any) => {
+        const itemName = String(it?.name || '');
+        const mappedTop6 = canonicalTop6Category(itemName);
+        if (mappedTop6 && mappedTop6 === selectedCategoryName) return true;
+        // Fallback for non-top6 categories: loose text match.
+        const normName = normCategoryText(itemName);
+        return normSel && normName.includes(normSel);
+      })
+      .map((it: any) => ({
+        id: String(it?.id || ''),
+        name: String(it?.name || '-'),
+        qty: safeNum(it?.qty),
+        amt: safeNum(it?.amt),
+      }))
+      .filter((r: any) => r.qty > 0 || r.amt > 0)
+      .sort((a: any, b: any) => b.qty - a.qty);
+    return rows;
+  }, [employeeProductsSnapshot.items, selectedCategoryName]);
 
   const duvetValueBands = useMemo(() => {
     const out = {
@@ -386,15 +410,60 @@ function EmployeeDetailModal({
               {categoryShareRows.length === 0 ? (
                 <div className="text-center text-neutral-400 py-10">لا توجد بيانات فئات ضمن الفترة.</div>
               ) : (
-                <PieChart
-                  vertical
-                  valueDisplay="number"
-                  data={categoryShareRows.map((r: any) => ({
-                    name: r.name,
-                    value: r.qty,
-                    count: r.qty,
-                  }))}
-                />
+                <div className="space-y-3">
+                  <PieChart
+                    vertical
+                    valueDisplay="number"
+                    onSliceClick={(name) => setSelectedCategoryName((prev) => (prev === name ? null : name))}
+                    data={categoryShareRows.map((r: any) => ({
+                      name: r.name,
+                      value: r.qty,
+                      count: r.qty,
+                    }))}
+                  />
+                  {selectedCategoryName && (
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-bold text-sm text-neutral-900">
+                          تفاصيل الفئة: {selectedCategoryName}
+                        </h4>
+                        <button
+                          type="button"
+                          className="text-xs px-2 py-1 rounded border border-neutral-300 bg-white hover:bg-neutral-100"
+                          onClick={() => setSelectedCategoryName(null)}
+                        >
+                          إغلاق
+                        </button>
+                      </div>
+                      {selectedCategoryItems.length === 0 ? (
+                        <div className="text-xs text-neutral-500">لا توجد عناصر مفصلة لهذه الفئة.</div>
+                      ) : (
+                        <div className="max-h-44 overflow-y-auto rounded-lg border border-neutral-200 bg-white">
+                          <table className="min-w-full text-xs">
+                            <thead className="bg-neutral-100 sticky top-0">
+                              <tr>
+                                <th className="th text-right">المنتج</th>
+                                <th className="th text-center">الكمية</th>
+                                <th className="th text-center">القيمة</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedCategoryItems.slice(0, 20).map((it: any) => (
+                                <tr key={`${it.id}-${it.name}`} className="border-t border-neutral-100">
+                                  <td className="td">
+                                    <div className="truncate max-w-[220px]" title={it.name}>{it.name}</div>
+                                  </td>
+                                  <td className="td text-center dir-ltr font-bold">{Math.round(it.qty).toLocaleString()}</td>
+                                  <td className="td text-center dir-ltr">{formatSAR(it.amt)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </ChartCard>
           </div>
