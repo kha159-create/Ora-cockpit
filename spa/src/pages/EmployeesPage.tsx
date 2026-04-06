@@ -343,6 +343,7 @@ function EmployeeDetailModal({
       high: { qty: 0, label: 'قيمة عالية (600+)' },
       total: 0,
     };
+    let rawBandTotal = 0;
     (employeeProductsSnapshot.items || []).forEach((it: any) => {
       const name = String(it?.name || '');
       if (canonicalTop6Category(name) !== 'لحافات كينغ') return;
@@ -350,13 +351,44 @@ function EmployeeDetailModal({
       const amt = safeNum(it?.amt);
       if (qty <= 0) return;
       const avg = amt / qty;
-      out.total += qty;
+      rawBandTotal += qty;
       if (avg <= 300) out.low.qty += qty;
       else if (avg <= 600) out.medium.qty += qty;
       else out.high.qty += qty;
     });
+
+    const kingAgg = (employeeProductsSnapshot.categories || [])
+      .map((c: any) => ({
+        name: String(c?.name || ''),
+        qty: safeNum(c?.qty),
+        amt: safeNum(c?.amt),
+      }))
+      .filter((c: any) => canonicalTop6Category(c.name) === 'لحافات كينغ')
+      .reduce(
+        (acc: any, c: any) => ({ qty: acc.qty + c.qty, amt: acc.amt + c.amt }),
+        { qty: 0, amt: 0 },
+      );
+
+    const kingTotalQty = safeNum(kingAgg.qty);
+    out.total = kingTotalQty;
+    if (kingTotalQty <= 0) return out;
+
+    // Align with trusted aggregate quantity from categories.
+    if (rawBandTotal > 0) {
+      const scale = kingTotalQty / rawBandTotal;
+      out.low.qty *= scale;
+      out.medium.qty *= scale;
+      out.high.qty *= scale;
+      return out;
+    }
+
+    // Fallback when item-level split is missing: classify by category weighted avg.
+    const avg = kingTotalQty > 0 ? safeNum(kingAgg.amt) / kingTotalQty : 0;
+    if (avg <= 300) out.low.qty = kingTotalQty;
+    else if (avg <= 600) out.medium.qty = kingTotalQty;
+    else out.high.qty = kingTotalQty;
     return out;
-  }, [employeeProductsSnapshot.items]);
+  }, [employeeProductsSnapshot.categories, employeeProductsSnapshot.items]);
 
   const dynamicCard = useMemo(() => {
     const end = new Date(rangeEnd + 'T12:00:00');
