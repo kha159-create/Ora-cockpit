@@ -262,14 +262,37 @@ function EmployeeDetailModal({
   }, [open, detail, empProductsRaw, productsPeriodKey]);
 
   const categoryShareRows = useMemo(() => {
-    const rows = (employeeProductsSnapshot.categories || [])
-      .map((c: any) => ({
-        name: String(c?.name || 'غير مصنف'),
-        qty: safeNum(c?.qty),
-        amt: safeNum(c?.amt),
-      }))
-      .filter((r: any) => r.qty > 0 || r.amt > 0)
-      .sort((a: any, b: any) => b.qty - a.qty);
+    const core = ['لحافات كينغ', 'لحافات فل', 'مخدات كينغ', 'مخدات ستاندر', 'لباد كينج', 'لباد فل'];
+    const coreMap = new Map<string, { qty: number; amt: number }>();
+    core.forEach((k) => coreMap.set(k, { qty: 0, amt: 0 }));
+    let otherQty = 0;
+    let otherAmt = 0;
+
+    (employeeProductsSnapshot.categories || []).forEach((c: any) => {
+      const rawName = String(c?.name || 'غير مصنف');
+      const qty = safeNum(c?.qty);
+      const amt = safeNum(c?.amt);
+      const mapped = canonicalTop6Category(rawName);
+      if (mapped) {
+        const prev = coreMap.get(mapped)!;
+        prev.qty += qty;
+        prev.amt += amt;
+        coreMap.set(mapped, prev);
+      } else {
+        otherQty += qty;
+        otherAmt += amt;
+      }
+    });
+
+    const rows = core.map((name) => ({
+      name,
+      qty: coreMap.get(name)?.qty || 0,
+      amt: coreMap.get(name)?.amt || 0,
+      isOther: false,
+    }));
+    if (otherQty > 0 || otherAmt > 0) {
+      rows.push({ name: 'أخرى', qty: otherQty, amt: otherAmt, isOther: true });
+    }
     const totalQty = rows.reduce((s: number, r: any) => s + r.qty, 0);
     return rows.map((r: any) => ({
       ...r,
@@ -284,8 +307,8 @@ function EmployeeDetailModal({
       .filter((it: any) => {
         const itemName = String(it?.name || '');
         const mappedTop6 = canonicalTop6Category(itemName);
+        if (selectedCategoryName === 'أخرى') return mappedTop6 == null;
         if (mappedTop6 && mappedTop6 === selectedCategoryName) return true;
-        // Fallback for non-top6 categories: loose text match.
         const normName = normCategoryText(itemName);
         return normSel && normName.includes(normSel);
       })
@@ -411,16 +434,46 @@ function EmployeeDetailModal({
                 <div className="text-center text-neutral-400 py-10">لا توجد بيانات فئات ضمن الفترة.</div>
               ) : (
                 <div className="space-y-3">
-                  <PieChart
-                    vertical
-                    valueDisplay="number"
-                    onSliceClick={(name) => setSelectedCategoryName((prev) => (prev === name ? null : name))}
-                    data={categoryShareRows.map((r: any) => ({
-                      name: r.name,
-                      value: r.qty,
-                      count: r.qty,
-                    }))}
-                  />
+                  <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {categoryShareRows.map((r: any) => (
+                          <button
+                            type="button"
+                            key={r.name}
+                            onClick={() => setSelectedCategoryName((prev) => (prev === r.name ? null : r.name))}
+                            className={`rounded-xl border p-3 text-right transition ${
+                              selectedCategoryName === r.name
+                                ? 'border-orange-400 bg-orange-50'
+                                : 'border-neutral-200 bg-white hover:bg-neutral-50'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-neutral-800">{r.name}</span>
+                              <span className="dir-ltr text-xs font-bold text-neutral-700">
+                                {Math.round(r.qty).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="mt-2 h-2 w-full bg-neutral-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-orange-400 to-orange-600" style={{ width: `${Math.min(100, Math.max(0, r.pct))}%` }} />
+                            </div>
+                            <div className="mt-1 text-xs font-bold text-orange-600 dir-ltr">{r.pct.toFixed(1)}%</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="lg:sticky lg:top-2">
+                      <PieChart
+                        vertical
+                        valueDisplay="number"
+                        data={categoryShareRows.filter((r: any) => r.qty > 0).map((r: any) => ({
+                          name: r.name,
+                          value: r.qty,
+                          count: r.qty,
+                        }))}
+                      />
+                    </div>
+                  </div>
                   {selectedCategoryName && (
                     <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
                       <div className="flex items-center justify-between mb-2">
