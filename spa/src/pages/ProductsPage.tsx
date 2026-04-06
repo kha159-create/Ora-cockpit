@@ -551,10 +551,9 @@ export default function ProductsPage() {
     const categoryScope = selectedCategory === 'all' ? catalogRows : catalogRows.filter((p) => p.category === selectedCategory);
     const categoryScopeQty = categoryScope.reduce((s, p) => s + (p.qty || 0), 0);
     const categoryScopeAmount = categoryScope.reduce((s, p) => s + (p.amount || 0), 0);
-    const categorySharePercent =
-      metric === 'qty'
-        ? (categoryScopeQty / Math.max(1, catalogQtyAll)) * 100
-        : (categoryScopeAmount / Math.max(1, catalogAmountAll)) * 100;
+    const categorySharePercentByQty = (categoryScopeQty / Math.max(1, catalogQtyAll)) * 100;
+    const categorySharePercentByValue = (categoryScopeAmount / Math.max(1, catalogAmountAll)) * 100;
+    const categorySharePercent = metric === 'qty' ? categorySharePercentByQty : categorySharePercentByValue;
 
     // ===== Market basket =====
     const basket = activeStore === 'all' ? (marketBasketAll['all'] || []) : (marketBasketAll[activeStore] || []);
@@ -651,6 +650,8 @@ export default function ProductsPage() {
       storeOptions,
       allowedStoreIds,
       totals: { totalQty, totalAmt, totalStores, productsCount: filteredCatalog.length },
+      categorySharePercentByQty,
+      categorySharePercentByValue,
       categorySharePercent,
       catalogCategories: Object.keys(catalog).sort((a, b) => a.localeCompare(b, 'ar')),
       filteredCatalog,
@@ -927,6 +928,9 @@ export default function ProductsPage() {
           <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-bold">إجمالي القيمة: {formatSAR(derived.filteredCatalog.reduce((s: number, p: any) => s + (p.amount || 0), 0))}</span>
           <span className="bg-violet-100 text-violet-700 px-3 py-1 rounded-full text-sm font-bold">
             نسبة الفئة ({metric === 'qty' ? 'بالكمية' : 'بالقيمة'}): {derived.categorySharePercent.toFixed(1)}%
+          </span>
+          <span className="bg-fuchsia-100 text-fuchsia-700 px-3 py-1 rounded-full text-sm font-bold">
+            نسبة الفئة بالقيمة: {derived.categorySharePercentByValue.toFixed(1)}%
           </span>
         </div>
         <div className="overflow-x-auto">
