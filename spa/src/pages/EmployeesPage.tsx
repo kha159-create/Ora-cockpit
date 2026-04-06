@@ -115,6 +115,16 @@ function resolveEmployeeName(rawId: string, fallbackName: string, employeeNames:
   return fallbackName || id;
 }
 
+function normalizeEmpId(raw: unknown) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  const preDash = s.includes('-') ? s.split('-')[0].trim() : s;
+  const digitsOnly = preDash.replace(/[^\d]/g, '');
+  if (!digitsOnly) return preDash;
+  const asNum = String(parseInt(digitsOnly, 10));
+  return asNum === 'NaN' ? digitsOnly : asNum;
+}
+
 function SortableTh({
   label,
   sortKey,
@@ -244,11 +254,23 @@ function EmployeeDetailModal({
     if (!open || !detail || !empProductsRaw?.periods) return { categories: [], items: [] };
     const periods = empProductsRaw.periods || {};
     const scoped = periods[productsPeriodKey] || periods.mtd || {};
-    const empBlock = scoped?.[String(detail.id)] || scoped?.[String(detail.id).padStart(4, '0')] || null;
+    const idRaw = String(detail.id || '').trim();
+    const idNorm = normalizeEmpId(idRaw);
+    const empBlock =
+      scoped?.[idRaw] ||
+      scoped?.[idRaw.padStart(4, '0')] ||
+      scoped?.[idNorm] ||
+      scoped?.[idNorm.padStart(4, '0')] ||
+      Object.entries(scoped).find(([k]) => normalizeEmpId(k) === idNorm)?.[1] ||
+      null;
     const categories = Array.isArray(empBlock?.categories) ? empBlock.categories : [];
     const items = Array.isArray(empBlock?.items) ? empBlock.items : [];
     return { categories, items };
   }, [open, detail, empProductsRaw, productsPeriodKey]);
+
+  useEffect(() => {
+    setSelectedCategoryName(null);
+  }, [detail?.id, productsPeriodKey]);
 
   const categoryShareRows = useMemo(() => {
     const core = ['لحافات كينغ', 'لحافات فل', 'مخدات كينغ', 'مخدات ستاندر', 'لباد كينج', 'لباد فل'];
@@ -453,7 +475,7 @@ function EmployeeDetailModal({
                               </tr>
                             </thead>
                             <tbody>
-                              {selectedCategoryItems.slice(0, 20).map((it: any) => (
+                              {selectedCategoryItems.map((it: any) => (
                                 <tr key={`${it.id}-${it.name}`} className="border-t border-neutral-100">
                                   <td className="td">
                                     <div className="truncate max-w-[220px]" title={it.name}>{it.name}</div>
@@ -1071,8 +1093,32 @@ export default function EmployeesPage() {
   }, [derived.employees, selectedEmployeeId]);
 
   const targetEnabled = period === 'mtd' || period === 'month' || period === 'custom';
-  const productsPeriodKey: 'mtd' | 'yest' | '7d' | '14d' | '30d' =
-    period === 'yesterday' ? 'yest' : period === 'today' ? 'yest' : period === 'custom' ? 'mtd' : period === 'month' ? 'mtd' : period;
+  const productsPeriodKey: 'mtd' | 'yest' | '7d' | '14d' | '30d' = useMemo(() => {
+    if (period === 'yesterday' || period === 'today') return 'yest';
+    if (period === 'mtd') return 'mtd';
+    if (period === 'month') {
+      if (selMonth === 0) return '30d';
+      const dim = new Date(selYear, selMonth, 0).getDate();
+      if (dim <= 7) return '7d';
+      if (dim <= 14) return '14d';
+      return '30d';
+    }
+    if (period === 'custom') {
+      const s = derived.range?.start;
+      const e = derived.range?.end;
+      if (s && e) {
+        const ds = new Date(`${s}T00:00:00`);
+        const de = new Date(`${e}T00:00:00`);
+        const span = Math.max(1, Math.floor((de.getTime() - ds.getTime()) / 86400000) + 1);
+        if (span <= 1) return 'yest';
+        if (span <= 7) return '7d';
+        if (span <= 14) return '14d';
+        if (span <= 30) return '30d';
+      }
+      return 'mtd';
+    }
+    return 'mtd';
+  }, [derived.range?.end, derived.range?.start, period, selMonth, selYear]);
   const periodLabel = useMemo(() => {
     if (period === 'today') return `اليوم (${derived.labels.todayStr})`;
     if (period === 'yesterday') return `أمس (${derived.labels.yesterdayStr})`;
