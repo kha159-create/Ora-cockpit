@@ -4,9 +4,24 @@ import { useLiveSalesData } from '../../hooks/useLiveSalesData';
 import { loadD365SalesRange } from '../../services/d365Live';
 import { getCurrentUser } from '../../auth/storage';
 
-function KPICard({ title, value, format, icon, trendValue, className }: any) {
+function KPICard({ title, value, format, icon, trendValue, className, onClick }: any) {
     return (
-        <div className={`bg-white rounded-2xl p-4 shadow-sm border border-neutral-100 flex flex-col justify-between h-full ${className}`}>
+        <div
+            role={onClick ? 'button' : undefined}
+            tabIndex={onClick ? 0 : undefined}
+            onClick={onClick}
+            onKeyDown={
+                onClick
+                    ? (e: React.KeyboardEvent) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            onClick();
+                        }
+                    }
+                    : undefined
+            }
+            className={`bg-white rounded-2xl p-4 shadow-sm border border-neutral-100 flex flex-col justify-between h-full ${onClick ? 'cursor-pointer hover:border-orange-300 hover:shadow-md transition-all' : ''} ${className || ''}`}
+        >
             <div className="flex justify-between items-start mb-2">
                 <div className="text-neutral-500 text-sm font-medium">{title}</div>
                 <div className="text-orange-100 p-1.5 bg-orange-50 rounded-lg">
@@ -51,6 +66,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     } | null>(null);
     const [liveRefreshing, setLiveRefreshing] = useState(false);
     const [liveRefreshTick, setLiveRefreshTick] = useState(0);
+    const [visitorsHourlyOpen, setVisitorsHourlyOpen] = useState(false);
 
     const isAdminOrAuditor = checkAdmin;
 
@@ -207,6 +223,33 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
         visitors: enhancedStores.reduce((acc: number, s: any) => acc + (s.visitors || 0), 0),
     }), [enhancedStores]);
 
+    /** زوار حسب الساعة — نفس نطاق مدير المنطقة في المودال (مثل HourlyPage للزوار) */
+    const visitorsByHour = useMemo(() => {
+        const rows = raw?.visitors_hourly || [];
+        const meta = raw?.store_meta || {};
+        const user = getCurrentUser();
+        const effMgr = isAdminOrAuditor ? manager : (user?.name || manager);
+        const allowed = new Set<string>();
+        if (effMgr === 'all') {
+            Object.keys(meta).forEach((sid) => allowed.add(sid));
+        } else {
+            Object.keys(meta).forEach((sid) => {
+                if (String(meta[sid]?.manager || '') === effMgr) allowed.add(sid);
+            });
+        }
+        const hours = Array.from({ length: 24 }, (_, i) => ({ hour: i, count: 0 }));
+        (rows as any[]).forEach((r: any[]) => {
+            const dt = String(r[0] || '').trim().substring(0, 10);
+            if (dt !== targetDateStr) return;
+            const sid = String(r[1] || '');
+            if (!allowed.has(sid)) return;
+            const h = Number(r[2]);
+            if (!Number.isInteger(h) || h < 0 || h > 23) return;
+            hours[h].count += Number(r[3]) || 0;
+        });
+        return hours;
+    }, [raw, manager, targetDateStr, isAdminOrAuditor]);
+
     // --- Normal Shift Totals (global + per-store) ---
     // ش1: 09:30 - 15:30
     // ش2: 15:30 - 24:00
@@ -290,9 +333,16 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
         return { globalShifts: gs, storeShifts: ss };
     }, [raw, manager, dateMode, d365Daily]);
 
+    React.useEffect(() => {
+        if (!isOpen) setVisitorsHourlyOpen(false);
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
+    const hourlyRows = visitorsByHour.filter((h) => h.count > 0);
+
     return (
+        <>
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm" onClick={onClose}>
             <div
                 className="bg-neutral-50 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
@@ -378,12 +428,21 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                 trendValue={todayTotals.trans > 0 ? `معدل: ${formatSAR(todayTotals.sales / todayTotals.trans)}` : undefined}
                             />
                             <KPICard
-                                title="نسبة التحويل"
-                                value={(todayTotals.visitors || 0) > 0 ? ((todayTotals.trans / (todayTotals.visitors || 1)) * 100) : 0}
-                                format={(v: number) => `${v.toFixed(1)}%`}
+                                title="الزوار"
+                                value={todayTotals.visitors || 0}
+                                format={(v: number) => Math.round(v).toLocaleString()}
                                 icon={<VisitorsIcon className="text-orange-600" />}
-                                trendValue={`زوار: ${(todayTotals.visitors || 0).toLocaleString()}`}
+                                trendValue="اضغط للعرض بالساعة"
+                                onClick={() => setVisitorsHourlyOpen(true)}
                             />
+                            <div className="col-span-2">
+                                <KPICard
+                                    title="نسبة التحويل"
+                                    value={(todayTotals.visitors || 0) > 0 ? ((todayTotals.trans / (todayTotals.visitors || 1)) * 100) : 0}
+                                    format={(v: number) => `${v.toFixed(1)}%`}
+                                    icon={<VisitorsIcon className="text-orange-600" />}
+                                />
+                            </div>
                         </div>
                     </div>
 
@@ -645,5 +704,52 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                 </div>
             </div >
         </div >
+
+        {visitorsHourlyOpen && (
+            <div
+                className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40"
+                onClick={() => setVisitorsHourlyOpen(false)}
+                role="presentation"
+            >
+                <div
+                    className="bg-white rounded-xl shadow-xl w-full max-w-sm p-4 border border-neutral-200"
+                    onClick={(e) => e.stopPropagation()}
+                    role="dialog"
+                    aria-label="زوار بالساعة"
+                >
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                        <h3 className="font-bold text-neutral-900 text-sm">
+                            {dateMode === 'today' ? 'زوار اليوم' : 'زوار الأمس'} — بالساعة
+                        </h3>
+                        <button
+                            type="button"
+                            className="text-neutral-500 hover:text-neutral-800 text-lg leading-none px-2"
+                            onClick={() => setVisitorsHourlyOpen(false)}
+                            aria-label="إغلاق"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <p className="text-xs text-neutral-500 mb-3 font-mono dir-ltr">{targetDateStr}</p>
+                    <div className="max-h-64 overflow-y-auto space-y-1 text-sm">
+                        {hourlyRows.length === 0 ? (
+                            <p className="text-center text-neutral-500 text-xs py-6">لا توجد بيانات بالساعة</p>
+                        ) : (
+                            hourlyRows.map(({ hour, count }) => (
+                                <div key={hour} className="flex justify-between gap-2 border-b border-neutral-100 py-1.5">
+                                    <span className="text-neutral-600 tabular-nums">
+                                        الساعة {String(hour).padStart(2, '0')}
+                                    </span>
+                                    <span className="font-bold text-neutral-900 dir-ltr tabular-nums">
+                                        {Math.round(count).toLocaleString()}
+                                    </span>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
     );
 };
