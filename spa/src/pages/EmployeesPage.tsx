@@ -336,29 +336,6 @@ function EmployeeDetailModal({
     return rows;
   }, [employeeProductsSnapshot.items, selectedCategoryName]);
 
-  const selectedCategoryTotal = useMemo(() => {
-    if (!selectedCategoryName) return { qty: 0, amt: 0 };
-    const hit = categoryShareRows.find((r: any) => r.name === selectedCategoryName);
-    return { qty: safeNum(hit?.qty), amt: safeNum(hit?.amt) };
-  }, [categoryShareRows, selectedCategoryName]);
-
-  const selectedCategoryItemsWithRemainder = useMemo(() => {
-    if (!selectedCategoryName) return [];
-    const base = [...selectedCategoryItems];
-    const knownQty = base.reduce((s: number, it: any) => s + safeNum(it?.qty), 0);
-    const knownAmt = base.reduce((s: number, it: any) => s + safeNum(it?.amt), 0);
-    const remainQty = Math.max(0, selectedCategoryTotal.qty - knownQty);
-    const remainAmt = Math.max(0, selectedCategoryTotal.amt - knownAmt);
-    if (remainQty > 0 || remainAmt > 0) {
-      base.push({
-        id: '__other__',
-        name: 'عناصر أخرى',
-        qty: remainQty,
-        amt: remainAmt,
-      });
-    }
-    return base;
-  }, [selectedCategoryItems, selectedCategoryName, selectedCategoryTotal.amt, selectedCategoryTotal.qty]);
 
   const duvetValueBands = useMemo(() => {
     const out = {
@@ -518,7 +495,7 @@ function EmployeeDetailModal({
                           إغلاق
                         </button>
                       </div>
-                      {selectedCategoryItemsWithRemainder.length === 0 ? (
+                      {selectedCategoryItems.length === 0 ? (
                         <div className="text-xs text-neutral-500">لا توجد عناصر مفصلة لهذه الفئة.</div>
                       ) : (
                         <div className="max-h-44 overflow-y-auto rounded-lg border border-neutral-200 bg-white">
@@ -531,7 +508,7 @@ function EmployeeDetailModal({
                               </tr>
                             </thead>
                             <tbody>
-                              {selectedCategoryItemsWithRemainder.map((it: any) => (
+                              {selectedCategoryItems.map((it: any) => (
                                 <tr key={`${it.id}-${it.name}`} className="border-t border-neutral-100">
                                   <td className="td">
                                     <div className="truncate max-w-[220px]" title={it.name}>{it.name}</div>
