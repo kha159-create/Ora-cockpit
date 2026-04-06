@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { loadEmployeeProductsData, loadEmployeesData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { ChartCard, KPICard, PieChart } from '../components/DashboardComponents';
+import { ChartCard, KPICard } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, PremiumTargetIcon, VisitorsIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
@@ -249,32 +249,33 @@ function EmployeeDetailModal({
     return { categories, items };
   }, [open, detail, empProductsRaw, productsPeriodKey]);
 
-  const top6Categories = useMemo(() => {
-    const names = ['لحافات كينغ', 'لحافات فل', 'مخدات كينغ', 'مخدات ستاندر', 'لباد كينج', 'لباد فل'];
-    const agg = new Map<string, { qty: number; amt: number }>();
-    names.forEach((n) => agg.set(n, { qty: 0, amt: 0 }));
-    (employeeProductsSnapshot.categories || []).forEach((c: any) => {
-      const can = canonicalTop6Category(String(c?.name || ''));
-      if (!can) return;
-      const r = agg.get(can)!;
-      r.qty += safeNum(c?.qty);
-      r.amt += safeNum(c?.amt);
-      agg.set(can, r);
-    });
-    return names.map((name) => ({ name, qty: agg.get(name)!.qty, amt: agg.get(name)!.amt }));
+  const categoryShareRows = useMemo(() => {
+    const rows = (employeeProductsSnapshot.categories || [])
+      .map((c: any) => ({
+        name: String(c?.name || 'غير مصنف'),
+        qty: safeNum(c?.qty),
+        amt: safeNum(c?.amt),
+      }))
+      .filter((r: any) => r.qty > 0 || r.amt > 0)
+      .sort((a: any, b: any) => b.qty - a.qty);
+    const totalQty = rows.reduce((s: number, r: any) => s + r.qty, 0);
+    return rows.map((r: any) => ({
+      ...r,
+      pct: totalQty > 0 ? (r.qty / totalQty) * 100 : 0,
+    }));
   }, [employeeProductsSnapshot.categories]);
 
   const duvetValueBands = useMemo(() => {
     const out = {
-      low: { qty: 0, label: 'Low Value (99-300)' },
-      medium: { qty: 0, label: 'Medium Value (301-600)' },
-      high: { qty: 0, label: 'High Value (600+)' },
+      low: { qty: 0, label: 'قيمة منخفضة (99-300)' },
+      medium: { qty: 0, label: 'قيمة متوسطة (301-600)' },
+      high: { qty: 0, label: 'قيمة عالية (600+)' },
       total: 0,
     };
     (employeeProductsSnapshot.items || []).forEach((it: any) => {
       const name = String(it?.name || '');
       const can = canonicalTop6Category(name);
-      if (can !== 'لحافات كينغ' && can !== 'لحافات فل') return;
+      if (can !== 'لحافات كينغ') return;
       const qty = safeNum(it?.qty);
       const amt = safeNum(it?.amt);
       if (qty <= 0) return;
@@ -362,17 +363,30 @@ function EmployeeDetailModal({
 
         <div className="mt-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <ChartCard title="Sales by Product Category" className="min-h-[340px]">
-              {top6Categories.every((c) => c.amt <= 0) ? (
+            <ChartCard title="نسب الفئات (العدد والنسبة)" className="min-h-[340px]">
+              {categoryShareRows.length === 0 ? (
                 <div className="text-center text-neutral-400 py-10">لا توجد بيانات فئات ضمن الفترة.</div>
               ) : (
-                <PieChart
-                  data={top6Categories.filter((c) => c.amt > 0).map((c) => ({ name: c.name, value: c.amt, count: c.qty }))}
-                />
+                <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+                  {categoryShareRows.map((r: any) => (
+                    <div key={r.name} className="rounded-lg border border-neutral-200 p-2.5 bg-white">
+                      <div className="flex items-center justify-between gap-2 text-sm">
+                        <span className="font-semibold text-neutral-800 truncate" title={r.name}>{r.name}</span>
+                        <span className="dir-ltr text-xs font-bold text-neutral-700 whitespace-nowrap">
+                          {Math.round(r.qty).toLocaleString()} ({r.pct.toFixed(1)}%)
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-2 w-full bg-neutral-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-orange-400 to-orange-600" style={{ width: `${Math.min(100, Math.max(0, r.pct))}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </ChartCard>
 
-            <ChartCard title="Duvet Sales Analysis by Value" className="min-h-[340px]">
+            <ChartCard title="تحليل الألحفة الكينج حسب القيمة" className="min-h-[340px]">
+              <div className="text-xs text-neutral-500 mb-2">التصنيف خاص بـ لحافات كينغ فقط</div>
               <div className="space-y-3">
                 {[duvetValueBands.low, duvetValueBands.medium, duvetValueBands.high].map((b) => {
                   const pct = duvetValueBands.total > 0 ? (b.qty / duvetValueBands.total) * 100 : 0;
@@ -380,7 +394,7 @@ function EmployeeDetailModal({
                     <div key={b.label}>
                       <div className="flex justify-between text-xs text-neutral-600 mb-1">
                         <span>{b.label}</span>
-                        <span className="dir-ltr">{Math.round(b.qty)} units ({pct.toFixed(1)}%)</span>
+                        <span className="dir-ltr">{Math.round(b.qty)} وحدة ({pct.toFixed(1)}%)</span>
                       </div>
                       <div className="w-full bg-neutral-200 rounded-full h-2.5 overflow-hidden">
                         <div className="h-full bg-gradient-to-r from-sky-400 to-sky-600" style={{ width: `${Math.max(0, pct)}%` }} />
@@ -389,14 +403,14 @@ function EmployeeDetailModal({
                   );
                 })}
                 <div className="pt-3 border-t border-neutral-200 text-sm space-y-1">
-                  <div className="flex justify-between"><span className="font-semibold text-neutral-600">Monthly Duvet Target</span><span className="font-bold">0</span></div>
-                  <div className="flex justify-between"><span className="font-semibold text-neutral-600">Sold (MTD)</span><span className="font-bold">{Math.round(duvetValueBands.total)}</span></div>
-                  <div className="flex justify-between"><span className="font-semibold text-emerald-700">Achievement (MTD)</span><span className="font-extrabold text-emerald-600">0.0%</span></div>
+                  <div className="flex justify-between"><span className="font-semibold text-neutral-600">هدف ألحفة كينغ الشهري</span><span className="font-bold">0</span></div>
+                  <div className="flex justify-between"><span className="font-semibold text-neutral-600">المباع (MTD)</span><span className="font-bold">{Math.round(duvetValueBands.total)}</span></div>
+                  <div className="flex justify-between"><span className="font-semibold text-emerald-700">نسبة التحقيق (MTD)</span><span className="font-extrabold text-emerald-600">0.0%</span></div>
                 </div>
               </div>
             </ChartCard>
 
-            <ChartCard title="Dynamic Daily Target" className="min-h-[340px]">
+            <ChartCard title="الهدف اليومي الديناميكي" className="min-h-[340px]">
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between"><span>Sales This Month (MTD)</span><span className="dir-ltr font-semibold">{formatSAR(dynamicCard.salesMtd)}</span></div>
                 <div className="flex justify-between"><span>Monthly Target</span><span className="dir-ltr font-semibold">{formatSAR(dynamicCard.monthlyTarget)}</span></div>
