@@ -148,7 +148,10 @@ function dailyNeededForCurrentPeriod(bucketEnd: string, lastAvailable: string, p
   remainingDays: number;
   dailyNeeded: number;
 } {
-  const remainingDays = Math.max(1, daysInclusiveYMD(lastAvailable, bucketEnd));
+  const d = new Date(lastAvailable + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  const todayYmd = toYMD(d);
+  const remainingDays = Math.max(1, daysInclusiveYMD(todayYmd, bucketEnd));
   return {
     remainingDays,
     dailyNeeded: Math.max(0, periodShortfall) / remainingDays,
@@ -1007,13 +1010,27 @@ export default function TargetSplitPage() {
 
   const insights = useMemo(() => {
     if (!storeRows.length) return null;
-    const weak = storeRows.filter((r) => r.monthTarget > 0 && r.monthAch < 85).slice(0, 5);
-    const strong = storeRows.filter((r) => r.monthTarget > 0 && r.monthAch >= 100).slice(0, 5);
-    const totalT = storeRows.reduce((s, r) => s + r.monthTarget, 0);
-    const totalS = storeRows.reduce((s, r) => s + r.monthSales, 0);
+    const withSplitGap = storeRows.map((r) => {
+      const allBuckets = r.bucketBlocks.flatMap((b) =>
+        b.buckets.map(({ bucket, metrics }) => ({ bucket, metrics })),
+      );
+      const active =
+        allBuckets.find((x) => x.bucket.start <= lastAvailableInMonth && x.bucket.end > lastAvailableInMonth) ||
+        allBuckets.find((x) => x.bucket.start > lastAvailableInMonth) ||
+        allBuckets[allBuckets.length - 1];
+      const periodTarget = active ? periodExpectedTarget(active.metrics, granularity) : r.monthTarget;
+      const periodSales = active ? active.metrics.sales : r.monthSales;
+      const periodAch = periodTarget > 0 ? (periodSales / periodTarget) * 100 : 0;
+      const periodGap = Math.max(0, periodTarget - periodSales);
+      return { ...r, periodTarget, periodSales, periodAch, periodGap };
+    });
+    const weak = withSplitGap.filter((r) => r.periodTarget > 0 && r.periodAch < 85).slice(0, 5);
+    const strong = withSplitGap.filter((r) => r.periodTarget > 0 && r.periodAch >= 100).slice(0, 5);
+    const totalT = withSplitGap.reduce((s, r) => s + r.periodTarget, 0);
+    const totalS = withSplitGap.reduce((s, r) => s + r.periodSales, 0);
     const w = totalT > 0 ? (totalS / totalT) * 100 : 0;
     return { weak, strong, totalT, totalS, weighted: w };
-  }, [storeRows]);
+  }, [granularity, lastAvailableInMonth, storeRows]);
 
   const toggleStore = (sid: string) => {
     setExpandedStores((prev) => {
@@ -1066,11 +1083,11 @@ export default function TargetSplitPage() {
           {insights && (
             <div className="flex flex-wrap gap-3">
               <div className="rounded-xl bg-white/10 px-4 py-3 backdrop-blur-sm border border-white/10">
-                <div className="text-[10px] text-slate-300">تحقيق مرجّح (الشهر)</div>
+                <div className="text-[10px] text-slate-300">تحقيق مرجّح (فترة التقسيم)</div>
                 <div className="text-2xl font-black text-emerald-300">{insights.weighted.toFixed(1)}%</div>
               </div>
               <div className="rounded-xl bg-white/10 px-4 py-3 backdrop-blur-sm border border-white/10">
-                <div className="text-[10px] text-slate-300">فجوة على مستوى العرض</div>
+                <div className="text-[10px] text-slate-300">فجوة على مستوى العرض (فترة التقسيم)</div>
                 <div className="text-lg font-bold text-amber-200">
                   {formatSAR(Math.max(0, insights.totalT - insights.totalS))}
                 </div>
@@ -1177,7 +1194,7 @@ export default function TargetSplitPage() {
           <ul className="mt-2 text-sm text-amber-950/90 list-disc list-inside space-y-1">
             {insights.weak.map((r) => (
               <li key={r.sid}>
-                <span className="font-semibold">{r.name}</span>: {r.monthAch.toFixed(1)}% — فجوة {formatSAR(Math.max(0, r.gap))}
+                <span className="font-semibold">{r.name}</span>: {r.periodAch.toFixed(1)}% — فجوة {formatSAR(r.periodGap)}
               </li>
             ))}
           </ul>
@@ -1371,26 +1388,17 @@ export default function TargetSplitPage() {
                                               bucket.end > lastAvailableInMonth && (
                                                 <tr className="bg-sky-50/90 border-b border-sky-100">
                                                   <td colSpan={7} className="py-2 px-3 text-[11px] text-sky-900 leading-relaxed">
-                                                    مطلوب يومياً لإغلاق تارجت الشهر:{' '}
-                                                    <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
                                                     {(() => {
-                                                      const p = dailyNeededForCurrentPeriod(
-                                                        bucket.end,
-                                                        lastAvailableInMonth,
-                                                        Math.max(0, periodExpectedTarget(metrics, granularity) - metrics.sales),
-                                                      );
+                                                      const shortfall = Math.max(0, periodExpectedTarget(metrics, granularity) - metrics.sales);
+                                                      const p = dailyNeededForCurrentPeriod(bucket.end, lastAvailableInMonth, shortfall);
                                                       return (
-                                                        <>
-                                                          {' · '}
+                                                        <span className="inline-block rounded-lg bg-white/80 px-2 py-1 font-extrabold text-sky-900 shadow-sm shadow-sky-200">
                                                           متبقي من تارجت الفترة{' '}
-                                                          <span className="dir-ltr inline-block font-bold">
-                                                            {formatSAR(Math.max(0, periodExpectedTarget(metrics, granularity) - metrics.sales))}
-                                                          </span>
+                                                          <span className="dir-ltr inline-block">{formatSAR(shortfall)}</span>
                                                           {' / '}
                                                           باقي {p.remainingDays} أيام ={' '}
-                                                          <span className="dir-ltr inline-block font-bold">{formatSAR(p.dailyNeeded)}</span>{' '}
-                                                          يومياً
-                                                        </>
+                                                          <span className="dir-ltr inline-block">{formatSAR(p.dailyNeeded)}</span> يومياً
+                                                        </span>
                                                       );
                                                     })()}
                                                   </td>
@@ -1402,11 +1410,9 @@ export default function TargetSplitPage() {
                                               <tr className="bg-rose-50/90 border-b border-rose-100">
                                                 <td colSpan={7} className="py-2 px-3 text-[11px] text-rose-900 leading-relaxed">
                                                   <span className="font-semibold">لم يُحقَّق كامل التارجت:</span>{' '}
-                                                  <span className="dir-ltr inline-block">متبقي للفترة {formatSAR(metrics.shortfallPeriod)}</span>
-                                                  {' · '}
-                                                  <span className="text-neutral-700">
-                                                    مطلوب يومياً لإغلاق تارجت الشهر:{' '}
-                                                    <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
+                                                  <span className="inline-block rounded-lg bg-white/80 px-2 py-1 font-extrabold text-rose-900 shadow-sm shadow-rose-200">
+                                                    متبقي من تارجت الفترة{' '}
+                                                    <span className="dir-ltr inline-block">{formatSAR(metrics.shortfallPeriod)}</span>
                                                   </span>
                                                 </td>
                                               </tr>
@@ -1526,26 +1532,17 @@ export default function TargetSplitPage() {
                                                           bucket.end > lastAvailableInMonth && (
                                                             <tr className="bg-sky-50/90 border-b border-sky-100">
                                                               <td colSpan={8} className="py-2 px-3 text-[10px] text-sky-900 leading-relaxed">
-                                                                مطلوب يومياً لإغلاق تارجت الشهر:{' '}
-                                                                <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
                                                                 {(() => {
-                                                                  const p = dailyNeededForCurrentPeriod(
-                                                                    bucket.end,
-                                                                    lastAvailableInMonth,
-                                                                    Math.max(0, periodExpectedTarget(metrics, granularity) - metrics.sales),
-                                                                  );
+                                                                  const shortfall = Math.max(0, periodExpectedTarget(metrics, granularity) - metrics.sales);
+                                                                  const p = dailyNeededForCurrentPeriod(bucket.end, lastAvailableInMonth, shortfall);
                                                                   return (
-                                                                    <>
-                                                                      {' · '}
+                                                                    <span className="inline-block rounded-lg bg-white/80 px-2 py-1 font-extrabold text-sky-900 shadow-sm shadow-sky-200">
                                                                       متبقي من تارجت الفترة{' '}
-                                                                      <span className="dir-ltr inline-block font-bold">
-                                                                        {formatSAR(Math.max(0, periodExpectedTarget(metrics, granularity) - metrics.sales))}
-                                                                      </span>
+                                                                      <span className="dir-ltr inline-block">{formatSAR(shortfall)}</span>
                                                                       {' / '}
                                                                       باقي {p.remainingDays} أيام ={' '}
-                                                                      <span className="dir-ltr inline-block font-bold">{formatSAR(p.dailyNeeded)}</span>{' '}
-                                                                      يومياً
-                                                                    </>
+                                                                      <span className="dir-ltr inline-block">{formatSAR(p.dailyNeeded)}</span> يومياً
+                                                                    </span>
                                                                   );
                                                                 })()}
                                                               </td>
@@ -1557,11 +1554,9 @@ export default function TargetSplitPage() {
                                                           <tr className="bg-rose-50/90 border-b border-rose-100">
                                                             <td colSpan={8} className="py-2 px-3 text-[10px] text-rose-900 leading-relaxed">
                                                               <span className="font-semibold">لم يُحقَّق كامل التارجت:</span>{' '}
-                                                              <span className="dir-ltr inline-block">متبقي للفترة {formatSAR(metrics.shortfallPeriod)}</span>
-                                                              {' · '}
-                                                              <span className="text-neutral-700">
-                                                                مطلوب يومياً لإغلاق تارجت الشهر:{' '}
-                                                                <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
+                                                              <span className="inline-block rounded-lg bg-white/80 px-2 py-1 font-extrabold text-rose-900 shadow-sm shadow-rose-200">
+                                                                متبقي من تارجت الفترة{' '}
+                                                                <span className="dir-ltr inline-block">{formatSAR(metrics.shortfallPeriod)}</span>
                                                               </span>
                                                             </td>
                                                           </tr>
