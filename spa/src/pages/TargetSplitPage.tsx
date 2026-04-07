@@ -4,6 +4,7 @@ import { loadEmployeesData, loadManagementData } from '../services/upstreamData'
 import { getCurrentUser } from '../auth/storage';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { sumEmployeeTargetForDateRange, sumManagementTargetsForDateRange } from '../utils/march2026Targets';
+import { generateTargetSplitStorePDF } from '../services/pdf/pdfService';
 import {
   buildBucketsForDateRange,
   daysInMonth,
@@ -971,6 +972,39 @@ export default function TargetSplitPage() {
     effectiveManager,
   ]);
 
+  const exportStorePDF = useCallback(
+    async (row: (typeof storeRows)[number]) => {
+      const granularityLabel = granularity === 'day' ? 'يومي' : granularity === '10' ? 'كل 10 أيام' : 'كل 15 يوماً';
+      const monthLabel = `${MONTHS_AR[selMonth - 1]}-${selYear}`;
+      await generateTargetSplitStorePDF(
+        {
+          sid: row.sid,
+          name: row.name,
+          manager: row.manager,
+          monthTarget: row.monthTarget,
+          monthSales: row.monthSales,
+          monthAch: row.monthAch,
+          bucketBlocks: row.bucketBlocks.map((b) => ({
+            label: b.label,
+            buckets: b.buckets.map(({ bucket, metrics }) => ({ label: bucket.label, metrics })),
+          })),
+          employees: row.employees.map((e) => ({
+            id: e.id,
+            name: e.name,
+            monthTarget: e.monthTarget,
+            monthSales: e.monthSales,
+            bucketBlocks: e.bucketBlocks.map((b) => ({
+              label: b.label,
+              buckets: b.buckets.map(({ bucket, metrics }) => ({ label: bucket.label, metrics })),
+            })),
+          })),
+        },
+        { monthLabel, granularityLabel, lastAvailableInMonth },
+      );
+    },
+    [granularity, lastAvailableInMonth, selMonth, selYear, storeRows],
+  );
+
   const insights = useMemo(() => {
     if (!storeRows.length) return null;
     const weak = storeRows.filter((r) => r.monthTarget > 0 && r.monthAch < 85).slice(0, 5);
@@ -1237,7 +1271,20 @@ export default function TargetSplitPage() {
                     >
                       <td className="td text-center text-neutral-400">{open ? '▼' : '◀'}</td>
                       <td className="td font-bold text-neutral-900">
-                        {row.name}
+                        <div className="flex items-start justify-between gap-2">
+                          <span>{row.name}</span>
+                          <button
+                            type="button"
+                            className="shrink-0 rounded-md bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-rose-700"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await exportStorePDF(row);
+                            }}
+                            title="تصدير PDF"
+                          >
+                            PDF
+                          </button>
+                        </div>
                         <span className="block text-xs font-normal text-neutral-500">{row.manager}</span>
                       </td>
                       <td className="td text-center dir-ltr">{formatSAR(row.monthTarget)}</td>

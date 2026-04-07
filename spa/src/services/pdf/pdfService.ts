@@ -786,3 +786,136 @@ export const generateProductSummaryPDF = async (
     });
     doc.save(`تحليل_المنتجات_${dateRange.start}_${dateRange.end}.pdf`);
 };
+
+type TargetSplitPdfMetrics = {
+    target: number;
+    sales: number;
+    achievement: number;
+    avgInv: number;
+    conversion?: number;
+    customerValue: number;
+    contributionPct?: number;
+    items?: number;
+    dailyTargetDynamic?: number;
+};
+
+type TargetSplitPdfBucket = {
+    label: string;
+    metrics: TargetSplitPdfMetrics;
+};
+
+type TargetSplitPdfBlock = {
+    label: string;
+    buckets: TargetSplitPdfBucket[];
+};
+
+type TargetSplitPdfEmployee = {
+    id: string;
+    name: string;
+    monthTarget: number;
+    monthSales: number;
+    bucketBlocks: TargetSplitPdfBlock[];
+};
+
+type TargetSplitPdfStore = {
+    sid: string;
+    name: string;
+    manager: string;
+    monthTarget: number;
+    monthSales: number;
+    monthAch: number;
+    bucketBlocks: TargetSplitPdfBlock[];
+    employees: TargetSplitPdfEmployee[];
+};
+
+const fmtN = (v: number) => Math.round(v || 0).toLocaleString();
+
+export const generateTargetSplitStorePDF = async (
+    store: TargetSplitPdfStore,
+    opts: { monthLabel: string; granularityLabel: string; lastAvailableInMonth: string }
+) => {
+    const doc = setupDoc('l');
+    addPageHeader(doc, `تقسيمة التارجت - ${store.name}`, `Manager: ${store.manager || '-'}`);
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.text(`الشهر: ${opts.monthLabel} | التقسيم: ${opts.granularityLabel} | البيانات حتى: ${opts.lastAvailableInMonth}`, 15, 28);
+    doc.text(
+        `تارجت الشهر: ${fmtN(store.monthTarget)} | المبيعات: ${fmtN(store.monthSales)} | التحقيق: ${store.monthAch.toFixed(1)}%`,
+        15,
+        34
+    );
+
+    const storeRows: any[] = [];
+    store.bucketBlocks.forEach((block) => {
+        (block.buckets || []).forEach((b) => {
+            const m = b.metrics || ({} as TargetSplitPdfMetrics);
+            storeRows.push([
+                block.label || '-',
+                b.label,
+                fmtN(m.dailyTargetDynamic ?? m.target),
+                fmtN(m.sales),
+                `${(m.achievement || 0).toFixed(1)}%`,
+                fmtN(m.avgInv),
+                `${(m.conversion || 0).toFixed(1)}%`,
+                fmtN(m.customerValue),
+            ]);
+        });
+    });
+
+    (doc as any).autoTable({
+        startY: 40,
+        head: [['المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق', 'معدل فاتورة', 'التحويل', 'قيمة عميل']],
+        body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0.0%', '0', '0.0%', '0']],
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.5 },
+        headStyles: { fillColor: [254, 121, 0], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+    });
+
+    (store.employees || []).forEach((emp, idx) => {
+        doc.addPage();
+        addPageHeader(doc, `الموظف: ${emp.name}`, `${store.name} (${emp.id})`);
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(10);
+        const empAch = emp.monthTarget > 0 ? (emp.monthSales / emp.monthTarget) * 100 : 0;
+        doc.text(
+            `تارجت الشهر: ${fmtN(emp.monthTarget)} | المبيعات: ${fmtN(emp.monthSales)} | التحقيق: ${empAch.toFixed(1)}%`,
+            15,
+            28
+        );
+
+        const empRows: any[] = [];
+        (emp.bucketBlocks || []).forEach((block) => {
+            (block.buckets || []).forEach((b) => {
+                const m = b.metrics || ({} as TargetSplitPdfMetrics);
+                empRows.push([
+                    block.label || '-',
+                    b.label,
+                    fmtN(m.dailyTargetDynamic ?? m.target),
+                    fmtN(m.sales),
+                    `${(m.achievement || 0).toFixed(1)}%`,
+                    fmtN(m.avgInv),
+                    `${(m.contributionPct || 0).toFixed(1)}%`,
+                    fmtN(m.items || 0),
+                    fmtN(m.customerValue),
+                ]);
+            });
+        });
+
+        (doc as any).autoTable({
+            startY: 34,
+            head: [['المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق', 'ATV', 'المساهمة', 'القطع', 'قيمة عميل']],
+            body: empRows.length ? empRows : [['-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0']],
+            styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.5 },
+            headStyles: { fillColor: [70, 85, 110], textColor: 255 },
+            alternateRowStyles: { fillColor: [245, 245, 245] },
+        });
+
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`-- ${idx + 2} --`, 148.5, 200, { align: 'center' });
+    });
+
+    const safeName = String(store.name || store.sid).replace(/[\\/:*?"<>|]/g, '_');
+    doc.save(`TargetSplit_${safeName}_${opts.monthLabel}.pdf`);
+};
