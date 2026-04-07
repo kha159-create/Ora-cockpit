@@ -102,19 +102,19 @@ function applyWindowCarryChain(
   getBase: (start: string, end: string) => number,
   getSales: (start: string, end: string) => number,
 ): { eff: number; base: number; sales: number }[] {
-  const lastStartedIdx = buckets.reduce((acc, b, i) => (b.start <= lastAvail ? i : acc), -1);
+  const lastCompletedIdx = buckets.reduce((acc, b, i) => (b.end <= lastAvail ? i : acc), -1);
   let carry = 0;
   return buckets.map((b, i) => {
     const base = getBase(b.start, b.end);
     const salesEnd = minYMD(b.end, lastAvail);
     const sales = b.start <= lastAvail ? getSales(b.start, salesEnd) : 0;
     let eff: number;
-    if (lastStartedIdx < 0) {
+    if (lastCompletedIdx < 0) {
       eff = base;
-    } else if (i <= lastStartedIdx) {
+    } else if (i <= lastCompletedIdx) {
       eff = base + carry;
       carry = eff - sales;
-    } else if (i === lastStartedIdx + 1) {
+    } else if (i === lastCompletedIdx + 1) {
       eff = base + carry;
     } else {
       eff = base;
@@ -479,7 +479,10 @@ export default function TargetSplitPage() {
       }
 
       const storeIds = new Set([sid]);
-      const monthT = sumManagementTargetsForDateRange(targetsRows, monthStart, lastAvailableInMonth)[sid] || 0;
+      const monthT =
+        sumManagementTargetsForDateRange(targetsRows, monthStart, monthEnd)[sid] ||
+        sumManagementTargetsForDateRange(targetsRows, monthStart, lastAvailableInMonth)[sid] ||
+        0;
       const monthAgg = aggregateMgmtForRange(raw, storeIds, monthStart, lastAvailableInMonth);
       const monthAch = monthT > 0 ? (monthAgg.sales / monthT) * 100 : 0;
 
@@ -556,7 +559,10 @@ export default function TargetSplitPage() {
       const emps: typeof list[0]['employees'] = [];
       for (const [eid, pinfo] of Object.entries(employeePrimaryStore)) {
         if (pinfo.storeId !== sid) continue;
-        const mt = sumEmployeeTargetForDateRange(empRaw, eid, monthStart, lastAvailableInMonth);
+        const mt =
+          sumEmployeeTargetForDateRange(empRaw, eid, monthStart, monthEnd) ||
+          sumEmployeeTargetForDateRange(empRaw, eid, monthStart, lastAvailableInMonth) ||
+          0;
         let ms = 0;
         const history = empRaw?.history || {};
         const empSalesByDate: Record<string, number> = {};
