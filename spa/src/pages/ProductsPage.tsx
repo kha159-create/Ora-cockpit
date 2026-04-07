@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { loadManagementData, loadProductAnalysisData, loadStockData, loadProductMapping } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { ChartCard, KPICard, LineChart, PieChart } from '../components/DashboardComponents';
+import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { CubeIcon, SalesIcon, InvoicesIcon, VisitorsIcon, XIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
@@ -433,11 +433,7 @@ export default function ProductsPage() {
       return true;
     };
 
-    // ===== Aggregate categories from analysis =====
-    const targetCategoryMap = new Map<TargetCategoryName, { qty: number; amount: number }>();
-    TARGET_CATEGORY_ORDER.forEach((name) => {
-      targetCategoryMap.set(name, { qty: 0, amount: 0 });
-    });
+    // ===== Totals from analysis (per store categories) =====
     let totalQty = 0;
     let totalAmt = 0;
     let totalStores = 0;
@@ -447,38 +443,10 @@ export default function ProductsPage() {
       totalStores += 1;
       const categories: any[] = storeObj?.categories || [];
       categories.forEach((c) => {
-        const catName = String(c.category || 'Uncategorized');
-
-        const qty = safeNum(c.qty);
-        const amount = safeNum(c.amount);
-        // The original totalQty and totalAmt accumulators are outside this inner loop.
-        // The instruction snippet defined new local variables, which is incorrect for global accumulation.
-        // Reverting to original accumulation logic for totalQty and totalAmt.
-        totalQty += qty;
-        totalAmt += amount;
-
-        const canonical = canonicalTargetCategory(catName);
-        if (canonical) {
-          const agg = targetCategoryMap.get(canonical) || { qty: 0, amount: 0 };
-          agg.qty += qty;
-          agg.amount += amount;
-          targetCategoryMap.set(canonical, agg);
-        }
+        totalQty += safeNum(c.qty);
+        totalAmt += safeNum(c.amount);
       });
     });
-    const categoryShareTargetOnly = TARGET_CATEGORY_ORDER
-      .map((name) => {
-        const row = targetCategoryMap.get(name) || { qty: 0, amount: 0 };
-        return { category: name, qty: row.qty, amount: row.amount };
-      })
-      .filter((r) => r.qty > 0 || r.amount > 0);
-    const categoryTargetDenomAmt = Math.max(1, categoryShareTargetOnly.reduce((s, r) => s + r.amount, 0));
-    const categorySharePieSlices = categoryShareTargetOnly.map((r) => ({
-      name: r.category,
-      value: r.amount,
-      count: r.qty,
-      sharePercent: (r.amount / categoryTargetDenomAmt) * 100,
-    }));
 
     // ===== Catalog (products list) =====
     const catalogRows: CatalogItem[] = [];
@@ -681,7 +649,6 @@ export default function ProductsPage() {
       selectedPairs,
       storesMap,
       valueAnalysis,
-      categorySharePieSlices,
       selectedStoreLabel,
     };
   }, [city, effectiveManager, mgmt, mode, priceMax, priceMin, productId, raw, search, selectedCategory, store, metric, user?.name, user?.role]);
@@ -866,7 +833,7 @@ export default function ProductsPage() {
         <KPICard title="عدد المنتجات (بعد الفلترة)" value={derived.totals.productsCount} format={(v) => Math.round(v).toLocaleString()} icon={<InvoicesIcon />} />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-stretch mt-2">
+      <div className="mt-2">
         <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-5 flex flex-col min-h-0">
           <div className="border-b border-neutral-100 pb-3 mb-4 shrink-0">
             <h3 className="text-lg font-bold text-neutral-900">تحليل المبيعات حسب القيمة</h3>
@@ -899,30 +866,6 @@ export default function ProductsPage() {
               totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
             />
           </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-5 flex flex-col min-h-[480px]">
-          <div className="border-b border-neutral-100 pb-3 mb-4 shrink-0">
-            <h3 className="text-lg font-bold text-neutral-900">حصة الفئة</h3>
-            <p className="text-xs text-neutral-500 mt-1">
-              الفئات المعروضة فقط: لحافات كينغ، لحافات فل، مخدات كينغ، مخدات ستاندر، لباد كينج، لباد فل
-            </p>
-            <div className="mt-2">
-              <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 px-3 py-1 text-xs font-extrabold text-white shadow-md shadow-orange-200">
-                🏪 الفرع: {derived.selectedStoreLabel}
-              </span>
-            </div>
-          </div>
-          {derived.categorySharePieSlices.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-neutral-500 text-sm py-16">لا توجد فئات في نطاق الفلترة</div>
-          ) : (
-            <div className="flex-1 min-h-0">
-              <PieChart
-                vertical
-                data={derived.categorySharePieSlices.map((s) => ({ name: s.name, value: s.value, count: s.count }))}
-              />
-            </div>
-          )}
         </div>
       </div>
 

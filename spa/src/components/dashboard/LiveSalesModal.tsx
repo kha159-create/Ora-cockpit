@@ -67,6 +67,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     const [liveRefreshing, setLiveRefreshing] = useState(false);
     const [liveRefreshTick, setLiveRefreshTick] = useState(0);
     const [visitorsHourlyOpen, setVisitorsHourlyOpen] = useState(false);
+    const [visitorsHourlyContext, setVisitorsHourlyContext] = useState<{ sid: string; name: string } | null>(null);
 
     const isAdminOrAuditor = checkAdmin;
 
@@ -223,32 +224,22 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
         visitors: enhancedStores.reduce((acc: number, s: any) => acc + (s.visitors || 0), 0),
     }), [enhancedStores]);
 
-    /** زوار حسب الساعة — نفس نطاق مدير المنطقة في المودال (مثل HourlyPage للزوار) */
-    const visitorsByHour = useMemo(() => {
+    /** زوار حسب الساعة لفرع واحد (عند الضغط على عدد الزوار في بطاقة الفرع) */
+    const visitorsByHourForStore = useMemo(() => {
+        const sidFilter = visitorsHourlyContext?.sid;
+        if (!sidFilter) return [];
         const rows = raw?.visitors_hourly || [];
-        const meta = raw?.store_meta || {};
-        const user = getCurrentUser();
-        const effMgr = isAdminOrAuditor ? manager : (user?.name || manager);
-        const allowed = new Set<string>();
-        if (effMgr === 'all') {
-            Object.keys(meta).forEach((sid) => allowed.add(sid));
-        } else {
-            Object.keys(meta).forEach((sid) => {
-                if (String(meta[sid]?.manager || '') === effMgr) allowed.add(sid);
-            });
-        }
         const hours = Array.from({ length: 24 }, (_, i) => ({ hour: i, count: 0 }));
         (rows as any[]).forEach((r: any[]) => {
             const dt = String(r[0] || '').trim().substring(0, 10);
             if (dt !== targetDateStr) return;
-            const sid = String(r[1] || '');
-            if (!allowed.has(sid)) return;
+            if (String(r[1] || '') !== String(sidFilter)) return;
             const h = Number(r[2]);
             if (!Number.isInteger(h) || h < 0 || h > 23) return;
             hours[h].count += Number(r[3]) || 0;
         });
         return hours;
-    }, [raw, manager, targetDateStr, isAdminOrAuditor]);
+    }, [raw, targetDateStr, visitorsHourlyContext?.sid]);
 
     // --- Normal Shift Totals (global + per-store) ---
     // ش1: 09:30 - 15:30
@@ -334,12 +325,15 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     }, [raw, manager, dateMode, d365Daily]);
 
     React.useEffect(() => {
-        if (!isOpen) setVisitorsHourlyOpen(false);
+        if (!isOpen) {
+            setVisitorsHourlyOpen(false);
+            setVisitorsHourlyContext(null);
+        }
     }, [isOpen]);
 
     if (!isOpen) return null;
 
-    const hourlyRows = visitorsByHour.filter((h) => h.count > 0);
+    const hourlyRows = visitorsByHourForStore.filter((h) => h.count > 0);
 
     return (
         <>
@@ -428,21 +422,12 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                 trendValue={todayTotals.trans > 0 ? `معدل: ${formatSAR(todayTotals.sales / todayTotals.trans)}` : undefined}
                             />
                             <KPICard
-                                title="الزوار"
-                                value={todayTotals.visitors || 0}
-                                format={(v: number) => Math.round(v).toLocaleString()}
+                                title="نسبة التحويل"
+                                value={(todayTotals.visitors || 0) > 0 ? ((todayTotals.trans / (todayTotals.visitors || 1)) * 100) : 0}
+                                format={(v: number) => `${v.toFixed(1)}%`}
                                 icon={<VisitorsIcon className="text-orange-600" />}
-                                trendValue="اضغط للعرض بالساعة"
-                                onClick={() => setVisitorsHourlyOpen(true)}
+                                trendValue={`زوار: ${(todayTotals.visitors || 0).toLocaleString()}`}
                             />
-                            <div className="col-span-2">
-                                <KPICard
-                                    title="نسبة التحويل"
-                                    value={(todayTotals.visitors || 0) > 0 ? ((todayTotals.trans / (todayTotals.visitors || 1)) * 100) : 0}
-                                    format={(v: number) => `${v.toFixed(1)}%`}
-                                    icon={<VisitorsIcon className="text-orange-600" />}
-                                />
-                            </div>
                         </div>
                     </div>
 
@@ -502,10 +487,17 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                     key={store.sid}
                                     className="bg-white rounded-2xl shadow-sm border border-neutral-200 overflow-hidden identity-card"
                                 >
-                                    <button
-                                        type="button"
-                                        className="w-full p-4 text-right flex flex-col gap-3 hover:bg-neutral-50 transition-colors group relative"
+                                    <div
+                                        role="button"
+                                        tabIndex={0}
+                                        className="w-full p-4 text-right flex flex-col gap-3 hover:bg-neutral-50 transition-colors group relative cursor-pointer"
                                         onClick={() => setExpandedStoreId(isExpanded ? null : store.sid)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                setExpandedStoreId(isExpanded ? null : store.sid);
+                                            }
+                                        }}
                                     >
                                         {/* Header: Name & Total Sales */}
                                         <div className="flex items-center justify-between gap-2 w-full border-b border-neutral-100 pb-2 mb-1">
@@ -523,9 +515,27 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
 
                                             <div className="flex-1 flex flex-col gap-2">
                                                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                                                    <div className="flex justify-between items-center bg-neutral-50 px-2 py-1 rounded">
+                                                    <div
+                                                        className="flex justify-between items-center bg-neutral-50 px-2 py-1 rounded cursor-pointer hover:bg-orange-50 hover:ring-1 hover:ring-orange-200 transition-all"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setVisitorsHourlyContext({ sid: String(store.sid), name: String(store.name || store.sid) });
+                                                            setVisitorsHourlyOpen(true);
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                setVisitorsHourlyContext({ sid: String(store.sid), name: String(store.name || store.sid) });
+                                                                setVisitorsHourlyOpen(true);
+                                                            }
+                                                        }}
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        title="عرض الزوار بالساعة لهذا الفرع"
+                                                    >
                                                         <span className="text-neutral-500 text-xs">زوار:</span>
-                                                        <span className="font-bold text-neutral-700">{Math.round(store.visitors || 0).toLocaleString()}</span>
+                                                        <span className="font-bold text-orange-700 underline-offset-2 group-hover:underline">{Math.round(store.visitors || 0).toLocaleString()}</span>
                                                     </div>
                                                     <div className="flex justify-between items-center bg-neutral-50 px-2 py-1 rounded">
                                                         <span className="text-neutral-500 text-xs">تحويل:</span>
@@ -611,7 +621,7 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                                 </div>
                                             </div>
                                         </div>
-                                    </button>
+                                    </div>
 
                                     {/* Employees Section — يظهر لكل من باع اليوم حتى بعد إكمال التارجت */}
                                     {isExpanded && Array.isArray(store.employees) && store.employees.length > 0 && (
@@ -705,10 +715,10 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
             </div >
         </div >
 
-        {visitorsHourlyOpen && (
+        {visitorsHourlyOpen && visitorsHourlyContext && (
             <div
                 className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40"
-                onClick={() => setVisitorsHourlyOpen(false)}
+                onClick={() => { setVisitorsHourlyOpen(false); setVisitorsHourlyContext(null); }}
                 role="presentation"
             >
                 <div
@@ -719,12 +729,12 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                 >
                     <div className="flex items-center justify-between gap-2 mb-2">
                         <h3 className="font-bold text-neutral-900 text-sm">
-                            {dateMode === 'today' ? 'زوار اليوم' : 'زوار الأمس'} — بالساعة
+                            {dateMode === 'today' ? 'زوار اليوم' : 'زوار الأمس'} — {visitorsHourlyContext.name}
                         </h3>
                         <button
                             type="button"
                             className="text-neutral-500 hover:text-neutral-800 text-lg leading-none px-2"
-                            onClick={() => setVisitorsHourlyOpen(false)}
+                            onClick={() => { setVisitorsHourlyOpen(false); setVisitorsHourlyContext(null); }}
                             aria-label="إغلاق"
                         >
                             ✕
