@@ -892,6 +892,16 @@ export const generateTargetSplitStorePDF = async (
         styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.5 },
         headStyles: { fillColor: [254, 121, 0], textColor: 255 },
         alternateRowStyles: { fillColor: [245, 245, 245] },
+        didParseCell: (data: any) => {
+            if (data.column.index === 8 || data.column.index === 10) {
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.textColor = [153, 27, 27];
+            }
+            if (data.column.index === 9) {
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.fillColor = [255, 247, 237];
+            }
+        },
     });
     doc.addPage();
     addPageHeader(doc, `الموظفون - ${store.name}`, `${store.sid}`);
@@ -923,6 +933,7 @@ export const generateTargetSplitStorePDF = async (
             '',
             `تحقيق الشهر ${empAch.toFixed(1)}%`,
         ]);
+        let firstRowForEmployee = true;
         (emp.bucketBlocks || []).forEach((block) => {
             (block.buckets || []).forEach((b) => {
                 const m = b.metrics || ({} as TargetSplitPdfMetrics);
@@ -931,7 +942,7 @@ export const generateTargetSplitStorePDF = async (
                 const need = periodNeed(b.label, shortfall, opts.lastAvailableInMonth);
                 const rowIndex = empRows.length;
                 empRows.push([
-                    `${emp.name} (${emp.id})`,
+                    firstRowForEmployee ? `${emp.name} (${emp.id})` : '↳',
                     block.label || '-',
                     b.label,
                     fmtN(expected),
@@ -946,6 +957,7 @@ export const generateTargetSplitStorePDF = async (
                     fmtN(need.daily),
                     `${empAch.toFixed(1)}%`,
                 ]);
+                firstRowForEmployee = false;
                 if (!markedFirstPeriod) {
                     firstPeriodRows.set(rowIndex, (m.achievement || 0) >= 100);
                     markedFirstPeriod = true;
@@ -976,6 +988,14 @@ export const generateTargetSplitStorePDF = async (
                 const ok = firstPeriodRows.get(r);
                 data.cell.styles.fillColor = ok ? [220, 252, 231] : [254, 226, 226];
                 data.cell.styles.textColor = ok ? [22, 101, 52] : [127, 29, 29];
+            }
+            if (data.column.index === 10 || data.column.index === 12) {
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.textColor = [153, 27, 27];
+            }
+            if (data.column.index === 11) {
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.fillColor = [255, 247, 237];
             }
         },
     });
