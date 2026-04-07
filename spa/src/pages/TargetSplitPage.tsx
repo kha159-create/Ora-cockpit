@@ -139,6 +139,10 @@ function enrichGap(
   return { shortfallPeriod, closeMonthDaily };
 }
 
+function periodExpectedTarget(metrics: { target: number; dailyTargetDynamic?: number }, granularity: SplitGranularity): number {
+  return granularity === 'day' ? metrics.dailyTargetDynamic ?? metrics.target : metrics.target;
+}
+
 function aggregateMgmtForRange(
   raw: any,
   storeIds: Set<string>,
@@ -1241,13 +1245,13 @@ export default function TargetSplitPage() {
                                 <span className="h-1 w-8 rounded-full bg-orange-500" />
                                 فترات التارجت — {granularity === 'day' ? 'يومي' : granularity === '10' ? 'كل 10 أيام' : 'كل 15 يوماً'}
                               </h3>
-                              {(granularity === '10' || granularity === '15') && (
-                                <p className="text-xs text-orange-900/85 mb-2 leading-relaxed max-w-4xl">
-                                  التارجت المعروض لكل فترة = الأساس الموزَّع على الأيام + ترحيل من الفترة السابقة: إن زدت عن
-                                  التارجت تُنقص الزيادة من مطلوب الفترة التالية، وإن قصّرت تُضاف الفجوة إليها. تُعرض كل
-                                  فترات الشهر حتى المستقبلية (بدون مبيعات بعد) لمعرفة المطلوب مسبقاً.
-                                </p>
-                              )}
+                              <div className="mb-3 rounded-xl border border-orange-200 bg-orange-50/80 px-3 py-2 text-xs text-orange-900">
+                                <span className="font-bold">تارجت الشهر:</span>{' '}
+                                <span className="dir-ltr inline-block font-extrabold">{formatSAR(row.monthTarget)}</span>
+                                {' · '}
+                                <span className="font-semibold">المبيعات:</span>{' '}
+                                <span className="dir-ltr inline-block">{formatSAR(row.monthSales)}</span>
+                              </div>
                               <div className="overflow-x-auto max-h-[420px] overflow-y-auto rounded-xl border border-neutral-200">
                                 <table className="min-w-full text-xs">
                                   <thead>
@@ -1298,7 +1302,19 @@ export default function TargetSplitPage() {
                                               <td className="td text-center">{metrics.conversion.toFixed(1)}%</td>
                                               <td className="td text-center dir-ltr">{Math.round(metrics.customerValue).toLocaleString()}</td>
                                             </tr>
-                                            {metrics.achievement < 100 && (
+                                            {(granularity === '10' || granularity === '15') &&
+                                              bucket.start <= lastAvailableInMonth &&
+                                              bucket.end > lastAvailableInMonth && (
+                                                <tr className="bg-sky-50/90 border-b border-sky-100">
+                                                  <td colSpan={7} className="py-2 px-3 text-[11px] text-sky-900 leading-relaxed">
+                                                    مطلوب يومياً لإغلاق تارجت الشهر:{' '}
+                                                    <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
+                                                  </td>
+                                                </tr>
+                                              )}
+                                            {(granularity === '10' || granularity === '15') &&
+                                              bucket.end <= lastAvailableInMonth &&
+                                              metrics.sales < periodExpectedTarget(metrics, granularity) && (
                                               <tr className="bg-rose-50/90 border-b border-rose-100">
                                                 <td colSpan={7} className="py-2 px-3 text-[11px] text-rose-900 leading-relaxed">
                                                   <span className="font-semibold">لم يُحقَّق كامل التارجت:</span>{' '}
@@ -1311,6 +1327,18 @@ export default function TargetSplitPage() {
                                                 </td>
                                               </tr>
                                             )}
+                                            {(granularity === '10' || granularity === '15') &&
+                                              bucket.end <= lastAvailableInMonth &&
+                                              metrics.sales >= periodExpectedTarget(metrics, granularity) && (
+                                                <tr className="bg-emerald-50/90 border-b border-emerald-100">
+                                                  <td colSpan={7} className="py-2 px-3 text-[11px] text-emerald-900 leading-relaxed">
+                                                    <span className="font-semibold">تم تحقيق التارجت وزيادة:</span>{' '}
+                                                    <span className="dir-ltr inline-block font-bold">
+                                                      {formatSAR(Math.max(0, metrics.sales - periodExpectedTarget(metrics, granularity)))}
+                                                    </span>
+                                                  </td>
+                                                </tr>
+                                              )}
                                           </React.Fragment>
                                         ))}
                                       </React.Fragment>
@@ -1409,7 +1437,19 @@ export default function TargetSplitPage() {
                                                           <td className="td text-center">{Math.round(metrics.items).toLocaleString()}</td>
                                                           <td className="td text-center dir-ltr">{Math.round(metrics.customerValue).toLocaleString()}</td>
                                                         </tr>
-                                                        {metrics.achievement < 100 && (
+                                                        {(granularity === '10' || granularity === '15') &&
+                                                          bucket.start <= lastAvailableInMonth &&
+                                                          bucket.end > lastAvailableInMonth && (
+                                                            <tr className="bg-sky-50/90 border-b border-sky-100">
+                                                              <td colSpan={8} className="py-2 px-3 text-[10px] text-sky-900 leading-relaxed">
+                                                                مطلوب يومياً لإغلاق تارجت الشهر:{' '}
+                                                                <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
+                                                              </td>
+                                                            </tr>
+                                                          )}
+                                                        {(granularity === '10' || granularity === '15') &&
+                                                          bucket.end <= lastAvailableInMonth &&
+                                                          metrics.sales < periodExpectedTarget(metrics, granularity) && (
                                                           <tr className="bg-rose-50/90 border-b border-rose-100">
                                                             <td colSpan={8} className="py-2 px-3 text-[10px] text-rose-900 leading-relaxed">
                                                               <span className="font-semibold">لم يُحقَّق كامل التارجت:</span>{' '}
@@ -1422,6 +1462,18 @@ export default function TargetSplitPage() {
                                                             </td>
                                                           </tr>
                                                         )}
+                                                        {(granularity === '10' || granularity === '15') &&
+                                                          bucket.end <= lastAvailableInMonth &&
+                                                          metrics.sales >= periodExpectedTarget(metrics, granularity) && (
+                                                            <tr className="bg-emerald-50/90 border-b border-emerald-100">
+                                                              <td colSpan={8} className="py-2 px-3 text-[10px] text-emerald-900 leading-relaxed">
+                                                                <span className="font-semibold">تم تحقيق التارجت وزيادة:</span>{' '}
+                                                                <span className="dir-ltr inline-block font-bold">
+                                                                  {formatSAR(Math.max(0, metrics.sales - periodExpectedTarget(metrics, granularity)))}
+                                                                </span>
+                                                              </td>
+                                                            </tr>
+                                                          )}
                                                       </React.Fragment>
                                                     ))}
                                                   </React.Fragment>

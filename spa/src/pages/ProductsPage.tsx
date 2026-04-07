@@ -833,42 +833,6 @@ export default function ProductsPage() {
         <KPICard title="عدد المنتجات (بعد الفلترة)" value={derived.totals.productsCount} format={(v) => Math.round(v).toLocaleString()} icon={<InvoicesIcon />} />
       </div>
 
-      <div className="mt-2">
-        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-5 flex flex-col min-h-0">
-          <div className="border-b border-neutral-100 pb-3 mb-4 shrink-0">
-            <h3 className="text-lg font-bold text-neutral-900">تحليل المبيعات حسب القيمة</h3>
-            <p className="text-xs text-neutral-500 mt-1">
-              متوسط سعر القطعة يحدد الشريحة — الفترة: <span className="font-semibold text-neutral-700">{derived.dateRangeLabel}</span>
-            </p>
-            <div className="mt-2">
-              <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 px-3 py-1 text-xs font-extrabold text-white shadow-md shadow-orange-200">
-                🏪 الفرع: {derived.selectedStoreLabel}
-              </span>
-            </div>
-          </div>
-          <div className="space-y-2 overflow-y-auto max-h-[620px] pr-1 custom-scrollbar flex-1">
-            <ValueTierGroup
-              title="لحاف كينج"
-              bucket={derived.valueAnalysis.duvetKing}
-              tierLabels={['قيمة منخفضة (99–300 ر.س)', 'قيمة متوسطة (301–600 ر.س)', 'قيمة عالية (أكثر من 600 ر.س)']}
-              totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
-            />
-            <ValueTierGroup
-              title="لحاف فل"
-              bucket={derived.valueAnalysis.duvetFull}
-              tierLabels={['قيمة منخفضة (حتى 300 ر.س)', 'قيمة متوسطة (301–499 ر.س)', 'قيمة عالية (500 ر.س فأكثر)']}
-              totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
-            />
-            <ValueTierGroup
-              title="مخدات"
-              bucket={derived.valueAnalysis.pillows}
-              tierLabels={['قيمة منخفضة (حتى 99 ر.س)', 'قيمة متوسطة (100–189 ر.س)', 'قيمة عالية (190 ر.س فأكثر)']}
-              totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
-            />
-          </div>
-        </div>
-      </div>
-
       {/* Catalog list */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
         <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white">
@@ -910,6 +874,11 @@ export default function ProductsPage() {
               <div className="text-sm text-neutral-600">مرتبة حسب: {metricLabel}</div>
             </div>
           </div>
+          <div className="mt-2">
+            <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 px-3 py-1 text-xs font-extrabold text-white shadow-md shadow-orange-200">
+              🏪 الفرع: {derived.selectedStoreLabel}
+            </span>
+          </div>
         </div>
         {/* Summary badges */}
         <div className="px-6 py-3 flex flex-wrap gap-4 border-b border-neutral-100">
@@ -921,9 +890,6 @@ export default function ProductsPage() {
           </span>
           <span className="bg-fuchsia-100 text-fuchsia-700 px-3 py-1 rounded-full text-sm font-bold">
             نسبة الفئة بالقيمة: {derived.categorySharePercentByValue.toFixed(1)}%
-          </span>
-          <span className="bg-neutral-100 text-neutral-700 px-3 py-1 rounded-full text-sm font-bold">
-            الفرع: {derived.selectedStoreLabel}
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -1049,6 +1015,42 @@ export default function ProductsPage() {
               </div>
             );
           })()}
+        </div>
+      </div>
+
+      <div className="mt-2">
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-5 flex flex-col min-h-0">
+          <div className="border-b border-neutral-100 pb-3 mb-4 shrink-0">
+            <h3 className="text-lg font-bold text-neutral-900">تحليل المبيعات حسب القيمة</h3>
+            <p className="text-xs text-neutral-500 mt-1">
+              متوسط سعر القطعة يحدد الشريحة — الفترة: <span className="font-semibold text-neutral-700">{derived.dateRangeLabel}</span>
+            </p>
+            <div className="mt-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 px-3 py-1 text-xs font-extrabold text-white shadow-md shadow-orange-200">
+                🏪 الفرع: {derived.selectedStoreLabel}
+              </span>
+            </div>
+          </div>
+          <div className="space-y-2 overflow-y-auto max-h-[620px] pr-1 custom-scrollbar flex-1">
+            <ValueTierGroup
+              title="لحاف كينج"
+              bucket={derived.valueAnalysis.duvetKing}
+              tierLabels={['قيمة منخفضة (99–300 ر.س)', 'قيمة متوسطة (301–600 ر.س)', 'قيمة عالية (أكثر من 600 ر.س)']}
+              totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
+            />
+            <ValueTierGroup
+              title="لحاف فل"
+              bucket={derived.valueAnalysis.duvetFull}
+              tierLabels={['قيمة منخفضة (حتى 300 ر.س)', 'قيمة متوسطة (301–499 ر.س)', 'قيمة عالية (500 ر.س فأكثر)']}
+              totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
+            />
+            <ValueTierGroup
+              title="مخدات"
+              bucket={derived.valueAnalysis.pillows}
+              tierLabels={['قيمة منخفضة (حتى 99 ر.س)', 'قيمة متوسطة (100–189 ر.س)', 'قيمة عالية (190 ر.س فأكثر)']}
+              totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
+            />
+          </div>
         </div>
       </div>
 
