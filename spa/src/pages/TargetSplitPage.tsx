@@ -143,6 +143,17 @@ function periodExpectedTarget(metrics: { target: number; dailyTargetDynamic?: nu
   return granularity === 'day' ? metrics.dailyTargetDynamic ?? metrics.target : metrics.target;
 }
 
+function dailyNeededForCurrentPeriod(bucketEnd: string, lastAvailable: string, periodShortfall: number): {
+  remainingDays: number;
+  dailyNeeded: number;
+} {
+  const remainingDays = Math.max(1, daysInclusiveYMD(lastAvailable, bucketEnd));
+  return {
+    remainingDays,
+    dailyNeeded: Math.max(0, periodShortfall) / remainingDays,
+  };
+}
+
 function aggregateMgmtForRange(
   raw: any,
   storeIds: Set<string>,
@@ -1315,6 +1326,26 @@ export default function TargetSplitPage() {
                                                   <td colSpan={7} className="py-2 px-3 text-[11px] text-sky-900 leading-relaxed">
                                                     مطلوب يومياً لإغلاق تارجت الشهر:{' '}
                                                     <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
+                                                    {(() => {
+                                                      const p = dailyNeededForCurrentPeriod(
+                                                        bucket.end,
+                                                        lastAvailableInMonth,
+                                                        Math.max(0, periodExpectedTarget(metrics, granularity) - metrics.sales),
+                                                      );
+                                                      return (
+                                                        <>
+                                                          {' · '}
+                                                          متبقي من تارجت الفترة{' '}
+                                                          <span className="dir-ltr inline-block font-bold">
+                                                            {formatSAR(Math.max(0, periodExpectedTarget(metrics, granularity) - metrics.sales))}
+                                                          </span>
+                                                          {' / '}
+                                                          باقي {p.remainingDays} أيام ={' '}
+                                                          <span className="dir-ltr inline-block font-bold">{formatSAR(p.dailyNeeded)}</span>{' '}
+                                                          يومياً
+                                                        </>
+                                                      );
+                                                    })()}
                                                   </td>
                                                 </tr>
                                               )}
@@ -1450,6 +1481,26 @@ export default function TargetSplitPage() {
                                                               <td colSpan={8} className="py-2 px-3 text-[10px] text-sky-900 leading-relaxed">
                                                                 مطلوب يومياً لإغلاق تارجت الشهر:{' '}
                                                                 <span className="dir-ltr inline-block font-bold">{formatSAR(metrics.closeMonthDaily)}</span>
+                                                                {(() => {
+                                                                  const p = dailyNeededForCurrentPeriod(
+                                                                    bucket.end,
+                                                                    lastAvailableInMonth,
+                                                                    Math.max(0, periodExpectedTarget(metrics, granularity) - metrics.sales),
+                                                                  );
+                                                                  return (
+                                                                    <>
+                                                                      {' · '}
+                                                                      متبقي من تارجت الفترة{' '}
+                                                                      <span className="dir-ltr inline-block font-bold">
+                                                                        {formatSAR(Math.max(0, periodExpectedTarget(metrics, granularity) - metrics.sales))}
+                                                                      </span>
+                                                                      {' / '}
+                                                                      باقي {p.remainingDays} أيام ={' '}
+                                                                      <span className="dir-ltr inline-block font-bold">{formatSAR(p.dailyNeeded)}</span>{' '}
+                                                                      يومياً
+                                                                    </>
+                                                                  );
+                                                                })()}
                                                               </td>
                                                             </tr>
                                                           )}
