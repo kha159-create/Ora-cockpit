@@ -832,11 +832,15 @@ const fmtN = (v: number) => Math.round(v || 0).toLocaleString();
 
 const periodNeed = (bucketLabel: string, shortfall: number, lastAvailableInMonth: string) => {
     const parts = String(bucketLabel || '').split('—').map(s => s.trim());
+    const bucketStart = parts.length > 1 ? parts[0] : parts[0];
     const bucketEnd = parts.length > 1 ? parts[1] : parts[0];
     const d = new Date(lastAvailableInMonth + 'T12:00:00');
     d.setDate(d.getDate() + 1); // include "today" relative to data cutoff (yesterday)
     const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const a = new Date(todayStr + 'T12:00:00').getTime();
+    // Active bucket: count from today to bucket end.
+    // Future bucket: count full bucket days only (do not include current bucket leftovers).
+    const fromYmd = todayStr < bucketStart ? bucketStart : todayStr;
+    const a = new Date(fromYmd + 'T12:00:00').getTime();
     const b = new Date(bucketEnd + 'T12:00:00').getTime();
     const days = Math.max(1, Math.floor((b - a) / 86400000) + 1);
     return { days, daily: Math.max(0, shortfall) / days };
@@ -896,14 +900,36 @@ export const generateTargetSplitStorePDF = async (
     doc.text(`الشهر: ${opts.monthLabel} | التقسيم: ${opts.granularityLabel}`, 15, 28);
 
     const empRows: any[] = [];
+    const separatorRows = new Set<number>();
+    const firstPeriodRows = new Map<number, boolean>();
     (store.employees || []).forEach((emp) => {
         const empAch = emp.monthTarget > 0 ? (emp.monthSales / emp.monthTarget) * 100 : 0;
+        let markedFirstPeriod = false;
+        const sepIndex = empRows.length;
+        separatorRows.add(sepIndex);
+        empRows.push([
+            `الموظف: ${emp.name} (${emp.id})`,
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            `تحقيق الشهر ${empAch.toFixed(1)}%`,
+        ]);
         (emp.bucketBlocks || []).forEach((block) => {
             (block.buckets || []).forEach((b) => {
                 const m = b.metrics || ({} as TargetSplitPdfMetrics);
                 const expected = (m.dailyTargetDynamic ?? m.target) || 0;
                 const shortfall = Math.max(0, expected - (m.sales || 0));
                 const need = periodNeed(b.label, shortfall, opts.lastAvailableInMonth);
+                const rowIndex = empRows.length;
                 empRows.push([
                     `${emp.name} (${emp.id})`,
                     block.label || '-',
@@ -920,6 +946,10 @@ export const generateTargetSplitStorePDF = async (
                     fmtN(need.daily),
                     `${empAch.toFixed(1)}%`,
                 ]);
+                if (!markedFirstPeriod) {
+                    firstPeriodRows.set(rowIndex, (m.achievement || 0) >= 100);
+                    markedFirstPeriod = true;
+                }
             });
         });
     });
@@ -934,6 +964,19 @@ export const generateTargetSplitStorePDF = async (
         columnStyles: {
             0: { halign: 'right', cellWidth: 32 },
             2: { cellWidth: 30 },
+        },
+        didParseCell: (data: any) => {
+            const r = data.row.index;
+            if (separatorRows.has(r)) {
+                data.cell.styles.fillColor = [232, 236, 244];
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.textColor = [15, 23, 42];
+            }
+            if (firstPeriodRows.has(r)) {
+                const ok = firstPeriodRows.get(r);
+                data.cell.styles.fillColor = ok ? [220, 252, 231] : [254, 226, 226];
+                data.cell.styles.textColor = ok ? [22, 101, 52] : [127, 29, 29];
+            }
         },
     });
 
