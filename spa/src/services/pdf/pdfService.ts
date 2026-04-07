@@ -830,6 +830,18 @@ type TargetSplitPdfStore = {
 
 const fmtN = (v: number) => Math.round(v || 0).toLocaleString();
 
+const periodNeed = (bucketLabel: string, shortfall: number, lastAvailableInMonth: string) => {
+    const parts = String(bucketLabel || '').split('—').map(s => s.trim());
+    const bucketEnd = parts.length > 1 ? parts[1] : parts[0];
+    const d = new Date(lastAvailableInMonth + 'T12:00:00');
+    d.setDate(d.getDate() + 1); // include "today" relative to data cutoff (yesterday)
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const a = new Date(todayStr + 'T12:00:00').getTime();
+    const b = new Date(bucketEnd + 'T12:00:00').getTime();
+    const days = Math.max(1, Math.floor((b - a) / 86400000) + 1);
+    return { days, daily: Math.max(0, shortfall) / days };
+};
+
 export const generateTargetSplitStorePDF = async (
     store: TargetSplitPdfStore,
     opts: { monthLabel: string; granularityLabel: string; lastAvailableInMonth: string }
@@ -850,70 +862,79 @@ export const generateTargetSplitStorePDF = async (
     store.bucketBlocks.forEach((block) => {
         (block.buckets || []).forEach((b) => {
             const m = b.metrics || ({} as TargetSplitPdfMetrics);
+            const expected = (m.dailyTargetDynamic ?? m.target) || 0;
+            const shortfall = Math.max(0, expected - (m.sales || 0));
+            const need = periodNeed(b.label, shortfall, opts.lastAvailableInMonth);
             storeRows.push([
                 block.label || '-',
                 b.label,
-                fmtN(m.dailyTargetDynamic ?? m.target),
+                fmtN(expected),
                 fmtN(m.sales),
                 `${(m.achievement || 0).toFixed(1)}%`,
                 fmtN(m.avgInv),
                 `${(m.conversion || 0).toFixed(1)}%`,
                 fmtN(m.customerValue),
+                fmtN(shortfall),
+                String(need.days),
+                fmtN(need.daily),
             ]);
         });
     });
 
     (doc as any).autoTable({
         startY: 40,
-        head: [['المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق', 'معدل فاتورة', 'التحويل', 'قيمة عميل']],
-        body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0.0%', '0', '0.0%', '0']],
+        head: [['المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق', 'معدل فاتورة', 'التحويل', 'قيمة عميل', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً']],
+        body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '1', '0']],
         styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.5 },
         headStyles: { fillColor: [254, 121, 0], textColor: 255 },
         alternateRowStyles: { fillColor: [245, 245, 245] },
     });
+    doc.addPage();
+    addPageHeader(doc, `الموظفون - ${store.name}`, `${store.sid}`);
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.text(`الشهر: ${opts.monthLabel} | التقسيم: ${opts.granularityLabel}`, 15, 28);
 
-    (store.employees || []).forEach((emp, idx) => {
-        doc.addPage();
-        addPageHeader(doc, `الموظف: ${emp.name}`, `${store.name} (${emp.id})`);
-        doc.setTextColor(0, 0, 0);
-        doc.setFontSize(10);
+    const empRows: any[] = [];
+    (store.employees || []).forEach((emp) => {
         const empAch = emp.monthTarget > 0 ? (emp.monthSales / emp.monthTarget) * 100 : 0;
-        doc.text(
-            `تارجت الشهر: ${fmtN(emp.monthTarget)} | المبيعات: ${fmtN(emp.monthSales)} | التحقيق: ${empAch.toFixed(1)}%`,
-            15,
-            28
-        );
-
-        const empRows: any[] = [];
         (emp.bucketBlocks || []).forEach((block) => {
             (block.buckets || []).forEach((b) => {
                 const m = b.metrics || ({} as TargetSplitPdfMetrics);
+                const expected = (m.dailyTargetDynamic ?? m.target) || 0;
+                const shortfall = Math.max(0, expected - (m.sales || 0));
+                const need = periodNeed(b.label, shortfall, opts.lastAvailableInMonth);
                 empRows.push([
+                    `${emp.name} (${emp.id})`,
                     block.label || '-',
                     b.label,
-                    fmtN(m.dailyTargetDynamic ?? m.target),
+                    fmtN(expected),
                     fmtN(m.sales),
                     `${(m.achievement || 0).toFixed(1)}%`,
                     fmtN(m.avgInv),
                     `${(m.contributionPct || 0).toFixed(1)}%`,
                     fmtN(m.items || 0),
                     fmtN(m.customerValue),
+                    fmtN(shortfall),
+                    String(need.days),
+                    fmtN(need.daily),
+                    `${empAch.toFixed(1)}%`,
                 ]);
             });
         });
+    });
 
-        (doc as any).autoTable({
-            startY: 34,
-            head: [['المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق', 'ATV', 'المساهمة', 'القطع', 'قيمة عميل']],
-            body: empRows.length ? empRows : [['-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0']],
-            styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.5 },
-            headStyles: { fillColor: [70, 85, 110], textColor: 255 },
-            alternateRowStyles: { fillColor: [245, 245, 245] },
-        });
-
-        doc.setFontSize(8);
-        doc.setTextColor(100, 100, 100);
-        doc.text(`-- ${idx + 2} --`, 148.5, 200, { align: 'center' });
+    (doc as any).autoTable({
+        startY: 34,
+        head: [['الموظف', 'المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق', 'ATV', 'المساهمة', 'القطع', 'قيمة عميل', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً', 'تحقيق الشهر']],
+        body: empRows.length ? empRows : [['-', '-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '0', '1', '0', '0.0%']],
+        styles: { font: 'Amiri', halign: 'center', fontSize: 7.2, cellPadding: 1.2 },
+        headStyles: { fillColor: [70, 85, 110], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        columnStyles: {
+            0: { halign: 'right', cellWidth: 32 },
+            2: { cellWidth: 30 },
+        },
     });
 
     const safeName = String(store.name || store.sid).replace(/[\\/:*?"<>|]/g, '_');
