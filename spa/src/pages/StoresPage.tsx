@@ -542,54 +542,65 @@ function StoreDetailsModal({
             />
           </div>
 
-          <div className="mb-6 rounded-2xl border border-cyan-100 bg-gradient-to-b from-cyan-50 to-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <h3 className="text-sm font-bold text-cyan-900">تحليل السلة ومتوسط القطع في الفاتورة</h3>
-              <div className="inline-flex items-center gap-2 rounded-xl bg-cyan-100 px-3 py-1.5 border border-cyan-200">
-                <span className="text-[11px] font-bold text-cyan-800">UPT</span>
-                <span className="text-2xl font-black text-cyan-700">{(details?.avgItemsStore || 0).toFixed(2)}</span>
+          <div className="mb-6 bg-white rounded-xl shadow-md border border-neutral-200 overflow-hidden relative group transition-all duration-300 hover:shadow-lg hover:border-orange-200">
+            <div className="absolute inset-0 bg-gradient-to-bl from-white via-white to-orange-50/40 pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity duration-300" />
+            <div className="relative z-10">
+              <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-neutral-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-50 to-orange-100/50 text-orange-600 flex items-center justify-center border border-orange-100 shadow-sm">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                  </div>
+                  <h3 className="text-sm font-bold text-neutral-800">تحليل السلة ومتوسط القطع في الفاتورة</h3>
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-orange-50 to-orange-100/50 px-3 py-1.5 border border-orange-100 shadow-sm">
+                  <span className="text-[11px] font-bold text-orange-700">UPT</span>
+                  <span className="text-2xl font-black text-orange-600">{(details?.avgItemsStore || 0).toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="p-4">
+                <div className="rounded-lg border border-neutral-100 overflow-hidden">
+                  <table className="min-w-[520px] w-full text-sm">
+                    <thead>
+                      <tr className="bg-neutral-800 text-white">
+                        <th className="px-3 py-2.5 text-right font-semibold">حجم السلة</th>
+                        <th className="px-3 py-2.5 text-center font-semibold">الفواتير</th>
+                        <th className="px-3 py-2.5 text-center font-semibold">النسبة</th>
+                        <th className="px-3 py-2.5 text-center font-semibold">القطع المباعة</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-50">
+                      <tr className="hover:bg-orange-50/30 transition-colors">
+                        <td className="px-3 py-2.5 font-bold text-red-600">قطعة واحدة</td>
+                        <td className="px-3 py-2.5 text-center font-bold">{ticketMix.one.invoices.toLocaleString()}</td>
+                        <td className="px-3 py-2.5 text-center font-bold text-red-500">{ticketMix.one.pct.toFixed(1)}%</td>
+                        <td className="px-3 py-2.5 text-center">{ticketMix.one.items.toLocaleString()}</td>
+                      </tr>
+                      <tr className="hover:bg-orange-50/30 transition-colors">
+                        <td className="px-3 py-2.5 font-bold text-amber-600">قطعتان</td>
+                        <td className="px-3 py-2.5 text-center font-bold">{ticketMix.two.invoices.toLocaleString()}</td>
+                        <td className="px-3 py-2.5 text-center font-bold text-amber-500">{ticketMix.two.pct.toFixed(1)}%</td>
+                        <td className="px-3 py-2.5 text-center">{ticketMix.two.items.toLocaleString()}</td>
+                      </tr>
+                      <tr className="hover:bg-orange-50/30 transition-colors">
+                        <td className="px-3 py-2.5 font-bold text-emerald-700">3 قطع فأكثر</td>
+                        <td className="px-3 py-2.5 text-center font-bold">{ticketMix.three.invoices.toLocaleString()}</td>
+                        <td className="px-3 py-2.5 text-center font-bold text-emerald-600">{ticketMix.three.pct.toFixed(1)}%</td>
+                        <td className="px-3 py-2.5 text-center">{ticketMix.three.items.toLocaleString()}</td>
+                      </tr>
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-neutral-50 border-t-2 border-orange-400 font-black">
+                        <td className="px-3 py-2.5 text-right">الإجمالي</td>
+                        <td className="px-3 py-2.5 text-center">{ticketMix.totalInvoices.toLocaleString()}</td>
+                        <td className="px-3 py-2.5 text-center">100%</td>
+                        <td className="px-3 py-2.5 text-center">{ticketMix.totalItems.toLocaleString()}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
             </div>
-            <div className="rounded-xl border border-neutral-200 bg-white overflow-hidden">
-              <table className="min-w-[520px] w-full text-sm">
-                <thead>
-                  <tr className="bg-neutral-800 text-white">
-                    <th className="px-3 py-2 text-right">حجم السلة</th>
-                    <th className="px-3 py-2 text-center">الفواتير</th>
-                    <th className="px-3 py-2 text-center">النسبة</th>
-                    <th className="px-3 py-2 text-center">القطع المباعة</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  <tr>
-                    <td className="px-3 py-2 font-bold text-red-600">قطعة واحدة</td>
-                    <td className="px-3 py-2 text-center font-bold">{ticketMix.one.invoices.toLocaleString()}</td>
-                    <td className="px-3 py-2 text-center font-bold text-red-500">{ticketMix.one.pct.toFixed(1)}%</td>
-                    <td className="px-3 py-2 text-center">{ticketMix.one.items.toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td className="px-3 py-2 font-bold text-amber-600">قطعتان</td>
-                    <td className="px-3 py-2 text-center font-bold">{ticketMix.two.invoices.toLocaleString()}</td>
-                    <td className="px-3 py-2 text-center font-bold text-amber-500">{ticketMix.two.pct.toFixed(1)}%</td>
-                    <td className="px-3 py-2 text-center">{ticketMix.two.items.toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td className="px-3 py-2 font-bold text-green-700">3 قطع فأكثر</td>
-                    <td className="px-3 py-2 text-center font-bold">{ticketMix.three.invoices.toLocaleString()}</td>
-                    <td className="px-3 py-2 text-center font-bold text-green-600">{ticketMix.three.pct.toFixed(1)}%</td>
-                    <td className="px-3 py-2 text-center">{ticketMix.three.items.toLocaleString()}</td>
-                  </tr>
-                </tbody>
-                <tfoot>
-                  <tr className="bg-neutral-50 border-t-2 border-orange-400 font-black">
-                    <td className="px-3 py-2 text-right">الإجمالي</td>
-                    <td className="px-3 py-2 text-center">{ticketMix.totalInvoices.toLocaleString()}</td>
-                    <td className="px-3 py-2 text-center">100%</td>
-                    <td className="px-3 py-2 text-center">{ticketMix.totalItems.toLocaleString()}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-gradient-to-r from-orange-400 to-orange-500 rounded-b-xl" />
           </div>
 
 
