@@ -557,9 +557,9 @@ function StoreDetailsModal({
                   <span className="text-2xl font-black text-orange-600">{(details?.avgItemsStore || 0).toFixed(2)}</span>
                 </div>
               </div>
-              <div className="p-4">
-                <div className="rounded-lg border border-neutral-100 overflow-hidden">
-                  <table className="min-w-[520px] w-full text-sm">
+              <div className="p-2 sm:p-4">
+                <div className="rounded-lg border border-neutral-100 overflow-x-auto">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gradient-to-r from-orange-500 to-orange-600 text-white">
                         <th className="px-3 py-2.5 text-right font-semibold">حجم السلة</th>
