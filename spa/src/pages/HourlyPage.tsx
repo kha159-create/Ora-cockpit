@@ -169,6 +169,27 @@ export default function HourlyPage() {
         };
     }, [hourlyData, fromHour, toHour]);
 
+    const hourlyInsights = useMemo(() => {
+        const bySales = [...hourlyData].sort((a, b) => b.sales - a.sales);
+        const byVisitors = [...hourlyData].sort((a, b) => b.visitors - a.visitors);
+        const byConv = [...hourlyData]
+            .map(h => ({ ...h, conv: h.visitors > 0 ? (h.trans / h.visitors) * 100 : 0 }))
+            .filter(h => h.visitors > 0)
+            .sort((a, b) => b.conv - a.conv);
+        const byAtv = [...hourlyData]
+            .map(h => ({ ...h, atv: h.trans > 0 ? h.sales / h.trans : 0 }))
+            .filter(h => h.trans > 0)
+            .sort((a, b) => b.atv - a.atv);
+        return {
+            bestSales: bySales[0]?.hour ?? null,
+            bestVisitors: byVisitors[0]?.hour ?? null,
+            bestConv: byConv[0]?.hour ?? null,
+            worstConv: byConv.length ? byConv[byConv.length - 1].hour : null,
+            bestAtv: byAtv[0]?.hour ?? null,
+            worstAtv: byAtv.length ? byAtv[byAtv.length - 1].hour : null,
+        };
+    }, [hourlyData]);
+
     const handleExportExcel = () => {
         const wb = XLSX.utils.book_new();
 
@@ -465,6 +486,17 @@ export default function HourlyPage() {
 
             {/* Hourly Table */}
             <div className="bg-white rounded-3xl shadow-sm border border-neutral-200 overflow-hidden">
+                <div className="px-5 py-3 border-b border-neutral-100 bg-neutral-50/70">
+                    <div className="text-xs font-black text-neutral-500 mb-2">دليل ألوان التظليل</div>
+                    <div className="flex flex-wrap gap-2">
+                        <span className="px-2 py-1 rounded-lg text-[11px] font-bold bg-amber-100 text-amber-800">الأكثر مبيعاً</span>
+                        <span className="px-2 py-1 rounded-lg text-[11px] font-bold bg-emerald-100 text-emerald-800">الأكثر زواراً</span>
+                        <span className="px-2 py-1 rounded-lg text-[11px] font-bold bg-red-100 text-red-800">الأقل استحواذاً</span>
+                        <span className="px-2 py-1 rounded-lg text-[11px] font-bold bg-green-100 text-green-800">الأعلى استحواذاً</span>
+                        <span className="px-2 py-1 rounded-lg text-[11px] font-bold bg-blue-100 text-blue-800">الأعلى معدل فاتورة</span>
+                        <span className="px-2 py-1 rounded-lg text-[11px] font-bold bg-violet-100 text-violet-800">الأقل معدل فاتورة</span>
+                    </div>
+                </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-right border-collapse">
                         <thead>
@@ -481,10 +513,17 @@ export default function HourlyPage() {
                             {hourlyData.map((h) => {
                                 const atv = h.trans > 0 ? h.sales / h.trans : 0;
                                 const conv = h.visitors > 0 ? (h.trans / h.visitors) * 100 : 0;
-                                const isPeak = h.sales === Math.max(...hourlyData.map(x => x.sales)) && h.sales > 0;
+                                const tags: string[] = [];
+                                if (hourlyInsights.bestSales === h.hour) tags.push('bg-amber-50');
+                                if (hourlyInsights.bestVisitors === h.hour) tags.push('bg-emerald-50');
+                                if (hourlyInsights.worstConv === h.hour) tags.push('bg-red-50');
+                                if (hourlyInsights.bestConv === h.hour) tags.push('bg-green-50');
+                                if (hourlyInsights.bestAtv === h.hour) tags.push('bg-blue-50');
+                                if (hourlyInsights.worstAtv === h.hour) tags.push('bg-violet-50');
+                                const highlightClass = tags.length ? tags[tags.length - 1] : '';
 
                                 return (
-                                    <tr key={h.hour} className={`hover:bg-neutral-50/80 transition-colors ${isPeak ? 'bg-orange-50/30' : ''}`}>
+                                    <tr key={h.hour} className={`hover:bg-neutral-50/80 transition-colors ${highlightClass}`}>
                                         <td className="p-4 font-bold text-neutral-900 border-l border-neutral-100 bg-neutral-50/50">
                                             <div className="flex items-center gap-2">
                                                 <span className="w-8 h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center text-[11px] font-black text-neutral-500 shadow-sm">

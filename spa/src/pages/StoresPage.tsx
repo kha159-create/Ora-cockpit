@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { loadEmployeesData, loadManagementData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
-import { ChartCard, KPICard, PieChart } from '../components/DashboardComponents';
+import { ChartCard, KPICard } from '../components/DashboardComponents';
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, InvoicesIcon, VisitorsIcon, FireIcon, CustomerValueIcon } from '../components/Icons';
 import { runProductValueAnalysis, safeNum } from '../services/analysisHelpers';
@@ -487,6 +487,10 @@ function StoreDetailsModal({
               <div className="text-sm text-neutral-500 mt-1">
                 {store.manager || 'مدير غير محدد'} · {store.city || '-'} · {store.type || '-'}
               </div>
+              <div className="mt-3 inline-flex items-center gap-3 rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-2 shadow-sm">
+                <div className="text-xs font-bold text-cyan-800">متوسط القطع في الفاتورة (UPT)</div>
+                <div className="text-2xl font-black text-cyan-700">{(details?.avgItemsStore || 0).toFixed(2)}</div>
+              </div>
             </div>
             <button className="btn-secondary py-2 px-4 shadow-sm" onClick={onClose}>
               إغلاق
@@ -626,15 +630,13 @@ function StoreDetailsModal({
                 <div className="flex items-center justify-center h-full text-neutral-400">لا توجد بيانات</div>
               ) : (
                 <div className="h-full flex flex-col">
-                  <div className="h-[200px] flex-shrink-0">
-                    <PieChart data={productMix.map(p => ({ name: p.name, value: p.value }))} />
-                  </div>
-                  <div className="flex-1 overflow-y-auto mt-4 custom-scrollbar">
+                  <div className="flex-1 overflow-y-auto custom-scrollbar">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-neutral-500 border-b border-neutral-100">
                           <th className="pb-2 text-right">المنتج</th>
                           <th className="pb-2 text-right">القيمة</th>
+                          <th className="pb-2 text-right">الكمية</th>
                           <th className="pb-2 text-right">النسبة</th>
                         </tr>
                       </thead>
@@ -643,6 +645,7 @@ function StoreDetailsModal({
                           <tr key={p.name}>
                             <td className="py-2 font-medium">{p.name}</td>
                             <td className="py-2 dir-ltr text-right">{formatSAR(p.value)}</td>
+                            <td className="py-2 dir-ltr text-right font-semibold text-neutral-700">{Math.round(p.qty).toLocaleString()}</td>
                             <td className="py-2 dir-ltr text-right font-bold text-neutral-900">{p.percentage.toFixed(1)}%</td>
                           </tr>
                         ))}
