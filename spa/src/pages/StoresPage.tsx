@@ -96,53 +96,6 @@ function normDate(s: unknown) {
   return String(s || '').substring(0, 10);
 }
 
-function estimateInvoiceItemMix(totalTransactions: number, totalItems: number) {
-  const t = Math.max(0, Math.round(totalTransactions));
-  const i = Math.max(0, Math.round(totalItems));
-  if (t <= 0) {
-    return {
-      one: { invoices: 0, items: 0, pct: 0 },
-      two: { invoices: 0, items: 0, pct: 0 },
-      three: { invoices: 0, items: 0, pct: 0 },
-      totalInvoices: 0,
-      totalItems: 0,
-    };
-  }
-
-  const avg = i / t;
-  let oneInv = 0;
-  let twoInv = 0;
-  let threeInv = 0;
-
-  if (avg <= 1) {
-    oneInv = t;
-  } else if (avg <= 2) {
-    twoInv = Math.round((avg - 1) * t);
-    oneInv = Math.max(0, t - twoInv);
-  } else {
-    oneInv = Math.round(t * 0.25);
-    twoInv = Math.round(t * 0.35);
-    threeInv = Math.max(0, t - oneInv - twoInv);
-  }
-  if (threeInv === 0) threeInv = Math.max(0, t - oneInv - twoInv);
-  const used = oneInv + twoInv + threeInv;
-  if (used !== t) {
-    threeInv = Math.max(0, threeInv + (t - used));
-  }
-
-  const oneItems = oneInv;
-  const twoItems = twoInv * 2;
-  const threeItems = Math.max(0, i - oneItems - twoItems);
-
-  return {
-    one: { invoices: oneInv, items: oneItems, pct: (oneInv / t) * 100 },
-    two: { invoices: twoInv, items: twoItems, pct: (twoInv / t) * 100 },
-    three: { invoices: threeInv, items: threeItems, pct: (threeInv / t) * 100 },
-    totalInvoices: t,
-    totalItems: oneItems + twoItems + threeItems,
-  };
-}
-
 function getRange(
   mode: Mode,
   standardYear: number,
@@ -431,22 +384,31 @@ function StoreDetailsModal({
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    const analysisMode = mode === 'yesterday' ? 'yest' : 'mtd';
+    const daysInRange = (() => {
+      const s = new Date(rangeStart + 'T12:00:00').getTime();
+      const e = new Date(rangeEnd + 'T12:00:00').getTime();
+      return Math.max(1, Math.floor((e - s) / 86400000) + 1);
+    })();
+    const analysisMode =
+      mode === 'yesterday' ? 'yest'
+        : mode === 'mtd' ? 'mtd'
+          : mode === 'today' ? 'yest'
+            : daysInRange <= 1 ? 'yest'
+              : daysInRange <= 7 ? '7d'
+                : daysInRange <= 14 ? '14d'
+                  : '30d';
     const pData = prodRaw?.periods?.[analysisMode] || prodRaw?.periods?.mtd || {};
-    const catalogData = pData?.catalog || {};
+    const storeCategoryRows: any[] = pData?.analysis?.[store.sid]?.categories || [];
     const missedByStoreMap = pData?.missed_opportunities || {};
     const branchMissed = store ? (missedByStoreMap[store.sid] || []) : [];
 
     const valueAnalysis = runProductValueAnalysis({
-      catalog: catalogData,
+      catalog: pData?.catalog || {},
       storeId: store?.sid,
     });
 
     const rowsForTotal = toList(rangeStats);
     const totalSAccum = rowsForTotal.reduce((s, r) => s + safeNum(r.s), 0);
-    const totalTAccum = rowsForTotal.reduce((s, r) => s + safeNum(r.t), 0);
-    const totalIAccum = rowsForTotal.reduce((s, r) => s + safeNum(r.i), 0);
-    const avgItemsStore = totalTAccum > 0 ? totalIAccum / totalTAccum : 0;
 
     const missedByEmployee = (() => {
       const agg: Record<string, number> = {};
@@ -459,6 +421,24 @@ function StoreDetailsModal({
       return agg;
     })();
 
+    const basketRows: any[] = mgmtRaw?.basket_analysis || [];
+    let bOneInv = 0, bOneItems = 0, bTwoInv = 0, bTwoItems = 0, bThreeInv = 0, bThreeItems = 0;
+    basketRows.forEach((r: any[]) => {
+      const d = normDate(r?.[0]);
+      const sid = String(r?.[1] || '');
+      const bucket = String(r?.[2] || '');
+      if (sid !== store.sid) return;
+      if (!d || d < rangeStart || d > rangeEnd) return;
+      const inv = safeNum(r?.[3]);
+      const items = safeNum(r?.[4]);
+      if (bucket === '1') { bOneInv += inv; bOneItems += items; }
+      else if (bucket === '2') { bTwoInv += inv; bTwoItems += items; }
+      else { bThreeInv += inv; bThreeItems += items; }
+    });
+    const mixTotalInv = bOneInv + bTwoInv + bThreeInv;
+    const mixTotalItems = bOneItems + bTwoItems + bThreeItems;
+    const avgItemsStore = mixTotalInv > 0 ? mixTotalItems / mixTotalInv : 0;
+
     return {
       rangeLabel,
       rangeList: rowsForTotal,
@@ -467,63 +447,39 @@ function StoreDetailsModal({
       branchMissed,
       missedByEmployee,
       avgItemsStore,
-      totalI: totalIAccum,
-      totalT: totalTAccum,
+      totalI: mixTotalItems,
+      totalT: mixTotalInv,
       totalS: totalSAccum,
-      catalog: catalogData,
+      productMixRows: storeCategoryRows.map((c: any) => ({
+        name: String(c.category || '-'),
+        value: safeNum(c.amount),
+        qty: safeNum(c.qty),
+        percentage: safeNum(c.share_percent),
+      })),
+      ticketMix: {
+        one: { invoices: bOneInv, items: bOneItems, pct: mixTotalInv > 0 ? (bOneInv / mixTotalInv) * 100 : 0 },
+        two: { invoices: bTwoInv, items: bTwoItems, pct: mixTotalInv > 0 ? (bTwoInv / mixTotalInv) * 100 : 0 },
+        three: { invoices: bThreeInv, items: bThreeItems, pct: mixTotalInv > 0 ? (bThreeInv / mixTotalInv) * 100 : 0 },
+        totalInvoices: mixTotalInv,
+        totalItems: mixTotalItems,
+      },
+      catalog: pData?.catalog || {},
       analysisMode
     };
   }, [employeesJson, endYMD, startYMD, store, prodRaw, mode, mgmtRaw]);
 
   // Product Mix (Store Level Interaction) - Use category keys from catalog
   const productMix = useMemo(() => {
-    if (!details?.catalog) return [];
+    return [...(details?.productMixRows || [])].sort((a, b) => b.value - a.value);
+  }, [details?.productMixRows]);
 
-    const sid = store?.sid || '';
-    // Catalog is Record<category_name, item[]>. Use the category keys for proper classification.
-    const categoryTotals: Record<string, { amount: number; qty: number }> = {};
-    let totalAmt = 0;
-    let totalQty = 0;
-
-    Object.entries(details.catalog || {}).forEach(([catKey, catItems]: [string, any]) => {
-      if (!Array.isArray(catItems)) return;
-      let catAmt = 0;
-      let catQty = 0;
-      catItems.forEach((item: any) => {
-        const storeData = item.stores?.[sid];
-        const amt = storeData ? (Number(storeData.a) || 0) : (Number(item.amount) || 0);
-        const qty = storeData ? (Number(storeData.q) || 0) : (Number(item.qty) || 0);
-        if (amt > 0 || qty > 0) {
-          catAmt += amt;
-          catQty += qty;
-        }
-      });
-      if (catAmt > 0 || catQty > 0) {
-        if (!categoryTotals[catKey]) categoryTotals[catKey] = { amount: 0, qty: 0 };
-        categoryTotals[catKey].amount += catAmt;
-        categoryTotals[catKey].qty += catQty;
-        totalAmt += catAmt;
-        totalQty += catQty;
-      }
-    });
-
-    if (totalAmt === 0 && totalQty === 0) return [];
-
-    return Object.entries(categoryTotals)
-      .map(([name, data]) => ({
-        name,
-        value: data.amount,
-        qty: data.qty,
-        percentage: totalAmt > 0 ? (data.amount / totalAmt) * 100 : 0,
-        qtyPercentage: totalQty > 0 ? (data.qty / totalQty) * 100 : 0,
-      }))
-      .sort((a, b) => b.value - a.value);
-
-  }, [details?.catalog, store]);
-
-  const ticketMix = useMemo(() => {
-    return estimateInvoiceItemMix(details?.totalT || 0, details?.totalI || 0);
-  }, [details?.totalI, details?.totalT]);
+  const ticketMix = details?.ticketMix || {
+    one: { invoices: 0, items: 0, pct: 0 },
+    two: { invoices: 0, items: 0, pct: 0 },
+    three: { invoices: 0, items: 0, pct: 0 },
+    totalInvoices: 0,
+    totalItems: 0,
+  };
 
 
   if (!open || !store) return null;
