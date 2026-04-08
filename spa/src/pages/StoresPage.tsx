@@ -494,50 +494,6 @@ function StoreDetailsModal({
               <div className="text-sm text-neutral-500 mt-1">
                 {store.manager || 'مدير غير محدد'} · {store.city || '-'} · {store.type || '-'}
               </div>
-              <div className="mt-3 inline-flex items-center gap-3 rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-2 shadow-sm">
-                <div className="text-xs font-bold text-cyan-800">متوسط القطع في الفاتورة (UPT)</div>
-                <div className="text-2xl font-black text-cyan-700">{(details?.avgItemsStore || 0).toFixed(2)}</div>
-              </div>
-              <div className="mt-3 rounded-xl border border-neutral-200 bg-white shadow-sm overflow-hidden">
-                <table className="min-w-[520px] w-full text-sm">
-                  <thead>
-                    <tr className="bg-neutral-800 text-white">
-                      <th className="px-3 py-2 text-right">حجم السلة</th>
-                      <th className="px-3 py-2 text-center">الفواتير</th>
-                      <th className="px-3 py-2 text-center">النسبة</th>
-                      <th className="px-3 py-2 text-center">القطع المباعة</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-neutral-100">
-                    <tr>
-                      <td className="px-3 py-2 font-bold text-red-600">قطعة واحدة</td>
-                      <td className="px-3 py-2 text-center font-bold">{ticketMix.one.invoices.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-center font-bold text-red-500">{ticketMix.one.pct.toFixed(1)}%</td>
-                      <td className="px-3 py-2 text-center">{ticketMix.one.items.toLocaleString()}</td>
-                    </tr>
-                    <tr>
-                      <td className="px-3 py-2 font-bold text-amber-600">قطعتان</td>
-                      <td className="px-3 py-2 text-center font-bold">{ticketMix.two.invoices.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-center font-bold text-amber-500">{ticketMix.two.pct.toFixed(1)}%</td>
-                      <td className="px-3 py-2 text-center">{ticketMix.two.items.toLocaleString()}</td>
-                    </tr>
-                    <tr>
-                      <td className="px-3 py-2 font-bold text-green-700">3 قطع فأكثر</td>
-                      <td className="px-3 py-2 text-center font-bold">{ticketMix.three.invoices.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-center font-bold text-green-600">{ticketMix.three.pct.toFixed(1)}%</td>
-                      <td className="px-3 py-2 text-center">{ticketMix.three.items.toLocaleString()}</td>
-                    </tr>
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-neutral-50 border-t-2 border-orange-400 font-black">
-                      <td className="px-3 py-2 text-right">الإجمالي</td>
-                      <td className="px-3 py-2 text-center">{ticketMix.totalInvoices.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-center">100%</td>
-                      <td className="px-3 py-2 text-center">{ticketMix.totalItems.toLocaleString()}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
             </div>
             <button className="btn-secondary py-2 px-4 shadow-sm" onClick={onClose}>
               إغلاق
@@ -584,6 +540,56 @@ function StoreDetailsModal({
                 return remDays > 0 ? rem / remDays : 0;
               })())}`}
             />
+          </div>
+
+          <div className="mb-6 rounded-2xl border border-cyan-100 bg-gradient-to-b from-cyan-50 to-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-sm font-bold text-cyan-900">تحليل السلة ومتوسط القطع في الفاتورة</h3>
+              <div className="inline-flex items-center gap-2 rounded-xl bg-cyan-100 px-3 py-1.5 border border-cyan-200">
+                <span className="text-[11px] font-bold text-cyan-800">UPT</span>
+                <span className="text-2xl font-black text-cyan-700">{(details?.avgItemsStore || 0).toFixed(2)}</span>
+              </div>
+            </div>
+            <div className="rounded-xl border border-neutral-200 bg-white overflow-hidden">
+              <table className="min-w-[520px] w-full text-sm">
+                <thead>
+                  <tr className="bg-neutral-800 text-white">
+                    <th className="px-3 py-2 text-right">حجم السلة</th>
+                    <th className="px-3 py-2 text-center">الفواتير</th>
+                    <th className="px-3 py-2 text-center">النسبة</th>
+                    <th className="px-3 py-2 text-center">القطع المباعة</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  <tr>
+                    <td className="px-3 py-2 font-bold text-red-600">قطعة واحدة</td>
+                    <td className="px-3 py-2 text-center font-bold">{ticketMix.one.invoices.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-center font-bold text-red-500">{ticketMix.one.pct.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-center">{ticketMix.one.items.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 font-bold text-amber-600">قطعتان</td>
+                    <td className="px-3 py-2 text-center font-bold">{ticketMix.two.invoices.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-center font-bold text-amber-500">{ticketMix.two.pct.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-center">{ticketMix.two.items.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 font-bold text-green-700">3 قطع فأكثر</td>
+                    <td className="px-3 py-2 text-center font-bold">{ticketMix.three.invoices.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-center font-bold text-green-600">{ticketMix.three.pct.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-center">{ticketMix.three.items.toLocaleString()}</td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr className="bg-neutral-50 border-t-2 border-orange-400 font-black">
+                    <td className="px-3 py-2 text-right">الإجمالي</td>
+                    <td className="px-3 py-2 text-center">{ticketMix.totalInvoices.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-center">100%</td>
+                    <td className="px-3 py-2 text-center">{ticketMix.totalItems.toLocaleString()}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
 
 
