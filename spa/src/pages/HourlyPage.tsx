@@ -19,6 +19,7 @@ export default function HourlyPage() {
     );
     const [fromHour, setFromHour] = useState<number>(0);
     const [toHour, setToHour] = useState<number>(24);
+    const [insightRange, setInsightRange] = useState<'day' | 'week' | 'month'>('week');
     // D365 API returns hours already in POS local time (+5 applied server-side).
     // Raw fallback: management_data uses +3 in SQL; add +2 so display matches POS.
     const RAW_HOUR_OFFSET = 2;
@@ -189,6 +190,138 @@ export default function HourlyPage() {
             worstAtv: byAtv.length ? byAtv[byAtv.length - 1].hour : null,
         };
     }, [hourlyData]);
+
+    const bestInsights = useMemo(() => {
+        const selDate = new Date(selectedDate + 'T00:00:00');
+        let dateFrom: string, dateTo: string;
+
+        if (insightRange === 'day') {
+            dateFrom = dateTo = selectedDate;
+        } else if (insightRange === 'week') {
+            const from = new Date(selDate);
+            from.setDate(from.getDate() - 6);
+            dateFrom = from.toISOString().split('T')[0];
+            dateTo = selectedDate;
+        } else {
+            const y = selDate.getFullYear(), m = selDate.getMonth();
+            dateFrom = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+            const ld = new Date(y, m + 1, 0).getDate();
+            dateTo = `${y}-${String(m + 1).padStart(2, '0')}-${String(ld).padStart(2, '0')}`;
+        }
+
+        const filteredSids = new Set<string>();
+        Object.keys(meta).forEach(sid => {
+            const sm = meta[sid];
+            if (selectedStore !== 'all' && sid !== selectedStore) return;
+            if (selectedManager !== 'all' && sm.manager !== selectedManager) return;
+            filteredSids.add(sid);
+        });
+
+        const srcH = insightRange === 'day' ? salesHourlyRows : (raw?.sales_hourly || []);
+        const srcVH = insightRange === 'day' ? visitorsHourlyRows : (raw?.visitors_hourly || []);
+        const srcSD = insightRange === 'day' ? salesDailyRows : (raw?.sales || []);
+        const srcTD = insightRange === 'day' ? transactionsRows : (raw?.transactions || []);
+        const srcVD = insightRange === 'day' ? visitorsDailyRows : (raw?.visitors || []);
+
+        const getLocalH = (date: string, h: number): number => {
+            if (insightRange === 'day' && useD365) return (h - D365_HOUR_BACK + 24) % 24;
+            return (h + RAW_HOUR_OFFSET) % 24;
+        };
+
+        const hMap = new Map<string, { date: string; hour: number; sales: number; trans: number; visitors: number }>();
+        (srcH || []).forEach((r: any[]) => {
+            const d = String(r[0] || '').trim().substring(0, 10);
+            if (d < dateFrom || d > dateTo) return;
+            const sid = String(r[1]);
+            if (filteredSids.size > 0 && !filteredSids.has(sid)) return;
+            const h = Number(r[2]);
+            if (!Number.isInteger(h) || h < 0 || h > 23) return;
+            const lh = getLocalH(d, h);
+            if (lh < 0 || lh > 23) return;
+            const k = `${d}|${lh}`;
+            const e = hMap.get(k) || { date: d, hour: lh, sales: 0, trans: 0, visitors: 0 };
+            e.sales += Number(r[3]) || 0;
+            e.trans += Number(r[4]) || 0;
+            hMap.set(k, e);
+        });
+        (srcVH || []).forEach((r: any[]) => {
+            const d = String(r[0] || '').trim().substring(0, 10);
+            if (d < dateFrom || d > dateTo) return;
+            const sid = String(r[1]);
+            if (filteredSids.size > 0 && !filteredSids.has(sid)) return;
+            const h = Number(r[2]);
+            if (!Number.isInteger(h) || h < 0 || h > 23) return;
+            const k = `${d}|${h}`;
+            const e = hMap.get(k) || { date: d, hour: h, sales: 0, trans: 0, visitors: 0 };
+            e.visitors += Number(r[3]) || 0;
+            hMap.set(k, e);
+        });
+
+        const dMap = new Map<string, { date: string; sales: number; trans: number; visitors: number }>();
+        (srcSD || []).forEach((r: any[]) => {
+            const d = String(r[0] || '').substring(0, 10);
+            if (d < dateFrom || d > dateTo) return;
+            const sid = String(r[1]);
+            if (filteredSids.size > 0 && !filteredSids.has(sid)) return;
+            const e = dMap.get(d) || { date: d, sales: 0, trans: 0, visitors: 0 };
+            e.sales += Number(r[2]) || 0;
+            dMap.set(d, e);
+        });
+        (srcTD || []).forEach((r: any[]) => {
+            const d = String(r[0] || '').substring(0, 10);
+            if (d < dateFrom || d > dateTo) return;
+            const sid = String(r[1]);
+            if (filteredSids.size > 0 && !filteredSids.has(sid)) return;
+            const e = dMap.get(d) || { date: d, sales: 0, trans: 0, visitors: 0 };
+            e.trans += Number(r[2]) || 0;
+            dMap.set(d, e);
+        });
+        (srcVD || []).forEach((r: any[]) => {
+            const d = String(r[0] || '').substring(0, 10);
+            if (d < dateFrom || d > dateTo) return;
+            const sid = String(r[1]);
+            if (filteredSids.size > 0 && !filteredSids.has(sid)) return;
+            const e = dMap.get(d) || { date: d, sales: 0, trans: 0, visitors: 0 };
+            e.visitors += Number(r[2]) || 0;
+            dMap.set(d, e);
+        });
+
+        let bestSalesH = { date: '', hour: 0, val: 0 };
+        let peakTrafficH = { date: '', hour: 0, val: 0 };
+        let bestConvH = { date: '', hour: 0, val: 0 };
+        let bestDayEntry = { date: '', val: 0 };
+
+        hMap.forEach(e => {
+            if (e.sales > bestSalesH.val) bestSalesH = { date: e.date, hour: e.hour, val: e.sales };
+            if (e.visitors > peakTrafficH.val) peakTrafficH = { date: e.date, hour: e.hour, val: e.visitors };
+            const cv = e.visitors > 0 ? (e.trans / e.visitors) * 100 : 0;
+            if (cv > bestConvH.val && e.visitors >= 3) bestConvH = { date: e.date, hour: e.hour, val: cv };
+        });
+        dMap.forEach(e => {
+            if (e.sales > bestDayEntry.val) bestDayEntry = { date: e.date, val: e.sales };
+        });
+
+        const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+        const fmtDH = (dt: string, hr: number) => {
+            if (!dt) return '-';
+            const dd = new Date(dt + 'T00:00:00');
+            const dn = dayNames[dd.getDay()];
+            const h12 = hr === 0 ? 12 : hr > 12 ? hr - 12 : hr;
+            const ap = hr >= 12 ? 'م' : 'ص';
+            return `${dn} ${h12} ${ap}`;
+        };
+        const fmtD = (dt: string) => {
+            if (!dt) return '-';
+            return dayNames[new Date(dt + 'T00:00:00').getDay()];
+        };
+
+        return [
+            { title: 'أفضل ساعة في المبيعات', main: fmtDH(bestSalesH.date, bestSalesH.hour), sub: formatSAR(bestSalesH.val) },
+            { title: 'الساعة الذروة', main: fmtDH(peakTrafficH.date, peakTrafficH.hour), sub: `${peakTrafficH.val.toLocaleString()} زائر` },
+            { title: 'أفضل يوم', main: fmtD(bestDayEntry.date), sub: formatSAR(bestDayEntry.val) },
+            { title: 'أفضل تحويل', main: fmtDH(bestConvH.date, bestConvH.hour), sub: `${bestConvH.val.toFixed(1)}%` },
+        ];
+    }, [raw, selectedDate, selectedStore, selectedManager, meta, insightRange, salesHourlyRows, visitorsHourlyRows, salesDailyRows, transactionsRows, visitorsDailyRows, useD365]);
 
     const handleExportExcel = () => {
         const wb = XLSX.utils.book_new();
@@ -482,6 +615,46 @@ export default function HourlyPage() {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            {/* Best Insights Cards */}
+            <div className="bg-white rounded-xl shadow-md border border-neutral-200 overflow-hidden relative group transition-all duration-300 hover:shadow-lg hover:border-orange-200">
+                <div className="absolute inset-0 bg-gradient-to-bl from-white via-white to-orange-50/40 pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="relative z-10">
+                    <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-neutral-100">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-50 to-orange-100/50 text-orange-600 flex items-center justify-center border border-orange-100 shadow-sm">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                            </div>
+                            <h3 className="text-sm font-bold text-neutral-800">أبرز المؤشرات</h3>
+                        </div>
+                        <div className="inline-flex items-center rounded-xl bg-neutral-100 p-0.5 border border-neutral-200">
+                            {(['day', 'week', 'month'] as const).map(r => (
+                                <button
+                                    key={r}
+                                    onClick={() => setInsightRange(r)}
+                                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition-all duration-200 ${insightRange === r ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
+                                >
+                                    {r === 'day' ? 'اليوم' : r === 'week' ? 'الأسبوع' : 'الشهر'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5">
+                        {bestInsights.map((card, i) => (
+                            <div key={i} className="rounded-xl border border-neutral-100 overflow-hidden shadow-sm hover:shadow-md hover:border-orange-200 transition-all duration-200">
+                                <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-3 py-1.5">
+                                    <span className="text-[11px] font-bold text-white">{card.title}</span>
+                                </div>
+                                <div className="px-4 py-4 text-center bg-white">
+                                    <div className="text-lg font-black text-neutral-900 leading-tight">{card.main}</div>
+                                    <div className="text-sm font-bold text-orange-600 mt-1.5">{card.sub}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-gradient-to-r from-orange-400 to-orange-500 rounded-b-xl" />
             </div>
 
             {/* Hourly Table */}
