@@ -561,7 +561,7 @@ function StoreDetailsModal({
                 <div className="rounded-lg border border-neutral-100 overflow-hidden">
                   <table className="min-w-[520px] w-full text-sm">
                     <thead>
-                      <tr className="bg-neutral-800 text-white">
+                      <tr className="bg-gradient-to-r from-orange-500 to-orange-600 text-white">
                         <th className="px-3 py-2.5 text-right font-semibold">حجم السلة</th>
                         <th className="px-3 py-2.5 text-center font-semibold">الفواتير</th>
                         <th className="px-3 py-2.5 text-center font-semibold">النسبة</th>
