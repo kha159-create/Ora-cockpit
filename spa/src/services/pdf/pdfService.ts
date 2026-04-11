@@ -837,13 +837,17 @@ const periodNeed = (bucketLabel: string, shortfall: number, lastAvailableInMonth
     const d = new Date(lastAvailableInMonth + 'T12:00:00');
     d.setDate(d.getDate() + 1); // include "today" relative to data cutoff (yesterday)
     const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    // انتهت فترة الـ10/15 يوماً: لا يبقى يوم في هذه الخانة
+    if (todayStr > bucketEnd) {
+        return { days: 0, daily: 0 };
+    }
     // Active bucket: count from today to bucket end.
     // Future bucket: count full bucket days only (do not include current bucket leftovers).
     const fromYmd = todayStr < bucketStart ? bucketStart : todayStr;
     const a = new Date(fromYmd + 'T12:00:00').getTime();
     const b = new Date(bucketEnd + 'T12:00:00').getTime();
     const days = Math.max(1, Math.floor((b - a) / 86400000) + 1);
-    return { days, daily: Math.max(0, shortfall) / days };
+    return { days, daily: days > 0 ? Math.max(0, shortfall) / days : 0 };
 };
 
 export const generateTargetSplitStorePDF = async (
@@ -889,8 +893,8 @@ export const generateTargetSplitStorePDF = async (
         startY: 40,
         head: [['المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق', 'معدل فاتورة', 'التحويل', 'قيمة عميل', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً']],
         body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '1', '0']],
-        styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.5 },
-        headStyles: { fillColor: [254, 121, 0], textColor: 255 },
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8.4, cellPadding: 1.9 },
+        headStyles: { fillColor: [254, 121, 0], textColor: 255, fontSize: 8.6 },
         alternateRowStyles: { fillColor: [245, 245, 245] },
         didParseCell: (data: any) => {
             if (data.column.index === 8 || data.column.index === 10) {
@@ -912,54 +916,51 @@ export const generateTargetSplitStorePDF = async (
     const empRows: any[] = [];
     const separatorRows = new Set<number>();
     const firstPeriodRows = new Map<number, boolean>();
+    const EMP_COLS = 12;
     (store.employees || []).forEach((emp) => {
         const empAch = emp.monthTarget > 0 ? (emp.monthSales / emp.monthTarget) * 100 : 0;
         let markedFirstPeriod = false;
         const sepIndex = empRows.length;
         separatorRows.add(sepIndex);
         empRows.push([
-            `الموظف: ${emp.name} (${emp.id})`,
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            `تحقيق الشهر ${empAch.toFixed(1)}%`,
+            {
+                content: `${emp.name} (${emp.id})  —  تارجت الشهر: ${fmtN(emp.monthTarget)}  —  تحقيق من تارجت الشهر: ${empAch.toFixed(1)}%`,
+                colSpan: EMP_COLS,
+                styles: {
+                    fillColor: [232, 236, 244],
+                    fontStyle: 'bold',
+                    textColor: [15, 23, 42],
+                    fontSize: 9,
+                    halign: 'right',
+                    cellPadding: { top: 3, bottom: 3, left: 4, right: 4 },
+                },
+            },
         ]);
-        let firstRowForEmployee = true;
         (emp.bucketBlocks || []).forEach((block) => {
             (block.buckets || []).forEach((b) => {
                 const m = b.metrics || ({} as TargetSplitPdfMetrics);
                 const expected = (m.dailyTargetDynamic ?? m.target) || 0;
                 const shortfall = Math.max(0, expected - (m.sales || 0));
                 const need = periodNeed(b.label, shortfall, opts.lastAvailableInMonth);
+                const achPeriodPct =
+                    expected > 0 ? ((m.sales || 0) / expected) * 100 : (m.achievement || 0);
                 const rowIndex = empRows.length;
                 empRows.push([
-                    firstRowForEmployee ? `${emp.name} (${emp.id})` : '↳',
+                    '↳',
                     block.label || '-',
                     b.label,
                     fmtN(expected),
                     fmtN(m.sales),
-                    `${(m.achievement || 0).toFixed(1)}%`,
+                    `${achPeriodPct.toFixed(1)}%`,
                     fmtN(m.avgInv),
                     `${(m.contributionPct || 0).toFixed(1)}%`,
                     fmtN(m.items || 0),
-                    fmtN(m.customerValue),
                     fmtN(shortfall),
                     String(need.days),
                     fmtN(need.daily),
-                    `${empAch.toFixed(1)}%`,
                 ]);
-                firstRowForEmployee = false;
                 if (!markedFirstPeriod) {
-                    firstPeriodRows.set(rowIndex, (m.achievement || 0) >= 100);
+                    firstPeriodRows.set(rowIndex, achPeriodPct >= 100);
                     markedFirstPeriod = true;
                 }
             });
@@ -968,32 +969,44 @@ export const generateTargetSplitStorePDF = async (
 
     (doc as any).autoTable({
         startY: 34,
-        head: [['الموظف', 'المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق', 'ATV', 'المساهمة', 'القطع', 'قيمة عميل', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً', 'تحقيق الشهر']],
-        body: empRows.length ? empRows : [['-', '-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '0', '1', '0', '0.0%']],
-        styles: { font: 'Amiri', halign: 'center', fontSize: 7.2, cellPadding: 1.2 },
-        headStyles: { fillColor: [70, 85, 110], textColor: 255 },
+        head: [['', 'المرحلة', 'الفترة', 'تارجت الفترة', 'المبيعات', 'تحقيق % (فترة)', 'ATV', 'مساهمة %', 'قطع', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً']],
+        body: empRows.length
+            ? empRows
+            : [['-', '-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '0', '0']],
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8.2, cellPadding: 1.8 },
+        headStyles: { fillColor: [70, 85, 110], textColor: 255, fontSize: 8.5 },
         alternateRowStyles: { fillColor: [245, 245, 245] },
         columnStyles: {
-            0: { halign: 'right', cellWidth: 32 },
-            2: { cellWidth: 30 },
+            0: { halign: 'right', cellWidth: 22 },
+            2: { cellWidth: 28 },
+            5: { cellWidth: 22 },
         },
         didParseCell: (data: any) => {
             const r = data.row.index;
-            if (separatorRows.has(r)) {
+            const cellRaw = data.row.raw;
+            const isSep =
+                separatorRows.has(r) ||
+                (Array.isArray(cellRaw) &&
+                    cellRaw.length === 1 &&
+                    typeof cellRaw[0] === 'object' &&
+                    cellRaw[0]?.colSpan === EMP_COLS);
+            if (isSep && data.column.index === 0) {
                 data.cell.styles.fillColor = [232, 236, 244];
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.textColor = [15, 23, 42];
+                data.cell.styles.fontSize = 9;
+                data.cell.styles.halign = 'right';
             }
             if (firstPeriodRows.has(r)) {
                 const ok = firstPeriodRows.get(r);
                 data.cell.styles.fillColor = ok ? [220, 252, 231] : [254, 226, 226];
                 data.cell.styles.textColor = ok ? [22, 101, 52] : [127, 29, 29];
             }
-            if (data.column.index === 10 || data.column.index === 12) {
+            if (data.column.index === 9 || data.column.index === 11) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.textColor = [153, 27, 27];
             }
-            if (data.column.index === 11) {
+            if (data.column.index === 10) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.fillColor = [255, 247, 237];
             }
