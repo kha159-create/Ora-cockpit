@@ -7,7 +7,7 @@ import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, InvoicesIcon, VisitorsIcon, FireIcon, CustomerValueIcon } from '../components/Icons';
 import { runProductValueAnalysis, safeNum } from '../services/analysisHelpers';
 import StoreCompareModal from '../components/StoreCompareModal';
-import { getComparisonPrevRange, getComparisonPrevDate, type ComparisonCalendarMode } from '../utils/seasons';
+import { getComparisonPrevRange, getComparisonPrevDate, formatComparisonRangeForDisplay, type ComparisonCalendarMode } from '../utils/seasons';
 import { useComparisonCalendar } from '../context/ComparisonCalendarContext';
 import {
   getMarch2026TargetMetrics,
@@ -987,7 +987,12 @@ export default function StoresPage() {
           ? 'الفترة الأولى (1–19 آذار) · '
           : 'الفترة الثانية (20–31 آذار) · '
         : '';
-    const rangeCore = range.startYMD === range.endYMD ? range.startYMD : `${range.startYMD} → ${range.endYMD} `;
+    const rangeCore =
+      comparisonCalendar === 'hijri'
+        ? formatComparisonRangeForDisplay(range.startYMD, range.endYMD, 'hijri')
+        : range.startYMD === range.endYMD
+          ? range.startYMD
+          : `${range.startYMD} → ${range.endYMD} `;
     return {
       managers: managersList,
       cities: citiesList,
@@ -997,7 +1002,7 @@ export default function StoresPage() {
       achTotal,
       rangeLabel: `${marchNote}${rangeCore}`,
     };
-  }, [branch, city, effectiveManager, manager, marchMtdPhase, mgmtRaw, mode, range, type, user?.name, user?.role]);
+  }, [branch, city, effectiveManager, manager, marchMtdPhase, mgmtRaw, mode, range, type, user?.name, user?.role, comparisonCalendar]);
 
   useEffect(() => {
     const sid = searchParams.get('sid');
@@ -1041,6 +1046,14 @@ export default function StoresPage() {
 
   return (
     <div className="space-y-6 relative min-h-[400px]">
+      <div className="rounded-xl border border-orange-200 bg-gradient-to-r from-orange-50/90 to-white px-4 py-3 text-sm text-neutral-800 shadow-sm">
+        <span className="font-black text-orange-800">مقارنة السنة الماضية:</span>{' '}
+        {comparisonCalendar === 'gregorian' ? (
+          <span>الوضع <strong className="text-neutral-900">ميلادي</strong> — المقارنة مع نفس الفترة بعد طرح سنة ميلادية كاملة.</span>
+        ) : (
+          <span>الوضع <strong className="text-neutral-900">هجري</strong> — المقارنة مع نفس اليوم الهجري بعد طرح سنة هجرية (محاذاة هجرية).</span>
+        )}
+      </div>
       <div className="bg-white rounded-xl shadow-md border border-neutral-200 p-3">
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
           <div className="flex flex-wrap items-end gap-3">

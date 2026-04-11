@@ -152,6 +152,13 @@ export function getSeasonalPrevDate(dateStr: string): string {
   return dateStr.replace(/^\d{4}/, (yr) => String(Number(yr) - 1));
 }
 
+/** أسماء الأشهر الهجرية للعرض */
+export const HIJRI_MONTHS_AR = [
+  '', 'محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني',
+  'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان',
+  'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة',
+] as const;
+
 export function formatHijriDate(dateStr: string): string {
   try {
     if (!dateStr) return '';
@@ -160,6 +167,19 @@ export function formatHijriDate(dateStr: string): string {
     return `${hijri.day} / ${hijri.month} / ${hijri.year}`;
   } catch {
     return '';
+  }
+}
+
+/** تاريخ هجري مقروء، مثال: «١٠ شعبان ١٤٤٧ هـ» */
+export function formatHijriDateArabic(dateStr: string): string {
+  try {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const hijri = gregorianToHijri({ year: y, month: m, day: d });
+    const monthName = HIJRI_MONTHS_AR[hijri.month] || String(hijri.month);
+    return `${hijri.day} ${monthName} ${hijri.year} هـ`;
+  } catch {
+    return formatHijriDate(dateStr);
   }
 }
 
@@ -210,6 +230,21 @@ export function getPrevYearRange(start: string, end: string, forceGregorian = fa
 /** مقارنة صريحة: ميلادي −١ سنة تقويمية | هجري نفس التاريخ الهجري من العام الهجري السابق */
 export type ComparisonCalendarMode = 'gregorian' | 'hijri';
 
+/** عرض نطاق الفترة: ميلادي كما هو من التقويم، أو هجري عند اختيار مقارنة هجرية */
+export function formatComparisonRangeForDisplay(
+  start: string,
+  end: string,
+  mode: ComparisonCalendarMode,
+): string {
+  if (!start || !end) return '';
+  if (mode === 'gregorian') {
+    return start === end ? start : `${start} → ${end}`;
+  }
+  const a = formatHijriDateArabic(start);
+  const b = formatHijriDateArabic(end);
+  return start === end ? a : `${a} → ${b}`;
+}
+
 export function getComparisonPrevRange(
   start: string,
   end: string,
@@ -244,13 +279,7 @@ export function getCurrentHijriDisplay(date?: Date): string {
       day: d.getDate(),
     });
 
-    const hijriMonths = [
-      '', 'محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني',
-      'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان',
-      'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة',
-    ];
-
-    return `${hijri.day} ${hijriMonths[hijri.month]} ${hijri.year}`;
+    return `${hijri.day} ${HIJRI_MONTHS_AR[hijri.month]} ${hijri.year}`;
   } catch {
     return '';
   }

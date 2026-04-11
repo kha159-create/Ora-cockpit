@@ -16,7 +16,7 @@ import { buildTopStoresRankForPeriod, mapBranchesDataWithLocations } from '../ut
 import { useComparisonCalendar } from '../context/ComparisonCalendarContext';
 
 import { generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
-import { getComparisonPrevRange, getComparisonPrevDate } from '../utils/seasons';
+import { getComparisonPrevRange, getComparisonPrevDate, formatComparisonRangeForDisplay } from '../utils/seasons';
 import {
   getMarch2026TargetMetrics,
   sumManagementTargetsForMonth,
@@ -183,6 +183,11 @@ export default function DashboardPage() {
     }
     return { start, end };
   }, [mode, customStart, customEnd, selYear, selMonth, marchMtdPhase]);
+
+  const rangeDisplayText = useMemo(
+    () => formatComparisonRangeForDisplay(range.start, range.end, calendar),
+    [range.start, range.end, calendar],
+  );
 
   const handlePrintDailyReport = () => {
     // Open store report modal
@@ -1101,19 +1106,19 @@ export default function DashboardPage() {
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex flex-col gap-1 max-w-[280px]">
               <span className="text-[10px] font-bold text-neutral-500">مقارنة السنة الماضية</span>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap" dir="ltr">
                 <button
                   type="button"
                   role="switch"
                   aria-checked={calendar === 'hijri'}
                   onClick={toggleComparisonCalendar}
-                  className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 transition-colors ${calendar === 'hijri' ? 'border-orange-500 bg-orange-50' : 'border-neutral-200 bg-neutral-100'}`}
+                  className={`relative h-8 w-[3.5rem] shrink-0 cursor-pointer rounded-full border-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-1 ${calendar === 'hijri' ? 'border-orange-500 bg-orange-100' : 'border-neutral-300 bg-neutral-200'}`}
                 >
                   <span
-                    className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-1 ring-black/5 transition ${calendar === 'hijri' ? 'translate-x-6' : 'translate-x-0.5'}`}
+                    className={`pointer-events-none absolute top-0.5 left-0.5 h-7 w-7 rounded-full bg-white shadow-md ring-1 ring-black/10 transition-transform duration-200 ease-out ${calendar === 'hijri' ? 'translate-x-[1.5rem]' : 'translate-x-0'}`}
                   />
                 </button>
-                <span className="text-xs font-bold text-neutral-700 whitespace-nowrap">
+                <span className="text-xs font-bold text-neutral-700 whitespace-nowrap" dir="rtl">
                   {calendar === 'gregorian' ? 'ميلادي' : 'هجري'}
                 </span>
               </div>
@@ -1215,7 +1220,7 @@ export default function DashboardPage() {
             </>
           )}
           <div className="text-sm font-semibold text-neutral-700 flex items-end">
-            {range.start} → {range.end}
+            <span className="text-right leading-snug">{rangeDisplayText}</span>
           </div>
         </div>
       </div>

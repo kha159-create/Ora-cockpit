@@ -4,7 +4,7 @@ import { getCurrentUser } from '../auth/storage';
 import { CustomerValueInsights } from '../components/dashboard/CustomerValueInsights';
 import { CustomerValueSimulationTable } from '../components/dashboard/CustomerValueSimulationTable';
 import { buildTopStoresRankForPeriod, mapBranchesDataWithLocations } from '../utils/customerValueBranchRows';
-import { getComparisonPrevRange } from '../utils/seasons';
+import { getComparisonPrevRange, formatComparisonRangeForDisplay } from '../utils/seasons';
 import { useComparisonCalendar } from '../context/ComparisonCalendarContext';
 
 function isAdminOrAuditor(role?: string) {
@@ -124,6 +124,11 @@ export default function CustomerValueSimulationPage() {
 
   const prevYearRange = useMemo(
     () => getComparisonPrevRange(range.start, range.end, calendar),
+    [range.start, range.end, calendar],
+  );
+
+  const rangeDisplayText = useMemo(
+    () => formatComparisonRangeForDisplay(range.start, range.end, calendar),
     [range.start, range.end, calendar],
   );
 
@@ -297,9 +302,9 @@ export default function CustomerValueSimulationPage() {
               </div>
             </>
           )}
-          <div className="text-sm font-semibold text-neutral-700 flex items-end">
-            {range.start} → {range.end}
-            <span className="mr-2 text-xs text-neutral-400">({calendar === 'hijri' ? 'مقارنة هجرية' : 'مقارنة ميلادية'})</span>
+          <div className="text-sm font-semibold text-neutral-700 flex flex-col items-end gap-0.5">
+            <span>{rangeDisplayText}</span>
+            <span className="text-xs text-neutral-400">({calendar === 'hijri' ? 'مقارنة هجرية' : 'مقارنة ميلادية'})</span>
           </div>
         </div>
       </div>
@@ -308,7 +313,7 @@ export default function CustomerValueSimulationPage() {
         stores={mapBranchesData}
         formatSAR={formatSAR}
         mode={mode}
-        periodLabel={`${range.start} → ${range.end}`}
+        periodLabel={rangeDisplayText}
       />
 
       <CustomerValueSimulationTable stores={mapBranchesData} />
