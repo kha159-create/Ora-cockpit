@@ -922,9 +922,15 @@ export const generateTargetSplitStorePDF = async (
         let markedFirstPeriod = false;
         const sepIndex = empRows.length;
         separatorRows.add(sepIndex);
+        // سطران: (1) الاسم والمعرّف بمحاذاة يمين كما يُقرأ بالعربية (2) الأرقام معزولة لتفادي اختلاط % مع رقم الموظف في PDF
+        const nMonth = fmtN(emp.monthTarget);
+        const nPct = empAch.toFixed(1);
+        const lineName = `\u200F${emp.name}\u200F (\u2066${String(emp.id)}\u2069)`;
+        const lineStats = `\u200Fتارجت الشهر:\u200F \u2066${nMonth}\u2069 \u200F—\u200F \u200Fتحقيق من تارجت الشهر:\u200F \u2066${nPct}%\u2069`;
+        const sepLine = `${lineName}\n${lineStats}`;
         empRows.push([
             {
-                content: `${emp.name} (${emp.id})  —  تارجت الشهر: ${fmtN(emp.monthTarget)}  —  تحقيق من تارجت الشهر: ${empAch.toFixed(1)}%`,
+                content: sepLine,
                 colSpan: EMP_COLS,
                 styles: {
                     fillColor: [232, 236, 244],
@@ -932,7 +938,8 @@ export const generateTargetSplitStorePDF = async (
                     textColor: [15, 23, 42],
                     fontSize: 9,
                     halign: 'right',
-                    cellPadding: { top: 3, bottom: 3, left: 4, right: 4 },
+                    valign: 'middle',
+                    cellPadding: { top: 5, bottom: 5, left: 5, right: 5 },
                 },
             },
         ]);
@@ -969,17 +976,17 @@ export const generateTargetSplitStorePDF = async (
 
     (doc as any).autoTable({
         startY: 34,
-        head: [['', 'المرحلة', 'الفترة', 'تارجت الفترة', 'المبيعات', 'تحقيق % (فترة)', 'ATV', 'مساهمة %', 'قطع', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً']],
+        head: [['', 'المرحلة', 'الفترة', 'تارجت الفترة', 'المبيعات', 'نسبة تحقيق الفترة', 'ATV', 'مساهمة %', 'قطع', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً']],
         body: empRows.length
             ? empRows
             : [['-', '-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '0', '0']],
-        styles: { font: 'Amiri', halign: 'center', fontSize: 8.2, cellPadding: 1.8 },
-        headStyles: { fillColor: [70, 85, 110], textColor: 255, fontSize: 8.5 },
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8.4, cellPadding: 2.1 },
+        headStyles: { fillColor: [70, 85, 110], textColor: 255, fontSize: 8.6 },
         alternateRowStyles: { fillColor: [245, 245, 245] },
         columnStyles: {
             0: { halign: 'right', cellWidth: 22 },
             2: { cellWidth: 28 },
-            5: { cellWidth: 22 },
+            5: { cellWidth: 22, fontStyle: 'bold' },
         },
         didParseCell: (data: any) => {
             const r = data.row.index;
@@ -1000,7 +1007,9 @@ export const generateTargetSplitStorePDF = async (
             if (firstPeriodRows.has(r)) {
                 const ok = firstPeriodRows.get(r);
                 data.cell.styles.fillColor = ok ? [220, 252, 231] : [254, 226, 226];
-                data.cell.styles.textColor = ok ? [22, 101, 52] : [127, 29, 29];
+                if (data.column.index !== 10) {
+                    data.cell.styles.textColor = ok ? [22, 101, 52] : [127, 29, 29];
+                }
             }
             if (data.column.index === 9 || data.column.index === 11) {
                 data.cell.styles.fontStyle = 'bold';
@@ -1009,6 +1018,7 @@ export const generateTargetSplitStorePDF = async (
             if (data.column.index === 10) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.fillColor = [255, 247, 237];
+                data.cell.styles.textColor = [15, 23, 42];
             }
         },
     });
