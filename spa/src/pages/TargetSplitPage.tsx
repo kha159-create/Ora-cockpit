@@ -827,7 +827,6 @@ export default function TargetSplitPage() {
         'تحقيق %',
         'معدل فاتورة',
         'تحويل %',
-        'قيمة عميل',
         'متبقي للفترة',
         'مطلوب يومياً لإغلاق الشهر',
       ]);
@@ -850,7 +849,6 @@ export default function TargetSplitPage() {
             metrics.achievement / 100,
             metrics.avgInv,
             metrics.conversion / 100,
-            metrics.customerValue,
             metrics.shortfallPeriod,
             metrics.closeMonthDaily,
           ]);
@@ -861,7 +859,6 @@ export default function TargetSplitPage() {
           fz(cur, 6, '0.0%');
           fz(cur, 7, '#,##0');
           fz(cur, 8, '#,##0');
-          fz(cur, 9, '#,##0');
           rIdx++;
         }
       }
@@ -891,7 +888,7 @@ export default function TargetSplitPage() {
             'الفترة',
             'تارجت الفترة',
             'مبيعات',
-            'تحقيق % (فترة)',
+            'تحقيق %',
             'ATV',
             'مساهمة %',
             'قطع',
@@ -1349,7 +1346,6 @@ export default function TargetSplitPage() {
                                       <th className="th text-center">تحقيق</th>
                                       <th className="th text-center">معدل فاتورة</th>
                                       <th className="th text-center">تحويل %</th>
-                                      <th className="th text-center">قيمة عميل</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -1357,7 +1353,7 @@ export default function TargetSplitPage() {
                                       <React.Fragment key={block.key}>
                                         {block.label ? (
                                           <tr className="bg-orange-100/90 border-b border-orange-200/80">
-                                            <td colSpan={7} className="td py-2 px-3 text-right font-bold text-orange-950">
+                                            <td colSpan={6} className="td py-2 px-3 text-right font-bold text-orange-950">
                                               {block.label}
                                             </td>
                                           </tr>
@@ -1381,29 +1377,22 @@ export default function TargetSplitPage() {
                                               </td>
                                               <td className="td text-center dir-ltr">{formatSAR(metrics.avgInv)}</td>
                                               <td className="td text-center">{metrics.conversion.toFixed(1)}%</td>
-                                              <td className="td text-center dir-ltr">{Math.round(metrics.customerValue).toLocaleString()}</td>
                                             </tr>
                                             {(granularity === '10' || granularity === '15') &&
                                               bucket.start <= lastAvailableInMonth &&
                                               bucket.end > lastAvailableInMonth && (
                                                 <tr className="bg-sky-50/90 border-b border-sky-100">
-                                                  <td colSpan={7} className="py-2 px-3 text-[11px] text-sky-900 leading-relaxed">
+                                                  <td colSpan={6} className="py-2 px-3 text-[11px] text-sky-900 leading-relaxed">
                                                     {(() => {
                                                       const shortfall = Math.max(0, periodExpectedTarget(metrics, granularity) - metrics.sales);
                                                       const p = dailyNeededForCurrentPeriod(bucket.end, lastAvailableInMonth, shortfall);
                                                       return (
-                                                        <span className="inline-block rounded-lg bg-white/90 px-2.5 py-1.5 font-extrabold text-sky-900 shadow-sm shadow-sky-200 border border-sky-200/60">
+                                                        <span className="inline-block rounded-lg bg-white/80 px-2 py-1 font-extrabold text-sky-900 shadow-sm shadow-sky-200">
                                                           متبقي من تارجت الفترة{' '}
                                                           <span className="dir-ltr inline-block">{formatSAR(shortfall)}</span>
                                                           {' / '}
-                                                          <span className="text-neutral-900 font-extrabold">
-                                                            باقي{' '}
-                                                            <span className="dir-ltr inline-block tabular-nums">{p.remainingDays}</span>{' '}
-                                                            أيام
-                                                          </span>
-                                                          {' = '}
-                                                          <span className="dir-ltr inline-block tabular-nums">{formatSAR(p.dailyNeeded)}</span>{' '}
-                                                          <span className="text-neutral-900 font-extrabold">يومياً</span>
+                                                          باقي {p.remainingDays} أيام ={' '}
+                                                          <span className="dir-ltr inline-block">{formatSAR(p.dailyNeeded)}</span> يومياً
                                                         </span>
                                                       );
                                                     })()}
@@ -1414,7 +1403,7 @@ export default function TargetSplitPage() {
                                               bucket.end <= lastAvailableInMonth &&
                                               metrics.sales < periodExpectedTarget(metrics, granularity) && (
                                               <tr className="bg-rose-50/90 border-b border-rose-100">
-                                                <td colSpan={7} className="py-2 px-3 text-[11px] text-rose-900 leading-relaxed">
+                                                <td colSpan={6} className="py-2 px-3 text-[11px] text-rose-900 leading-relaxed">
                                                   <span className="font-semibold">لم يُحقَّق كامل التارجت:</span>{' '}
                                                   <span className="inline-block rounded-lg bg-white/80 px-2 py-1 font-extrabold text-rose-900 shadow-sm shadow-rose-200">
                                                     متبقي من تارجت الفترة{' '}
@@ -1427,7 +1416,7 @@ export default function TargetSplitPage() {
                                               bucket.end <= lastAvailableInMonth &&
                                               metrics.sales >= periodExpectedTarget(metrics, granularity) && (
                                                 <tr className="bg-emerald-50/90 border-b border-emerald-100">
-                                                  <td colSpan={7} className="py-2 px-3 text-[11px] text-emerald-900 leading-relaxed">
+                                                  <td colSpan={6} className="py-2 px-3 text-[11px] text-emerald-900 leading-relaxed">
                                                     <span className="font-semibold">تم تحقيق التارجت وزيادة:</span>{' '}
                                                     <span className="dir-ltr inline-block font-bold">
                                                       {formatSAR(Math.max(0, metrics.sales - periodExpectedTarget(metrics, granularity)))}
@@ -1454,59 +1443,56 @@ export default function TargetSplitPage() {
                                     const eAch = emp.monthTarget > 0 ? (emp.monthSales / emp.monthTarget) * 100 : 0;
                                     return (
                                       <div key={ek} className="rounded-xl border border-neutral-200 bg-white overflow-hidden">
-                                        <div
-                                          dir="rtl"
-                                          className="flex flex-wrap items-center justify-start gap-x-5 gap-y-2 bg-slate-200/95 px-3 py-3 border-b border-slate-300/90 text-xs sm:text-sm text-slate-900"
+                                        <button
+                                          type="button"
+                                          className="w-full flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-right hover:bg-neutral-50"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleEmp(ek);
+                                          }}
                                         >
-                                          <button
-                                            type="button"
-                                            className="min-w-0 shrink text-right font-bold text-slate-900 underline-offset-2 hover:underline focus-visible:outline focus-visible:ring-2 focus-visible:ring-slate-500 rounded-sm"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              toggleEmp(ek);
-                                            }}
-                                            title={eopen ? 'إخفاء تفاصيل الفترات' : 'عرض تفاصيل الفترات'}
-                                          >
-                                            {emp.name}{' '}
-                                            <span className="font-semibold text-slate-600">({emp.id})</span>
-                                          </button>
-                                          <span className="inline-flex flex-wrap items-baseline gap-1 tabular-nums">
-                                            <span className="text-slate-700">تارجت الشهر:</span>
-                                            <b className="dir-ltr inline-block font-extrabold text-slate-900">{formatSAR(emp.monthTarget)}</b>
+                                          <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-neutral-900">
+                                            <span className="font-semibold">
+                                              {emp.name}{' '}
+                                              <span className="text-xs font-normal text-neutral-500">({emp.id})</span>
+                                            </span>
+                                            <span className="text-xs text-neutral-600">
+                                              تارجت الشهر:{' '}
+                                              <b className="dir-ltr inline-block text-neutral-900">{formatSAR(emp.monthTarget)}</b>
+                                            </span>
+                                            <span className="text-xs text-neutral-600">
+                                              تحقيق الشهر:{' '}
+                                              <b
+                                                className={
+                                                  eAch >= 100 ? 'text-emerald-700' : eAch >= 85 ? 'text-amber-800' : 'text-red-700'
+                                                }
+                                              >
+                                                {eAch.toFixed(1)}%
+                                              </b>
+                                            </span>
                                           </span>
-                                          <span className="inline-flex flex-wrap items-baseline gap-1 tabular-nums">
-                                            <span className="text-slate-700">مبيعات:</span>
-                                            <b className="dir-ltr inline-block font-semibold text-slate-900">{formatSAR(emp.monthSales)}</b>
+                                          <span className="text-xs shrink-0 text-neutral-500">
+                                            {eopen ? 'إخفاء الجدول' : 'تفاصيل الفترات'}
                                           </span>
-                                          <span className="inline-flex flex-wrap items-baseline gap-1 tabular-nums">
-                                            <span className="text-slate-700">تحقيق من تارجت الشهر:</span>
-                                            <b
-                                              className={`dir-ltr inline-block font-extrabold ${
-                                                eAch >= 100 ? 'text-emerald-800' : eAch >= 85 ? 'text-amber-900' : 'text-red-800'
-                                              }`}
-                                            >
-                                              {eAch.toFixed(1)}%
-                                            </b>
-                                          </span>
-                                        </div>
+                                        </button>
                                         {eopen && (
                                           <div className="border-t border-neutral-100 p-2 overflow-x-auto max-h-80 overflow-y-auto">
-                                            <table className="min-w-full border-collapse text-[11px]">
+                                            <table className="min-w-full text-[11px]">
                                               <thead>
                                                 <tr className="bg-slate-700 text-white">
-                                                  <th className="th text-right py-2.5">الفترة</th>
-                                                  <th className="th text-center py-2.5">
+                                                  <th className="th text-right">الفترة</th>
+                                                  <th className="th text-center">
                                                     {granularity === 'day'
                                                       ? 'اليومية'
                                                       : granularity === '10' || granularity === '15'
                                                         ? 'تارجت (ترحيل)'
                                                         : 'تارجت'}
                                                   </th>
-                                                  <th className="th text-center py-2.5">مبيعات</th>
-                                                  <th className="th text-center py-2.5">نسبة تحقيق الفترة</th>
-                                                  <th className="th text-center py-2.5">ATV</th>
-                                                  <th className="th text-center py-2.5">مساهمة %</th>
-                                                  <th className="th text-center py-2.5">قطع</th>
+                                                  <th className="th text-center">مبيعات</th>
+                                                  <th className="th text-center">تحقيق (فترة)</th>
+                                                  <th className="th text-center">ATV</th>
+                                                  <th className="th text-center">مساهمة %</th>
+                                                  <th className="th text-center">قطع</th>
                                                 </tr>
                                               </thead>
                                               <tbody>
@@ -1514,31 +1500,31 @@ export default function TargetSplitPage() {
                                                   <React.Fragment key={block.key}>
                                                     {block.label ? (
                                                       <tr className="bg-slate-200/80 border-b border-slate-300/80">
-                                                        <td colSpan={7} className="td py-2 px-3 text-right font-bold text-slate-900">
+                                                        <td colSpan={7} className="td py-1.5 px-2 text-right font-bold text-slate-900">
                                                           {block.label}
                                                         </td>
                                                       </tr>
                                                     ) : null}
                                                     {block.buckets.map(({ bucket, metrics }) => (
                                                       <React.Fragment key={bucket.id}>
-                                                        <tr className="border-b border-neutral-100 align-middle">
-                                                          <td className="td py-2 font-mono text-[11px]">{bucket.label}</td>
-                                                          <td className="td py-2 text-center dir-ltr tabular-nums">
+                                                        <tr className="border-b border-neutral-100">
+                                                          <td className="td font-mono">{bucket.label}</td>
+                                                          <td className="td text-center dir-ltr">
                                                             {formatSAR(granularity === 'day' ? metrics.dailyTargetDynamic || 0 : metrics.target)}
                                                           </td>
-                                                          <td className="td py-2 text-center dir-ltr tabular-nums">{formatSAR(metrics.sales)}</td>
-                                                          <td className="td py-2 text-center tabular-nums">
+                                                          <td className="td text-center dir-ltr">{formatSAR(metrics.sales)}</td>
+                                                          <td className="td text-center">
                                                             <span
-                                                              className={`inline-block min-w-[3.25rem] font-bold ${
+                                                              className={`font-bold ${
                                                                 metrics.achievement >= 100 ? 'text-emerald-600' : metrics.achievement >= 85 ? 'text-amber-700' : 'text-red-600'
                                                               }`}
                                                             >
                                                               {metrics.achievement.toFixed(1)}%
                                                             </span>
                                                           </td>
-                                                          <td className="td py-2 text-center dir-ltr tabular-nums">{formatSAR(metrics.avgInv)}</td>
-                                                          <td className="td py-2 text-center font-medium tabular-nums">{metrics.contributionPct.toFixed(1)}%</td>
-                                                          <td className="td py-2 text-center tabular-nums">{Math.round(metrics.items).toLocaleString()}</td>
+                                                          <td className="td text-center dir-ltr">{formatSAR(metrics.avgInv)}</td>
+                                                          <td className="td text-center font-medium">{metrics.contributionPct.toFixed(1)}%</td>
+                                                          <td className="td text-center">{Math.round(metrics.items).toLocaleString()}</td>
                                                         </tr>
                                                         {(granularity === '10' || granularity === '15') &&
                                                           bucket.start <= lastAvailableInMonth &&
@@ -1549,18 +1535,12 @@ export default function TargetSplitPage() {
                                                                   const shortfall = Math.max(0, periodExpectedTarget(metrics, granularity) - metrics.sales);
                                                                   const p = dailyNeededForCurrentPeriod(bucket.end, lastAvailableInMonth, shortfall);
                                                                   return (
-                                                                    <span className="inline-block rounded-lg bg-white/90 px-2.5 py-1.5 font-extrabold text-sky-900 shadow-sm shadow-sky-200 border border-sky-200/60">
+                                                                    <span className="inline-block rounded-lg bg-white/80 px-2 py-1 font-extrabold text-sky-900 shadow-sm shadow-sky-200">
                                                                       متبقي من تارجت الفترة{' '}
                                                                       <span className="dir-ltr inline-block">{formatSAR(shortfall)}</span>
                                                                       {' / '}
-                                                                      <span className="text-neutral-900 font-extrabold">
-                                                                        باقي{' '}
-                                                                        <span className="dir-ltr inline-block tabular-nums">{p.remainingDays}</span>{' '}
-                                                                        أيام
-                                                                      </span>
-                                                                      {' = '}
-                                                                      <span className="dir-ltr inline-block tabular-nums">{formatSAR(p.dailyNeeded)}</span>{' '}
-                                                                      <span className="text-neutral-900 font-extrabold">يومياً</span>
+                                                                      باقي {p.remainingDays} أيام ={' '}
+                                                                      <span className="dir-ltr inline-block">{formatSAR(p.dailyNeeded)}</span> يومياً
                                                                     </span>
                                                                   );
                                                                 })()}

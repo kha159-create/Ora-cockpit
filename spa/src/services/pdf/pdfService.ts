@@ -837,12 +837,9 @@ const periodNeed = (bucketLabel: string, shortfall: number, lastAvailableInMonth
     const d = new Date(lastAvailableInMonth + 'T12:00:00');
     d.setDate(d.getDate() + 1); // include "today" relative to data cutoff (yesterday)
     const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    // انتهت فترة الـ10/15 يوماً: لا يبقى يوم في هذه الخانة
     if (todayStr > bucketEnd) {
         return { days: 0, daily: 0 };
     }
-    // Active bucket: count from today to bucket end.
-    // Future bucket: count full bucket days only (do not include current bucket leftovers).
     const fromYmd = todayStr < bucketStart ? bucketStart : todayStr;
     const a = new Date(fromYmd + 'T12:00:00').getTime();
     const b = new Date(bucketEnd + 'T12:00:00').getTime();
@@ -881,7 +878,6 @@ export const generateTargetSplitStorePDF = async (
                 `${(m.achievement || 0).toFixed(1)}%`,
                 fmtN(m.avgInv),
                 `${(m.conversion || 0).toFixed(1)}%`,
-                fmtN(m.customerValue),
                 fmtN(shortfall),
                 String(need.days),
                 fmtN(need.daily),
@@ -891,17 +887,17 @@ export const generateTargetSplitStorePDF = async (
 
     (doc as any).autoTable({
         startY: 40,
-        head: [['المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق', 'معدل فاتورة', 'التحويل', 'قيمة عميل', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً']],
-        body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '1', '0']],
-        styles: { font: 'Amiri', halign: 'center', fontSize: 8.4, cellPadding: 1.9 },
-        headStyles: { fillColor: [254, 121, 0], textColor: 255, fontSize: 8.6 },
+        head: [['المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق', 'معدل فاتورة', 'التحويل', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً']],
+        body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '0']],
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.5 },
+        headStyles: { fillColor: [254, 121, 0], textColor: 255 },
         alternateRowStyles: { fillColor: [245, 245, 245] },
         didParseCell: (data: any) => {
-            if (data.column.index === 8 || data.column.index === 10) {
+            if (data.column.index === 7 || data.column.index === 9) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.textColor = [153, 27, 27];
             }
-            if (data.column.index === 9) {
+            if (data.column.index === 8) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.fillColor = [255, 247, 237];
             }
@@ -922,27 +918,24 @@ export const generateTargetSplitStorePDF = async (
         let markedFirstPeriod = false;
         const sepIndex = empRows.length;
         separatorRows.add(sepIndex);
-        // سطران: (1) الاسم والمعرّف بمحاذاة يمين كما يُقرأ بالعربية (2) الأرقام معزولة لتفادي اختلاط % مع رقم الموظف في PDF
-        const nMonth = fmtN(emp.monthTarget);
-        const nPct = empAch.toFixed(1);
-        const lineName = `\u200F${emp.name}\u200F (\u2066${String(emp.id)}\u2069)`;
-        const lineStats = `\u200Fتارجت الشهر:\u200F \u2066${nMonth}\u2069 \u200F—\u200F \u200Fتحقيق من تارجت الشهر:\u200F \u2066${nPct}%\u2069`;
-        const sepLine = `${lineName}\n${lineStats}`;
+        const sepText =
+            `الموظف: ${emp.name} (${emp.id}) — تارجت الشهر: ${fmtN(emp.monthTarget)} — تحقيق الشهر: ${empAch.toFixed(1)}%`;
         empRows.push([
             {
-                content: sepLine,
+                content: sepText,
                 colSpan: EMP_COLS,
                 styles: {
                     fillColor: [232, 236, 244],
                     fontStyle: 'bold',
                     textColor: [15, 23, 42],
-                    fontSize: 9,
+                    fontSize: 8.5,
                     halign: 'right',
                     valign: 'middle',
-                    cellPadding: { top: 5, bottom: 5, left: 5, right: 5 },
+                    cellPadding: { top: 3, bottom: 3, left: 4, right: 4 },
                 },
             },
         ]);
+        let firstRowForEmployee = true;
         (emp.bucketBlocks || []).forEach((block) => {
             (block.buckets || []).forEach((b) => {
                 const m = b.metrics || ({} as TargetSplitPdfMetrics);
@@ -953,7 +946,7 @@ export const generateTargetSplitStorePDF = async (
                     expected > 0 ? ((m.sales || 0) / expected) * 100 : (m.achievement || 0);
                 const rowIndex = empRows.length;
                 empRows.push([
-                    '↳',
+                    firstRowForEmployee ? `${emp.name} (${emp.id})` : '↳',
                     block.label || '-',
                     b.label,
                     fmtN(expected),
@@ -966,6 +959,7 @@ export const generateTargetSplitStorePDF = async (
                     String(need.days),
                     fmtN(need.daily),
                 ]);
+                firstRowForEmployee = false;
                 if (!markedFirstPeriod) {
                     firstPeriodRows.set(rowIndex, achPeriodPct >= 100);
                     markedFirstPeriod = true;
@@ -976,17 +970,14 @@ export const generateTargetSplitStorePDF = async (
 
     (doc as any).autoTable({
         startY: 34,
-        head: [['', 'المرحلة', 'الفترة', 'تارجت الفترة', 'المبيعات', 'نسبة تحقيق الفترة', 'ATV', 'مساهمة %', 'قطع', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً']],
-        body: empRows.length
-            ? empRows
-            : [['-', '-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '0', '0']],
-        styles: { font: 'Amiri', halign: 'center', fontSize: 8.4, cellPadding: 2.1 },
-        headStyles: { fillColor: [70, 85, 110], textColor: 255, fontSize: 8.6 },
+        head: [['', 'المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق (فترة)', 'ATV', 'المساهمة', 'القطع', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً']],
+        body: empRows.length ? empRows : [['-', '-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '0', '0']],
+        styles: { font: 'Amiri', halign: 'center', fontSize: 7.2, cellPadding: 1.4 },
+        headStyles: { fillColor: [70, 85, 110], textColor: 255 },
         alternateRowStyles: { fillColor: [245, 245, 245] },
         columnStyles: {
-            0: { halign: 'right', cellWidth: 22 },
+            0: { halign: 'right', cellWidth: 30 },
             2: { cellWidth: 28 },
-            5: { cellWidth: 22, fontStyle: 'bold' },
         },
         didParseCell: (data: any) => {
             const r = data.row.index;
@@ -996,20 +987,18 @@ export const generateTargetSplitStorePDF = async (
                 (Array.isArray(cellRaw) &&
                     cellRaw.length === 1 &&
                     typeof cellRaw[0] === 'object' &&
-                    cellRaw[0]?.colSpan === EMP_COLS);
+                    (cellRaw[0] as { colSpan?: number }).colSpan === EMP_COLS);
             if (isSep && data.column.index === 0) {
                 data.cell.styles.fillColor = [232, 236, 244];
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.textColor = [15, 23, 42];
-                data.cell.styles.fontSize = 9;
+                data.cell.styles.fontSize = 8.5;
                 data.cell.styles.halign = 'right';
             }
             if (firstPeriodRows.has(r)) {
                 const ok = firstPeriodRows.get(r);
                 data.cell.styles.fillColor = ok ? [220, 252, 231] : [254, 226, 226];
-                if (data.column.index !== 10) {
-                    data.cell.styles.textColor = ok ? [22, 101, 52] : [127, 29, 29];
-                }
+                data.cell.styles.textColor = ok ? [22, 101, 52] : [127, 29, 29];
             }
             if (data.column.index === 9 || data.column.index === 11) {
                 data.cell.styles.fontStyle = 'bold';
@@ -1018,7 +1007,6 @@ export const generateTargetSplitStorePDF = async (
             if (data.column.index === 10) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.fillColor = [255, 247, 237];
-                data.cell.styles.textColor = [15, 23, 42];
             }
         },
     });
