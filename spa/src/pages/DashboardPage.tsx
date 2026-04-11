@@ -11,12 +11,12 @@ import { DailyReportModal } from '../components/dashboard/DailyReportModal';
 import { StoreReportModal } from '../components/dashboard/StoreReportModal';
 import { EmployeeReportModal } from '../components/dashboard/EmployeeReportModal';
 import { DrillDownModal } from '../components/dashboard/DrillDownModal';
-import { CustomerValueInsights } from '../components/dashboard/CustomerValueInsights';
 import { BranchesMap } from '../components/dashboard/BranchesMap';
-import { getStoreLocation } from '../utils/coordinates';
+import { buildTopStoresRankForPeriod, mapBranchesDataWithLocations } from '../utils/customerValueBranchRows';
+import { useComparisonCalendar } from '../context/ComparisonCalendarContext';
 
 import { generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
-import { getPrevYearRange, getPrevYearDate } from '../utils/seasons';
+import { getComparisonPrevRange, getComparisonPrevDate } from '../utils/seasons';
 import {
   getMarch2026TargetMetrics,
   sumManagementTargetsForMonth,
@@ -84,11 +84,11 @@ export default function DashboardPage() {
   const [prodRaw, setProdRaw] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [mode, setMode] = useState<Mode>('mtd');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const user = getCurrentUser();
+  const { calendar, toggle: toggleComparisonCalendar } = useComparisonCalendar();
   const [manager, setManager] = useState<string>('all');
   const [branch, setBranch] = useState<string>(user?.storeId || 'all');
   const [city, setCity] = useState<string>('all');
@@ -119,7 +119,6 @@ export default function DashboardPage() {
     val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 
   const loadData = useCallback(() => {
-    setRefreshing(true);
     Promise.all([loadManagementData(), loadEmployeesData()])
       .then(([m, e]) => {
         setRaw(m);
@@ -127,8 +126,7 @@ export default function DashboardPage() {
         setLastUpdate(new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
         setErr(null);
       })
-      .catch((e) => setErr(e?.message || String(e)))
-      .finally(() => setRefreshing(false));
+      .catch((e) => setErr(e?.message || String(e)));
   }, []);
 
   useEffect(() => {
@@ -213,7 +211,7 @@ export default function DashboardPage() {
     const prevDateMap: Record<string, string> = {};
     const prevDatesSet = new Set<string>();
     dates.forEach(dt => {
-      const prevDt = getPrevYearDate(dt);
+      const prevDt = getComparisonPrevDate(dt, calendar);
       prevDateMap[dt] = prevDt;
       prevDatesSet.add(prevDt);
     });
@@ -523,10 +521,10 @@ export default function DashboardPage() {
     return { sales, trans, visitors, target };
   }, [raw, range.start, range.end, allowedStoreIds, mode]);
 
-  // نفس الفترة من السنة الماضية للمقارنة (مع دعم المواسم الهجرية)
+  // نفس الفترة من السنة الماضية: ميلادي −١ سنة | أو محاذاة هجرية حسب الإعداد
   const prevYearRange = useMemo(() => {
-    return getPrevYearRange(range.start, range.end);
-  }, [range.start, range.end]);
+    return getComparisonPrevRange(range.start, range.end, calendar);
+  }, [range.start, range.end, calendar]);
 
   const prevYearTotals = useMemo(() => {
     if (!raw) return { sales: 0, trans: 0, visitors: 0, target: 0 };
@@ -550,86 +548,15 @@ export default function DashboardPage() {
     return { sales, trans, visitors, target };
   }, [raw, prevYearRange.start, prevYearRange.end, allowedStoreIds, mode]);
 
-  const inRange = useMemo(
-    () => (d: string) => {
-      const x = String(d).substring(0, 10);
-      return x >= range.start && x <= range.end;
-    },
-    [range.start, range.end],
-  );
-
-  // دالة للتحقق من تاريخ ضمن نفس الفترة للسنة السابقة
-  const inPrevYearRange = useMemo(
-    () => (d: string) => {
-      const x = String(d).substring(0, 10);
-      return x >= prevYearRange.start && x <= prevYearRange.end;
-    },
-    [prevYearRange.start, prevYearRange.end],
-  );
-
   const topStoresRank = useMemo(() => {
     if (!raw?.sales || !raw?.stores) return [];
-    const allow = (sid: string) => allowedStoreIds.has(sid);
-    const byStore: Record<string, { sales: number; trans: number; visitors: number; target: number; prevYearSales: number; prevYearVisitors: number }> = {};
-    const isOnlineStore = (sid: string) => raw?.store_meta?.[sid]?.type === 'online';
-
-    (raw.sales || []).forEach(([d, s, v]: any[]) => {
-      if (!allow(s) || isOnlineStore(s)) return;
-      if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevYearSales: 0, prevYearVisitors: 0 };
-      if (inRange(d)) byStore[s].sales += v || 0;
-      // مقارنة بنفس الفترة من السنة السابقة
-      if (inPrevYearRange(d)) byStore[s].prevYearSales += v || 0;
+    return buildTopStoresRankForPeriod(raw, {
+      allowedStoreIds,
+      range: { start: range.start, end: range.end },
+      prevYearRange,
+      mode,
     });
-    (raw.transactions || []).forEach(([d, s, v]: any[]) => {
-      if (!allow(s) || isOnlineStore(s)) return;
-      if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevYearSales: 0, prevYearVisitors: 0 };
-      if (inRange(d)) byStore[s].trans += v || 0;
-    });
-    (raw.visitors || []).forEach(([d, s, v]: any[]) => {
-      if (!allow(s) || isOnlineStore(s)) return;
-      if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevYearSales: 0, prevYearVisitors: 0 };
-      if (inRange(d)) byStore[s].visitors += v || 0;
-      // مقارنة زوار نفس الفترة من السنة السابقة
-      if (inPrevYearRange(d)) byStore[s].prevYearVisitors += v || 0;
-    });
-    if (mode === 'custom' && range.start && range.end) {
-      const summed = sumManagementTargetsForDateRange(raw.targets, range.start, range.end);
-      Object.entries(summed).forEach(([sid, t]) => {
-        if (!allow(sid) || isOnlineStore(sid)) return;
-        if (!byStore[sid]) byStore[sid] = { sales: 0, trans: 0, visitors: 0, target: 0, prevYearSales: 0, prevYearVisitors: 0 };
-        byStore[sid].target = t || 0;
-      });
-    } else {
-      (raw.targets || []).forEach(([d, s, v]: any[]) => {
-        if (!allow(s) || isOnlineStore(s)) return;
-        if (!byStore[s]) byStore[s] = { sales: 0, trans: 0, visitors: 0, target: 0, prevYearSales: 0, prevYearVisitors: 0 };
-        if (inRange(d)) byStore[s].target += v || 0;
-      });
-    }
-    return Object.entries(byStore).map(([sid, v]) => {
-      // النمو: الفترة الحالية مقابل نفس الفترة من السنة السابقة
-      const growth = v.prevYearSales > 0 ? ((v.sales - v.prevYearSales) / v.prevYearSales) * 100 : 0;
-      const achievement = v.target > 0 ? (v.sales / v.target) * 100 : 0;
-      const avgInv = v.trans > 0 ? v.sales / v.trans : 0;
-      const customerValue = v.visitors > 0 ? v.sales / v.visitors : 0;
-      const prevCustomerValue = v.prevYearVisitors > 0 ? v.prevYearSales / v.prevYearVisitors : 0;
-      return {
-        id: sid,
-        name: raw.stores?.[sid] || sid,
-        sales: v.sales,
-        trans: v.trans,
-        visitors: v.visitors,
-        target: v.target,
-        growth,
-        achievement,
-        avg_inv: avgInv,
-        prevYearSales: v.prevYearSales,
-        prevYearVisitors: v.prevYearVisitors,
-        customerValue,
-        prevCustomerValue,
-      };
-    });
-  }, [raw, inRange, inPrevYearRange, allowedStoreIds, mode, range.start, range.end]);
+  }, [raw, allowedStoreIds, range.start, range.end, prevYearRange, mode]);
 
   const topEmployeesRank = useMemo(() => {
     if (!empRaw?.history || !empRaw?.employee_names) return [];
@@ -680,36 +607,16 @@ export default function DashboardPage() {
     }));
   }, [empRaw, range.start, range.end, allowedStoreIds, raw?.store_meta, mode]);
 
-  const mapBranchesData = useMemo(() => {
-    return topStoresRank.map(store => {
-      const city = raw?.store_meta?.[store.id]?.city || 'الرياض';
-      const [lat, lng] = getStoreLocation(store.id, city);
-      return {
-        id: store.id,
-        name: store.name,
-        city,
-        lat,
-        lng,
-        sales: store.sales,
-        trans: store.trans,
-        visitors: store.visitors,
-        target: store.target,
-        avg_inv: store.avg_inv,
-        growth: store.growth,
-        achievement: store.achievement,
-        customerValue: store.customerValue ?? (store.visitors > 0 ? store.sales / store.visitors : 0),
-        prevCustomerValue: store.prevCustomerValue,
-        prevYearSales: store.prevYearSales,
-        prevYearVisitors: store.prevYearVisitors,
-      };
-    });
-  }, [topStoresRank, raw?.store_meta]);
+  const mapBranchesData = useMemo(
+    () => mapBranchesDataWithLocations(topStoresRank, raw?.store_meta),
+    [topStoresRank, raw?.store_meta],
+  );
 
   // أمس + مقارنة العام الماضي — قبل أي return حتى تبقى hooks أسفلها صالحة
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = toYMD(yesterday);
-  const lastYearYesterdayStr = getPrevYearDate(yesterdayStr);
+  const lastYearYesterdayStr = getComparisonPrevDate(yesterdayStr, calendar);
 
   const handlePrintEmployeeReport = () => {
     // Initialize employee selection with all active employees
@@ -948,7 +855,7 @@ export default function DashboardPage() {
         const monthStartStr = toYMD(monthStart);
         const monthEndStr = toYMD(monthEnd > new Date() ? new Date() : monthEnd);
 
-        const seasonPrev = getPrevYearRange(monthStartStr, monthEndStr);
+        const seasonPrev = getComparisonPrevRange(monthStartStr, monthEndStr, calendar);
 
         let sales = 0, target = 0, prevSales = 0, visitors = 0, prevVisitors = 0;
 
@@ -996,7 +903,7 @@ export default function DashboardPage() {
     const prevMap: Record<string, string> = {};
     const prevDatesSet = new Set<string>();
     days.forEach(dt => {
-      const prev = getPrevYearDate(dt);
+      const prev = getComparisonPrevDate(dt, calendar);
       prevMap[dt] = prev;
       prevDatesSet.add(prev);
     });
@@ -1045,7 +952,7 @@ export default function DashboardPage() {
       entry.Visitors = r.visitors;
       return entry;
     });
-  }, [raw, allowedStoreIds, chartMode, selYear, isFullYearView, range.start, range.end]);
+  }, [raw, allowedStoreIds, chartMode, selYear, isFullYearView, range.start, range.end, calendar]);
 
 
   const prodDerived = useMemo(() => {
@@ -1191,15 +1098,29 @@ export default function DashboardPage() {
           <span className="text-sm text-neutral-500">
             آخر تحديث: {lastUpdate ?? '--:--:--'}
           </span>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={loadData}
-              disabled={refreshing}
-              className="btn-secondary py-2 px-4 text-sm"
-            >
-              {refreshing ? 'جاري التحديث...' : 'تحديث البيانات'}
-            </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-col gap-1 max-w-[280px]">
+              <span className="text-[10px] font-bold text-neutral-500">مقارنة السنة الماضية</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={calendar === 'hijri'}
+                  onClick={toggleComparisonCalendar}
+                  className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 transition-colors ${calendar === 'hijri' ? 'border-orange-500 bg-orange-50' : 'border-neutral-200 bg-neutral-100'}`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-1 ring-black/5 transition ${calendar === 'hijri' ? 'translate-x-6' : 'translate-x-0.5'}`}
+                  />
+                </button>
+                <span className="text-xs font-bold text-neutral-700 whitespace-nowrap">
+                  {calendar === 'gregorian' ? 'ميلادي' : 'هجري'}
+                </span>
+              </div>
+              <p className="text-[10px] text-neutral-500 leading-snug">
+                يحدد كيفية مطابقة أيام الفترة الحالية مع «السنة الماضية» في المعارض والرسوم: نفس التاريخ الميلادي أو نفس اليوم الهجري.
+              </p>
+            </div>
           </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
@@ -1339,8 +1260,6 @@ export default function DashboardPage() {
         </button>,
         document.getElementById('daily-report-portal-target')!
       )}
-
-      <CustomerValueInsights stores={mapBranchesData} formatSAR={formatSAR} mode={mode} periodLabel={`${range.start} → ${range.end}`} />
 
       {/* خريطة الفروع المباشرة */}
       <div className="bg-white rounded-xl shadow-md border border-neutral-200 p-4">

@@ -207,6 +207,30 @@ export function getPrevYearRange(start: string, end: string, forceGregorian = fa
   };
 }
 
+/** مقارنة صريحة: ميلادي −١ سنة تقويمية | هجري نفس التاريخ الهجري من العام الهجري السابق */
+export type ComparisonCalendarMode = 'gregorian' | 'hijri';
+
+export function getComparisonPrevRange(
+  start: string,
+  end: string,
+  mode: ComparisonCalendarMode,
+): { start: string; end: string } {
+  if (mode === 'hijri') {
+    return getSeasonalPrevRange(start, end);
+  }
+  return {
+    start: start.replace(/^\d{4}/, (yr) => String(Number(yr) - 1)),
+    end: end.replace(/^\d{4}/, (yr) => String(Number(yr) - 1)),
+  };
+}
+
+export function getComparisonPrevDate(dateStr: string, mode: ComparisonCalendarMode): string {
+  if (mode === 'hijri') {
+    return getSeasonalPrevDate(dateStr);
+  }
+  return dateStr.replace(/^\d{4}/, (yr) => String(Number(yr) - 1));
+}
+
 /**
  * Get the current Hijri date info string for display.
  * Returns e.g. "19 شعبان 1447"

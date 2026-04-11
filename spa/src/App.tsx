@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage';
 import { Suspense } from 'react';
 import { DashboardSkeleton } from './components/SkeletonComponents';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ComparisonCalendarProvider } from './context/ComparisonCalendarContext';
 
 // Lazy Load Pages
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage'));
@@ -21,6 +22,7 @@ const ComparisonPage = React.lazy(() => import('./pages/ComparisonPage'));
 const HourlyPage = React.lazy(() => import('./pages/HourlyPage'));
 const TVPage = React.lazy(() => import('./pages/TVPage'));
 const TargetSplitPage = React.lazy(() => import('./pages/TargetSplitPage'));
+const CustomerValueSimulationPage = React.lazy(() => import('./pages/CustomerValueSimulationPage'));
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const u = getCurrentUser();
@@ -47,7 +49,9 @@ export default function App() {
         path="/"
         element={
           <RequireAuth>
-            <MainLayout />
+            <ComparisonCalendarProvider>
+              <MainLayout />
+            </ComparisonCalendarProvider>
           </RequireAuth>
         }
       >
@@ -62,6 +66,7 @@ export default function App() {
         <Route path="comparison" element={<PageWrap><ComparisonPage /></PageWrap>} />
         <Route path="hourly" element={<PageWrap><HourlyPage /></PageWrap>} />
         <Route path="target-split" element={<PageWrap><TargetSplitPage /></PageWrap>} />
+        <Route path="customer-value" element={<PageWrap><CustomerValueSimulationPage /></PageWrap>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -7,7 +7,8 @@ import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, InvoicesIcon, VisitorsIcon, FireIcon, CustomerValueIcon } from '../components/Icons';
 import { runProductValueAnalysis, safeNum } from '../services/analysisHelpers';
 import StoreCompareModal from '../components/StoreCompareModal';
-import { getPrevYearRange, getPrevYearDate } from '../utils/seasons';
+import { getComparisonPrevRange, getComparisonPrevDate, type ComparisonCalendarMode } from '../utils/seasons';
+import { useComparisonCalendar } from '../context/ComparisonCalendarContext';
 import {
   getMarch2026TargetMetrics,
   sumManagementTargetsForMonth,
@@ -103,6 +104,7 @@ function getRange(
   customStart: string,
   customEnd: string,
   marchMtdPhase: '1' | '2' = '1',
+  comparisonCalendar: ComparisonCalendarMode = 'gregorian',
 ) {
   const now = new Date();
   const today = new Date(now);
@@ -166,8 +168,7 @@ function getRange(
     currEnd = new Date(endYMD + 'T23:59:59');
   }
 
-  // Use seasonal prev-year range (Hijri-aligned when in season)
-  const seasonalPrev = getPrevYearRange(startYMD, endYMD);
+  const seasonalPrev = getComparisonPrevRange(startYMD, endYMD, comparisonCalendar);
   const prevStartYMD = seasonalPrev.start;
   const prevEndYMD = seasonalPrev.end;
 
@@ -187,6 +188,7 @@ function StoreDetailsModal({
   startYMD,
   endYMD,
   prodRaw,
+  comparisonCalendar,
 }: {
   open: boolean;
   onClose: () => void;
@@ -197,6 +199,7 @@ function StoreDetailsModal({
   startYMD: string;
   endYMD: string;
   prodRaw: any;
+  comparisonCalendar: ComparisonCalendarMode;
 }) {
   const rangeLabel = useMemo(() => {
     if (!startYMD || !endYMD) return '-';
@@ -341,10 +344,10 @@ function StoreDetailsModal({
     const currentDates = Object.keys(dailyBreakdown);
     const prevToCurrentMap: Record<string, string> = {};
     currentDates.forEach(dt => {
-      const prevDt = getPrevYearDate(dt);
+      const prevDt = getComparisonPrevDate(dt, comparisonCalendar);
       prevToCurrentMap[prevDt] = dt;
     });
-    const prevRange = getPrevYearRange(rangeStart, rangeEnd);
+    const prevRange = getComparisonPrevRange(rangeStart, rangeEnd, comparisonCalendar);
 
     mgmtSales.forEach(([d, sid, s]: any[]) => {
       if (sid !== store?.sid) return;
@@ -466,7 +469,7 @@ function StoreDetailsModal({
       catalog: pData?.catalog || {},
       analysisMode
     };
-  }, [employeesJson, endYMD, startYMD, store, prodRaw, mode, mgmtRaw]);
+  }, [employeesJson, endYMD, startYMD, store, prodRaw, mode, mgmtRaw, comparisonCalendar]);
 
   // Product Mix (Store Level Interaction) - Use category keys from catalog
   const productMix = useMemo(() => {
@@ -728,6 +731,7 @@ function StoreDetailsModal({
 
 export default function StoresPage() {
   const user = getCurrentUser();
+  const { calendar: comparisonCalendar } = useComparisonCalendar();
   const [searchParams, setSearchParams] = useSearchParams();
   const [mgmtRaw, setMgmtRaw] = useState<any>(null);
   const [empRaw, setEmpRaw] = useState<any>(null);
@@ -766,8 +770,8 @@ export default function StoresPage() {
   const [storeSortKey, setStoreSortKey] = useState<StoreSortKey>('val');
   const [storeSortDir, setStoreSortDir] = useState<'asc' | 'desc'>('desc');
   const range = useMemo(
-    () => getRange(mode, standardYear, standardMonth, customStart, customEnd, marchMtdPhase),
-    [customEnd, customStart, marchMtdPhase, mode, standardMonth, standardYear],
+    () => getRange(mode, standardYear, standardMonth, customStart, customEnd, marchMtdPhase, comparisonCalendar),
+    [customEnd, customStart, marchMtdPhase, mode, standardMonth, standardYear, comparisonCalendar],
   );
 
   const handleStoreSort = (key: StoreSortKey) => {
@@ -1295,6 +1299,7 @@ export default function StoresPage() {
           startYMD={range.startYMD}
           endYMD={range.endYMD}
           prodRaw={prodRaw}
+          comparisonCalendar={comparisonCalendar}
         />
       )}
 
