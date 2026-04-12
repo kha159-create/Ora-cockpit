@@ -878,6 +878,7 @@ export const generateTargetSplitStorePDF = async (
                 `${(m.achievement || 0).toFixed(1)}%`,
                 fmtN(m.avgInv),
                 `${(m.conversion || 0).toFixed(1)}%`,
+                fmtN(m.customerValue),
                 fmtN(shortfall),
                 String(need.days),
                 fmtN(need.daily),
@@ -887,17 +888,17 @@ export const generateTargetSplitStorePDF = async (
 
     (doc as any).autoTable({
         startY: 40,
-        head: [['المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق', 'معدل فاتورة', 'التحويل', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً']],
-        body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '0']],
+        head: [['المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق', 'معدل فاتورة', 'التحويل', 'قيمة عميل', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً']],
+        body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '0', '0']],
         styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.5 },
         headStyles: { fillColor: [254, 121, 0], textColor: 255 },
         alternateRowStyles: { fillColor: [245, 245, 245] },
         didParseCell: (data: any) => {
-            if (data.column.index === 7 || data.column.index === 9) {
+            if (data.column.index === 8 || data.column.index === 10) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.textColor = [153, 27, 27];
             }
-            if (data.column.index === 8) {
+            if (data.column.index === 9) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.fillColor = [255, 247, 237];
             }

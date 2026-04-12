@@ -827,6 +827,7 @@ export default function TargetSplitPage() {
         'تحقيق %',
         'معدل فاتورة',
         'تحويل %',
+        'قيمة عميل',
         'متبقي للفترة',
         'مطلوب يومياً لإغلاق الشهر',
       ]);
@@ -849,6 +850,7 @@ export default function TargetSplitPage() {
             metrics.achievement / 100,
             metrics.avgInv,
             metrics.conversion / 100,
+            metrics.customerValue,
             metrics.shortfallPeriod,
             metrics.closeMonthDaily,
           ]);
@@ -859,6 +861,7 @@ export default function TargetSplitPage() {
           fz(cur, 6, '0.0%');
           fz(cur, 7, '#,##0');
           fz(cur, 8, '#,##0');
+          fz(cur, 9, '#,##0');
           rIdx++;
         }
       }
@@ -1346,6 +1349,7 @@ export default function TargetSplitPage() {
                                       <th className="th text-center">تحقيق</th>
                                       <th className="th text-center">معدل فاتورة</th>
                                       <th className="th text-center">تحويل %</th>
+                                      <th className="th text-center">قيمة عميل</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -1353,7 +1357,7 @@ export default function TargetSplitPage() {
                                       <React.Fragment key={block.key}>
                                         {block.label ? (
                                           <tr className="bg-orange-100/90 border-b border-orange-200/80">
-                                            <td colSpan={6} className="td py-2 px-3 text-right font-bold text-orange-950">
+                                            <td colSpan={7} className="td py-2 px-3 text-right font-bold text-orange-950">
                                               {block.label}
                                             </td>
                                           </tr>
@@ -1377,12 +1381,13 @@ export default function TargetSplitPage() {
                                               </td>
                                               <td className="td text-center dir-ltr">{formatSAR(metrics.avgInv)}</td>
                                               <td className="td text-center">{metrics.conversion.toFixed(1)}%</td>
+                                              <td className="td text-center dir-ltr">{Math.round(metrics.customerValue).toLocaleString()}</td>
                                             </tr>
                                             {(granularity === '10' || granularity === '15') &&
                                               bucket.start <= lastAvailableInMonth &&
                                               bucket.end > lastAvailableInMonth && (
                                                 <tr className="bg-sky-50/90 border-b border-sky-100">
-                                                  <td colSpan={6} className="py-2 px-3 text-[11px] text-sky-900 leading-relaxed">
+                                                  <td colSpan={7} className="py-2 px-3 text-[11px] text-sky-900 leading-relaxed">
                                                     {(() => {
                                                       const shortfall = Math.max(0, periodExpectedTarget(metrics, granularity) - metrics.sales);
                                                       const p = dailyNeededForCurrentPeriod(bucket.end, lastAvailableInMonth, shortfall);
@@ -1403,7 +1408,7 @@ export default function TargetSplitPage() {
                                               bucket.end <= lastAvailableInMonth &&
                                               metrics.sales < periodExpectedTarget(metrics, granularity) && (
                                               <tr className="bg-rose-50/90 border-b border-rose-100">
-                                                <td colSpan={6} className="py-2 px-3 text-[11px] text-rose-900 leading-relaxed">
+                                                <td colSpan={7} className="py-2 px-3 text-[11px] text-rose-900 leading-relaxed">
                                                   <span className="font-semibold">لم يُحقَّق كامل التارجت:</span>{' '}
                                                   <span className="inline-block rounded-lg bg-white/80 px-2 py-1 font-extrabold text-rose-900 shadow-sm shadow-rose-200">
                                                     متبقي من تارجت الفترة{' '}
@@ -1416,7 +1421,7 @@ export default function TargetSplitPage() {
                                               bucket.end <= lastAvailableInMonth &&
                                               metrics.sales >= periodExpectedTarget(metrics, granularity) && (
                                                 <tr className="bg-emerald-50/90 border-b border-emerald-100">
-                                                  <td colSpan={6} className="py-2 px-3 text-[11px] text-emerald-900 leading-relaxed">
+                                                  <td colSpan={7} className="py-2 px-3 text-[11px] text-emerald-900 leading-relaxed">
                                                     <span className="font-semibold">تم تحقيق التارجت وزيادة:</span>{' '}
                                                     <span className="dir-ltr inline-block font-bold">
                                                       {formatSAR(Math.max(0, metrics.sales - periodExpectedTarget(metrics, granularity)))}
