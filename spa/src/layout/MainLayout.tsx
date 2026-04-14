@@ -29,7 +29,7 @@ import { formatSAR } from '../utils/formatting';
 const baseNavItems = [
   { to: '/', label: 'لوحة التحكم', icon: <HomeIcon /> },
   { to: '/stores', label: 'المعارض', icon: <OfficeBuildingIcon /> },
-  { to: '/customer-value', label: 'ق.م والمحاكاة', icon: <CashIcon /> },
+  { to: '/customer-value', label: 'ق.ع والمحاكاة', icon: <CashIcon /> },
   { to: '/comparison', label: 'المقارنات', icon: <SwitchHorizontalIcon /> },
   { to: '/employees', label: 'الموظفين', icon: <UserGroupIcon /> },
   { to: '/target-split', label: 'تقسيمة التارجت', icon: <PremiumTargetIcon className="w-5 h-5" /> },

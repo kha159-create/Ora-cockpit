@@ -46,6 +46,41 @@ function getDefaultRange(mode: Mode, selYear?: number, selMonth?: number) {
 
 const monthsAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
+type AnomalyDailyRow = {
+  date: string;
+  sales: number;
+  visitors: number;
+  customerValue: number;
+  sharePct: number;
+  shareAnomaly: boolean;
+  visitorsAnomaly: boolean;
+  cvAnomaly: boolean;
+};
+
+type AnomalyStore = {
+  id: string;
+  name: string;
+  normal: {
+    shareMin: number;
+    shareMax: number;
+    visitorsMin: number;
+    visitorsMax: number;
+    cvMin: number;
+    cvMax: number;
+  };
+  rows: AnomalyDailyRow[];
+};
+
+const percentile = (arr: number[], p: number): number => {
+  if (!arr.length) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const idx = (sorted.length - 1) * p;
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+};
+
 export default function CustomerValueSimulationPage() {
   const [raw, setRaw] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -62,6 +97,7 @@ export default function CustomerValueSimulationPage() {
   const [selYear, setSelYear] = useState<number>(() => new Date().getFullYear());
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [marchMtdPhase, setMarchMtdPhase] = useState<'1' | '2'>('1');
+  const [openAnomalyStoreId, setOpenAnomalyStoreId] = useState<string | null>(null);
 
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -199,6 +235,88 @@ export default function CustomerValueSimulationPage() {
     return mapBranchesDataWithLocations(rows, raw?.store_meta);
   }, [raw, allowedStoreIds, range.start, range.end, prevYearRange, mode]);
 
+  const anomalyStores = useMemo<AnomalyStore[]>(() => {
+    if (!raw) return [];
+    const storeNames: Record<string, string> = raw?.stores || {};
+    const perStoreDate: Record<string, Record<string, { sales: number; visitors: number }>> = {};
+    const totalSalesByDate: Record<string, number> = {};
+    const storeMeta: Record<string, { type?: string }> = raw?.store_meta || {};
+    const isOnlineStore = (sid: string) => {
+      const type = String(storeMeta?.[sid]?.type || '').toLowerCase();
+      return type === 'online' || type === 'platform' || type === 'warehouse';
+    };
+
+    (raw.sales || []).forEach(([d, sid, v]: any[]) => {
+      const ds = String(d).substring(0, 10);
+      const storeId = String(sid);
+      const val = Number(v) || 0;
+      if (!allowedStoreIds.has(storeId) || isOnlineStore(storeId)) return;
+      if (ds < range.start || ds > range.end) return;
+      if (!perStoreDate[storeId]) perStoreDate[storeId] = {};
+      if (!perStoreDate[storeId][ds]) perStoreDate[storeId][ds] = { sales: 0, visitors: 0 };
+      perStoreDate[storeId][ds].sales += val;
+      totalSalesByDate[ds] = (totalSalesByDate[ds] || 0) + val;
+    });
+    (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
+      const ds = String(d).substring(0, 10);
+      const storeId = String(sid);
+      const val = Number(v) || 0;
+      if (!allowedStoreIds.has(storeId) || isOnlineStore(storeId)) return;
+      if (ds < range.start || ds > range.end) return;
+      if (!perStoreDate[storeId]) perStoreDate[storeId] = {};
+      if (!perStoreDate[storeId][ds]) perStoreDate[storeId][ds] = { sales: 0, visitors: 0 };
+      perStoreDate[storeId][ds].visitors += val;
+    });
+
+    const storesOut: AnomalyStore[] = [];
+    Object.entries(perStoreDate).forEach(([sid, byDate]) => {
+      const daily = Object.entries(byDate)
+        .map(([date, x]) => {
+          const visitors = x.visitors;
+          const sales = x.sales;
+          const customerValue = visitors > 0 ? sales / visitors : 0;
+          const sharePct = (totalSalesByDate[date] || 0) > 0 ? (sales / totalSalesByDate[date]) * 100 : 0;
+          return { date, sales, visitors, customerValue, sharePct };
+        })
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      if (daily.length < 6) return;
+
+      const shares = daily.map((d) => d.sharePct);
+      const visitors = daily.map((d) => d.visitors);
+      const cvs = daily.map((d) => d.customerValue);
+
+      const normal = {
+        shareMin: percentile(shares, 0.2),
+        shareMax: percentile(shares, 0.8),
+        visitorsMin: percentile(visitors, 0.2),
+        visitorsMax: percentile(visitors, 0.8),
+        cvMin: percentile(cvs, 0.2),
+        cvMax: percentile(cvs, 0.8),
+      };
+
+      const rows: AnomalyDailyRow[] = daily
+        .map((d) => {
+          const shareAnomaly = d.sharePct < normal.shareMin || d.sharePct > normal.shareMax;
+          const visitorsAnomaly = d.visitors < normal.visitorsMin || d.visitors > normal.visitorsMax;
+          const cvAnomaly = d.customerValue < normal.cvMin || d.customerValue > normal.cvMax;
+          return { ...d, shareAnomaly, visitorsAnomaly, cvAnomaly };
+        })
+        .filter((d) => d.shareAnomaly || d.visitorsAnomaly || d.cvAnomaly);
+
+      if (!rows.length) return;
+
+      storesOut.push({
+        id: sid,
+        name: storeNames[sid] || sid,
+        normal,
+        rows: rows.sort((a, b) => b.date.localeCompare(a.date)),
+      });
+    });
+
+    return storesOut.sort((a, b) => b.rows.length - a.rows.length);
+  }, [raw, allowedStoreIds, range.start, range.end]);
+
   const formatSAR = (val: number) =>
     val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 
@@ -216,7 +334,7 @@ export default function CustomerValueSimulationPage() {
   return (
     <div className="space-y-6 pb-16">
       <div className="bg-white rounded-xl shadow-md border border-neutral-200 p-4">
-        <h1 className="text-xl font-black text-neutral-900 mb-1">ق.م والمحاكاة</h1>
+        <h1 className="text-xl font-black text-neutral-900 mb-1">ق.ع والمحاكاة</h1>
         <p className="text-sm text-neutral-500 mb-4">قيمة العميل، جدول الفروع، والمحاكاة — مع جدول تفاعلي للزوار وقيمة العميل (الحالي والماضي).</p>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
           {isAdminOrAuditor(user?.role) && (
@@ -317,6 +435,87 @@ export default function CustomerValueSimulationPage() {
       />
 
       <CustomerValueSimulationTable stores={mapBranchesData} />
+
+      <div className="bg-white rounded-xl shadow-md border border-neutral-200 overflow-hidden">
+        <div className="px-4 py-3 border-b border-neutral-100">
+          <h3 className="text-sm font-black text-neutral-900">الأرقام الشاذة</h3>
+          <p className="text-xs text-neutral-500 mt-1">
+            نرصد الأيام التي خرجت عن الوضع الطبيعي لكل فرع في: الاستحواذ، عدد الزوار، وقيمة العميل.
+          </p>
+        </div>
+        {!anomalyStores.length ? (
+          <div className="p-5 text-sm text-neutral-500">لا توجد أيام شاذة واضحة ضمن الفلاتر الحالية.</div>
+        ) : (
+          <div className="divide-y divide-neutral-100">
+            {anomalyStores.map((store) => {
+              const isOpen = openAnomalyStoreId === store.id;
+              return (
+                <div key={store.id}>
+                  <button
+                    type="button"
+                    className="w-full px-4 py-3 text-right hover:bg-neutral-50 flex items-center justify-between"
+                    onClick={() => setOpenAnomalyStoreId((prev) => (prev === store.id ? null : store.id))}
+                  >
+                    <span className="font-semibold text-neutral-900">{store.name}</span>
+                    <span className="text-xs text-neutral-500">
+                      {store.rows.length} يوم شاذ {isOpen ? '▲' : '▼'}
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div className="px-4 pb-4 space-y-3 bg-neutral-50/60">
+                      <div className="rounded-lg border border-orange-200 bg-orange-50/70 p-3 text-xs text-neutral-700 grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <div>
+                          <b>الوضع الطبيعي للاستحواذ:</b>{' '}
+                          <span className="dir-ltr inline-block">{store.normal.shareMin.toFixed(1)}% - {store.normal.shareMax.toFixed(1)}%</span>
+                        </div>
+                        <div>
+                          <b>الوضع الطبيعي للزوار:</b>{' '}
+                          <span className="dir-ltr inline-block">{Math.round(store.normal.visitorsMin).toLocaleString()} - {Math.round(store.normal.visitorsMax).toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <b>الوضع الطبيعي لقيمة العميل:</b>{' '}
+                          <span className="dir-ltr inline-block">{formatSAR(store.normal.cvMin)} - {formatSAR(store.normal.cvMax)}</span>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+                        <table className="min-w-full text-xs">
+                          <thead>
+                            <tr className="bg-neutral-100 text-neutral-700">
+                              <th className="p-2 text-right">اليوم</th>
+                              <th className="p-2 text-center">المبيعات</th>
+                              <th className="p-2 text-center">الاستحواذ</th>
+                              <th className="p-2 text-center">الزوار</th>
+                              <th className="p-2 text-center">قيمة عميل</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {store.rows.map((r) => (
+                              <tr key={`${store.id}-${r.date}`} className="border-t border-neutral-100">
+                                <td className="p-2 font-mono">{r.date}</td>
+                                <td className="p-2 text-center dir-ltr">{formatSAR(r.sales)}</td>
+                                <td className={`p-2 text-center dir-ltr font-bold ${r.shareAnomaly ? 'text-red-700' : 'text-neutral-700'}`}>
+                                  {r.sharePct.toFixed(1)}%
+                                </td>
+                                <td className={`p-2 text-center dir-ltr font-bold ${r.visitorsAnomaly ? 'text-red-700' : 'text-neutral-700'}`}>
+                                  {Math.round(r.visitors).toLocaleString()}
+                                </td>
+                                <td className={`p-2 text-center dir-ltr font-bold ${r.cvAnomaly ? 'text-red-700' : 'text-neutral-700'}`}>
+                                  {formatSAR(r.customerValue)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
