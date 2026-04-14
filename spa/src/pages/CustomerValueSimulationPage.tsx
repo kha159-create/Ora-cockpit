@@ -49,19 +49,20 @@ const monthsAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'ما�
 type AnomalyDailyRow = {
   date: string;
   sales: number;
+  trans: number;
   visitors: number;
   customerValue: number;
-  sharePct: number;
+  conversionPct: number;
   severity: number;
   isWeekend: boolean;
-  shareAnomaly: boolean;
+  conversionAnomaly: boolean;
   visitorsAnomaly: boolean;
   cvAnomaly: boolean;
 };
 
 type NormalBand = {
-  shareMin: number;
-  shareMax: number;
+  conversionMin: number;
+  conversionMax: number;
   visitorsMin: number;
   visitorsMax: number;
   cvMin: number;
@@ -95,15 +96,15 @@ const isWeekendDay = (ymd: string): boolean => {
 
 const buildNormalBand = (daily: Array<{ sharePct: number; visitors: number; customerValue: number }>): NormalBand => {
   if (!daily.length) {
-    return { shareMin: 0, shareMax: 0, visitorsMin: 0, visitorsMax: 0, cvMin: 0, cvMax: 0 };
+    return { conversionMin: 0, conversionMax: 0, visitorsMin: 0, visitorsMax: 0, cvMin: 0, cvMax: 0 };
   }
-  const shares = daily.map((d) => d.sharePct);
+  const conversions = daily.map((d) => d.conversionPct);
   const visitors = daily.map((d) => d.visitors);
   const cvs = daily.map((d) => d.customerValue);
   // نطاق أضيق (35%-65%) لتقليل الفجوة
   return {
-    shareMin: percentile(shares, 0.35),
-    shareMax: percentile(shares, 0.65),
+    conversionMin: percentile(conversions, 0.35),
+    conversionMax: percentile(conversions, 0.65),
     visitorsMin: percentile(visitors, 0.35),
     visitorsMax: percentile(visitors, 0.65),
     cvMin: percentile(cvs, 0.35),
@@ -270,46 +271,32 @@ export default function CustomerValueSimulationPage() {
   const anomalyStores = useMemo<AnomalyStore[]>(() => {
     if (!raw) return [];
     const storeNames: Record<string, string> = raw?.stores || {};
-    const perStoreDate: Record<string, Record<string, { sales: number; visitors: number }>> = {};
-    const totalSalesByDate: Record<string, number> = {};
-    const cohortTotalSalesByDate: Record<string, number> = {};
+    const perStoreDate: Record<string, Record<string, { sales: number; trans: number; visitors: number }>> = {};
     const storeMeta: Record<string, { type?: string }> = raw?.store_meta || {};
     const isOnlineStore = (sid: string) => {
       const type = String(storeMeta?.[sid]?.type || '').toLowerCase();
       return type === 'online' || type === 'platform' || type === 'warehouse';
     };
 
-    // Cohort for share%: same manager/city/type scope, but ignore selected branch.
-    // This avoids misleading 100% share when user filters to one branch only.
-    const cohortStoreIds = new Set<string>();
-    Object.keys(raw?.stores || {}).forEach((sid) => {
-      const m: any = storeMeta?.[sid] || {};
-      if (isOnlineStore(sid)) return;
-      if (user?.role === 'BranchManager' && sid !== user?.storeId) return;
-      if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return;
-      if (city !== 'all' && String(m?.city || '') !== city) return;
-      if (selectedStoreType !== 'all') {
-        const type = String(m?.type || '').toLowerCase();
-        const online = type === 'online' || type === 'platform' || type === 'warehouse';
-        if (selectedStoreType === 'online' && !online) return;
-        if (selectedStoreType === 'store' && online) return;
-      }
-      cohortStoreIds.add(sid);
-    });
-
     (raw.sales || []).forEach(([d, sid, v]: any[]) => {
       const ds = String(d).substring(0, 10);
       const storeId = String(sid);
       const val = Number(v) || 0;
-      if (cohortStoreIds.has(storeId) && ds >= range.start && ds <= range.end) {
-        cohortTotalSalesByDate[ds] = (cohortTotalSalesByDate[ds] || 0) + val;
-      }
       if (!allowedStoreIds.has(storeId) || isOnlineStore(storeId)) return;
       if (ds < range.start || ds > range.end) return;
       if (!perStoreDate[storeId]) perStoreDate[storeId] = {};
-      if (!perStoreDate[storeId][ds]) perStoreDate[storeId][ds] = { sales: 0, visitors: 0 };
+      if (!perStoreDate[storeId][ds]) perStoreDate[storeId][ds] = { sales: 0, trans: 0, visitors: 0 };
       perStoreDate[storeId][ds].sales += val;
-      totalSalesByDate[ds] = (totalSalesByDate[ds] || 0) + val;
+    });
+    (raw.transactions || []).forEach(([d, sid, v]: any[]) => {
+      const ds = String(d).substring(0, 10);
+      const storeId = String(sid);
+      const val = Number(v) || 0;
+      if (!allowedStoreIds.has(storeId) || isOnlineStore(storeId)) return;
+      if (ds < range.start || ds > range.end) return;
+      if (!perStoreDate[storeId]) perStoreDate[storeId] = {};
+      if (!perStoreDate[storeId][ds]) perStoreDate[storeId][ds] = { sales: 0, trans: 0, visitors: 0 };
+      perStoreDate[storeId][ds].trans += val;
     });
     (raw.visitors || []).forEach(([d, sid, v]: any[]) => {
       const ds = String(d).substring(0, 10);
@@ -318,7 +305,7 @@ export default function CustomerValueSimulationPage() {
       if (!allowedStoreIds.has(storeId) || isOnlineStore(storeId)) return;
       if (ds < range.start || ds > range.end) return;
       if (!perStoreDate[storeId]) perStoreDate[storeId] = {};
-      if (!perStoreDate[storeId][ds]) perStoreDate[storeId][ds] = { sales: 0, visitors: 0 };
+      if (!perStoreDate[storeId][ds]) perStoreDate[storeId][ds] = { sales: 0, trans: 0, visitors: 0 };
       perStoreDate[storeId][ds].visitors += val;
     });
 
@@ -328,11 +315,11 @@ export default function CustomerValueSimulationPage() {
         .map(([date, x]) => {
           const visitors = x.visitors;
           const sales = x.sales;
+          const trans = x.trans;
           const customerValue = visitors > 0 ? sales / visitors : 0;
-          const cohortDen = cohortTotalSalesByDate[date] || totalSalesByDate[date] || 0;
-          const sharePct = cohortDen > 0 ? (sales / cohortDen) * 100 : 0;
+          const conversionPct = visitors > 0 ? (trans / visitors) * 100 : 0;
           const isWeekend = isWeekendDay(date);
-          return { date, sales, visitors, customerValue, sharePct, isWeekend };
+          return { date, sales, trans, visitors, customerValue, conversionPct, isWeekend };
         })
         .sort((a, b) => a.date.localeCompare(b.date));
 
@@ -348,14 +335,14 @@ export default function CustomerValueSimulationPage() {
       const buildSoftBand = (rows: typeof daily) => {
         const src = rows.length ? rows : daily;
         return {
-          shareMin: percentile(src.map((r) => r.sharePct), 0.2),
-          shareMax: percentile(src.map((r) => r.sharePct), 0.8),
+          conversionMin: percentile(src.map((r) => r.conversionPct), 0.2),
+          conversionMax: percentile(src.map((r) => r.conversionPct), 0.8),
           visitorsMin: percentile(src.map((r) => r.visitors), 0.2),
           visitorsMax: percentile(src.map((r) => r.visitors), 0.8),
           cvMin: percentile(src.map((r) => r.customerValue), 0.2),
           cvMax: percentile(src.map((r) => r.customerValue), 0.8),
-          shareMinExtreme: percentile(src.map((r) => r.sharePct), 0.1),
-          shareMaxExtreme: percentile(src.map((r) => r.sharePct), 0.9),
+          conversionMinExtreme: percentile(src.map((r) => r.conversionPct), 0.1),
+          conversionMaxExtreme: percentile(src.map((r) => r.conversionPct), 0.9),
           visitorsMinExtreme: percentile(src.map((r) => r.visitors), 0.1),
           visitorsMaxExtreme: percentile(src.map((r) => r.visitors), 0.9),
           cvMinExtreme: percentile(src.map((r) => r.customerValue), 0.1),
@@ -365,31 +352,30 @@ export default function CustomerValueSimulationPage() {
       const softWeek = buildSoftBand(weekDaily);
       const softWeekend = buildSoftBand(weekendDaily);
 
-      const canUseShare = cohortStoreIds.size >= 2;
       const scoredRows: AnomalyDailyRow[] = daily
         .map((d) => {
           const soft = d.isWeekend ? softWeekend : softWeek;
-          const shareSoft = outside(d.sharePct, soft.shareMin, soft.shareMax);
+          const conversionSoft = outside(d.conversionPct, soft.conversionMin, soft.conversionMax);
           const visitorsSoft = outside(d.visitors, soft.visitorsMin, soft.visitorsMax);
           const cvSoft = outside(d.customerValue, soft.cvMin, soft.cvMax);
-          const score = Number(canUseShare && shareSoft) + Number(visitorsSoft) + Number(cvSoft);
+          const score = Number(conversionSoft) + Number(visitorsSoft) + Number(cvSoft);
 
-          const shareExtreme = outside(d.sharePct, soft.shareMinExtreme, soft.shareMaxExtreme);
+          const conversionExtreme = outside(d.conversionPct, soft.conversionMinExtreme, soft.conversionMaxExtreme);
           const visitorsExtreme = outside(d.visitors, soft.visitorsMinExtreme, soft.visitorsMaxExtreme);
           const cvExtreme = outside(d.customerValue, soft.cvMinExtreme, soft.cvMaxExtreme);
 
           // Smart anomaly: require at least 2 correlated deviations.
-          const shareAnomaly = canUseShare && (shareSoft || shareExtreme) && score >= 2;
+          const conversionAnomaly = (conversionSoft || conversionExtreme) && score >= 2;
           const visitorsAnomaly = (visitorsSoft || visitorsExtreme) && score >= 2;
           const cvAnomaly = (cvSoft || cvExtreme) && score >= 2;
 
           const severity =
-            (canUseShare ? (shareExtreme ? 2 : shareSoft ? 1 : 0) : 0) +
+            (conversionExtreme ? 2 : conversionSoft ? 1 : 0) +
             (visitorsExtreme ? 2 : visitorsSoft ? 1 : 0) +
             (cvExtreme ? 2 : cvSoft ? 1 : 0);
-          return { ...d, severity, shareAnomaly, visitorsAnomaly, cvAnomaly };
+          return { ...d, severity, conversionAnomaly, visitorsAnomaly, cvAnomaly };
         })
-        .filter((d) => d.shareAnomaly || d.visitorsAnomaly || d.cvAnomaly);
+        .filter((d) => d.conversionAnomaly || d.visitorsAnomaly || d.cvAnomaly);
 
       // Prevent noisy output: keep strongest anomalies only (max 40% of days, minimum 3 if available).
       const cap = Math.max(3, Math.ceil(daily.length * 0.4));
@@ -415,11 +401,6 @@ export default function CustomerValueSimulationPage() {
     allowedStoreIds,
     range.start,
     range.end,
-    user?.role,
-    user?.storeId,
-    effectiveManager,
-    city,
-    selectedStoreType,
   ]);
 
   const formatSAR = (val: number) =>
@@ -573,8 +554,8 @@ export default function CustomerValueSimulationPage() {
                           <b>أيام الأسبوع (أحد–أربعاء)</b>
                           <div className="mt-1 space-y-0.5">
                             <div>
-                              <span className="text-neutral-600">الاستحواذ:</span>{' '}
-                              <span className="dir-ltr inline-block">{store.normalWeek.shareMin.toFixed(1)}% - {store.normalWeek.shareMax.toFixed(1)}%</span>
+                              <span className="text-neutral-600">التحويل:</span>{' '}
+                              <span className="dir-ltr inline-block">{store.normalWeek.conversionMin.toFixed(1)}% - {store.normalWeek.conversionMax.toFixed(1)}%</span>
                             </div>
                             <div>
                               <span className="text-neutral-600">الزوار:</span>{' '}
@@ -590,8 +571,8 @@ export default function CustomerValueSimulationPage() {
                           <b className="text-orange-700">الويكند (خميس–جمعة–سبت)</b>
                           <div className="mt-1 space-y-0.5">
                             <div>
-                              <span className="text-neutral-600">الاستحواذ:</span>{' '}
-                              <span className="dir-ltr inline-block">{store.normalWeekend.shareMin.toFixed(1)}% - {store.normalWeekend.shareMax.toFixed(1)}%</span>
+                              <span className="text-neutral-600">التحويل:</span>{' '}
+                              <span className="dir-ltr inline-block">{store.normalWeekend.conversionMin.toFixed(1)}% - {store.normalWeekend.conversionMax.toFixed(1)}%</span>
                             </div>
                             <div>
                               <span className="text-neutral-600">الزوار:</span>{' '}
@@ -611,7 +592,7 @@ export default function CustomerValueSimulationPage() {
                             <tr className="bg-neutral-100 text-neutral-700">
                               <th className="p-2 text-right">اليوم</th>
                               <th className="p-2 text-center">المبيعات</th>
-                              <th className="p-2 text-center">الاستحواذ</th>
+                              <th className="p-2 text-center">التحويل</th>
                               <th className="p-2 text-center">الزوار</th>
                               <th className="p-2 text-center">قيمة عميل</th>
                             </tr>
@@ -621,8 +602,8 @@ export default function CustomerValueSimulationPage() {
                               <tr key={`${store.id}-${r.date}`} className={`border-t border-neutral-100 ${r.isWeekend ? 'bg-orange-50/70' : ''}`}>
                                 <td className="p-2 font-mono">{r.date}</td>
                                 <td className="p-2 text-center dir-ltr">{formatSAR(r.sales)}</td>
-                                <td className={`p-2 text-center dir-ltr font-bold ${r.shareAnomaly ? 'text-red-700' : 'text-neutral-700'}`}>
-                                  {r.sharePct.toFixed(1)}%
+                                <td className={`p-2 text-center dir-ltr font-bold ${r.conversionAnomaly ? 'text-red-700' : 'text-neutral-700'}`}>
+                                  {r.conversionPct.toFixed(1)}%
                                 </td>
                                 <td className={`p-2 text-center dir-ltr font-bold ${r.visitorsAnomaly ? 'text-red-700' : 'text-neutral-700'}`}>
                                   {Math.round(r.visitors).toLocaleString()}
