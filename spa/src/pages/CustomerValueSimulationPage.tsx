@@ -52,22 +52,26 @@ type AnomalyDailyRow = {
   visitors: number;
   customerValue: number;
   sharePct: number;
+  isWeekend: boolean;
   shareAnomaly: boolean;
   visitorsAnomaly: boolean;
   cvAnomaly: boolean;
 };
 
+type NormalBand = {
+  shareMin: number;
+  shareMax: number;
+  visitorsMin: number;
+  visitorsMax: number;
+  cvMin: number;
+  cvMax: number;
+};
+
 type AnomalyStore = {
   id: string;
   name: string;
-  normal: {
-    shareMin: number;
-    shareMax: number;
-    visitorsMin: number;
-    visitorsMax: number;
-    cvMin: number;
-    cvMax: number;
-  };
+  normalWeek: NormalBand;
+  normalWeekend: NormalBand;
   rows: AnomalyDailyRow[];
 };
 
@@ -79,6 +83,31 @@ const percentile = (arr: number[], p: number): number => {
   const hi = Math.ceil(idx);
   if (lo === hi) return sorted[lo];
   return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+};
+
+const isWeekendDay = (ymd: string): boolean => {
+  const d = new Date(`${ymd}T12:00:00`);
+  const day = d.getDay();
+  // الخميس / الجمعة / السبت
+  return day === 4 || day === 5 || day === 6;
+};
+
+const buildNormalBand = (daily: Array<{ sharePct: number; visitors: number; customerValue: number }>): NormalBand => {
+  if (!daily.length) {
+    return { shareMin: 0, shareMax: 0, visitorsMin: 0, visitorsMax: 0, cvMin: 0, cvMax: 0 };
+  }
+  const shares = daily.map((d) => d.sharePct);
+  const visitors = daily.map((d) => d.visitors);
+  const cvs = daily.map((d) => d.customerValue);
+  // نطاق أضيق (35%-65%) لتقليل الفجوة
+  return {
+    shareMin: percentile(shares, 0.35),
+    shareMax: percentile(shares, 0.65),
+    visitorsMin: percentile(visitors, 0.35),
+    visitorsMax: percentile(visitors, 0.65),
+    cvMin: percentile(cvs, 0.35),
+    cvMax: percentile(cvs, 0.65),
+  };
 };
 
 export default function CustomerValueSimulationPage() {
@@ -276,30 +305,25 @@ export default function CustomerValueSimulationPage() {
           const sales = x.sales;
           const customerValue = visitors > 0 ? sales / visitors : 0;
           const sharePct = (totalSalesByDate[date] || 0) > 0 ? (sales / totalSalesByDate[date]) * 100 : 0;
-          return { date, sales, visitors, customerValue, sharePct };
+          const isWeekend = isWeekendDay(date);
+          return { date, sales, visitors, customerValue, sharePct, isWeekend };
         })
         .sort((a, b) => a.date.localeCompare(b.date));
 
       if (daily.length < 6) return;
 
-      const shares = daily.map((d) => d.sharePct);
-      const visitors = daily.map((d) => d.visitors);
-      const cvs = daily.map((d) => d.customerValue);
-
-      const normal = {
-        shareMin: percentile(shares, 0.2),
-        shareMax: percentile(shares, 0.8),
-        visitorsMin: percentile(visitors, 0.2),
-        visitorsMax: percentile(visitors, 0.8),
-        cvMin: percentile(cvs, 0.2),
-        cvMax: percentile(cvs, 0.8),
-      };
+      const weekDaily = daily.filter((d) => !d.isWeekend);
+      const weekendDaily = daily.filter((d) => d.isWeekend);
+      const fallbackBand = buildNormalBand(daily);
+      const normalWeek = weekDaily.length ? buildNormalBand(weekDaily) : fallbackBand;
+      const normalWeekend = weekendDaily.length ? buildNormalBand(weekendDaily) : fallbackBand;
 
       const rows: AnomalyDailyRow[] = daily
         .map((d) => {
-          const shareAnomaly = d.sharePct < normal.shareMin || d.sharePct > normal.shareMax;
-          const visitorsAnomaly = d.visitors < normal.visitorsMin || d.visitors > normal.visitorsMax;
-          const cvAnomaly = d.customerValue < normal.cvMin || d.customerValue > normal.cvMax;
+          const band = d.isWeekend ? normalWeekend : normalWeek;
+          const shareAnomaly = d.sharePct < band.shareMin || d.sharePct > band.shareMax;
+          const visitorsAnomaly = d.visitors < band.visitorsMin || d.visitors > band.visitorsMax;
+          const cvAnomaly = d.customerValue < band.cvMin || d.customerValue > band.cvMax;
           return { ...d, shareAnomaly, visitorsAnomaly, cvAnomaly };
         })
         .filter((d) => d.shareAnomaly || d.visitorsAnomaly || d.cvAnomaly);
@@ -309,8 +333,10 @@ export default function CustomerValueSimulationPage() {
       storesOut.push({
         id: sid,
         name: storeNames[sid] || sid,
-        normal,
-        rows: rows.sort((a, b) => b.date.localeCompare(a.date)),
+        normalWeek,
+        normalWeekend,
+        // بداية الشهر بالأعلى
+        rows: rows.sort((a, b) => a.date.localeCompare(b.date)),
       });
     });
 
@@ -463,18 +489,40 @@ export default function CustomerValueSimulationPage() {
                   </button>
                   {isOpen && (
                     <div className="px-4 pb-4 space-y-3 bg-neutral-50/60">
-                      <div className="rounded-lg border border-orange-200 bg-orange-50/70 p-3 text-xs text-neutral-700 grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div className="rounded-lg border border-orange-200 bg-orange-50/70 p-3 text-xs text-neutral-700 grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
-                          <b>الوضع الطبيعي للاستحواذ:</b>{' '}
-                          <span className="dir-ltr inline-block">{store.normal.shareMin.toFixed(1)}% - {store.normal.shareMax.toFixed(1)}%</span>
+                          <b>أيام الأسبوع (أحد–أربعاء)</b>
+                          <div className="mt-1 space-y-0.5">
+                            <div>
+                              <span className="text-neutral-600">الاستحواذ:</span>{' '}
+                              <span className="dir-ltr inline-block">{store.normalWeek.shareMin.toFixed(1)}% - {store.normalWeek.shareMax.toFixed(1)}%</span>
+                            </div>
+                            <div>
+                              <span className="text-neutral-600">الزوار:</span>{' '}
+                              <span className="dir-ltr inline-block">{Math.round(store.normalWeek.visitorsMin).toLocaleString()} - {Math.round(store.normalWeek.visitorsMax).toLocaleString()}</span>
+                            </div>
+                            <div>
+                              <span className="text-neutral-600">قيمة العميل:</span>{' '}
+                              <span className="dir-ltr inline-block">{formatSAR(store.normalWeek.cvMin)} - {formatSAR(store.normalWeek.cvMax)}</span>
+                            </div>
+                          </div>
                         </div>
                         <div>
-                          <b>الوضع الطبيعي للزوار:</b>{' '}
-                          <span className="dir-ltr inline-block">{Math.round(store.normal.visitorsMin).toLocaleString()} - {Math.round(store.normal.visitorsMax).toLocaleString()}</span>
-                        </div>
-                        <div>
-                          <b>الوضع الطبيعي لقيمة العميل:</b>{' '}
-                          <span className="dir-ltr inline-block">{formatSAR(store.normal.cvMin)} - {formatSAR(store.normal.cvMax)}</span>
+                          <b className="text-orange-700">الويكند (خميس–جمعة–سبت)</b>
+                          <div className="mt-1 space-y-0.5">
+                            <div>
+                              <span className="text-neutral-600">الاستحواذ:</span>{' '}
+                              <span className="dir-ltr inline-block">{store.normalWeekend.shareMin.toFixed(1)}% - {store.normalWeekend.shareMax.toFixed(1)}%</span>
+                            </div>
+                            <div>
+                              <span className="text-neutral-600">الزوار:</span>{' '}
+                              <span className="dir-ltr inline-block">{Math.round(store.normalWeekend.visitorsMin).toLocaleString()} - {Math.round(store.normalWeekend.visitorsMax).toLocaleString()}</span>
+                            </div>
+                            <div>
+                              <span className="text-neutral-600">قيمة العميل:</span>{' '}
+                              <span className="dir-ltr inline-block">{formatSAR(store.normalWeekend.cvMin)} - {formatSAR(store.normalWeekend.cvMax)}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
@@ -491,7 +539,7 @@ export default function CustomerValueSimulationPage() {
                           </thead>
                           <tbody>
                             {store.rows.map((r) => (
-                              <tr key={`${store.id}-${r.date}`} className="border-t border-neutral-100">
+                              <tr key={`${store.id}-${r.date}`} className={`border-t border-neutral-100 ${r.isWeekend ? 'bg-orange-50/70' : ''}`}>
                                 <td className="p-2 font-mono">{r.date}</td>
                                 <td className="p-2 text-center dir-ltr">{formatSAR(r.sales)}</td>
                                 <td className={`p-2 text-center dir-ltr font-bold ${r.shareAnomaly ? 'text-red-700' : 'text-neutral-700'}`}>
