@@ -52,6 +52,7 @@ type AnomalyDailyRow = {
   visitors: number;
   customerValue: number;
   sharePct: number;
+  severity: number;
   isWeekend: boolean;
   shareAnomaly: boolean;
   visitorsAnomaly: boolean;
@@ -364,25 +365,37 @@ export default function CustomerValueSimulationPage() {
       const softWeek = buildSoftBand(weekDaily);
       const softWeekend = buildSoftBand(weekendDaily);
 
-      const rows: AnomalyDailyRow[] = daily
+      const canUseShare = cohortStoreIds.size >= 2;
+      const scoredRows: AnomalyDailyRow[] = daily
         .map((d) => {
           const soft = d.isWeekend ? softWeekend : softWeek;
           const shareSoft = outside(d.sharePct, soft.shareMin, soft.shareMax);
           const visitorsSoft = outside(d.visitors, soft.visitorsMin, soft.visitorsMax);
           const cvSoft = outside(d.customerValue, soft.cvMin, soft.cvMax);
-          const score = Number(shareSoft) + Number(visitorsSoft) + Number(cvSoft);
+          const score = Number(canUseShare && shareSoft) + Number(visitorsSoft) + Number(cvSoft);
 
           const shareExtreme = outside(d.sharePct, soft.shareMinExtreme, soft.shareMaxExtreme);
           const visitorsExtreme = outside(d.visitors, soft.visitorsMinExtreme, soft.visitorsMaxExtreme);
           const cvExtreme = outside(d.customerValue, soft.cvMinExtreme, soft.cvMaxExtreme);
 
-          // Smart anomaly: at least 2 soft deviations OR one extreme deviation.
-          const shareAnomaly = (score >= 2 && shareSoft) || shareExtreme;
-          const visitorsAnomaly = (score >= 2 && visitorsSoft) || visitorsExtreme;
-          const cvAnomaly = (score >= 2 && cvSoft) || cvExtreme;
-          return { ...d, shareAnomaly, visitorsAnomaly, cvAnomaly };
+          // Smart anomaly: require at least 2 correlated deviations.
+          const shareAnomaly = canUseShare && (shareSoft || shareExtreme) && score >= 2;
+          const visitorsAnomaly = (visitorsSoft || visitorsExtreme) && score >= 2;
+          const cvAnomaly = (cvSoft || cvExtreme) && score >= 2;
+
+          const severity =
+            (canUseShare ? (shareExtreme ? 2 : shareSoft ? 1 : 0) : 0) +
+            (visitorsExtreme ? 2 : visitorsSoft ? 1 : 0) +
+            (cvExtreme ? 2 : cvSoft ? 1 : 0);
+          return { ...d, severity, shareAnomaly, visitorsAnomaly, cvAnomaly };
         })
         .filter((d) => d.shareAnomaly || d.visitorsAnomaly || d.cvAnomaly);
+
+      // Prevent noisy output: keep strongest anomalies only (max 40% of days, minimum 3 if available).
+      const cap = Math.max(3, Math.ceil(daily.length * 0.4));
+      const rows = scoredRows
+        .sort((a, b) => b.severity - a.severity || a.date.localeCompare(b.date))
+        .slice(0, cap);
 
       if (!rows.length) return;
 

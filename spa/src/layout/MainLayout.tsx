@@ -336,7 +336,7 @@ export default function MainLayout() {
 
             <div className="w-full md:w-auto grid grid-cols-2 md:flex items-stretch md:items-center gap-2 md:gap-3 flex-shrink-0">
               {/* Target div for Dashboard's Daily Report Button Portal */}
-              <div id="daily-report-portal-target" className="col-span-2 md:col-span-1 min-w-0" />
+              <div id="daily-report-portal-target" className="min-w-0 [&:empty]:hidden" />
 
               <button
                 onClick={() => setLiveModalOpen(true)}
