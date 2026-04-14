@@ -334,48 +334,37 @@ export default function MainLayout() {
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+            <div className="w-full md:w-auto grid grid-cols-2 md:flex items-stretch md:items-center gap-2 md:gap-3 flex-shrink-0">
               {/* Target div for Dashboard's Daily Report Button Portal */}
-              <div id="daily-report-portal-target"></div>
-
-              <button
-                onClick={() => window.open('#/tv', '_blank')}
-                className="hidden md:flex bg-slate-800 text-white px-4 py-2.5 rounded-xl shadow-md items-center gap-2 hover:scale-105 transition-transform"
-                title="شاشة العرض (TV Mode)"
-              >
-                <span className="text-lg leading-none">📺</span>
-                <span className="font-bold text-xs sm:text-sm whitespace-nowrap">وضع الشاشة</span>
-              </button>
+              <div id="daily-report-portal-target" className="col-span-2 md:col-span-1 min-w-0" />
 
               <button
                 onClick={() => setLiveModalOpen(true)}
-                className="flex bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-md items-center gap-2 animate-pulse hover:scale-105 transition-transform border border-orange-400"
+                className="flex justify-center bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-md items-center gap-2 animate-pulse hover:scale-105 transition-transform border border-orange-400"
               >
                 <div className="w-5 h-5"><FireIcon /></div>
                 <span className="font-bold text-xs sm:text-sm whitespace-nowrap">مبيعات اليوم</span>
               </button>
 
-              <div className="flex bg-neutral-100 p-1 rounded-2xl gap-1">
-                <button
-                  onClick={() => setIsSearchOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-neutral-600 hover:bg-white hover:text-orange-600 hover:shadow-sm transition-all group border border-transparent"
-                  title="بحث النظام (Ctrl+K)"
-                >
-                  <SearchIcon className="h-5 w-5" />
-                  <span className="hidden lg:inline font-bold text-sm">بحث النظام</span>
-                </button>
-
-                <button
-                  onClick={openInquiry}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-neutral-600 hover:bg-white hover:text-orange-600 hover:shadow-sm transition-all group border border-transparent"
-                >
-                  <CubeIcon className="h-5 w-5" />
-                  <span className="hidden lg:inline font-bold text-sm">استعلام منتج</span>
-                </button>
-              </div>
+              <button
+                onClick={() => setIsSearchOpen(true)}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-neutral-700 bg-neutral-100 hover:bg-white hover:text-orange-600 hover:shadow-sm transition-all group border border-neutral-200"
+                title="بحث النظام (Ctrl+K)"
+              >
+                <SearchIcon className="h-5 w-5" />
+                <span className="font-bold text-xs sm:text-sm whitespace-nowrap">بحث النظام</span>
+              </button>
 
               <button
-                className="btn-secondary py-2.5 px-5 flex items-center gap-2"
+                onClick={openInquiry}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-neutral-700 bg-neutral-100 hover:bg-white hover:text-orange-600 hover:shadow-sm transition-all group border border-neutral-200"
+              >
+                <CubeIcon className="h-5 w-5" />
+                <span className="font-bold text-xs sm:text-sm whitespace-nowrap">استعلام منتج</span>
+              </button>
+
+              <button
+                className="hidden md:flex btn-secondary py-2.5 px-5 items-center gap-2"
                 onClick={() => {
                   clearCurrentUser();
                   nav('/login');

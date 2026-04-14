@@ -110,6 +110,8 @@ const buildNormalBand = (daily: Array<{ sharePct: number; visitors: number; cust
   };
 };
 
+const outside = (x: number, min: number, max: number) => x < min || x > max;
+
 export default function CustomerValueSimulationPage() {
   const [raw, setRaw] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -269,16 +271,38 @@ export default function CustomerValueSimulationPage() {
     const storeNames: Record<string, string> = raw?.stores || {};
     const perStoreDate: Record<string, Record<string, { sales: number; visitors: number }>> = {};
     const totalSalesByDate: Record<string, number> = {};
+    const cohortTotalSalesByDate: Record<string, number> = {};
     const storeMeta: Record<string, { type?: string }> = raw?.store_meta || {};
     const isOnlineStore = (sid: string) => {
       const type = String(storeMeta?.[sid]?.type || '').toLowerCase();
       return type === 'online' || type === 'platform' || type === 'warehouse';
     };
 
+    // Cohort for share%: same manager/city/type scope, but ignore selected branch.
+    // This avoids misleading 100% share when user filters to one branch only.
+    const cohortStoreIds = new Set<string>();
+    Object.keys(raw?.stores || {}).forEach((sid) => {
+      const m: any = storeMeta?.[sid] || {};
+      if (isOnlineStore(sid)) return;
+      if (user?.role === 'BranchManager' && sid !== user?.storeId) return;
+      if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return;
+      if (city !== 'all' && String(m?.city || '') !== city) return;
+      if (selectedStoreType !== 'all') {
+        const type = String(m?.type || '').toLowerCase();
+        const online = type === 'online' || type === 'platform' || type === 'warehouse';
+        if (selectedStoreType === 'online' && !online) return;
+        if (selectedStoreType === 'store' && online) return;
+      }
+      cohortStoreIds.add(sid);
+    });
+
     (raw.sales || []).forEach(([d, sid, v]: any[]) => {
       const ds = String(d).substring(0, 10);
       const storeId = String(sid);
       const val = Number(v) || 0;
+      if (cohortStoreIds.has(storeId) && ds >= range.start && ds <= range.end) {
+        cohortTotalSalesByDate[ds] = (cohortTotalSalesByDate[ds] || 0) + val;
+      }
       if (!allowedStoreIds.has(storeId) || isOnlineStore(storeId)) return;
       if (ds < range.start || ds > range.end) return;
       if (!perStoreDate[storeId]) perStoreDate[storeId] = {};
@@ -304,7 +328,8 @@ export default function CustomerValueSimulationPage() {
           const visitors = x.visitors;
           const sales = x.sales;
           const customerValue = visitors > 0 ? sales / visitors : 0;
-          const sharePct = (totalSalesByDate[date] || 0) > 0 ? (sales / totalSalesByDate[date]) * 100 : 0;
+          const cohortDen = cohortTotalSalesByDate[date] || totalSalesByDate[date] || 0;
+          const sharePct = cohortDen > 0 ? (sales / cohortDen) * 100 : 0;
           const isWeekend = isWeekendDay(date);
           return { date, sales, visitors, customerValue, sharePct, isWeekend };
         })
@@ -318,12 +343,43 @@ export default function CustomerValueSimulationPage() {
       const normalWeek = weekDaily.length ? buildNormalBand(weekDaily) : fallbackBand;
       const normalWeekend = weekendDaily.length ? buildNormalBand(weekendDaily) : fallbackBand;
 
+      // Softer band for anomaly detection (smart mode), tighter band stays for display.
+      const buildSoftBand = (rows: typeof daily) => {
+        const src = rows.length ? rows : daily;
+        return {
+          shareMin: percentile(src.map((r) => r.sharePct), 0.2),
+          shareMax: percentile(src.map((r) => r.sharePct), 0.8),
+          visitorsMin: percentile(src.map((r) => r.visitors), 0.2),
+          visitorsMax: percentile(src.map((r) => r.visitors), 0.8),
+          cvMin: percentile(src.map((r) => r.customerValue), 0.2),
+          cvMax: percentile(src.map((r) => r.customerValue), 0.8),
+          shareMinExtreme: percentile(src.map((r) => r.sharePct), 0.1),
+          shareMaxExtreme: percentile(src.map((r) => r.sharePct), 0.9),
+          visitorsMinExtreme: percentile(src.map((r) => r.visitors), 0.1),
+          visitorsMaxExtreme: percentile(src.map((r) => r.visitors), 0.9),
+          cvMinExtreme: percentile(src.map((r) => r.customerValue), 0.1),
+          cvMaxExtreme: percentile(src.map((r) => r.customerValue), 0.9),
+        };
+      };
+      const softWeek = buildSoftBand(weekDaily);
+      const softWeekend = buildSoftBand(weekendDaily);
+
       const rows: AnomalyDailyRow[] = daily
         .map((d) => {
-          const band = d.isWeekend ? normalWeekend : normalWeek;
-          const shareAnomaly = d.sharePct < band.shareMin || d.sharePct > band.shareMax;
-          const visitorsAnomaly = d.visitors < band.visitorsMin || d.visitors > band.visitorsMax;
-          const cvAnomaly = d.customerValue < band.cvMin || d.customerValue > band.cvMax;
+          const soft = d.isWeekend ? softWeekend : softWeek;
+          const shareSoft = outside(d.sharePct, soft.shareMin, soft.shareMax);
+          const visitorsSoft = outside(d.visitors, soft.visitorsMin, soft.visitorsMax);
+          const cvSoft = outside(d.customerValue, soft.cvMin, soft.cvMax);
+          const score = Number(shareSoft) + Number(visitorsSoft) + Number(cvSoft);
+
+          const shareExtreme = outside(d.sharePct, soft.shareMinExtreme, soft.shareMaxExtreme);
+          const visitorsExtreme = outside(d.visitors, soft.visitorsMinExtreme, soft.visitorsMaxExtreme);
+          const cvExtreme = outside(d.customerValue, soft.cvMinExtreme, soft.cvMaxExtreme);
+
+          // Smart anomaly: at least 2 soft deviations OR one extreme deviation.
+          const shareAnomaly = (score >= 2 && shareSoft) || shareExtreme;
+          const visitorsAnomaly = (score >= 2 && visitorsSoft) || visitorsExtreme;
+          const cvAnomaly = (score >= 2 && cvSoft) || cvExtreme;
           return { ...d, shareAnomaly, visitorsAnomaly, cvAnomaly };
         })
         .filter((d) => d.shareAnomaly || d.visitorsAnomaly || d.cvAnomaly);
@@ -341,7 +397,17 @@ export default function CustomerValueSimulationPage() {
     });
 
     return storesOut.sort((a, b) => b.rows.length - a.rows.length);
-  }, [raw, allowedStoreIds, range.start, range.end]);
+  }, [
+    raw,
+    allowedStoreIds,
+    range.start,
+    range.end,
+    user?.role,
+    user?.storeId,
+    effectiveManager,
+    city,
+    selectedStoreType,
+  ]);
 
   const formatSAR = (val: number) =>
     val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
