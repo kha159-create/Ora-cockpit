@@ -566,6 +566,164 @@ export default function OffersPage() {
         <KPICard title="إجمالي الخصم" value={stats.totalPeriodDisc} format={formatSAR} icon={<FireIcon />} />
       </div>
 
+      {/* Additional Insights (aligned with original feature set, same local design) */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
+          <div className="p-3 border-b border-neutral-200 bg-gradient-to-l from-amber-50 to-white">
+            <h3 className="text-base font-bold text-neutral-900">أفضل 5 عروض</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-neutral-50 text-neutral-600">
+                  <th className="py-2 px-3 text-right text-xs font-bold">#</th>
+                  <th className="py-2 px-3 text-right text-xs font-bold">العرض</th>
+                  <th className="py-2 px-3 text-center text-xs font-bold">المبيعات</th>
+                  <th className="py-2 px-3 text-center text-xs font-bold">الكفاءة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {top5.length ? top5.map((o: any, idx: number) => (
+                  <tr key={`top-${o.id || idx}`} className="border-t border-neutral-100">
+                    <td className="py-2 px-3 text-neutral-500 text-xs">{idx + 1}</td>
+                    <td className="py-2 px-3 font-semibold text-neutral-900 text-sm">{o.name || o.offer_name || o.id || '-'}</td>
+                    <td className="py-2 px-3 text-center dir-ltr font-bold text-emerald-700 text-sm">{formatSAR(o.periodSales)}</td>
+                    <td className="py-2 px-3 text-center dir-ltr font-bold text-orange-700 text-sm">{o.periodEff.toFixed(1)}%</td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={4} className="py-6 text-center text-neutral-400 text-sm">لا توجد بيانات</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
+          <div className="p-3 border-b border-neutral-200 bg-gradient-to-l from-rose-50 to-white">
+            <h3 className="text-base font-bold text-neutral-900">عروض ضعيفة الأداء</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-neutral-50 text-neutral-600">
+                  <th className="py-2 px-3 text-right text-xs font-bold">#</th>
+                  <th className="py-2 px-3 text-right text-xs font-bold">العرض</th>
+                  <th className="py-2 px-3 text-center text-xs font-bold">الكفاءة</th>
+                  <th className="py-2 px-3 text-center text-xs font-bold">العمليات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weakOffers.length ? weakOffers.map((o: any, idx: number) => (
+                  <tr key={`weak-${o.id || idx}`} className="border-t border-neutral-100">
+                    <td className="py-2 px-3 text-neutral-500 text-xs">{idx + 1}</td>
+                    <td className="py-2 px-3 font-semibold text-neutral-900 text-sm">{o.name || o.offer_name || o.id || '-'}</td>
+                    <td className="py-2 px-3 text-center dir-ltr font-bold text-red-600 text-sm">{o.periodEff.toFixed(1)}%</td>
+                    <td className="py-2 px-3 text-center dir-ltr text-neutral-700 text-sm">{o.periodOps.toLocaleString()}</td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={4} className="py-6 text-center text-neutral-400 text-sm">لا توجد عروض ضعيفة ضمن الفلاتر</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
+          <div className="p-3 border-b border-neutral-200 bg-gradient-to-l from-sky-50 to-white">
+            <h3 className="text-base font-bold text-neutral-900">أكثر المنتجات مبيعاً في العروض</h3>
+          </div>
+          <div className="overflow-x-auto max-h-[280px] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-neutral-50">
+                <tr className="text-neutral-600">
+                  <th className="py-2 px-3 text-right text-xs font-bold">#</th>
+                  <th className="py-2 px-3 text-right text-xs font-bold">رقم المنتج</th>
+                  <th className="py-2 px-3 text-right text-xs font-bold">اسم المنتج</th>
+                  <th className="py-2 px-3 text-center text-xs font-bold">الكمية</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topProducts.length ? topProducts.map((p: any, idx: number) => (
+                  <tr key={`prod-${p.id}-${idx}`} className="border-t border-neutral-100">
+                    <td className="py-2 px-3 text-neutral-500 text-xs">{idx + 1}</td>
+                    <td className="py-2 px-3 font-mono text-neutral-600 text-xs">{p.id}</td>
+                    <td className="py-2 px-3 text-neutral-900 text-sm">{p.name}</td>
+                    <td className="py-2 px-3 text-center font-bold text-orange-700 dir-ltr text-sm">{Math.round(p.qty).toLocaleString()}</td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={4} className="py-6 text-center text-neutral-400 text-sm">لا توجد بيانات منتجات</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
+          <div className="p-3 border-b border-neutral-200 bg-gradient-to-l from-emerald-50 to-white">
+            <h3 className="text-base font-bold text-neutral-900">ملخص كفاءة العروض</h3>
+          </div>
+          <div className="overflow-x-auto max-h-[280px] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-neutral-50">
+                <tr className="text-neutral-600">
+                  <th className="py-2 px-3 text-right text-xs font-bold">#</th>
+                  <th className="py-2 px-3 text-right text-xs font-bold">العرض</th>
+                  <th className="py-2 px-3 text-center text-xs font-bold">الكفاءة</th>
+                  <th className="py-2 px-3 text-center text-xs font-bold">متوسط السلة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {efficiencySummary.length ? efficiencySummary.map((o: any, idx: number) => (
+                  <tr key={`eff-${idx}`} className="border-t border-neutral-100">
+                    <td className="py-2 px-3 text-neutral-500 text-xs">{idx + 1}</td>
+                    <td className="py-2 px-3 text-neutral-900 text-sm font-semibold">{o.name}</td>
+                    <td className="py-2 px-3 text-center dir-ltr font-bold text-emerald-700 text-sm">{o.periodEff.toFixed(1)}%</td>
+                    <td className="py-2 px-3 text-center dir-ltr text-sky-700 font-semibold text-sm">{formatSAR(o.periodAvgBasket)}</td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={4} className="py-6 text-center text-neutral-400 text-sm">لا توجد بيانات كفاءة</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
+        <div className="p-3 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white">
+          <h3 className="text-base font-bold text-neutral-900">اقتراحات للمنتجات الراكدة داخل العروض</h3>
+        </div>
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          {weakOffers.slice(0, 3).map((o: any, idx: number) => (
+            <div key={`stagnant-offer-${idx}`} className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+              <div className="text-xs text-neutral-500 mb-1">عرض يحتاج تحسين</div>
+              <div className="text-sm font-bold text-neutral-900">{o.name || o.offer_name || o.id || '-'}</div>
+              <div className="mt-1 text-xs text-red-600 font-semibold">الكفاءة الحالية: {o.periodEff.toFixed(1)}%</div>
+              <div className="mt-2 text-xs text-neutral-600">
+                اقتراح: راجع المنتجات المضافة للعرض وارفع الجاذبية بعناصر من الأعلى مبيعاً أو حسّن نسبة الخصم.
+              </div>
+            </div>
+          ))}
+          {!weakOffers.length && (
+            <div className="rounded-xl border border-dashed border-neutral-300 p-4 text-sm text-neutral-500">
+              لا توجد عروض منخفضة الأداء حالياً، استمر بمراقبة الكفاءة يومياً.
+            </div>
+          )}
+          {topProducts.slice(0, 2).map((p: any, idx: number) => (
+            <div key={`stagnant-product-${idx}`} className="rounded-xl border border-orange-200 bg-orange-50/60 p-3">
+              <div className="text-xs text-neutral-500 mb-1">منتج مرشح للدفع داخل العروض</div>
+              <div className="text-sm font-bold text-neutral-900">{p.name}</div>
+              <div className="mt-1 text-xs text-orange-700 font-semibold">مباع: {Math.round(p.qty).toLocaleString()} قطعة</div>
+              <div className="mt-2 text-xs text-neutral-600">
+                اقتراح: إدراجه ضمن عرض مركّب مع منتجات ضعيفة الحركة لرفع معدل السلة.
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Offers List / Grid */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
         <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white flex justify-between items-center">

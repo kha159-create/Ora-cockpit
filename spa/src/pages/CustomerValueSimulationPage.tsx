@@ -598,21 +598,27 @@ export default function CustomerValueSimulationPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {store.rows.map((r) => (
-                              <tr key={`${store.id}-${r.date}`} className={`border-t border-neutral-100 ${r.isWeekend ? 'bg-orange-50/70' : ''}`}>
-                                <td className="p-2 font-mono">{r.date}</td>
-                                <td className="p-2 text-center dir-ltr">{formatSAR(r.sales)}</td>
-                                <td className={`p-2 text-center dir-ltr font-bold ${r.conversionAnomaly ? 'text-red-700' : 'text-neutral-700'}`}>
-                                  {r.conversionPct.toFixed(1)}%
-                                </td>
-                                <td className={`p-2 text-center dir-ltr font-bold ${r.visitorsAnomaly ? 'text-red-700' : 'text-neutral-700'}`}>
-                                  {Math.round(r.visitors).toLocaleString()}
-                                </td>
-                                <td className={`p-2 text-center dir-ltr font-bold ${r.cvAnomaly ? 'text-red-700' : 'text-neutral-700'}`}>
-                                  {formatSAR(r.customerValue)}
-                                </td>
-                              </tr>
-                            ))}
+                            {store.rows.map((r) => {
+                              const band = r.isWeekend ? store.normalWeekend : store.normalWeek;
+                              const conversionTone = r.conversionPct > band.conversionMax ? 'text-emerald-700' : r.conversionPct < band.conversionMin ? 'text-red-700' : 'text-neutral-700';
+                              const visitorsTone = r.visitors > band.visitorsMax ? 'text-emerald-700' : r.visitors < band.visitorsMin ? 'text-red-700' : 'text-neutral-700';
+                              const cvTone = r.customerValue > band.cvMax ? 'text-emerald-700' : r.customerValue < band.cvMin ? 'text-red-700' : 'text-neutral-700';
+                              return (
+                                <tr key={`${store.id}-${r.date}`} className={`border-t border-neutral-100 ${r.isWeekend ? 'bg-orange-50/70' : ''}`}>
+                                  <td className="p-2 font-mono">{r.date}</td>
+                                  <td className="p-2 text-center dir-ltr">{formatSAR(r.sales)}</td>
+                                  <td className={`p-2 text-center dir-ltr font-bold ${conversionTone}`}>
+                                    {r.conversionPct.toFixed(1)}%
+                                  </td>
+                                  <td className={`p-2 text-center dir-ltr font-bold ${visitorsTone}`}>
+                                    {Math.round(r.visitors).toLocaleString()}
+                                  </td>
+                                  <td className={`p-2 text-center dir-ltr font-bold ${cvTone}`}>
+                                    {formatSAR(r.customerValue)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
