@@ -1059,8 +1059,8 @@ export default function ProductsPage() {
                 className="input md:col-span-2 xl:col-span-2 min-w-0"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="🔍 ابحث بأكثر من كود: 4489514+4489515"
-                title="يمكن البحث بأكثر من كود/اسم (مسافة أو + أو فاصلة)"
+                placeholder="🔍 بس اكتب كود او اسم استخدم + لاكثر من كود"
+                title="بس اكتب كود او اسم استخدم + لاكثر من كود"
               />
               <input
                 type="number"
