@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { loadOffersData, loadManagementData, loadProductMapping } from '../services/upstreamData';
+import { loadOffersData, loadManagementData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { DownloadIcon, XIcon, TagIcon, SalesIcon, InvoicesIcon, PremiumTargetIcon, CustomerValueIcon, FireIcon } from '../components/Icons';
 import { KPICard } from '../components/DashboardComponents';
@@ -18,74 +18,11 @@ function pad2(n: number) { return String(n).padStart(2, '0'); }
 function toYMD(d: Date) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 
 type PeriodKey = 'mtd' | '7d' | '14d' | '30d' | 'yest' | 'custom';
-type FlashDealComponent = { label: string; itemCode: string; resolvedOfferItemIds?: string[] };
-type FlashDeal = { id: string; name: string; components: FlashDealComponent[] };
-
-const FLASH_DEALS_STORAGE_KEY = 'ora.offers.flashDeals.v1';
-const DEFAULT_FLASH_DEALS: FlashDeal[] = [
-  {
-    id: 'flash-peach-caspian-4489420',
-    name: 'فلاش ديل لحاف Peach Caspian - 395',
-    components: [{ label: 'لحاف Peach Caspian', itemCode: '4489420' }],
-  },
-  {
-    id: 'flash-lahaf-495-bundle',
-    name: 'فلاش ديل أطقم اللحاف - 495',
-    components: [
-      { label: 'ANNETTE GREY PINK', itemCode: '4489416' },
-      { label: 'JOUY DE TOILE', itemCode: '4489424' },
-      { label: 'Dakota Linen', itemCode: '4489419' },
-      { label: 'STRIPE GRAPE PURPLE', itemCode: '4489403' },
-      { label: 'PARADIES BIRDS', itemCode: '4489418' },
-    ],
-  },
-  {
-    id: 'flash-199-quilt-pillow',
-    name: 'فلاش ديل لحاف 199 + مخدة مجاناً',
-    components: [
-      { label: 'لحاف مفرد 199 (270106)', itemCode: '270106' },
-      { label: 'لحاف مفرد 199 (270103)', itemCode: '270103' },
-      { label: 'لحاف مفرد 199 (270108)', itemCode: '270108' },
-      { label: 'لحاف مفرد 199 (270109)', itemCode: '270109' },
-      { label: 'Perfect pillow (مجاني)', itemCode: '9619' },
-    ],
-  },
-];
-
-function loadFlashDeals(): FlashDeal[] {
-  try {
-    const raw = window.localStorage.getItem(FLASH_DEALS_STORAGE_KEY);
-    if (!raw) return DEFAULT_FLASH_DEALS;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return DEFAULT_FLASH_DEALS;
-    const cleaned = parsed
-      .map((d: any) => ({
-        id: String(d?.id || ''),
-        name: String(d?.name || '').trim(),
-        components: Array.isArray(d?.components)
-          ? d.components
-              .map((c: any) => ({
-                label: String(c?.label || '').trim(),
-                itemCode: String(c?.itemCode || '').trim(),
-                resolvedOfferItemIds: Array.isArray(c?.resolvedOfferItemIds)
-                  ? c.resolvedOfferItemIds.map((x: any) => String(x || '').trim()).filter(Boolean)
-                  : undefined,
-              }))
-              .filter((c: FlashDealComponent) => c.label && c.itemCode)
-          : [],
-      }))
-      .filter((d: FlashDeal) => d.id && d.name && d.components.length);
-    return cleaned.length ? cleaned : DEFAULT_FLASH_DEALS;
-  } catch {
-    return DEFAULT_FLASH_DEALS;
-  }
-}
 
 export default function OffersPage() {
   const user = getCurrentUser();
   const [data, setData] = useState<any>(null);
   const [mgmt, setMgmt] = useState<any>(null);
-  const [productMapping, setProductMapping] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [manager, setManager] = useState<string>('all');
   const [branch, setBranch] = useState<string>('all');
@@ -103,30 +40,13 @@ export default function OffersPage() {
   // -- [NEW] Comparison & Copy Logic --
   const [compareList, setCompareList] = useState<any[]>([]);
   const [showCompareModal, setShowCompareModal] = useState(false);
-  const [flashDeals, setFlashDeals] = useState<FlashDeal[]>(() => loadFlashDeals());
-  const [flashStart, setFlashStart] = useState('');
-  const [flashEnd, setFlashEnd] = useState('');
-  const [showFlashEditor, setShowFlashEditor] = useState(false);
-  const [flashDraftName, setFlashDraftName] = useState('');
-  const [flashDraftComponents, setFlashDraftComponents] = useState<FlashDealComponent[]>([
-    { label: '', itemCode: '' },
-  ]);
 
   useEffect(() => {
     loadOffersData()
       .then(setData)
       .catch((e) => setErr(e?.message || String(e)));
     loadManagementData().then(setMgmt).catch(() => { });
-    loadProductMapping().then((rows) => setProductMapping(Array.isArray(rows) ? rows : [])).catch(() => setProductMapping([]));
   }, []);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(FLASH_DEALS_STORAGE_KEY, JSON.stringify(flashDeals));
-    } catch {
-      // Ignore persistence errors and keep UI working.
-    }
-  }, [flashDeals]);
 
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -337,179 +257,6 @@ export default function OffersPage() {
 
     return processedOffers;
   }, [rawOffers, allowedStoreIds, dateRange, statusFilter, mgmt, sortMode]);
-
-  useEffect(() => {
-    if (!flashStart) setFlashStart(dateRange.start);
-    if (!flashEnd) setFlashEnd(dateRange.end);
-  }, [dateRange.start, dateRange.end, flashStart, flashEnd]);
-
-  const flashDateRange = useMemo(() => {
-    const start = flashStart || dateRange.start;
-    const end = flashEnd || dateRange.end;
-    if (start <= end) return { start, end };
-    return { start: end, end: start };
-  }, [flashStart, flashEnd, dateRange.start, dateRange.end]);
-
-  const allOfferItems = useMemo(() => {
-    const byId = new Map<string, { id: string; name: string }>();
-    rawOffers.forEach((o: any) => {
-      const itemsRaw = Array.isArray(o?.items) ? o.items : [];
-      itemsRaw.forEach((it: any) => {
-        const itemId = String(it?.i || it?.id || it?.item_id || '').trim();
-        if (!itemId) return;
-        const itemName = String(it?.n || it?.name || it?.item_name || itemId).trim();
-        const prev = byId.get(itemId);
-        if (!prev || itemName.length > prev.name.length) byId.set(itemId, { id: itemId, name: itemName || itemId });
-      });
-    });
-    return Array.from(byId.values());
-  }, [rawOffers]);
-
-  const flashLookup = useMemo(() => {
-    const offerNameById = new Map(allOfferItems.map((x) => [x.id, x.name] as const));
-    const tokenToItemIds = new Map<string, Set<string>>();
-
-    const attachToken = (tokenRaw: string, itemIds: string[]) => {
-      const token = tokenRaw.trim();
-      if (!token || !itemIds.length) return;
-      if (!tokenToItemIds.has(token)) tokenToItemIds.set(token, new Set());
-      const dst = tokenToItemIds.get(token)!;
-      itemIds.forEach((id) => dst.add(id));
-    };
-
-    allOfferItems.forEach((x) => attachToken(x.id, [x.id]));
-    productMapping.forEach((m: any) => {
-      const id = String(m?.id || '').trim();
-      const dCode = String(m?.dCode || '').trim();
-      const alias = String(m?.alias || '').trim();
-      const candidates = Array.from(new Set([id, dCode, alias].filter(Boolean)));
-      if (!candidates.length) return;
-      [id, dCode, alias].forEach((token) => attachToken(token, candidates));
-    });
-
-    const suggestions = new Map<string, { token: string; offerItemId: string; name: string }>();
-    tokenToItemIds.forEach((itemIds, token) => {
-      itemIds.forEach((itemId) => {
-        const key = `${token}::${itemId}`;
-        suggestions.set(key, {
-          token,
-          offerItemId: itemId,
-          name: offerNameById.get(itemId) || String(
-            productMapping.find((x: any) =>
-              String(x?.id || '').trim() === itemId ||
-              String(x?.dCode || '').trim() === itemId ||
-              String(x?.alias || '').trim() === itemId
-            )?.name || itemId
-          ),
-        });
-      });
-    });
-
-    return {
-      tokenToItemIds,
-      suggestions: Array.from(suggestions.values()).sort((a, b) => a.token.localeCompare(b.token)),
-    };
-  }, [allOfferItems, productMapping]);
-
-  const resolveOfferItemIds = (token: string): string[] => {
-    const t = token.trim();
-    if (!t) return [];
-    const ids = flashLookup.tokenToItemIds.get(t);
-    return ids ? Array.from(ids) : [];
-  };
-
-  const flashDealRows = useMemo(() => {
-    const qtyByItem = new Map<string, number>();
-    rawOffers.forEach((o: any) => {
-      const itemsRaw = Array.isArray(o?.items) ? o.items : [];
-      itemsRaw.forEach((it: any) => {
-        const d = String(it?.d || '').substring(0, 10);
-        const sid = String(it?.s || '');
-        if (!d || d < flashDateRange.start || d > flashDateRange.end) return;
-        if (sid && !allowedStoreIds.has(sid)) return;
-        const itemId = String(it?.i || it?.id || it?.item_id || '').trim();
-        if (!itemId) return;
-        const qty = Math.abs(Number(it?.q || it?.qty || it?.quantity || 0));
-        if (!Number.isFinite(qty) || qty <= 0) return;
-        qtyByItem.set(itemId, (qtyByItem.get(itemId) || 0) + qty);
-      });
-    });
-
-    return flashDeals.map((deal) => {
-      const components = deal.components.map((comp) => {
-        const fallbackIds = resolveOfferItemIds(comp.itemCode);
-        const resolvedIds = comp.resolvedOfferItemIds?.length ? comp.resolvedOfferItemIds : fallbackIds;
-        const sold = resolvedIds.reduce((sum, id) => sum + (qtyByItem.get(id) || 0), 0);
-        return { ...comp, sold, resolvedOfferItemIds: resolvedIds };
-      });
-      const estimatedBundleSales = components.length ? Math.min(...components.map((c) => c.sold)) : 0;
-      return { ...deal, components, estimatedBundleSales };
-    });
-  }, [rawOffers, flashDeals, flashDateRange.start, flashDateRange.end, allowedStoreIds, flashLookup]);
-
-  const resetFlashDraft = () => {
-    setFlashDraftName('');
-    setFlashDraftComponents([{ label: '', itemCode: '' }]);
-  };
-
-  const addFlashDeal = () => {
-    const name = flashDraftName.trim();
-    const draftRows = flashDraftComponents
-      .map((c) => ({
-        label: c.label.trim(),
-        itemCode: c.itemCode.trim(),
-        resolvedOfferItemIds: c.resolvedOfferItemIds?.length ? c.resolvedOfferItemIds : resolveOfferItemIds(c.itemCode),
-      }))
-      .filter((c) => c.label && c.itemCode);
-    if (!name || !draftRows.length) {
-      alert('أدخل اسم العرض ومكوّناً واحداً على الأقل.');
-      return;
-    }
-    const unresolved = draftRows.filter((c) => !(c.resolvedOfferItemIds && c.resolvedOfferItemIds.length));
-    if (unresolved.length) {
-      alert('يوجد منتجات غير مرتبطة بداتا العروض. اخترها من نتائج البحث المقترحة لضمان دقة الأرقام.');
-      return;
-    }
-    const components = draftRows as Array<{ label: string; itemCode: string; resolvedOfferItemIds: string[] }>;
-    const deal: FlashDeal = {
-      id: `flash-${Date.now()}`,
-      name,
-      components,
-    };
-    setFlashDeals((prev) => [deal, ...prev]);
-    resetFlashDraft();
-    setShowFlashEditor(false);
-  };
-
-  const removeFlashDeal = (dealId: string) => {
-    setFlashDeals((prev) => prev.filter((d) => d.id !== dealId));
-  };
-
-  const getFlashSuggestions = (query: string) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return flashLookup.suggestions.slice(0, 20);
-    return flashLookup.suggestions
-      .filter((s) => s.token.toLowerCase().includes(q) || s.name.toLowerCase().includes(q))
-      .slice(0, 20);
-  };
-
-  const bindAllMatchingSuggestions = (idx: number) => {
-    setFlashDraftComponents((prev) => {
-      const row = prev[idx];
-      if (!row) return prev;
-      const suggestions = getFlashSuggestions(row.itemCode);
-      const linkedIds = Array.from(new Set(suggestions.map((s) => s.offerItemId)));
-      if (!linkedIds.length) return prev;
-      return prev.map((x, i) =>
-        i === idx
-          ? {
-              ...x,
-              resolvedOfferItemIds: linkedIds,
-            }
-          : x
-      );
-    });
-  };
 
   const stats = useMemo(() => {
     const res = offers.reduce((acc: any, o: any) => {
@@ -819,198 +566,100 @@ export default function OffersPage() {
         <KPICard title="إجمالي الخصم" value={stats.totalPeriodDisc} format={formatSAR} icon={<FireIcon />} />
       </div>
 
-      {/* Flash Deals */}
+      {/* Offers List / Grid */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
-        <div className="p-3 border-b border-neutral-200 bg-gradient-to-l from-violet-50 to-white flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h3 className="text-base font-bold text-neutral-900">عروض فلاش ديل</h3>
-            <p className="text-xs text-neutral-500 mt-0.5">
-              الحسابات تعتمد على فلاتر المعارض الأساسية الحالية (مدير/فرع/مدينة/نوع) مع فترة مخصصة لهذه البطاقة.
-            </p>
-          </div>
-          <button
-            onClick={() => setShowFlashEditor((p) => !p)}
-            className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-colors"
-          >
-            {showFlashEditor ? 'إغلاق الإضافة' : 'إضافة عرض فلاش ديل'}
-          </button>
+        <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white flex justify-between items-center">
+          <h3 className="text-lg font-bold text-neutral-900">قائمة العروض ({offers.length})</h3>
         </div>
 
-        {showFlashEditor && (
-          <div className="p-4 border-b border-neutral-200 bg-violet-50/40 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-neutral-600 mb-1">اسم العرض</label>
-                <input
-                  className="input w-full"
-                  value={flashDraftName}
-                  onChange={(e) => setFlashDraftName(e.target.value)}
-                  placeholder="مثال: لحاف 199 + مخدة مجاناً"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              {flashDraftComponents.map((comp, idx) => (
-                <div key={`draft-comp-${idx}`} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
-                  <div className="md:col-span-5">
-                    <label className="block text-xs font-semibold text-neutral-600 mb-1">اسم المنتج داخل العرض</label>
-                    <input
-                      className="input w-full"
-                      value={comp.label}
-                      onChange={(e) => setFlashDraftComponents((prev) => prev.map((x, i) => (i === idx ? { ...x, label: e.target.value } : x)))}
-                      placeholder="مثال: Perfect pillow مجاني"
-                    />
-                  </div>
-                  <div className="md:col-span-5">
-                    <label className="block text-xs font-semibold text-neutral-600 mb-1">بحث المنتج / الرمز</label>
-                    <input
-                      className="input w-full dir-ltr"
-                      value={comp.itemCode}
-                      onChange={(e) =>
-                        setFlashDraftComponents((prev) =>
-                          prev.map((x, i) =>
-                            i === idx ? { ...x, itemCode: e.target.value, resolvedOfferItemIds: undefined } : x
-                          )
-                        )
-                      }
-                      placeholder="اكتب بداية الكود أو اسم المنتج"
-                    />
-                    <div className="mt-1 max-h-28 overflow-y-auto rounded-lg border border-neutral-200 bg-white">
-                      {getFlashSuggestions(comp.itemCode).map((s) => (
-                        <button
-                          type="button"
-                          key={`${s.token}-${s.offerItemId}`}
-                          className="w-full text-right px-2 py-1.5 hover:bg-orange-50 border-b border-neutral-100 last:border-b-0"
-                          onClick={() =>
-                            setFlashDraftComponents((prev) =>
-                              prev.map((x, i) =>
-                                i === idx
-                                  ? { ...x, itemCode: s.token, label: x.label || s.name, resolvedOfferItemIds: [s.offerItemId] }
-                                  : x
-                              )
-                            )
-                          }
-                        >
-                          <div className="text-[11px] font-mono text-neutral-700 dir-ltr">{s.token}</div>
-                          <div className="text-[11px] text-neutral-500 truncate">{s.name}</div>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="mt-1 flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="px-2 py-1 rounded-md border border-violet-200 bg-violet-50 text-violet-700 text-[11px] font-bold"
-                        onClick={() => bindAllMatchingSuggestions(idx)}
+        {viewMode === 'list' ? (
+          <div className="overflow-x-auto">
+            {offers.length === 0 ? (
+              <div className="p-8 text-center text-neutral-500">لا توجد عروض بعد تطبيق الفلاتر.</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-neutral-800 text-white">
+                    <th className="py-3 px-4 w-10"></th> {/* Checkbox Col */}
+                    <th className="py-3 px-4 text-right">#</th>
+                    <th className="py-3 px-4 text-right">اسم العرض</th>
+                    <th className="py-3 px-4 text-center bg-neutral-700/50">أمس</th>
+                    <th className="py-3 px-4 text-center bg-neutral-700/50">فواتير أمس</th>
+                    <th className="py-3 px-4 text-center">المبيعات</th>
+                    <th className="py-3 px-4 text-center">الفواتير</th>
+                    <th className="py-3 px-4 text-center">الخصم</th>
+                    <th className="py-3 px-4 text-center">كفاءة</th>
+                    <th className="py-3 px-4 text-center">م. السلة</th>
+                    <th className="py-3 px-4 text-center">منتجات</th>
+                    <th className="py-3 px-4 text-center w-10">نسخ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {offers.slice(0, 100).map((o: any, i: number) => {
+                    const isSelected = !!compareList.find(c => c.id === o.id);
+                    return (
+                      <tr
+                        key={i}
+                        className={`border-b border-neutral-100 transition-colors cursor-pointer ${isSelected ? 'bg-blue-50' : 'hover:bg-orange-50'}`}
+                        onClick={() => setSelectedOffer(o)}
                       >
-                        ربط كل النتائج المطابقة
-                      </button>
-                      <span className="text-[11px] text-neutral-500">
-                        مرتبط: {comp.resolvedOfferItemIds?.length || 0} باركود
-                      </span>
-                    </div>
-                  </div>
-                  <div className="md:col-span-2">
-                    <button
-                      type="button"
-                      className="w-full px-2 py-2 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold disabled:opacity-50"
-                      disabled={flashDraftComponents.length === 1}
-                      onClick={() => setFlashDraftComponents((prev) => prev.filter((_, i) => i !== idx))}
-                    >
-                      حذف السطر
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className="px-3 py-1.5 rounded-lg border border-neutral-300 bg-white text-neutral-700 text-xs font-bold"
-                onClick={() => setFlashDraftComponents((prev) => [...prev, { label: '', itemCode: '' }])}
-              >
-                + إضافة منتج داخل العرض
-              </button>
-              <button
-                type="button"
-                className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold"
-                onClick={addFlashDeal}
-              >
-                حفظ العرض
-              </button>
-            </div>
+                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => toggleCompare(o, e as any)}
+                            className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500 cursor-pointer"
+                          />
+                        </td>
+                        <td className="py-3 px-4 text-neutral-500">{i + 1}</td>
+                        <td className="py-3 px-4 font-bold text-neutral-900">
+                          {o.name || o.offer_name || o.id || '-'}
+                          <div className="flex gap-1 mt-1">
+                            {getBadges(o).map((b, idx) => (
+                              <span key={idx} className={`text-[10px] px-1.5 py-0.5 rounded-full ${b.color}`}>{b.label}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center font-bold text-green-600 bg-green-50/30">{formatSAR(o.yestSales)}</td>
+                        <td className="py-3 px-4 text-center text-neutral-600 bg-green-50/30">{o.yestOps.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-center font-bold text-blue-700">{formatSAR(o.periodSales)}</td>
+                        <td className="py-3 px-4 text-center font-medium">{o.periodOps.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-center text-red-500 font-mono">{o.periodDisc.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-center font-black text-orange-600">{o.periodEff.toFixed(1)}%</td>
+                        <td className="py-3 px-4 text-center text-sky-700 font-semibold">{formatSAR(o.periodAvgBasket)}</td>
+                        <td className="py-3 px-4 text-center text-neutral-600">{o.aggregatedItems?.length || 0}</td>
+                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button onClick={(e) => copyOfferDetails(o, e)} className="p-1.5 hover:bg-neutral-200 rounded text-neutral-500 hover:text-neutral-800" title="نسخ">
+                            <ClipboardIcon className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        ) : (
+          /* GRID VIEW */
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 bg-neutral-50">
+            {offers.length === 0 ? (
+              <div className="p-8 text-center text-neutral-500 col-span-full">لا توجد عروض بعد تطبيق الفلاتر.</div>
+            ) : (
+              offers.slice(0, 100).map((o: any, i: number) => (
+                <OfferCard
+                  key={i}
+                  offer={o}
+                  onClick={() => setSelectedOffer(o)}
+                  badges={getBadges(o)}
+                  isSelected={!!compareList.find(c => c.id === o.id)}
+                  onToggle={(e: any) => toggleCompare(o, e)}
+                  onCopy={(e: any) => copyOfferDetails(o, e)}
+                />
+              ))
+            )}
           </div>
         )}
-
-        <div className="p-4 border-b border-neutral-100 bg-neutral-50/70">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-neutral-500 mb-1">من تاريخ</label>
-              <input type="date" className="input w-full" value={flashStart} onChange={(e) => setFlashStart(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-neutral-500 mb-1">إلى تاريخ</label>
-              <input type="date" className="input w-full" value={flashEnd} onChange={(e) => setFlashEnd(e.target.value)} />
-            </div>
-            <div className="md:col-span-2 flex items-end">
-              <div className="text-xs text-neutral-500">
-                الفترة الفعلية: <span className="font-mono dir-ltr">{flashDateRange.start}</span> → <span className="font-mono dir-ltr">{flashDateRange.end}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-neutral-100 text-neutral-700">
-                <th className="py-2 px-3 text-right text-xs font-bold">العرض</th>
-                <th className="py-2 px-3 text-right text-xs font-bold">تفاصيل المنتجات داخل العرض</th>
-                <th className="py-2 px-3 text-center text-xs font-bold">تقدير بيع العرض المركب</th>
-                <th className="py-2 px-3 text-center text-xs font-bold">إجراء</th>
-              </tr>
-            </thead>
-            <tbody>
-              {flashDealRows.length ? flashDealRows.map((deal) => (
-                <tr key={deal.id} className="border-t border-neutral-100 align-top">
-                  <td className="py-3 px-3">
-                    <div className="font-bold text-neutral-900">{deal.name}</div>
-                    <div className="text-[11px] text-neutral-500 mt-1">{deal.components.length} منتج/مكوّن</div>
-                  </td>
-                  <td className="py-3 px-3">
-                    <div className="space-y-1.5">
-                      {deal.components.map((comp, idx) => (
-                        <div key={`${deal.id}-comp-${idx}`} className="flex flex-wrap items-center gap-2 text-xs">
-                          <span className="font-semibold text-neutral-800">{comp.label}</span>
-                          <span className="font-mono text-neutral-500">({comp.itemCode})</span>
-                          <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-bold dir-ltr">
-                            {Math.round(comp.sold).toLocaleString()} بيع
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="py-3 px-3 text-center">
-                    <span className="inline-flex px-2.5 py-1 rounded-full bg-violet-100 text-violet-700 font-bold dir-ltr">
-                      {Math.round(deal.estimatedBundleSales).toLocaleString()}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-center">
-                    <button
-                      className="px-2.5 py-1 rounded-md border border-red-200 bg-red-50 text-red-700 text-xs font-bold"
-                      onClick={() => removeFlashDeal(deal.id)}
-                    >
-                      حذف
-                    </button>
-                  </td>
-                </tr>
-              )) : (
-                <tr>
-                  <td colSpan={4} className="py-8 text-center text-neutral-400">لا توجد عروض فلاش ديل حالياً.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
       </div>
 
       {/* Additional Insights (aligned with original feature set, same local design) */}
@@ -1169,102 +818,6 @@ export default function OffersPage() {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Offers List / Grid */}
-      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
-        <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white flex justify-between items-center">
-          <h3 className="text-lg font-bold text-neutral-900">قائمة العروض ({offers.length})</h3>
-        </div>
-
-        {viewMode === 'list' ? (
-          <div className="overflow-x-auto">
-            {offers.length === 0 ? (
-              <div className="p-8 text-center text-neutral-500">لا توجد عروض بعد تطبيق الفلاتر.</div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-neutral-800 text-white">
-                    <th className="py-3 px-4 w-10"></th> {/* Checkbox Col */}
-                    <th className="py-3 px-4 text-right">#</th>
-                    <th className="py-3 px-4 text-right">اسم العرض</th>
-                    <th className="py-3 px-4 text-center bg-neutral-700/50">أمس</th>
-                    <th className="py-3 px-4 text-center bg-neutral-700/50">فواتير أمس</th>
-                    <th className="py-3 px-4 text-center">المبيعات</th>
-                    <th className="py-3 px-4 text-center">الفواتير</th>
-                    <th className="py-3 px-4 text-center">الخصم</th>
-                    <th className="py-3 px-4 text-center">كفاءة</th>
-                    <th className="py-3 px-4 text-center">م. السلة</th>
-                    <th className="py-3 px-4 text-center">منتجات</th>
-                    <th className="py-3 px-4 text-center w-10">نسخ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {offers.slice(0, 100).map((o: any, i: number) => {
-                    const isSelected = !!compareList.find(c => c.id === o.id);
-                    return (
-                      <tr
-                        key={i}
-                        className={`border-b border-neutral-100 transition-colors cursor-pointer ${isSelected ? 'bg-blue-50' : 'hover:bg-orange-50'}`}
-                        onClick={() => setSelectedOffer(o)}
-                      >
-                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(e) => toggleCompare(o, e as any)}
-                            className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500 cursor-pointer"
-                          />
-                        </td>
-                        <td className="py-3 px-4 text-neutral-500">{i + 1}</td>
-                        <td className="py-3 px-4 font-bold text-neutral-900">
-                          {o.name || o.offer_name || o.id || '-'}
-                          <div className="flex gap-1 mt-1">
-                            {getBadges(o).map((b, idx) => (
-                              <span key={idx} className={`text-[10px] px-1.5 py-0.5 rounded-full ${b.color}`}>{b.label}</span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-center font-bold text-green-600 bg-green-50/30">{formatSAR(o.yestSales)}</td>
-                        <td className="py-3 px-4 text-center text-neutral-600 bg-green-50/30">{o.yestOps.toLocaleString()}</td>
-                        <td className="py-3 px-4 text-center font-bold text-blue-700">{formatSAR(o.periodSales)}</td>
-                        <td className="py-3 px-4 text-center font-medium">{o.periodOps.toLocaleString()}</td>
-                        <td className="py-3 px-4 text-center text-red-500 font-mono">{o.periodDisc.toLocaleString()}</td>
-                        <td className="py-3 px-4 text-center font-black text-orange-600">{o.periodEff.toFixed(1)}%</td>
-                        <td className="py-3 px-4 text-center text-sky-700 font-semibold">{formatSAR(o.periodAvgBasket)}</td>
-                        <td className="py-3 px-4 text-center text-neutral-600">{o.aggregatedItems?.length || 0}</td>
-                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={(e) => copyOfferDetails(o, e)} className="p-1.5 hover:bg-neutral-200 rounded text-neutral-500 hover:text-neutral-800" title="نسخ">
-                            <ClipboardIcon className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        ) : (
-          /* GRID VIEW */
-          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 bg-neutral-50">
-            {offers.length === 0 ? (
-              <div className="p-8 text-center text-neutral-500 col-span-full">لا توجد عروض بعد تطبيق الفلاتر.</div>
-            ) : (
-              offers.slice(0, 100).map((o: any, i: number) => (
-                <OfferCard
-                  key={i}
-                  offer={o}
-                  onClick={() => setSelectedOffer(o)}
-                  badges={getBadges(o)}
-                  isSelected={!!compareList.find(c => c.id === o.id)}
-                  onToggle={(e: any) => toggleCompare(o, e)}
-                  onCopy={(e: any) => copyOfferDetails(o, e)}
-                />
-              ))
-            )}
-          </div>
-        )}
       </div>
 
       {/* Floating Compare Action Bar */}

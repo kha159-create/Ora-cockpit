@@ -8,8 +8,7 @@ import { CubeIcon, SalesIcon, InvoicesIcon, VisitorsIcon, XIcon } from '../compo
 import * as XLSX from 'xlsx';
 import { generateProductSummaryPDF } from '../services/pdf/pdfService';
 
-type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest';
-type Metric = 'qty' | 'val';
+type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest' | 'custom';
 
 const BASKET_PER_PAGE = 10;
 const MISSED_PER_PAGE = 10;
@@ -34,13 +33,18 @@ function formatSAR(val: number) {
   return val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 }
 
-function getDateRangeForMode(m: PeriodMode): { start: string; end: string } {
+function getDateRangeForMode(m: PeriodMode, customStart?: string, customEnd?: string): { start: string; end: string } {
   const pad = (n: number) => String(n).padStart(2, '0');
   const now = new Date();
   const yest = new Date(now);
   yest.setDate(now.getDate() - 1);
   const end = `${yest.getFullYear()}-${pad(yest.getMonth() + 1)}-${pad(yest.getDate())}`;
   if (m === 'yest') return { start: end, end };
+  if (m === 'custom' && customStart && customEnd) {
+    return customStart <= customEnd
+      ? { start: customStart, end: customEnd }
+      : { start: customEnd, end: customStart };
+  }
   if (m === '7d') {
     const s = new Date(now); s.setDate(now.getDate() - 7);
     return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end };
@@ -236,7 +240,8 @@ export default function ProductsPage() {
   const [productMapping, setProductMapping] = useState<Record<string, any>>({});
 
   const [mode, setMode] = useState<PeriodMode>('mtd');
-  const [metric, setMetric] = useState<Metric>('qty');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
 
   const [manager, setManager] = useState<string>('all');
   const [city, setCity] = useState<string>('all');
@@ -291,7 +296,7 @@ export default function ProductsPage() {
   }, []);
 
   // Reset page to 1 when filters change
-  useEffect(() => { setCurrentPage(1); }, [mode, manager, city, store, search, selectedCategory, metric, priceMin, priceMax]);
+  useEffect(() => { setCurrentPage(1); }, [mode, manager, city, store, search, selectedCategory, priceMin, priceMax, customStart, customEnd]);
 
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -368,10 +373,12 @@ export default function ProductsPage() {
       });
     }
 
-    const pData = raw.periods?.[mode] || null;
-    const analysis: Record<string, any> = (pData?.analysis || {}) as any;
+    const dateRange = getDateRangeForMode(mode, customStart, customEnd);
+    const isCustomMode = mode === 'custom';
+    const pData = !isCustomMode ? (raw.periods?.[mode] || null) : null;
+    const analysisSource: Record<string, any> = (isCustomMode ? raw.periods?.mtd?.analysis : pData?.analysis || {}) as any;
     const catalog: Record<string, any[]> = (pData?.catalog || {}) as any;
-    const missedByStore: Record<string, any[]> = (pData?.missed_opportunities || {}) as any;
+    const missedByStore: Record<string, any[]> = ((isCustomMode ? raw.periods?.mtd?.missed_opportunities : pData?.missed_opportunities) || {}) as any;
     const marketBasketAll: Record<string, any[]> = raw.market_basket || {};
     const dailyHistory: Record<string, any[]> = raw.product_daily_history || {};
 
@@ -383,14 +390,14 @@ export default function ProductsPage() {
     };
 
     const accessibleStoreIds = new Set<string>(
-      Object.keys(analysis).filter((sid) => isStoreAccessible(sid)),
+      Object.keys(analysisSource).filter((sid) => isStoreAccessible(sid)),
     );
 
     // Build manager + city + store options from the data we actually have for this period
     const managersSet = new Set<string>();
     const citiesSet = new Set<string>();
     const storeOptions: { id: string; name: string; manager: string; city: string }[] = [];
-    for (const sid of Object.keys(analysis)) {
+    for (const sid of Object.keys(analysisSource)) {
       if (!accessibleStoreIds.has(sid)) continue;
       const meta = storeMeta[sid] || {};
       const mgr = String(meta.manager || '');
@@ -404,7 +411,7 @@ export default function ProductsPage() {
 
       storeOptions.push({
         id: sid,
-        name: analysis[sid]?.store_name || storesMap[sid] || meta.name || sid,
+        name: analysisSource[sid]?.store_name || storesMap[sid] || meta.name || sid,
         manager: mgr,
         city: cityVal,
       });
@@ -433,83 +440,95 @@ export default function ProductsPage() {
       return true;
     };
 
-    // ===== Totals from analysis (per store categories) =====
-    let totalQty = 0;
-    let totalAmt = 0;
-    let totalStores = 0;
-
-    Object.entries(analysis).forEach(([sid, storeObj]) => {
-      if (!storeInScope(sid)) return;
-      totalStores += 1;
-      const categories: any[] = storeObj?.categories || [];
-      categories.forEach((c) => {
-        totalQty += safeNum(c.qty);
-        totalAmt += safeNum(c.amount);
-      });
-    });
-
     // ===== Catalog (products list) =====
     const catalogRows: CatalogItem[] = [];
     const q = search.trim().toLowerCase();
-    Object.entries(catalog).forEach(([catName, items]) => {
-      if (!Array.isArray(items)) return;
-      for (const it of items) {
-        const id = String(it?.id || '');
-        const name = String(it?.name || id);
-        const map = productMapping[id] || {};
-        const alias = String(map.alias ?? it?.alias ?? '').trim();
-        const dCode = String(map.dCode ?? it?.dCode ?? '').trim();
-        const stores = it?.stores || {};
+    const pushCatalogItem = (catName: string, it: any) => {
+      const id = String(it?.id || '');
+      const name = String(it?.name || id);
+      const map = productMapping[id] || {};
+      const alias = String(map.alias ?? it?.alias ?? '').trim();
+      const dCode = String(map.dCode ?? it?.dCode ?? '').trim();
+      const stores = it?.stores || {};
+      const stockEntry = stockMap.get(alias) || stockMap.get(dCode) || stockMap.get(id);
 
-        // Find Stock Data
-        // Priority: Alias -> dCode (which matches 'code' in stock file) -> id
-        let stockEntry = stockMap.get(alias) || stockMap.get(dCode) || stockMap.get(id);
+      let qty = 0;
+      let amount = 0;
+      let computedStock = 0;
 
-        let qty = 0;
-        let amount = 0;
-        let computedStock = 0;
-
-        if (activeStore === 'all') {
-          for (const [sid, st] of Object.entries(stores)) {
-            if (!storeInScope(String(sid))) continue;
-            qty += safeNum((st as any)?.q);
-            amount += safeNum((st as any)?.a);
-          }
-          if (stockEntry && stockEntry.byStore) {
-            for (const [sid, stQty] of Object.entries(stockEntry.byStore)) {
-              // Include stock if the store is in scope, or if we want to include warehouse (0)
-              // Often warehouse stock is global, but if filtered by manager, maybe not. Let's include it if storeInScope or if warehouse.
-              if (!storeInScope(String(sid)) && sid !== '0') continue;
-              computedStock += safeNum(stQty);
-            }
-          }
-        } else {
-          const st = stores?.[activeStore];
-          qty = safeNum(st?.q);
-          amount = safeNum(st?.a);
-          computedStock = safeNum(stockEntry?.byStore?.[activeStore]);
+      if (activeStore === 'all') {
+        for (const [sid, st] of Object.entries(stores)) {
+          if (!storeInScope(String(sid))) continue;
+          qty += safeNum((st as any)?.q);
+          amount += safeNum((st as any)?.a);
         }
-
-        // إذا لم يكن هناك بيع ولا كمية، نتجاهل المنتج في العرض العادي
-        // لكن إذا كان هناك بحث (q) نسمح بظهوره حتى لو بدون مبيعات ليظهر في نتائج البحث.
-        if (!q && qty === 0 && amount === 0) continue;
-        catalogRows.push({
-          id,
-          name: name,
-          alias: alias,
-          old_code: String(it?.old_code || ''),
-          dCode,
-          category: String(catName),
-          qty,
-          amount,
-          trend: it?.trend,
-          trendReason: it?.trend_reason,
-          salesByStore: stores as any,
-          stockByStore: stockEntry?.byStore,
-          totalStock: computedStock
-        });
+        if (stockEntry && stockEntry.byStore) {
+          for (const [sid, stQty] of Object.entries(stockEntry.byStore)) {
+            if (!storeInScope(String(sid)) && sid !== '0') continue;
+            computedStock += safeNum(stQty);
+          }
+        }
+      } else {
+        const st = stores?.[activeStore];
+        qty = safeNum(st?.q);
+        amount = safeNum(st?.a);
+        computedStock = safeNum(stockEntry?.byStore?.[activeStore]);
       }
-    });
+
+      if (!q && qty === 0 && amount === 0) return;
+      catalogRows.push({
+        id,
+        name,
+        alias,
+        old_code: String(it?.old_code || ''),
+        dCode,
+        category: String(catName),
+        qty,
+        amount,
+        trend: it?.trend,
+        trendReason: it?.trend_reason,
+        salesByStore: stores as any,
+        stockByStore: stockEntry?.byStore,
+        totalStock: computedStock
+      });
+    };
+
+    if (!isCustomMode) {
+      Object.entries(catalog).forEach(([catName, items]) => {
+        if (!Array.isArray(items)) return;
+        for (const it of items) pushCatalogItem(catName, it);
+      });
+    } else {
+      const itemNames = raw.item_names || {};
+      const itemCategories = raw.item_categories || {};
+      const byItem = new Map<string, { id: string; name: string; category: string; stores: Record<string, { q: number; a: number }> }>();
+      Object.entries(dailyHistory).forEach(([itemId, rows]) => {
+        const rid = String(itemId || '').trim();
+        if (!rid || !Array.isArray(rows)) return;
+        rows.forEach((r: any) => {
+          const ds = String(r?.date || '').substring(0, 10);
+          const sid = String(r?.store || r?.s || '');
+          if (!ds || ds < dateRange.start || ds > dateRange.end) return;
+          if (!storeInScope(sid)) return;
+          const qty = safeNum(r?.qty);
+          const amount = safeNum(r?.amount);
+          if (qty === 0 && amount === 0) return;
+          if (!byItem.has(rid)) {
+            byItem.set(rid, {
+              id: rid,
+              name: String(itemNames[rid] || rid),
+              category: String(itemCategories[rid] || 'Uncategorized'),
+              stores: {},
+            });
+          }
+          const entry = byItem.get(rid)!;
+          if (!entry.stores[sid]) entry.stores[sid] = { q: 0, a: 0 };
+          entry.stores[sid].q += qty;
+          entry.stores[sid].a += amount;
+        });
+      });
+      byItem.forEach((item) => pushCatalogItem(item.category, item));
+    }
 
     const catFilter = selectedCategory;
     let filteredCatalog = catalogRows;
@@ -533,7 +552,7 @@ export default function ProductsPage() {
         return true;
       });
     }
-    filteredCatalog.sort((a, b) => (metric === 'qty' ? b.qty - a.qty : b.amount - a.amount));
+    filteredCatalog.sort((a, b) => b.qty - a.qty);
     const catalogQtyAll = catalogRows.reduce((s, p) => s + (p.qty || 0), 0);
     const catalogAmountAll = catalogRows.reduce((s, p) => s + (p.amount || 0), 0);
     const categoryScope = selectedCategory === 'all' ? catalogRows : catalogRows.filter((p) => p.category === selectedCategory);
@@ -541,7 +560,10 @@ export default function ProductsPage() {
     const categoryScopeAmount = categoryScope.reduce((s, p) => s + (p.amount || 0), 0);
     const categorySharePercentByQty = (categoryScopeQty / Math.max(1, catalogQtyAll)) * 100;
     const categorySharePercentByValue = (categoryScopeAmount / Math.max(1, catalogAmountAll)) * 100;
-    const categorySharePercent = metric === 'qty' ? categorySharePercentByQty : categorySharePercentByValue;
+    const categorySharePercent = categorySharePercentByQty;
+    const totalQty = catalogRows.reduce((s, p) => s + (p.qty || 0), 0);
+    const totalAmt = catalogRows.reduce((s, p) => s + (p.amount || 0), 0);
+    const totalStores = storeOptions.filter((s) => storeInScope(s.id)).length;
 
     // ===== Market basket =====
     const basket = activeStore === 'all' ? (marketBasketAll['all'] || []) : (marketBasketAll[activeStore] || []);
@@ -628,9 +650,8 @@ export default function ProductsPage() {
       return { duvetKing, duvetFull, pillows, others };
     })();
 
-    const dateRange = getDateRangeForMode(mode);
     return {
-      dateRangeLabel: pData?.date_range || '-',
+      dateRangeLabel: isCustomMode ? `${dateRange.start} → ${dateRange.end}` : (pData?.date_range || '-'),
       dateRangeStart: dateRange.start,
       dateRangeEnd: dateRange.end,
       managers,
@@ -641,7 +662,7 @@ export default function ProductsPage() {
       categorySharePercentByQty,
       categorySharePercentByValue,
       categorySharePercent,
-      catalogCategories: Object.keys(catalog).sort((a, b) => a.localeCompare(b, 'ar')),
+      catalogCategories: Array.from(new Set(catalogRows.map((r) => r.category))).sort((a, b) => a.localeCompare(b, 'ar')),
       filteredCatalog,
       basket,
       missedList,
@@ -651,7 +672,7 @@ export default function ProductsPage() {
       valueAnalysis,
       selectedStoreLabel,
     };
-  }, [city, effectiveManager, mgmt, mode, priceMax, priceMin, productId, raw, search, selectedCategory, store, metric, user?.name, user?.role]);
+  }, [city, customEnd, customStart, effectiveManager, mgmt, mode, priceMax, priceMin, productId, raw, search, selectedCategory, store, user?.name, user?.role]);
 
   const productKpis = useMemo(() => {
     if (!derived || !productId) return null;
@@ -720,8 +741,6 @@ export default function ProductsPage() {
     return <DashboardSkeleton />;
   }
 
-  const metricLabel = metric === 'qty' ? '📦 الكمية' : '💰 القيمة';
-
   return (
     <div className="space-y-6 relative min-h-[400px]">
       {/* Controls */}
@@ -733,6 +752,7 @@ export default function ProductsPage() {
             <PeriodButton active={mode === '14d'} label="14 يوم" onClick={() => setMode('14d')} />
             <PeriodButton active={mode === '30d'} label="30 يوم" onClick={() => setMode('30d')} />
             <PeriodButton active={mode === 'yest'} label="⏳ أمس" onClick={() => setMode('yest')} />
+            <PeriodButton active={mode === 'custom'} label="📆 فترة مخصصة" onClick={() => setMode('custom')} />
           </div>
 
           <div className="flex items-center gap-2">
@@ -753,6 +773,23 @@ export default function ProductsPage() {
             </button>
           </div>
         </div>
+        {mode === 'custom' && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              className="input"
+              value={customStart}
+              onChange={(e) => setCustomStart(e.target.value)}
+            />
+            <span className="text-neutral-400">→</span>
+            <input
+              type="date"
+              className="input"
+              value={customEnd}
+              onChange={(e) => setCustomEnd(e.target.value)}
+            />
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-4">
           <div className={`${isAdminOrAuditor(user?.role) ? '' : 'hidden'}`}>
@@ -792,22 +829,8 @@ export default function ProductsPage() {
           </div>
 
           <div>
-            <div className="text-xs font-semibold text-neutral-500 mb-1">العرض</div>
+            <div className="text-xs font-semibold text-neutral-500 mb-1">الأقسام</div>
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                className={`btn-secondary py-2 px-3 ${metric === 'qty' ? 'ring-2 ring-orange-200' : ''}`}
-                onClick={() => setMetric('qty')}
-              >
-                📦 الكمية
-              </button>
-              <button
-                type="button"
-                className={`btn-secondary py-2 px-3 ${metric === 'val' ? 'ring-2 ring-orange-200' : ''}`}
-                onClick={() => setMetric('val')}
-              >
-                💰 القيمة
-              </button>
               <button
                 type="button"
                 className="btn-secondary py-2 px-3 flex items-center gap-2"
@@ -871,7 +894,7 @@ export default function ProductsPage() {
                   </option>
                 ))}
               </select>
-              <div className="text-sm text-neutral-600">مرتبة حسب: {metricLabel}</div>
+              <div className="text-sm text-neutral-600">مرتبة حسب: 📦 الكمية</div>
             </div>
           </div>
           <div className="mt-2">
@@ -886,7 +909,7 @@ export default function ProductsPage() {
           <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-bold">إجمالي الكمية: {Math.round(derived.filteredCatalog.reduce((s: number, p: any) => s + (p.qty || 0), 0)).toLocaleString()}</span>
           <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-bold">إجمالي القيمة: {formatSAR(derived.filteredCatalog.reduce((s: number, p: any) => s + (p.amount || 0), 0))}</span>
           <span className="bg-violet-100 text-violet-700 px-3 py-1 rounded-full text-sm font-bold">
-            نسبة الفئة ({metric === 'qty' ? 'بالكمية' : 'بالقيمة'}): {derived.categorySharePercent.toFixed(1)}%
+            نسبة الفئة (بالكمية): {derived.categorySharePercent.toFixed(1)}%
           </span>
           <span className="bg-fuchsia-100 text-fuchsia-700 px-3 py-1 rounded-full text-sm font-bold">
             نسبة الفئة بالقيمة: {derived.categorySharePercentByValue.toFixed(1)}%
