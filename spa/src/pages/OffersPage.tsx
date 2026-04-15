@@ -43,7 +43,10 @@ const DEFAULT_FLASH_DEALS: FlashDeal[] = [
     id: 'flash-199-quilt-pillow',
     name: 'فلاش ديل لحاف 199 + مخدة مجاناً',
     components: [
-      { label: 'لحاف مفرد 199', itemCode: '2701' },
+      { label: 'لحاف مفرد 199 (270106)', itemCode: '270106' },
+      { label: 'لحاف مفرد 199 (270103)', itemCode: '270103' },
+      { label: 'لحاف مفرد 199 (270108)', itemCode: '270108' },
+      { label: 'لحاف مفرد 199 (270109)', itemCode: '270109' },
       { label: 'Perfect pillow (مجاني)', itemCode: '9619' },
     ],
   },
@@ -490,6 +493,24 @@ export default function OffersPage() {
       .slice(0, 20);
   };
 
+  const bindAllMatchingSuggestions = (idx: number) => {
+    setFlashDraftComponents((prev) => {
+      const row = prev[idx];
+      if (!row) return prev;
+      const suggestions = getFlashSuggestions(row.itemCode);
+      const linkedIds = Array.from(new Set(suggestions.map((s) => s.offerItemId)));
+      if (!linkedIds.length) return prev;
+      return prev.map((x, i) =>
+        i === idx
+          ? {
+              ...x,
+              resolvedOfferItemIds: linkedIds,
+            }
+          : x
+      );
+    });
+  };
+
   const stats = useMemo(() => {
     const res = offers.reduce((acc: any, o: any) => {
       acc.totalYest += o.yestSales;
@@ -874,6 +895,18 @@ export default function OffersPage() {
                           <div className="text-[11px] text-neutral-500 truncate">{s.name}</div>
                         </button>
                       ))}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="px-2 py-1 rounded-md border border-violet-200 bg-violet-50 text-violet-700 text-[11px] font-bold"
+                        onClick={() => bindAllMatchingSuggestions(idx)}
+                      >
+                        ربط كل النتائج المطابقة
+                      </button>
+                      <span className="text-[11px] text-neutral-500">
+                        مرتبط: {comp.resolvedOfferItemIds?.length || 0} باركود
+                      </span>
                     </div>
                   </div>
                   <div className="md:col-span-2">
