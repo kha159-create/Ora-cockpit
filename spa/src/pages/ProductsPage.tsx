@@ -9,6 +9,13 @@ import * as XLSX from 'xlsx';
 import { generateProductSummaryPDF } from '../services/pdf/pdfService';
 
 type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest' | 'custom';
+type RepSearchMode = 'sales_stock' | 'stock_only';
+type RepStockStatus = 'all' | 'in_stock' | 'low' | 'out';
+type RepViewMode = 'product' | 'store' | 'month';
+type RepLogic = 'AND' | 'OR';
+type RepField = 'alias' | 'name';
+type RepOp = 'contains' | 'equals' | 'not_equals' | 'starts_with' | 'in_list';
+type RepCondition = { id: number; field: RepField; op: RepOp; value: string };
 
 const BASKET_PER_PAGE = 10;
 const MISSED_PER_PAGE = 10;
@@ -252,6 +259,17 @@ export default function ProductsPage() {
   const [priceMin, setPriceMin] = useState<string>('');
   const [priceMax, setPriceMax] = useState<string>('');
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [expandedRepOpen, setExpandedRepOpen] = useState(false);
+  const [repSearchMode, setRepSearchMode] = useState<RepSearchMode>('sales_stock');
+  const [repStore, setRepStore] = useState<string>('all');
+  const [repCategories, setRepCategories] = useState<string[]>([]);
+  const [repStockStatus, setRepStockStatus] = useState<RepStockStatus>('all');
+  const [repViewMode, setRepViewMode] = useState<RepViewMode>('product');
+  const [repLogic, setRepLogic] = useState<RepLogic>('AND');
+  const [repConditions, setRepConditions] = useState<RepCondition[]>([
+    { id: 1, field: 'alias', op: 'contains', value: '' },
+  ]);
+  const [repAnalysisOpen, setRepAnalysisOpen] = useState(false);
 
   // State Definitions moved up to avoid hoisting/TDZ issues
   const [productId, setProductId] = useState<string | null>(null);
@@ -674,6 +692,139 @@ export default function ProductsPage() {
     };
   }, [city, customEnd, customStart, effectiveManager, mgmt, mode, priceMax, priceMin, productId, raw, search, selectedCategory, store, user?.name, user?.role]);
 
+  const expandedRep = useMemo(() => {
+    if (!derived || !raw) return null;
+
+    const runCondition = (target: string, op: RepOp, rawValue: string) => {
+      const t = String(target || '').toLowerCase();
+      const v = String(rawValue || '').toLowerCase().trim();
+      if (!v) return true;
+      if (op === 'contains') return t.includes(v);
+      if (op === 'equals') return t === v;
+      if (op === 'not_equals') return t !== v;
+      if (op === 'starts_with') return t.startsWith(v);
+      if (op === 'in_list') {
+        const tokens = v.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
+        return tokens.includes(t);
+      }
+      return true;
+    };
+
+    const activeConditions = repConditions.filter((c) => String(c.value || '').trim());
+    const matchesAdvanced = (row: any) => {
+      if (!activeConditions.length) return true;
+      const results = activeConditions.map((c) => {
+        const fieldValue = c.field === 'alias' ? String(row.alias || row.dCode || row.id || '') : String(row.name || '');
+        return runCondition(fieldValue, c.op, c.value);
+      });
+      return repLogic === 'AND' ? results.every(Boolean) : results.some(Boolean);
+    };
+
+    const baseRows = derived.filteredCatalog.filter((r: any) => {
+      if (repStore !== 'all') {
+        const s = r.salesByStore?.[repStore];
+        if (!s || (safeNum(s.q) === 0 && safeNum(s.a) === 0)) return false;
+      }
+      if (repCategories.length && !repCategories.includes(String(r.category || ''))) return false;
+      if (repSearchMode === 'stock_only' && !(safeNum(r.totalStock) > 0 && safeNum(r.qty) === 0)) return false;
+      if (repStockStatus === 'in_stock' && !(safeNum(r.totalStock) > 0)) return false;
+      if (repStockStatus === 'low' && !(safeNum(r.totalStock) >= 1 && safeNum(r.totalStock) <= 10)) return false;
+      if (repStockStatus === 'out' && !(safeNum(r.totalStock) === 0)) return false;
+      if (!matchesAdvanced(r)) return false;
+      return true;
+    });
+
+    let rows: any[] = [];
+    if (repViewMode === 'product') {
+      rows = baseRows.map((r) => ({
+        alias: r.alias || r.dCode || r.id,
+        name: r.name,
+        category: r.category,
+        unitPrice: r.qty > 0 ? r.amount / r.qty : 0,
+        qty: r.qty,
+        amount: r.amount,
+        stock: safeNum(r.totalStock),
+        viewLabel: '-',
+      }));
+    } else if (repViewMode === 'store') {
+      baseRows.forEach((r) => {
+        Object.entries(r.salesByStore || {}).forEach(([sid, st]: any) => {
+          if (repStore !== 'all' && sid !== repStore) return;
+          const sq = safeNum(st?.q);
+          const sa = safeNum(st?.a);
+          if (sq === 0 && sa === 0) return;
+          rows.push({
+            alias: r.alias || r.dCode || r.id,
+            name: r.name,
+            category: r.category,
+            unitPrice: sq > 0 ? sa / sq : 0,
+            qty: sq,
+            amount: sa,
+            stock: safeNum(r.stockByStore?.[sid]),
+            viewLabel: derived.storesMap?.[sid] || sid,
+          });
+        });
+      });
+    } else {
+      const hist = raw.product_daily_history || {};
+      baseRows.forEach((r) => {
+        const byMonth = new Map<string, { qty: number; amount: number }>();
+        const hRows = Array.isArray(hist[r.id]) ? hist[r.id] : [];
+        hRows.forEach((h: any) => {
+          const ds = String(h?.date || '').substring(0, 10);
+          if (!ds || ds < derived.dateRangeStart || ds > derived.dateRangeEnd) return;
+          const month = ds.substring(0, 7);
+          if (!byMonth.has(month)) byMonth.set(month, { qty: 0, amount: 0 });
+          const x = byMonth.get(month)!;
+          x.qty += safeNum(h?.qty);
+          x.amount += safeNum(h?.amount);
+        });
+        byMonth.forEach((x, m) => {
+          rows.push({
+            alias: r.alias || r.dCode || r.id,
+            name: r.name,
+            category: r.category,
+            unitPrice: x.qty > 0 ? x.amount / x.qty : 0,
+            qty: x.qty,
+            amount: x.amount,
+            stock: safeNum(r.totalStock),
+            viewLabel: m,
+          });
+        });
+      });
+    }
+
+    rows.sort((a, b) => b.qty - a.qty || b.amount - a.amount);
+    const totalQty = rows.reduce((s, r) => s + safeNum(r.qty), 0);
+    const totalAmount = rows.reduce((s, r) => s + safeNum(r.amount), 0);
+    const totalStock = rows.reduce((s, r) => s + safeNum(r.stock), 0);
+
+    const topByValue = [...rows].sort((a, b) => b.amount - a.amount).slice(0, 10);
+    const topByQty = [...rows].sort((a, b) => b.qty - a.qty).slice(0, 10);
+    const categoryMap = new Map<string, { qty: number; amount: number }>();
+    rows.forEach((r) => {
+      const key = String(r.category || 'Uncategorized');
+      if (!categoryMap.has(key)) categoryMap.set(key, { qty: 0, amount: 0 });
+      const c = categoryMap.get(key)!;
+      c.qty += safeNum(r.qty);
+      c.amount += safeNum(r.amount);
+    });
+    const categoriesByValue = Array.from(categoryMap.entries()).map(([k, v]) => ({ category: k, qty: v.qty, amount: v.amount })).sort((a, b) => b.amount - a.amount).slice(0, 10);
+    const categoriesByQty = Array.from(categoryMap.entries()).map(([k, v]) => ({ category: k, qty: v.qty, amount: v.amount })).sort((a, b) => b.qty - a.qty).slice(0, 10);
+
+    return {
+      rows,
+      totalItems: rows.length,
+      totalQty,
+      totalAmount,
+      totalStock,
+      topByValue,
+      topByQty,
+      categoriesByValue,
+      categoriesByQty,
+    };
+  }, [derived, raw, repCategories, repConditions, repLogic, repSearchMode, repStockStatus, repStore, repViewMode]);
+
   const productKpis = useMemo(() => {
     if (!derived || !productId) return null;
     const hist = [...derived.selectedHistory].map((h: any) => ({
@@ -696,6 +847,42 @@ export default function ProductsPage() {
 
     return { best, worst, zeroDays, totalQty, totalAmt, avgAmt, chart, totalStock };
   }, [derived, productId]);
+
+  const addRepCondition = () => {
+    setRepConditions((prev) => [...prev, { id: Date.now(), field: 'alias', op: 'contains', value: '' }]);
+  };
+
+  const resetExpandedRep = () => {
+    setRepSearchMode('sales_stock');
+    setRepStore('all');
+    setRepCategories([]);
+    setRepStockStatus('all');
+    setRepViewMode('product');
+    setRepLogic('AND');
+    setRepConditions([{ id: 1, field: 'alias', op: 'contains', value: '' }]);
+    setRepAnalysisOpen(false);
+  };
+
+  const exportExpandedRows = () => {
+    if (!expandedRep?.rows?.length) {
+      alert('لا توجد بيانات للتصدير');
+      return;
+    }
+    const rows = expandedRep.rows.map((r: any) => ({
+      Alias: r.alias,
+      'اسم المنتج': r.name,
+      'الفئة': r.category,
+      'سعر البيع': r.unitPrice,
+      'الكمية المباعة': r.qty,
+      'إجمالي المبيعات': r.amount,
+      'الستوك الحالي': r.stock,
+      'التفصيل': r.viewLabel,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'REP Results');
+    XLSX.writeFile(wb, `REP_${derived?.dateRangeStart || 'from'}_${derived?.dateRangeEnd || 'to'}.xlsx`);
+  };
 
   const exportProductExcel = () => {
     if (!derived?.filteredCatalog?.length) {
@@ -770,6 +957,13 @@ export default function ProductsPage() {
               className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm font-semibold"
             >
               📄 تصدير PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => setExpandedRepOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 text-sm font-semibold"
+            >
+              📚 تقارير موسعة
             </button>
           </div>
         </div>
@@ -846,14 +1040,6 @@ export default function ProductsPage() {
           <div className="text-xs font-semibold text-neutral-500 mb-1">بحث عن منتج</div>
           <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="اسم المنتج أو Item ID..." />
         </div>
-      </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KPICard title="عدد المعارض في النطاق" value={derived.totals.totalStores} format={(v) => Math.round(v).toLocaleString()} icon={<VisitorsIcon />} />
-        <KPICard title="إجمالي الكمية" value={derived.totals.totalQty} format={(v) => Math.round(v).toLocaleString()} icon={<CubeIcon />} />
-        <KPICard title="إجمالي القيمة" value={derived.totals.totalAmt} format={formatSAR} icon={<SalesIcon />} />
-        <KPICard title="عدد المنتجات (بعد الفلترة)" value={derived.totals.productsCount} format={(v) => Math.round(v).toLocaleString()} icon={<InvoicesIcon />} />
       </div>
 
       {/* Catalog list */}
@@ -1272,6 +1458,226 @@ export default function ProductsPage() {
           );
         })()}
       </ChartCard>
+
+      <Modal open={expandedRepOpen} onClose={() => setExpandedRepOpen(false)} title="📚 تقارير موسعة" maxWidthClass="max-w-[96vw]">
+        <div className="space-y-5">
+          <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 space-y-4">
+            <h3 className="font-bold text-neutral-900">🔍 البحث والفلترة</h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">🎯 نوع البحث</div>
+                <select className="input" value={repSearchMode} onChange={(e) => setRepSearchMode(e.target.value as RepSearchMode)}>
+                  <option value="sales_stock">المبيعات والمخزون</option>
+                  <option value="stock_only">المخزون فقط (بدون مبيعات)</option>
+                </select>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">📅 من تاريخ</div>
+                <input className="input" type="date" value={customStart} onChange={(e) => { setCustomStart(e.target.value); setMode('custom'); }} />
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">📅 إلى تاريخ</div>
+                <input className="input" type="date" value={customEnd} onChange={(e) => { setCustomEnd(e.target.value); setMode('custom'); }} />
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">🏪 المعرض</div>
+                <select className="input" value={repStore} onChange={(e) => setRepStore(e.target.value)}>
+                  <option value="all">الكل</option>
+                  {derived.storeOptions.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">📂 الفئة (Ctrl للتحديد المتباعد)</div>
+                <select
+                  multiple
+                  className="input h-28"
+                  value={repCategories}
+                  onChange={(e) => {
+                    const vals = Array.from(e.target.selectedOptions).map((o) => o.value);
+                    setRepCategories(vals);
+                  }}
+                >
+                  {derived.catalogCategories.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">📦 حالة المخزون</div>
+                <select className="input" value={repStockStatus} onChange={(e) => setRepStockStatus(e.target.value as RepStockStatus)}>
+                  <option value="all">الكل</option>
+                  <option value="in_stock">متوفر (&gt; 0)</option>
+                  <option value="low">منخفض (1-10)</option>
+                  <option value="out">نفذت الكمية (0)</option>
+                </select>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-neutral-500 mb-1">🏪 طريقة العرض</div>
+                <select className="input" value={repViewMode} onChange={(e) => setRepViewMode(e.target.value as RepViewMode)}>
+                  <option value="product">مجمع حسب المنتج</option>
+                  <option value="store">مفصل حسب المعرض</option>
+                  <option value="month">مفصل حسب الشهر</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-neutral-200 bg-white p-3 space-y-2">
+              <div className="flex items-center gap-3">
+                <h4 className="font-semibold text-neutral-800">🏷️ شروط البحث المتقدمة (كود أو اسم المنتج)</h4>
+                <select className="input w-24" value={repLogic} onChange={(e) => setRepLogic(e.target.value as RepLogic)}>
+                  <option value="AND">AND</option>
+                  <option value="OR">OR</option>
+                </select>
+              </div>
+              {repConditions.map((c) => (
+                <div key={c.id} className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                  <select className="input md:col-span-2" value={c.field} onChange={(e) => setRepConditions((prev) => prev.map((x) => x.id === c.id ? { ...x, field: e.target.value as RepField } : x))}>
+                    <option value="alias">الكود (Alias)</option>
+                    <option value="name">الاسم (Name)</option>
+                  </select>
+                  <select className="input md:col-span-3" value={c.op} onChange={(e) => setRepConditions((prev) => prev.map((x) => x.id === c.id ? { ...x, op: e.target.value as RepOp } : x))}>
+                    <option value="contains">يحتوي على</option>
+                    <option value="equals">يساوي</option>
+                    <option value="not_equals">لا يساوي</option>
+                    <option value="starts_with">يبدأ بـ</option>
+                    <option value="in_list">ضمن قائمة</option>
+                  </select>
+                  <input className="input md:col-span-6" value={c.value} onChange={(e) => setRepConditions((prev) => prev.map((x) => x.id === c.id ? { ...x, value: e.target.value } : x))} placeholder="القيمة..." />
+                  <button type="button" className="input md:col-span-1 text-red-600" onClick={() => setRepConditions((prev) => prev.length > 1 ? prev.filter((x) => x.id !== c.id) : prev)}>✕</button>
+                </div>
+              ))}
+              <button type="button" className="btn-secondary py-2 px-3 text-sm" onClick={addRepCondition}>+ إضافة شرط</button>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-bold" onClick={() => setMode('custom')}>🔍 بحث</button>
+              <button type="button" className="px-3 py-2 bg-neutral-800 text-white rounded-lg text-sm font-bold" onClick={() => setRepAnalysisOpen((v) => !v)}>🧠 التحليل</button>
+              <button type="button" className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold" onClick={exportExpandedRows}>📊 تصدير Excel</button>
+              <button type="button" className="px-3 py-2 bg-emerald-700 text-white rounded-lg text-sm font-bold" onClick={exportExpandedRows}>📥 تصدير الأكثر مبيعاً</button>
+              <button type="button" className="px-3 py-2 bg-sky-600 text-white rounded-lg text-sm font-bold" onClick={exportExpandedRows}>📥 تقرير الأكثر مبيعاً-فئات</button>
+              <button type="button" className="px-3 py-2 bg-orange-500 text-white rounded-lg text-sm font-bold" onClick={exportProductPDF}>📄 تصدير PDF</button>
+              <button type="button" className="px-3 py-2 bg-neutral-200 text-neutral-700 rounded-lg text-sm font-bold" onClick={resetExpandedRep}>🔄 إعادة تعيين</button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            <KPICard title="عدد الأصناف" value={expandedRep?.totalItems || 0} format={(v) => Math.round(v).toLocaleString()} icon={<CubeIcon />} />
+            <KPICard title="إجمالي الكمية" value={expandedRep?.totalQty || 0} format={(v) => Math.round(v).toLocaleString()} icon={<InvoicesIcon />} />
+            <KPICard title="إجمالي المبيعات (ر.س)" value={expandedRep?.totalAmount || 0} format={formatSAR} icon={<SalesIcon />} />
+            <KPICard title="إجمالي الستوك الحالي" value={expandedRep?.totalStock || 0} format={(v) => Math.round(v).toLocaleString()} icon={<VisitorsIcon />} />
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <ChartCard title="🏆 المنتجات الأكثر مبيعاً (قيمة)">
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead><tr><th className="th">Alias</th><th className="th">اسم المنتج</th><th className="th text-center">القيمة</th></tr></thead>
+                  <tbody>{(expandedRep?.topByValue || []).map((r: any, i: number) => <tr key={`v-${i}`}><td className="td font-mono">{r.alias}</td><td className="td">{r.name}</td><td className="td text-center">{formatSAR(r.amount)}</td></tr>)}</tbody>
+                </table>
+              </div>
+            </ChartCard>
+            <ChartCard title="🔥 المنتجات الأكثر مبيعاً (كمية)">
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead><tr><th className="th">Alias</th><th className="th">اسم المنتج</th><th className="th text-center">الكمية</th></tr></thead>
+                  <tbody>{(expandedRep?.topByQty || []).map((r: any, i: number) => <tr key={`q-${i}`}><td className="td font-mono">{r.alias}</td><td className="td">{r.name}</td><td className="td text-center">{Math.round(r.qty).toLocaleString()}</td></tr>)}</tbody>
+                </table>
+              </div>
+            </ChartCard>
+            <ChartCard title="📁 الفئات الأكثر مبيعاً (قيمة)">
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead><tr><th className="th">الفئة</th><th className="th text-center">القيمة</th></tr></thead>
+                  <tbody>{(expandedRep?.categoriesByValue || []).map((r: any, i: number) => <tr key={`cv-${i}`}><td className="td">{r.category}</td><td className="td text-center">{formatSAR(r.amount)}</td></tr>)}</tbody>
+                </table>
+              </div>
+            </ChartCard>
+            <ChartCard title="📦 الفئات الأكثر مبيعاً (كمية)">
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead><tr><th className="th">الفئة</th><th className="th text-center">الكمية</th></tr></thead>
+                  <tbody>{(expandedRep?.categoriesByQty || []).map((r: any, i: number) => <tr key={`cq-${i}`}><td className="td">{r.category}</td><td className="td text-center">{Math.round(r.qty).toLocaleString()}</td></tr>)}</tbody>
+                </table>
+              </div>
+            </ChartCard>
+          </div>
+
+          <ChartCard title="📋 نتائج البحث">
+            <div className="text-xs text-neutral-500 mb-2">{expandedRep?.rows?.length || 0}</div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr>
+                    <th className="th">#</th>
+                    <th className="th">Alias</th>
+                    <th className="th">اسم المنتج</th>
+                    <th className="th">الفئة</th>
+                    <th className="th text-center">سعر البيع</th>
+                    <th className="th text-center">الكمية المباعة</th>
+                    <th className="th text-center">إجمالي المبيعات</th>
+                    <th className="th text-center">الستوك الحالي</th>
+                    <th className="th text-center">{repViewMode === 'store' ? 'المعرض' : repViewMode === 'month' ? 'الشهر' : '-'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(expandedRep?.rows || []).slice(0, 400).map((r: any, i: number) => (
+                    <tr key={`rep-row-${i}`}>
+                      <td className="td">{i + 1}</td>
+                      <td className="td font-mono">{r.alias}</td>
+                      <td className="td">{r.name}</td>
+                      <td className="td">{r.category}</td>
+                      <td className="td text-center">{formatSAR(r.unitPrice)}</td>
+                      <td className="td text-center">{Math.round(r.qty).toLocaleString()}</td>
+                      <td className="td text-center">{formatSAR(r.amount)}</td>
+                      <td className="td text-center">{Math.round(r.stock).toLocaleString()}</td>
+                      <td className="td text-center">{r.viewLabel}</td>
+                    </tr>
+                  ))}
+                  {!expandedRep?.rows?.length && (
+                    <tr><td className="td text-center text-neutral-500" colSpan={9}>لا توجد نتائج.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </ChartCard>
+
+          {repAnalysisOpen && (
+            <ChartCard title="🧠 التحليل (Analysis)">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-sm text-neutral-600">📥 تصدير التقرير (Excel)</div>
+                <button type="button" className="btn-secondary py-1 px-3" onClick={exportExpandedRows}>📥 تصدير</button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr>
+                      <th className="th">الفئة السعرية (ر.س)</th>
+                      <th className="th text-center">لحافات توين</th>
+                      <th className="th text-center">لحافات فل</th>
+                      <th className="th text-center">لحافات كوين</th>
+                      <th className="th text-center">لحافات كينغ</th>
+                      <th className="th text-center">إجمالي الستوك المتوفر</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="td">منخفض/متوسط/مرتفع</td>
+                      <td className="td text-center">—</td>
+                      <td className="td text-center">—</td>
+                      <td className="td text-center">—</td>
+                      <td className="td text-center">—</td>
+                      <td className="td text-center">{Math.round(expandedRep?.totalStock || 0).toLocaleString()}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </ChartCard>
+          )}
+        </div>
+      </Modal>
 
       {/* Catalog modal */}
       <Modal open={catalogOpen} onClose={() => setCatalogOpen(false)} title="📂 تصفح الأقسام" maxWidthClass="max-w-6xl">
