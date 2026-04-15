@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { loadOffersData, loadManagementData } from '../services/upstreamData';
+import { loadOffersData, loadManagementData, loadProductMapping } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { DownloadIcon, XIcon, TagIcon, SalesIcon, InvoicesIcon, PremiumTargetIcon, CustomerValueIcon, FireIcon } from '../components/Icons';
 import { KPICard } from '../components/DashboardComponents';
@@ -18,8 +18,7 @@ function pad2(n: number) { return String(n).padStart(2, '0'); }
 function toYMD(d: Date) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 
 type PeriodKey = 'mtd' | '7d' | '14d' | '30d' | 'yest' | 'custom';
-type FlashMatchType = 'exact' | 'prefix';
-type FlashDealComponent = { label: string; itemCode: string; matchType: FlashMatchType };
+type FlashDealComponent = { label: string; itemCode: string; resolvedOfferItemIds?: string[] };
 type FlashDeal = { id: string; name: string; components: FlashDealComponent[] };
 
 const FLASH_DEALS_STORAGE_KEY = 'ora.offers.flashDeals.v1';
@@ -27,25 +26,25 @@ const DEFAULT_FLASH_DEALS: FlashDeal[] = [
   {
     id: 'flash-peach-caspian-4489420',
     name: 'فلاش ديل لحاف Peach Caspian - 395',
-    components: [{ label: 'لحاف Peach Caspian', itemCode: '4489420', matchType: 'exact' }],
+    components: [{ label: 'لحاف Peach Caspian', itemCode: '4489420' }],
   },
   {
     id: 'flash-lahaf-495-bundle',
     name: 'فلاش ديل أطقم اللحاف - 495',
     components: [
-      { label: 'ANNETTE GREY PINK', itemCode: '4489416', matchType: 'exact' },
-      { label: 'JOUY DE TOILE', itemCode: '4489424', matchType: 'exact' },
-      { label: 'Dakota Linen', itemCode: '4489419', matchType: 'exact' },
-      { label: 'STRIPE GRAPE PURPLE', itemCode: '4489403', matchType: 'exact' },
-      { label: 'PARADIES BIRDS', itemCode: '4489418', matchType: 'exact' },
+      { label: 'ANNETTE GREY PINK', itemCode: '4489416' },
+      { label: 'JOUY DE TOILE', itemCode: '4489424' },
+      { label: 'Dakota Linen', itemCode: '4489419' },
+      { label: 'STRIPE GRAPE PURPLE', itemCode: '4489403' },
+      { label: 'PARADIES BIRDS', itemCode: '4489418' },
     ],
   },
   {
     id: 'flash-199-quilt-pillow',
     name: 'فلاش ديل لحاف 199 + مخدة مجاناً',
     components: [
-      { label: 'لحاف مفرد 199', itemCode: '2701', matchType: 'prefix' },
-      { label: 'Perfect pillow (مجاني)', itemCode: '9619', matchType: 'exact' },
+      { label: 'لحاف مفرد 199', itemCode: '2701' },
+      { label: 'Perfect pillow (مجاني)', itemCode: '9619' },
     ],
   },
 ];
@@ -65,7 +64,9 @@ function loadFlashDeals(): FlashDeal[] {
               .map((c: any) => ({
                 label: String(c?.label || '').trim(),
                 itemCode: String(c?.itemCode || '').trim(),
-                matchType: c?.matchType === 'prefix' ? 'prefix' : 'exact',
+                resolvedOfferItemIds: Array.isArray(c?.resolvedOfferItemIds)
+                  ? c.resolvedOfferItemIds.map((x: any) => String(x || '').trim()).filter(Boolean)
+                  : undefined,
               }))
               .filter((c: FlashDealComponent) => c.label && c.itemCode)
           : [],
@@ -81,6 +82,7 @@ export default function OffersPage() {
   const user = getCurrentUser();
   const [data, setData] = useState<any>(null);
   const [mgmt, setMgmt] = useState<any>(null);
+  const [productMapping, setProductMapping] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [manager, setManager] = useState<string>('all');
   const [branch, setBranch] = useState<string>('all');
@@ -104,7 +106,7 @@ export default function OffersPage() {
   const [showFlashEditor, setShowFlashEditor] = useState(false);
   const [flashDraftName, setFlashDraftName] = useState('');
   const [flashDraftComponents, setFlashDraftComponents] = useState<FlashDealComponent[]>([
-    { label: '', itemCode: '', matchType: 'exact' },
+    { label: '', itemCode: '' },
   ]);
 
   useEffect(() => {
@@ -112,6 +114,7 @@ export default function OffersPage() {
       .then(setData)
       .catch((e) => setErr(e?.message || String(e)));
     loadManagementData().then(setMgmt).catch(() => { });
+    loadProductMapping().then((rows) => setProductMapping(Array.isArray(rows) ? rows : [])).catch(() => setProductMapping([]));
   }, []);
 
   useEffect(() => {
@@ -344,6 +347,74 @@ export default function OffersPage() {
     return { start: end, end: start };
   }, [flashStart, flashEnd, dateRange.start, dateRange.end]);
 
+  const allOfferItems = useMemo(() => {
+    const byId = new Map<string, { id: string; name: string }>();
+    rawOffers.forEach((o: any) => {
+      const itemsRaw = Array.isArray(o?.items) ? o.items : [];
+      itemsRaw.forEach((it: any) => {
+        const itemId = String(it?.i || it?.id || it?.item_id || '').trim();
+        if (!itemId) return;
+        const itemName = String(it?.n || it?.name || it?.item_name || itemId).trim();
+        const prev = byId.get(itemId);
+        if (!prev || itemName.length > prev.name.length) byId.set(itemId, { id: itemId, name: itemName || itemId });
+      });
+    });
+    return Array.from(byId.values());
+  }, [rawOffers]);
+
+  const flashLookup = useMemo(() => {
+    const offerNameById = new Map(allOfferItems.map((x) => [x.id, x.name] as const));
+    const tokenToItemIds = new Map<string, Set<string>>();
+
+    const attachToken = (tokenRaw: string, itemIds: string[]) => {
+      const token = tokenRaw.trim();
+      if (!token || !itemIds.length) return;
+      if (!tokenToItemIds.has(token)) tokenToItemIds.set(token, new Set());
+      const dst = tokenToItemIds.get(token)!;
+      itemIds.forEach((id) => dst.add(id));
+    };
+
+    allOfferItems.forEach((x) => attachToken(x.id, [x.id]));
+    productMapping.forEach((m: any) => {
+      const id = String(m?.id || '').trim();
+      const dCode = String(m?.dCode || '').trim();
+      const alias = String(m?.alias || '').trim();
+      const candidates = Array.from(new Set([id, dCode, alias].filter(Boolean)));
+      if (!candidates.length) return;
+      [id, dCode, alias].forEach((token) => attachToken(token, candidates));
+    });
+
+    const suggestions = new Map<string, { token: string; offerItemId: string; name: string }>();
+    tokenToItemIds.forEach((itemIds, token) => {
+      itemIds.forEach((itemId) => {
+        const key = `${token}::${itemId}`;
+        suggestions.set(key, {
+          token,
+          offerItemId: itemId,
+          name: offerNameById.get(itemId) || String(
+            productMapping.find((x: any) =>
+              String(x?.id || '').trim() === itemId ||
+              String(x?.dCode || '').trim() === itemId ||
+              String(x?.alias || '').trim() === itemId
+            )?.name || itemId
+          ),
+        });
+      });
+    });
+
+    return {
+      tokenToItemIds,
+      suggestions: Array.from(suggestions.values()).sort((a, b) => a.token.localeCompare(b.token)),
+    };
+  }, [allOfferItems, productMapping]);
+
+  const resolveOfferItemIds = (token: string): string[] => {
+    const t = token.trim();
+    if (!t) return [];
+    const ids = flashLookup.tokenToItemIds.get(t);
+    return ids ? Array.from(ids) : [];
+  };
+
   const flashDealRows = useMemo(() => {
     const qtyByItem = new Map<string, number>();
     rawOffers.forEach((o: any) => {
@@ -363,40 +434,40 @@ export default function OffersPage() {
 
     return flashDeals.map((deal) => {
       const components = deal.components.map((comp) => {
-        const code = comp.itemCode.trim();
-        let sold = 0;
-        if (comp.matchType === 'prefix') {
-          qtyByItem.forEach((qty, itemId) => {
-            if (itemId.startsWith(code)) sold += qty;
-          });
-        } else {
-          sold = qtyByItem.get(code) || 0;
-        }
-        return { ...comp, sold };
+        const fallbackIds = resolveOfferItemIds(comp.itemCode);
+        const resolvedIds = comp.resolvedOfferItemIds?.length ? comp.resolvedOfferItemIds : fallbackIds;
+        const sold = resolvedIds.reduce((sum, id) => sum + (qtyByItem.get(id) || 0), 0);
+        return { ...comp, sold, resolvedOfferItemIds: resolvedIds };
       });
       const estimatedBundleSales = components.length ? Math.min(...components.map((c) => c.sold)) : 0;
       return { ...deal, components, estimatedBundleSales };
     });
-  }, [rawOffers, flashDeals, flashDateRange.start, flashDateRange.end, allowedStoreIds]);
+  }, [rawOffers, flashDeals, flashDateRange.start, flashDateRange.end, allowedStoreIds, flashLookup]);
 
   const resetFlashDraft = () => {
     setFlashDraftName('');
-    setFlashDraftComponents([{ label: '', itemCode: '', matchType: 'exact' }]);
+    setFlashDraftComponents([{ label: '', itemCode: '' }]);
   };
 
   const addFlashDeal = () => {
     const name = flashDraftName.trim();
-    const components = flashDraftComponents
+    const draftRows = flashDraftComponents
       .map((c) => ({
         label: c.label.trim(),
         itemCode: c.itemCode.trim(),
-        matchType: c.matchType,
+        resolvedOfferItemIds: c.resolvedOfferItemIds?.length ? c.resolvedOfferItemIds : resolveOfferItemIds(c.itemCode),
       }))
       .filter((c) => c.label && c.itemCode);
-    if (!name || !components.length) {
+    if (!name || !draftRows.length) {
       alert('أدخل اسم العرض ومكوّناً واحداً على الأقل.');
       return;
     }
+    const unresolved = draftRows.filter((c) => !(c.resolvedOfferItemIds && c.resolvedOfferItemIds.length));
+    if (unresolved.length) {
+      alert('يوجد منتجات غير مرتبطة بداتا العروض. اخترها من نتائج البحث المقترحة لضمان دقة الأرقام.');
+      return;
+    }
+    const components = draftRows as Array<{ label: string; itemCode: string; resolvedOfferItemIds: string[] }>;
     const deal: FlashDeal = {
       id: `flash-${Date.now()}`,
       name,
@@ -409,6 +480,14 @@ export default function OffersPage() {
 
   const removeFlashDeal = (dealId: string) => {
     setFlashDeals((prev) => prev.filter((d) => d.id !== dealId));
+  };
+
+  const getFlashSuggestions = (query: string) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return flashLookup.suggestions.slice(0, 20);
+    return flashLookup.suggestions
+      .filter((s) => s.token.toLowerCase().includes(q) || s.name.toLowerCase().includes(q))
+      .slice(0, 20);
   };
 
   const stats = useMemo(() => {
@@ -761,25 +840,41 @@ export default function OffersPage() {
                       placeholder="مثال: Perfect pillow مجاني"
                     />
                   </div>
-                  <div className="md:col-span-3">
-                    <label className="block text-xs font-semibold text-neutral-600 mb-1">رمز المنتج</label>
+                  <div className="md:col-span-5">
+                    <label className="block text-xs font-semibold text-neutral-600 mb-1">بحث المنتج / الرمز</label>
                     <input
                       className="input w-full dir-ltr"
                       value={comp.itemCode}
-                      onChange={(e) => setFlashDraftComponents((prev) => prev.map((x, i) => (i === idx ? { ...x, itemCode: e.target.value } : x)))}
-                      placeholder="4489420 أو 2701"
+                      onChange={(e) =>
+                        setFlashDraftComponents((prev) =>
+                          prev.map((x, i) =>
+                            i === idx ? { ...x, itemCode: e.target.value, resolvedOfferItemIds: undefined } : x
+                          )
+                        )
+                      }
+                      placeholder="اكتب بداية الكود أو اسم المنتج"
                     />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold text-neutral-600 mb-1">نوع المطابقة</label>
-                    <select
-                      className="input w-full"
-                      value={comp.matchType}
-                      onChange={(e) => setFlashDraftComponents((prev) => prev.map((x, i) => (i === idx ? { ...x, matchType: e.target.value as FlashMatchType } : x)))}
-                    >
-                      <option value="exact">رمز مطابق</option>
-                      <option value="prefix">يبدأ بـ</option>
-                    </select>
+                    <div className="mt-1 max-h-28 overflow-y-auto rounded-lg border border-neutral-200 bg-white">
+                      {getFlashSuggestions(comp.itemCode).map((s) => (
+                        <button
+                          type="button"
+                          key={`${s.token}-${s.offerItemId}`}
+                          className="w-full text-right px-2 py-1.5 hover:bg-orange-50 border-b border-neutral-100 last:border-b-0"
+                          onClick={() =>
+                            setFlashDraftComponents((prev) =>
+                              prev.map((x, i) =>
+                                i === idx
+                                  ? { ...x, itemCode: s.token, label: x.label || s.name, resolvedOfferItemIds: [s.offerItemId] }
+                                  : x
+                              )
+                            )
+                          }
+                        >
+                          <div className="text-[11px] font-mono text-neutral-700 dir-ltr">{s.token}</div>
+                          <div className="text-[11px] text-neutral-500 truncate">{s.name}</div>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="md:col-span-2">
                     <button
@@ -798,7 +893,7 @@ export default function OffersPage() {
               <button
                 type="button"
                 className="px-3 py-1.5 rounded-lg border border-neutral-300 bg-white text-neutral-700 text-xs font-bold"
-                onClick={() => setFlashDraftComponents((prev) => [...prev, { label: '', itemCode: '', matchType: 'exact' }])}
+                onClick={() => setFlashDraftComponents((prev) => [...prev, { label: '', itemCode: '' }])}
               >
                 + إضافة منتج داخل العرض
               </button>
@@ -853,7 +948,7 @@ export default function OffersPage() {
                       {deal.components.map((comp, idx) => (
                         <div key={`${deal.id}-comp-${idx}`} className="flex flex-wrap items-center gap-2 text-xs">
                           <span className="font-semibold text-neutral-800">{comp.label}</span>
-                          <span className="font-mono text-neutral-500">({comp.matchType === 'prefix' ? `${comp.itemCode}*` : comp.itemCode})</span>
+                          <span className="font-mono text-neutral-500">({comp.itemCode})</span>
                           <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-bold dir-ltr">
                             {Math.round(comp.sold).toLocaleString()} بيع
                           </span>
