@@ -18,6 +18,64 @@ function pad2(n: number) { return String(n).padStart(2, '0'); }
 function toYMD(d: Date) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 
 type PeriodKey = 'mtd' | '7d' | '14d' | '30d' | 'yest' | 'custom';
+type FlashMatchType = 'exact' | 'prefix';
+type FlashDealComponent = { label: string; itemCode: string; matchType: FlashMatchType };
+type FlashDeal = { id: string; name: string; components: FlashDealComponent[] };
+
+const FLASH_DEALS_STORAGE_KEY = 'ora.offers.flashDeals.v1';
+const DEFAULT_FLASH_DEALS: FlashDeal[] = [
+  {
+    id: 'flash-peach-caspian-4489420',
+    name: 'فلاش ديل لحاف Peach Caspian - 395',
+    components: [{ label: 'لحاف Peach Caspian', itemCode: '4489420', matchType: 'exact' }],
+  },
+  {
+    id: 'flash-lahaf-495-bundle',
+    name: 'فلاش ديل أطقم اللحاف - 495',
+    components: [
+      { label: 'ANNETTE GREY PINK', itemCode: '4489416', matchType: 'exact' },
+      { label: 'JOUY DE TOILE', itemCode: '4489424', matchType: 'exact' },
+      { label: 'Dakota Linen', itemCode: '4489419', matchType: 'exact' },
+      { label: 'STRIPE GRAPE PURPLE', itemCode: '4489403', matchType: 'exact' },
+      { label: 'PARADIES BIRDS', itemCode: '4489418', matchType: 'exact' },
+    ],
+  },
+  {
+    id: 'flash-199-quilt-pillow',
+    name: 'فلاش ديل لحاف 199 + مخدة مجاناً',
+    components: [
+      { label: 'لحاف مفرد 199', itemCode: '2701', matchType: 'prefix' },
+      { label: 'Perfect pillow (مجاني)', itemCode: '9619', matchType: 'exact' },
+    ],
+  },
+];
+
+function loadFlashDeals(): FlashDeal[] {
+  try {
+    const raw = window.localStorage.getItem(FLASH_DEALS_STORAGE_KEY);
+    if (!raw) return DEFAULT_FLASH_DEALS;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return DEFAULT_FLASH_DEALS;
+    const cleaned = parsed
+      .map((d: any) => ({
+        id: String(d?.id || ''),
+        name: String(d?.name || '').trim(),
+        components: Array.isArray(d?.components)
+          ? d.components
+              .map((c: any) => ({
+                label: String(c?.label || '').trim(),
+                itemCode: String(c?.itemCode || '').trim(),
+                matchType: c?.matchType === 'prefix' ? 'prefix' : 'exact',
+              }))
+              .filter((c: FlashDealComponent) => c.label && c.itemCode)
+          : [],
+      }))
+      .filter((d: FlashDeal) => d.id && d.name && d.components.length);
+    return cleaned.length ? cleaned : DEFAULT_FLASH_DEALS;
+  } catch {
+    return DEFAULT_FLASH_DEALS;
+  }
+}
 
 export default function OffersPage() {
   const user = getCurrentUser();
@@ -40,6 +98,14 @@ export default function OffersPage() {
   // -- [NEW] Comparison & Copy Logic --
   const [compareList, setCompareList] = useState<any[]>([]);
   const [showCompareModal, setShowCompareModal] = useState(false);
+  const [flashDeals, setFlashDeals] = useState<FlashDeal[]>(() => loadFlashDeals());
+  const [flashStart, setFlashStart] = useState('');
+  const [flashEnd, setFlashEnd] = useState('');
+  const [showFlashEditor, setShowFlashEditor] = useState(false);
+  const [flashDraftName, setFlashDraftName] = useState('');
+  const [flashDraftComponents, setFlashDraftComponents] = useState<FlashDealComponent[]>([
+    { label: '', itemCode: '', matchType: 'exact' },
+  ]);
 
   useEffect(() => {
     loadOffersData()
@@ -47,6 +113,14 @@ export default function OffersPage() {
       .catch((e) => setErr(e?.message || String(e)));
     loadManagementData().then(setMgmt).catch(() => { });
   }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(FLASH_DEALS_STORAGE_KEY, JSON.stringify(flashDeals));
+    } catch {
+      // Ignore persistence errors and keep UI working.
+    }
+  }, [flashDeals]);
 
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -257,6 +331,85 @@ export default function OffersPage() {
 
     return processedOffers;
   }, [rawOffers, allowedStoreIds, dateRange, statusFilter, mgmt, sortMode]);
+
+  useEffect(() => {
+    if (!flashStart) setFlashStart(dateRange.start);
+    if (!flashEnd) setFlashEnd(dateRange.end);
+  }, [dateRange.start, dateRange.end, flashStart, flashEnd]);
+
+  const flashDateRange = useMemo(() => {
+    const start = flashStart || dateRange.start;
+    const end = flashEnd || dateRange.end;
+    if (start <= end) return { start, end };
+    return { start: end, end: start };
+  }, [flashStart, flashEnd, dateRange.start, dateRange.end]);
+
+  const flashDealRows = useMemo(() => {
+    const qtyByItem = new Map<string, number>();
+    rawOffers.forEach((o: any) => {
+      const itemsRaw = Array.isArray(o?.items) ? o.items : [];
+      itemsRaw.forEach((it: any) => {
+        const d = String(it?.d || '').substring(0, 10);
+        const sid = String(it?.s || '');
+        if (!d || d < flashDateRange.start || d > flashDateRange.end) return;
+        if (sid && !allowedStoreIds.has(sid)) return;
+        const itemId = String(it?.i || it?.id || it?.item_id || '').trim();
+        if (!itemId) return;
+        const qty = Math.abs(Number(it?.q || it?.qty || it?.quantity || 0));
+        if (!Number.isFinite(qty) || qty <= 0) return;
+        qtyByItem.set(itemId, (qtyByItem.get(itemId) || 0) + qty);
+      });
+    });
+
+    return flashDeals.map((deal) => {
+      const components = deal.components.map((comp) => {
+        const code = comp.itemCode.trim();
+        let sold = 0;
+        if (comp.matchType === 'prefix') {
+          qtyByItem.forEach((qty, itemId) => {
+            if (itemId.startsWith(code)) sold += qty;
+          });
+        } else {
+          sold = qtyByItem.get(code) || 0;
+        }
+        return { ...comp, sold };
+      });
+      const estimatedBundleSales = components.length ? Math.min(...components.map((c) => c.sold)) : 0;
+      return { ...deal, components, estimatedBundleSales };
+    });
+  }, [rawOffers, flashDeals, flashDateRange.start, flashDateRange.end, allowedStoreIds]);
+
+  const resetFlashDraft = () => {
+    setFlashDraftName('');
+    setFlashDraftComponents([{ label: '', itemCode: '', matchType: 'exact' }]);
+  };
+
+  const addFlashDeal = () => {
+    const name = flashDraftName.trim();
+    const components = flashDraftComponents
+      .map((c) => ({
+        label: c.label.trim(),
+        itemCode: c.itemCode.trim(),
+        matchType: c.matchType,
+      }))
+      .filter((c) => c.label && c.itemCode);
+    if (!name || !components.length) {
+      alert('أدخل اسم العرض ومكوّناً واحداً على الأقل.');
+      return;
+    }
+    const deal: FlashDeal = {
+      id: `flash-${Date.now()}`,
+      name,
+      components,
+    };
+    setFlashDeals((prev) => [deal, ...prev]);
+    resetFlashDraft();
+    setShowFlashEditor(false);
+  };
+
+  const removeFlashDeal = (dealId: string) => {
+    setFlashDeals((prev) => prev.filter((d) => d.id !== dealId));
+  };
 
   const stats = useMemo(() => {
     const res = offers.reduce((acc: any, o: any) => {
@@ -564,6 +717,172 @@ export default function OffersPage() {
         <KPICard title="كفاءة العروض" value={stats.periodEff} format={v => v.toFixed(1) + '%'} icon={<PremiumTargetIcon />} showProgress progressValue={stats.periodEff} />
         <KPICard title="متوسط السلة" value={stats.periodAvgBasket} format={formatSAR} icon={<CustomerValueIcon />} />
         <KPICard title="إجمالي الخصم" value={stats.totalPeriodDisc} format={formatSAR} icon={<FireIcon />} />
+      </div>
+
+      {/* Flash Deals */}
+      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden">
+        <div className="p-3 border-b border-neutral-200 bg-gradient-to-l from-violet-50 to-white flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-base font-bold text-neutral-900">عروض فلاش ديل</h3>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              الحسابات تعتمد على فلاتر المعارض الأساسية الحالية (مدير/فرع/مدينة/نوع) مع فترة مخصصة لهذه البطاقة.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowFlashEditor((p) => !p)}
+            className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-colors"
+          >
+            {showFlashEditor ? 'إغلاق الإضافة' : 'إضافة عرض فلاش ديل'}
+          </button>
+        </div>
+
+        {showFlashEditor && (
+          <div className="p-4 border-b border-neutral-200 bg-violet-50/40 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-neutral-600 mb-1">اسم العرض</label>
+                <input
+                  className="input w-full"
+                  value={flashDraftName}
+                  onChange={(e) => setFlashDraftName(e.target.value)}
+                  placeholder="مثال: لحاف 199 + مخدة مجاناً"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              {flashDraftComponents.map((comp, idx) => (
+                <div key={`draft-comp-${idx}`} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+                  <div className="md:col-span-5">
+                    <label className="block text-xs font-semibold text-neutral-600 mb-1">اسم المنتج داخل العرض</label>
+                    <input
+                      className="input w-full"
+                      value={comp.label}
+                      onChange={(e) => setFlashDraftComponents((prev) => prev.map((x, i) => (i === idx ? { ...x, label: e.target.value } : x)))}
+                      placeholder="مثال: Perfect pillow مجاني"
+                    />
+                  </div>
+                  <div className="md:col-span-3">
+                    <label className="block text-xs font-semibold text-neutral-600 mb-1">رمز المنتج</label>
+                    <input
+                      className="input w-full dir-ltr"
+                      value={comp.itemCode}
+                      onChange={(e) => setFlashDraftComponents((prev) => prev.map((x, i) => (i === idx ? { ...x, itemCode: e.target.value } : x)))}
+                      placeholder="4489420 أو 2701"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-neutral-600 mb-1">نوع المطابقة</label>
+                    <select
+                      className="input w-full"
+                      value={comp.matchType}
+                      onChange={(e) => setFlashDraftComponents((prev) => prev.map((x, i) => (i === idx ? { ...x, matchType: e.target.value as FlashMatchType } : x)))}
+                    >
+                      <option value="exact">رمز مطابق</option>
+                      <option value="prefix">يبدأ بـ</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <button
+                      type="button"
+                      className="w-full px-2 py-2 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold disabled:opacity-50"
+                      disabled={flashDraftComponents.length === 1}
+                      onClick={() => setFlashDraftComponents((prev) => prev.filter((_, i) => i !== idx))}
+                    >
+                      حذف السطر
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="px-3 py-1.5 rounded-lg border border-neutral-300 bg-white text-neutral-700 text-xs font-bold"
+                onClick={() => setFlashDraftComponents((prev) => [...prev, { label: '', itemCode: '', matchType: 'exact' }])}
+              >
+                + إضافة منتج داخل العرض
+              </button>
+              <button
+                type="button"
+                className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold"
+                onClick={addFlashDeal}
+              >
+                حفظ العرض
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="p-4 border-b border-neutral-100 bg-neutral-50/70">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-neutral-500 mb-1">من تاريخ</label>
+              <input type="date" className="input w-full" value={flashStart} onChange={(e) => setFlashStart(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-neutral-500 mb-1">إلى تاريخ</label>
+              <input type="date" className="input w-full" value={flashEnd} onChange={(e) => setFlashEnd(e.target.value)} />
+            </div>
+            <div className="md:col-span-2 flex items-end">
+              <div className="text-xs text-neutral-500">
+                الفترة الفعلية: <span className="font-mono dir-ltr">{flashDateRange.start}</span> → <span className="font-mono dir-ltr">{flashDateRange.end}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-neutral-100 text-neutral-700">
+                <th className="py-2 px-3 text-right text-xs font-bold">العرض</th>
+                <th className="py-2 px-3 text-right text-xs font-bold">تفاصيل المنتجات داخل العرض</th>
+                <th className="py-2 px-3 text-center text-xs font-bold">تقدير بيع العرض المركب</th>
+                <th className="py-2 px-3 text-center text-xs font-bold">إجراء</th>
+              </tr>
+            </thead>
+            <tbody>
+              {flashDealRows.length ? flashDealRows.map((deal) => (
+                <tr key={deal.id} className="border-t border-neutral-100 align-top">
+                  <td className="py-3 px-3">
+                    <div className="font-bold text-neutral-900">{deal.name}</div>
+                    <div className="text-[11px] text-neutral-500 mt-1">{deal.components.length} منتج/مكوّن</div>
+                  </td>
+                  <td className="py-3 px-3">
+                    <div className="space-y-1.5">
+                      {deal.components.map((comp, idx) => (
+                        <div key={`${deal.id}-comp-${idx}`} className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="font-semibold text-neutral-800">{comp.label}</span>
+                          <span className="font-mono text-neutral-500">({comp.matchType === 'prefix' ? `${comp.itemCode}*` : comp.itemCode})</span>
+                          <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-bold dir-ltr">
+                            {Math.round(comp.sold).toLocaleString()} بيع
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="py-3 px-3 text-center">
+                    <span className="inline-flex px-2.5 py-1 rounded-full bg-violet-100 text-violet-700 font-bold dir-ltr">
+                      {Math.round(deal.estimatedBundleSales).toLocaleString()}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3 text-center">
+                    <button
+                      className="px-2.5 py-1 rounded-md border border-red-200 bg-red-50 text-red-700 text-xs font-bold"
+                      onClick={() => removeFlashDeal(deal.id)}
+                    >
+                      حذف
+                    </button>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-neutral-400">لا توجد عروض فلاش ديل حالياً.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Additional Insights (aligned with original feature set, same local design) */}
