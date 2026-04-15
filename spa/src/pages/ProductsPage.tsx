@@ -1059,8 +1059,8 @@ export default function ProductsPage() {
                 className="input md:col-span-2 xl:col-span-2 min-w-0"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="🔍 بس اكتب كود او اسم استخدم + لاكثر من كود"
-                title="بس اكتب كود او اسم استخدم + لاكثر من كود"
+                placeholder="🔍   كود او اسم المنتج استخدم (+) لاكثر من كود"
+                title="  كود او اسم المنتج استخدم (+) لاكثر من كود"
               />
               <input
                 type="number"
