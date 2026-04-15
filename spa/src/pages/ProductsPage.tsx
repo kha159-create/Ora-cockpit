@@ -461,6 +461,10 @@ export default function ProductsPage() {
     // ===== Catalog (products list) =====
     const catalogRows: CatalogItem[] = [];
     const q = search.trim().toLowerCase();
+    const searchTokens = q
+      .split(/[\s,+،]+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
     const pushCatalogItem = (catName: string, it: any) => {
       const id = String(it?.id || '');
       const name = String(it?.name || id);
@@ -551,13 +555,15 @@ export default function ProductsPage() {
     const catFilter = selectedCategory;
     let filteredCatalog = catalogRows;
     if (catFilter !== 'all') filteredCatalog = filteredCatalog.filter((r) => r.category === catFilter);
-    if (q) {
+    if (searchTokens.length) {
       filteredCatalog = filteredCatalog.filter((r) =>
-        r.id.toLowerCase().includes(q) ||
-        r.name.toLowerCase().includes(q) ||
-        String(r.alias || '').toLowerCase().includes(q) ||
-        String(r.old_code || '').toLowerCase().includes(q) ||
-        String(r.dCode || '').toLowerCase().includes(q)
+        searchTokens.some((token) =>
+          r.id.toLowerCase().includes(token) ||
+          r.name.toLowerCase().includes(token) ||
+          String(r.alias || '').toLowerCase().includes(token) ||
+          String(r.old_code || '').toLowerCase().includes(token) ||
+          String(r.dCode || '').toLowerCase().includes(token)
+        )
       );
     }
     const minVal = safeNum(priceMin);
@@ -1047,18 +1053,18 @@ export default function ProductsPage() {
         <div className="p-4 border-b border-neutral-200 bg-gradient-to-l from-orange-50 to-white">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-lg font-bold text-neutral-900">📦 قائمة المنتجات</div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-5 gap-2 items-center w-full md:w-auto">
               <input
                 type="text"
-                className="input min-w-[200px] max-w-[280px]"
+                className="input md:col-span-2 xl:col-span-2 min-w-0"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="🔍 الكود القديم، الجديد، أو اسم المنتج"
-                title="بحث بالكود القديم أو الجديد أو اسم المنتج"
+                placeholder="🔍 ابحث بأكثر من كود: 4489514+4489515"
+                title="يمكن البحث بأكثر من كود/اسم (مسافة أو + أو فاصلة)"
               />
               <input
                 type="number"
-                className="input w-[120px]"
+                className="input min-w-0"
                 value={priceMin}
                 onChange={(e) => setPriceMin(e.target.value)}
                 placeholder="السعر من"
@@ -1066,13 +1072,13 @@ export default function ProductsPage() {
               />
               <input
                 type="number"
-                className="input w-[120px]"
+                className="input min-w-0"
                 value={priceMax}
                 onChange={(e) => setPriceMax(e.target.value)}
                 placeholder="السعر إلى"
                 min={0}
               />
-              <select className="input" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
+              <select className="input min-w-0" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
                 <option value="all">كل الأقسام</option>
                 {derived.catalogCategories.map((c) => (
                   <option key={c} value={c}>
@@ -1080,7 +1086,7 @@ export default function ProductsPage() {
                   </option>
                 ))}
               </select>
-              <div className="text-sm text-neutral-600">مرتبة حسب: 📦 الكمية</div>
+              <div className="text-sm text-neutral-600 md:col-span-4 xl:col-span-5">مرتبة حسب: 📦 الكمية</div>
             </div>
           </div>
           <div className="mt-2">
