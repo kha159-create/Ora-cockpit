@@ -42,8 +42,8 @@ function toYMD(d: Date) {
 
 function getEffectiveDate() {
   const now = new Date();
-  // If before 1 AM, we effectively treat it as the previous day for "Today's" metrics
-  if (now.getHours() < 1) {
+  // If before 12 PM, treat it as previous business day.
+  if (now.getHours() < 12) {
     const d = new Date(now);
     d.setDate(now.getDate() - 1);
     return d;
@@ -52,7 +52,7 @@ function getEffectiveDate() {
 }
 
 function getDefaultRange(mode: Mode, selYear?: number, selMonth?: number) {
-  const now = new Date();
+  const now = getEffectiveDate();
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -60,9 +60,7 @@ function getDefaultRange(mode: Mode, selYear?: number, selMonth?: number) {
   if (mode === 'today') return { start: toYMD(now), end: toYMD(now) };
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
   if (mode === 'mtd') {
-    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endMtd = yesterday.getMonth() !== now.getMonth() ? now : yesterday;
-    return { start: toYMD(startOfCurrentMonth), end: toYMD(endMtd) };
+    return { start: toYMD(startOfCurrentMonth), end: toYMD(now) };
   }
   if (mode === 'month' && selYear != null && selMonth != null) {
     if (selMonth === 0) {
@@ -618,9 +616,8 @@ export default function DashboardPage() {
   );
 
   // أمس + مقارنة العام الماضي — قبل أي return حتى تبقى hooks أسفلها صالحة
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = toYMD(yesterday);
+  const effectiveDate = getEffectiveDate();
+  const yesterdayStr = toYMD(effectiveDate);
   const lastYearYesterdayStr = getComparisonPrevDate(yesterdayStr, calendar);
 
   const handlePrintEmployeeReport = () => {

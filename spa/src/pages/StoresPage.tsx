@@ -108,7 +108,7 @@ function getRange(
 ) {
   const now = new Date();
   const today = new Date(now);
-  if (now.getHours() < 1) {
+  if (now.getHours() < 12) {
     today.setDate(now.getDate() - 1);
   }
   const yesterday = new Date(today);
@@ -119,7 +119,7 @@ function getRange(
 
   if (mode === 'mtd') {
     currStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0);
-    const mtdEnd = yesterday;
+    const mtdEnd = today;
     currEnd = new Date(mtdEnd);
     currEnd.setHours(23, 59, 59, 999);
   } else if (mode === 'yesterday') {

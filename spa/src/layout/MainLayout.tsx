@@ -35,6 +35,7 @@ const baseNavItems = [
   { to: '/target-split', label: 'تقسيمة التارجت', icon: <PremiumTargetIcon className="w-5 h-5" /> },
   { to: '/commissions', label: 'العمولات', icon: <CashIcon /> },
   { to: '/hourly', label: 'المبيعات بالساعه', icon: <ClockIcon /> },
+  { to: '/employee-analysis', label: 'تحليل الموظفين', icon: <UserGroupIcon /> },
   { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
   { to: '/offers', label: 'قائمة العروض', icon: <TagIcon /> },
   { to: '/reports', label: 'التقارير', icon: <ClipboardListIcon /> },
@@ -129,12 +130,38 @@ export default function MainLayout() {
         loadStockData()
       ]);
       setGlobalMeta(mgmtRaw);
+      const pad2 = (n: number) => String(n).padStart(2, '0');
+      const toYMD = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+      const nowReal = new Date();
+      const effectiveToday = new Date(nowReal);
+      if (nowReal.getHours() < 12) effectiveToday.setDate(nowReal.getDate() - 1);
+      const todayYMD = toYMD(effectiveToday);
+      const monthStartYMD = `${todayYMD.substring(0, 8)}01`;
       const getP = (p: string) => prodRaw.periods?.[p]?.catalog && Object.keys(prodRaw.periods[p].catalog).length > 0 ? prodRaw.periods[p] : null;
       const pData = getP('mtd') || getP('30d') || getP('14d') || getP('7d') || null;
       if (!pData) return;
 
       const history = prodRaw.product_daily_history || {};
       setGlobalHistory(history);
+
+      const mtdByItem = new Map<string, { qty: number; amount: number; byStore: Record<string, { q: number; a: number }> }>();
+      Object.entries(history).forEach(([itemId, rows]) => {
+        if (!Array.isArray(rows)) return;
+        rows.forEach((r: any) => {
+          const ds = String(r?.date || '').substring(0, 10);
+          const sid = String(r?.store || '');
+          if (!ds || ds < monthStartYMD || ds > todayYMD) return;
+          const qty = Number(r?.qty) || 0;
+          const amount = Number(r?.amount) || 0;
+          if (!mtdByItem.has(itemId)) mtdByItem.set(itemId, { qty: 0, amount: 0, byStore: {} });
+          const x = mtdByItem.get(itemId)!;
+          x.qty += qty;
+          x.amount += amount;
+          if (!x.byStore[sid]) x.byStore[sid] = { q: 0, a: 0 };
+          x.byStore[sid].q += qty;
+          x.byStore[sid].a += amount;
+        });
+      });
 
       // --- STOCK PROCESSING LOGIC ---
       const storesMap: Record<string, string> = mgmtRaw.stores || {};
@@ -224,6 +251,16 @@ export default function MainLayout() {
             qty += q;
             amount += a;
             salesByStore[sid] = { q, a };
+          }
+
+          const histAgg = mtdByItem.get(id);
+          if (histAgg) {
+            qty = histAgg.qty;
+            amount = histAgg.amount;
+            Object.keys(salesByStore).forEach((sid) => delete salesByStore[sid]);
+            Object.entries(histAgg.byStore).forEach(([sid, st]) => {
+              salesByStore[sid] = { q: st.q, a: st.a };
+            });
           }
 
           // Stock Lookup

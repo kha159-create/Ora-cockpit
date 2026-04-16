@@ -23,6 +23,7 @@ const HourlyPage = React.lazy(() => import('./pages/HourlyPage'));
 const TVPage = React.lazy(() => import('./pages/TVPage'));
 const TargetSplitPage = React.lazy(() => import('./pages/TargetSplitPage'));
 const CustomerValueSimulationPage = React.lazy(() => import('./pages/CustomerValueSimulationPage'));
+const EmployeeAnalysisPage = React.lazy(() => import('./pages/EmployeeAnalysisPage'));
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const u = getCurrentUser();
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="commissions" element={<PageWrap><CommissionsPage /></PageWrap>} />
         <Route path="comparison" element={<PageWrap><ComparisonPage /></PageWrap>} />
         <Route path="hourly" element={<PageWrap><HourlyPage /></PageWrap>} />
+        <Route path="employee-analysis" element={<PageWrap><EmployeeAnalysisPage /></PageWrap>} />
         <Route path="target-split" element={<PageWrap><TargetSplitPage /></PageWrap>} />
         <Route path="customer-value" element={<PageWrap><CustomerValueSimulationPage /></PageWrap>} />
       </Route>

@@ -42,30 +42,35 @@ function formatSAR(val: number) {
 
 function getDateRangeForMode(m: PeriodMode, customStart?: string, customEnd?: string): { start: string; end: string } {
   const pad = (n: number) => String(n).padStart(2, '0');
-  const now = new Date();
-  const yest = new Date(now);
-  yest.setDate(now.getDate() - 1);
-  const end = `${yest.getFullYear()}-${pad(yest.getMonth() + 1)}-${pad(yest.getDate())}`;
-  if (m === 'yest') return { start: end, end };
+  const nowReal = new Date();
+  const today = new Date(nowReal);
+  if (nowReal.getHours() < 12) {
+    today.setDate(nowReal.getDate() - 1);
+  }
+  const yest = new Date(today);
+  yest.setDate(today.getDate() - 1);
+  const todayYMD = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  const yestYMD = `${yest.getFullYear()}-${pad(yest.getMonth() + 1)}-${pad(yest.getDate())}`;
+  if (m === 'yest') return { start: yestYMD, end: yestYMD };
   if (m === 'custom' && customStart && customEnd) {
     return customStart <= customEnd
       ? { start: customStart, end: customEnd }
       : { start: customEnd, end: customStart };
   }
   if (m === '7d') {
-    const s = new Date(now); s.setDate(now.getDate() - 7);
-    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end };
+    const s = new Date(today); s.setDate(today.getDate() - 7);
+    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end: todayYMD };
   }
   if (m === '14d') {
-    const s = new Date(now); s.setDate(now.getDate() - 14);
-    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end };
+    const s = new Date(today); s.setDate(today.getDate() - 14);
+    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end: todayYMD };
   }
   if (m === '30d') {
-    const s = new Date(now); s.setDate(now.getDate() - 30);
-    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end };
+    const s = new Date(today); s.setDate(today.getDate() - 30);
+    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end: todayYMD };
   }
-  const start = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
-  return { start, end };
+  const start = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-01`;
+  return { start, end: todayYMD };
 }
 
 function isAdminOrAuditor(role?: string) {
