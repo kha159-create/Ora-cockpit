@@ -1,4 +1,4 @@
-declare const process: any;
+﻿declare const process: any;
 
 type VercelRequest = {
   method?: string;
@@ -47,9 +47,11 @@ function parseBody(req: VercelRequest) {
 function sanitizeRows(rows: any[]) {
   return rows.slice(0, 180).map((row) => ({
     employee: String(row?.employee || '').trim(),
+    employeeId: String(row?.employeeId || '').trim(),
     store: String(row?.store || '').trim(),
     level: String(row?.level || '').trim(),
     pattern: String(row?.pattern || '').trim(),
+    structure: String(row?.structure || '').trim(),
     strength: String(row?.strength || '').trim(),
     weakness: String(row?.weakness || '').trim(),
     action: String(row?.action || '').trim(),
@@ -58,6 +60,7 @@ function sanitizeRows(rows: any[]) {
     padQuality: String(row?.padQuality || '').trim(),
     pillowStatus: String(row?.pillowStatus || '').trim(),
     offerBehavior: String(row?.offerBehavior || '').trim(),
+    atvVsStore: String(row?.atvVsStore || '').trim(),
     avgTicket: Math.round(toNumber(row?.avgTicket)),
     sales: Math.round(toNumber(row?.sales)),
     transactions: Math.round(toNumber(row?.transactions)),
@@ -65,6 +68,20 @@ function sanitizeRows(rows: any[]) {
     padAttachPct: Number(toNumber(row?.padAttachPct).toFixed(1)),
     pillowAttachPct: Number(toNumber(row?.pillowAttachPct).toFixed(1)),
     offerFocusPct: Number(toNumber(row?.offerFocusPct).toFixed(1)),
+    targetAchievementPct: Number(toNumber(row?.targetAchievementPct).toFixed(1)),
+    targetPaceStatus: String(row?.targetPaceStatus || '').trim(),
+    dailyRiskStatus: String(row?.dailyRiskStatus || '').trim(),
+    avgDailySales: Math.round(toNumber(row?.avgDailySales)),
+    requiredRemainingDailySales: Math.round(toNumber(row?.requiredRemainingDailySales)),
+    periodPerformance: String(row?.periodPerformance || '').trim(),
+    periodBuckets: Array.isArray(row?.periodBuckets) ? row.periodBuckets.slice(0, 4) : [],
+    duvetKingBands: row?.duvetKingBands || {},
+    duvetFullBands: row?.duvetFullBands || {},
+    padKingModels: row?.padKingModels || {},
+    padFullModels: row?.padFullModels || {},
+    pillowKing: row?.pillowKing || {},
+    pillowFull: row?.pillowFull || {},
+    topOffers: Array.isArray(row?.topOffers) ? row.topOffers.slice(0, 5) : [],
   }));
 }
 
@@ -91,15 +108,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const systemPrompt = [
-      'أنت مدير أداء إقليمي خبير في تجارة التجزئة المنزلية.',
-      'حلل أداء الموظفين فردياً وبأسلوب عملي يصلح للاستخدام المباشر من المدير.',
-      'ركّز على: جودة المبيعات، متوسط الفاتورة، بيع اللحاف، ربط اللباد، ربط المخدة، سلوك العروض، والتوصية الإدارية.',
-      'تجنب الملخصات العامة والكلام الإنشائي.',
-      'اكتب بالعربية فقط، بشكل واضح ومنظم وقصير.',
-      'ابدأ بملخص تنفيذي قصير جداً، ثم 3 إلى 6 نقاط قرار للإدارة، ثم ملاحظات مختصرة عن أبرز الموظفين الذين يحتاجون تدخل أو يستحقون تعزيز.',
-      'إذا ظهر اعتماد على العروض بدون جودة بيع فاذكره بوضوح.',
-      'إذا ظهر بيع مباشر قوي بدون اعتماد على العروض فاذكره بوضوح.',
-      'اجعل النبرة عملية، إدارية، وقابلة للتنفيذ فوراً.',
+      'أنت مدير أداء إقليمي أول في تجارة التجزئة المنزلية.',
+      'حلل أداء الموظفين بشكل فردي وبأسلوب عملي يصلح للاستخدام المباشر من المدير.',
+      'ركز على: جودة المبيعات، متوسط الفاتورة مقابل الفرع، بيع اللحاف، توزيع شرائح سعر اللحاف، ربط اللباد، موديلات اللباد 5/10/15 سم، ربط المخدة على أساس اللحاف، سلوك العروض، إيقاع الهدف، الخطر اليومي، واتساق الأداء بين الفترات.',
+      'ميّز بوضوح بين البيع المنظم والبيع المشتت، وبين الاستفادة الصحية من العروض والاعتماد على العروض.',
+      'لا تقدم ملخصات عامة أو عبارات إنشائية.',
+      'اكتب بالعربية فقط وبشكل واضح ومختصر وقابل للتنفيذ.',
+      'ابدأ بملخص تنفيذي قصير جداً، ثم نقاط قرار للإدارة، ثم أبرز الموظفين الذين يحتاجون تدخلاً أو تعزيزاً.',
+      'لكل موظف مهم، حاول تحديد: مصدر القوة الحقيقي، نقطة الضعف الأساسية، هل البيع منظم أم مشتت، ومن أين يأتي الأداء، ثم توصية إدارية مباشرة.',
     ].join(' ');
 
     const userPrompt = JSON.stringify(
@@ -127,7 +143,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           },
           {
             role: 'user',
-            content: `حلل البيانات التالية:\n${userPrompt}`,
+            content: `حلل البيانات التالية وقدم قراءة إدارية عربية موجهة للمدير:
+${userPrompt}`,
           },
         ],
       }),
