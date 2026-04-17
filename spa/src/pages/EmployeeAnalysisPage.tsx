@@ -21,6 +21,9 @@ const PAD_MODEL_CODE_MAP: Record<string, 5 | 10 | 15> = {
   '130030010': 15,
 };
 
+const KING_PAD_CODE_SET = new Set(['9300', '9611', '9629', '130010008', '130010023', '130010024']);
+const FULL_PAD_CODE_SET = new Set(['9612', '9615', '9630', '130030008', '130030009', '130030010']);
+
 const PAD_NAME_MODEL_MAP: Array<{ pattern: RegExp; model: 5 | 10 | 15 }> = [
   { pattern: /justrelax|matresspadkingjustrelax/, model: 5 },
   { pattern: /clouddre+a?m15cm|matresspadfullclouddre+a?m15cm|fullclouddre+a?m15cm/, model: 15 },
@@ -93,7 +96,7 @@ function resolveEmployeeName(rawId: string, fallbackName: string, employeeNames:
 function canonicalTop6Category(v: string) {
   const t = normText(v);
   const isKing = t.includes('king') || t.includes('كينغ') || t.includes('كنج');
-  const isFull = t.includes('full') || t.includes('فل') || t.includes('twin') || t.includes('توين');
+  const isFull = t.includes('full') || t.includes('queen') || t.includes('فل') || t.includes('كوين') || t.includes('twin') || t.includes('توين');
   const isPillow = t.includes('مخده') || t.includes('مخدات') || t.includes('pillow');
   const isDuvet = t.includes('لحاف') || t.includes('لحافات') || t.includes('duvet') || t.includes('comforter');
   const isPad = t.includes('لباد') || t.includes('لبده') || t.includes('mattress') || t.includes('protect');
@@ -114,13 +117,8 @@ function parsePadModel(name: string): 5 | 10 | 15 | null {
   return null;
 }
 
-function isOfferLikeItem(name: string) {
-  const t = normText(name);
-  return t.includes('عرض') || t.includes('offer') || t.includes('promo') || t.includes('special');
-}
-
-function parsePadModelFromItem(item: any): 5 | 10 | 15 | null {
-  const keys = [
+function getItemKeys(item: any) {
+  return [
     item?.alias,
     item?.dynamic_code,
     item?.dynamicCode,
@@ -135,6 +133,52 @@ function parsePadModelFromItem(item: any): 5 | 10 | 15 | null {
   ]
     .map(normalizeProductKey)
     .filter(Boolean);
+}
+
+function getItemAvgPrice(item: any) {
+  const qty = safeNum(item?.qty);
+  if (qty <= 0) return null;
+  const amt = safeNum(item?.amt);
+  if (amt <= 0) return null;
+  return amt / qty;
+}
+
+function parsePadBucketFromItem(item: any): 'king' | 'full' | null {
+  const keys = getItemKeys(item);
+  for (const key of keys) {
+    if (KING_PAD_CODE_SET.has(key)) return 'king';
+    if (FULL_PAD_CODE_SET.has(key)) return 'full';
+  }
+
+  const t = normText(String(item?.name || ''));
+  const isPad = t.includes('ظ„ط¨ط§ط¯') || t.includes('ظ„ط¨ط¯ظ‡') || t.includes('mattress') || t.includes('protect');
+  if (!isPad) return null;
+  if (t.includes('king') || t.includes('ظƒظٹظ†ط؛') || t.includes('ظƒظ†ط¬')) return 'king';
+  if (t.includes('full') || t.includes('queen') || t.includes('twin') || t.includes('ظپظ„') || t.includes('طƒظˆظٹظ†') || t.includes('طھظˆظٹظ†')) return 'full';
+  return null;
+}
+
+function parsePadModelFromPrice(item: any, bucket: 'king' | 'full'): 5 | 10 | 15 | null {
+  const avg = getItemAvgPrice(item);
+  if (avg == null || avg <= 0) return null;
+  if (bucket === 'king') {
+    if (avg <= 250) return 5;
+    if (avg <= 450) return 10;
+    return 15;
+  }
+  if (avg <= 220) return 5;
+  if (avg <= 380) return 10;
+  return 15;
+}
+
+function isOfferLikeItem(name: string) {
+  const t = normText(name);
+  return t.includes('عرض') || t.includes('offer') || t.includes('promo') || t.includes('special');
+}
+
+function parsePadModelFromItem(item: any): 5 | 10 | 15 | null {
+  const keys = getItemKeys(item);
+  const bucket = parsePadBucketFromItem(item);
 
   for (const key of keys) {
     if (PAD_MODEL_CODE_MAP[key]) return PAD_MODEL_CODE_MAP[key];
@@ -145,7 +189,10 @@ function parsePadModelFromItem(item: any): 5 | 10 | 15 | null {
     if (rule.pattern.test(normalizedName)) return rule.model;
   }
 
-  return parsePadModel(String(item?.name || ''));
+  const parsedFromName = parsePadModel(String(item?.name || ''));
+  if (parsedFromName) return parsedFromName;
+  if (bucket) return parsePadModelFromPrice(item, bucket);
+  return null;
 }
 
 function targetPaceLabel(status: string) {
@@ -250,9 +297,10 @@ type SortKey = 'name' | 'store' | 'level' | 'sales' | 'avgTicket' | 'targetAchie
 type SortDir = 'asc' | 'desc';
 type OfferItem = { name: string; qty: number; pct: number };
 type DuvetBands = { low: number; medium: number; high: number; total: number; focus: string };
-type PadModels = { model5: number; model10: number; model15: number; total: number; unclassified: number; focus: string; attachPct: number | null; quality: string };
+type PadModels = { model5: number; model10: number; model15: number; total: number; unclassified: number; focus: string; attachPct: number | null; quality: string; low?: number; medium?: number; high?: number; priceFocus?: string; avgUnitPrice?: number | null };
 type PillowDetail = { total: number; attachPct: number | null; status: string };
 type PeriodSnapshot = { label: string; sales: number; target: number; achievementPct: number };
+type ProductMixSummary = { topCategory: string; concentrationPct: number; otherSharePct: number; coreSharePct: number; distinctCategories: number; diversityLabel: string; supportLabel: string };
 
 type ProductInsights = {
   kingDuvet: number;
@@ -269,6 +317,7 @@ type ProductInsights = {
   kingPillowDetail: PillowDetail;
   fullPillowDetail: PillowDetail;
   offerTopItems: OfferItem[];
+  mixSummary?: ProductMixSummary;
 };
 
 type EmployeeRow = {
@@ -505,12 +554,20 @@ export default function EmployeeAnalysisPage() {
       const hasProductData = Boolean(empBlock && (categories.length > 0 || items.length > 0));
       const p = emptyProductInsights();
       const offerMap = new Map<string, number>();
+      const categoryQtyMap = new Map<string, number>();
+      const hasCategoryAggregates = categories.some((c: any) => safeNum(c?.qty) > 0);
       let kingDuvetBandRaw = 0;
       let fullDuvetBandRaw = 0;
+      let kingPadItemQty = 0;
+      let fullPadItemQty = 0;
+      let kingPadItemAmt = 0;
+      let fullPadItemAmt = 0;
 
       categories.forEach((c: any) => {
-        const mapped = canonicalTop6Category(String(c?.name || ''));
+        const rawName = String(c?.name || 'غير مصنف').trim() || 'غير مصنف';
+        const mapped = canonicalTop6Category(rawName);
         const qty = safeNum(c?.qty);
+        if (qty > 0) categoryQtyMap.set(rawName, (categoryQtyMap.get(rawName) || 0) + qty);
         if (mapped === 'king_duvet') p.kingDuvet += qty;
         if (mapped === 'full_duvet') p.fullDuvet += qty;
         if (mapped === 'king_pad') p.kingPad += qty;
@@ -521,10 +578,16 @@ export default function EmployeeAnalysisPage() {
 
       items.forEach((it: any) => {
         const name = String(it?.name || '');
-        const cat = canonicalTop6Category(name);
+        const rawCat = canonicalTop6Category(name);
+        const padBucket = parsePadBucketFromItem(it);
+        const cat = padBucket ? (padBucket === 'king' ? 'king_pad' : 'full_pad') : rawCat;
         const qty = safeNum(it?.qty);
         const avg = qty > 0 ? safeNum(it?.amt) / qty : 0;
         if (qty <= 0) return;
+        if (!hasCategoryAggregates) {
+          const bucketName = name.trim() || 'غير مصنف';
+          categoryQtyMap.set(bucketName, (categoryQtyMap.get(bucketName) || 0) + qty);
+        }
         if (cat === 'king_duvet') {
           kingDuvetBandRaw += qty;
           if (avg <= 300) p.kingDuvetBands.low += qty;
@@ -538,31 +601,35 @@ export default function EmployeeAnalysisPage() {
           else p.fullDuvetBands.high += qty;
         }
         if (cat === 'king_pad') {
+          kingPadItemQty += qty;
+          kingPadItemAmt += safeNum(it?.amt);
           const model = parsePadModelFromItem(it);
           if (model === 5) p.kingPadModels.model5 += qty;
           else if (model === 10) p.kingPadModels.model10 += qty;
           else if (model === 15) p.kingPadModels.model15 += qty;
           else p.kingPadModels.unclassified += qty;
+          if (avg > 0) {
+            if (avg <= 250) p.kingPadModels.low = (p.kingPadModels.low || 0) + qty;
+            else if (avg <= 450) p.kingPadModels.medium = (p.kingPadModels.medium || 0) + qty;
+            else p.kingPadModels.high = (p.kingPadModels.high || 0) + qty;
+          }
         }
         if (cat === 'full_pad') {
+          fullPadItemQty += qty;
+          fullPadItemAmt += safeNum(it?.amt);
           const model = parsePadModelFromItem(it);
           if (model === 5) p.fullPadModels.model5 += qty;
           else if (model === 10) p.fullPadModels.model10 += qty;
           else if (model === 15) p.fullPadModels.model15 += qty;
           else p.fullPadModels.unclassified += qty;
+          if (avg > 0) {
+            if (avg <= 220) p.fullPadModels.low = (p.fullPadModels.low || 0) + qty;
+            else if (avg <= 380) p.fullPadModels.medium = (p.fullPadModels.medium || 0) + qty;
+            else p.fullPadModels.high = (p.fullPadModels.high || 0) + qty;
+          }
         }
         const offerKeys = [
-          it?.alias,
-          it?.dynamic_code,
-          it?.dynamicCode,
-          it?.old_code,
-          it?.oldCode,
-          it?.new_code,
-          it?.newCode,
-          it?.product_code,
-          it?.productCode,
-          it?.code,
-          it?.id,
+          ...getItemKeys(it),
           normText(name),
         ]
           .map(normalizeProductKey)
@@ -598,6 +665,8 @@ export default function EmployeeAnalysisPage() {
         p.fullDuvetBands.high *= scale;
       }
 
+      if (kingPadItemQty > 0) p.kingPad = kingPadItemQty;
+      if (fullPadItemQty > 0) p.fullPad = fullPadItemQty;
       p.kingDuvetBands.total = p.kingDuvet;
       p.fullDuvetBands.total = p.fullDuvet;
       p.kingDuvetBands.focus = focusLabel([{ label: 'تركيز سعري منخفض', value: p.kingDuvetBands.low }, { label: 'تركيز سعري متوسط', value: p.kingDuvetBands.medium }, { label: 'تركيز سعري مرتفع', value: p.kingDuvetBands.high }]);
@@ -610,6 +679,10 @@ export default function EmployeeAnalysisPage() {
       p.fullPadModels.quality = classifyPadQuality(p.fullPadModels.attachPct);
       p.kingPadModels.focus = focusLabel([{ label: 'تركيز 5 سم', value: p.kingPadModels.model5 }, { label: 'تركيز 10 سم', value: p.kingPadModels.model10 }, { label: 'تركيز 15 سم', value: p.kingPadModels.model15 }]);
       p.fullPadModels.focus = focusLabel([{ label: 'تركيز 5 سم', value: p.fullPadModels.model5 }, { label: 'تركيز 10 سم', value: p.fullPadModels.model10 }, { label: 'تركيز 15 سم', value: p.fullPadModels.model15 }]);
+      p.kingPadModels.avgUnitPrice = kingPadItemQty > 0 ? kingPadItemAmt / kingPadItemQty : null;
+      p.fullPadModels.avgUnitPrice = fullPadItemQty > 0 ? fullPadItemAmt / fullPadItemQty : null;
+      p.kingPadModels.priceFocus = focusLabel([{ label: 'سعري منخفض', value: p.kingPadModels.low || 0 }, { label: 'سعري متوسط', value: p.kingPadModels.medium || 0 }, { label: 'سعري مرتفع', value: p.kingPadModels.high || 0 }]);
+      p.fullPadModels.priceFocus = focusLabel([{ label: 'سعري منخفض', value: p.fullPadModels.low || 0 }, { label: 'سعري متوسط', value: p.fullPadModels.medium || 0 }, { label: 'سعري مرتفع', value: p.fullPadModels.high || 0 }]);
       p.kingPillowDetail.total = p.kingPillow;
       p.fullPillowDetail.total = p.fullPillow;
       p.kingPillowDetail.attachPct = p.kingDuvet > 0 ? (p.kingPillow / (p.kingDuvet * 2)) * 100 : null;
@@ -621,6 +694,21 @@ export default function EmployeeAnalysisPage() {
       const coreUnits = p.kingDuvet + p.fullDuvet + p.kingPad + p.fullPad + p.kingPillow + p.fullPillow;
       p.offerFocusPct = coreUnits > 0 ? (offerUnits / coreUnits) * 100 : 0;
       p.offerTopItems = Array.from(offerMap.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, qty]) => ({ name, qty, pct: offerUnits > 0 ? (qty / offerUnits) * 100 : 0 }));
+      const mixRows = Array.from(categoryQtyMap.entries()).map(([name, qty]) => ({ name, qty })).filter((entry) => entry.qty > 0).sort((a, b) => b.qty - a.qty);
+      const mixTotal = mixRows.reduce((sum, entry) => sum + entry.qty, 0);
+      const mixCore = mixRows.reduce((sum, entry) => (canonicalTop6Category(entry.name) ? sum + entry.qty : sum), 0);
+      const topMix = mixRows[0];
+      const concentrationPct = mixTotal > 0 && topMix ? (topMix.qty / mixTotal) * 100 : 0;
+      const otherSharePct = mixTotal > 0 ? ((mixTotal - mixCore) / mixTotal) * 100 : 0;
+      p.mixSummary = {
+        topCategory: topMix?.name || 'لا توجد بيانات',
+        concentrationPct,
+        otherSharePct,
+        coreSharePct: mixTotal > 0 ? (mixCore / mixTotal) * 100 : 0,
+        distinctCategories: mixRows.length,
+        diversityLabel: mixTotal <= 0 ? 'لا توجد بيانات' : concentrationPct >= 68 ? 'مبيعات مركزة' : mixRows.length >= 4 ? 'تنوع صحي' : 'تنوع متوسط',
+        supportLabel: mixTotal <= 0 ? 'لا توجد بيانات' : otherSharePct >= 30 ? 'تنوع داعم واضح' : otherSharePct >= 12 ? 'تنوع داعم محدود' : 'اعتماد أساسي على الفئات الرئيسية',
+      };
 
       row.hasProductData = hasProductData;
       row.productInsights = p;
@@ -662,6 +750,7 @@ export default function EmployeeAnalysisPage() {
 
     return derived.rows.map((row) => {
       const p = row.productInsights;
+      const mixSummary = p.mixSummary || { topCategory: 'لا توجد بيانات', concentrationPct: 0, otherSharePct: 0, coreSharePct: 0, distinctCategories: 0, diversityLabel: 'لا توجد بيانات', supportLabel: 'لا توجد بيانات' };
       const hasProductData = row.hasProductData;
       const totalDuvet = p.kingDuvet + p.fullDuvet;
       const totalPad = p.kingPad + p.fullPad;
@@ -706,23 +795,28 @@ export default function EmployeeAnalysisPage() {
       const salesScore = row.sales >= salesMedian * 1.15 ? 2 : row.sales >= salesMedian * 0.8 ? 1 : 0;
       const atvScore = atvVsStore === 'above_store_average' ? 2 : atvVsStore === 'near_store_average' ? 1 : 0;
       const paceScore = targetPaceStatus === 'on_track' ? 2 : targetPaceStatus === 'slightly_behind' ? 1 : 0;
+      const mixScore = !hasProductData ? null : mixSummary.concentrationPct >= 68 ? 0 : mixSummary.distinctCategories >= 4 || mixSummary.otherSharePct >= 18 ? 2 : 1;
       const duvetScore = !hasProductData ? null : totalDuvet >= Math.max(1, duvetMedian * 1.15) ? 2 : totalDuvet >= Math.max(1, duvetMedian * 0.8) ? 1 : 0;
       const padScore = !hasProductData ? null : weightedPadAttach != null && weightedPadAttach >= 85 ? 2 : weightedPadAttach != null && weightedPadAttach >= 55 ? 1 : 0;
       const pillowScore = !hasProductData ? null : weightedPillowAttach != null && weightedPillowAttach > 100 ? 2 : weightedPillowAttach != null && weightedPillowAttach >= 70 ? 1 : 0;
       const productFocuses = [p.kingDuvetBands.focus, p.fullDuvetBands.focus, p.kingPadModels.focus, p.fullPadModels.focus].filter((focus) => focus !== 'لا توجد بيانات' && focus !== 'متوازن');
-      const scatteredSelling = offerBehavior === 'اعتماد زائد على العروض' || periodPerformance === 'أداء متذبذب' || periodPerformance === 'بداية قوية ثم تراجع' || productFocuses.length >= 3;
-      const structuredSelling = offerBehavior !== 'اعتماد زائد على العروض' && (padScore ?? 1) >= 1 && (pillowScore ?? 1) >= 1 && consistencyScore >= 1;
+      const narrowMix = mixSummary.concentrationPct >= 68;
+      const strongMix = mixSummary.distinctCategories >= 4 && mixSummary.concentrationPct < 55;
+      const supportiveMix = mixSummary.otherSharePct >= 18;
+      const scatteredSelling = offerBehavior === 'اعتماد زائد على العروض' || periodPerformance === 'أداء متذبذب' || periodPerformance === 'بداية قوية ثم تراجع' || productFocuses.length >= 3 || (narrowMix && ((padScore ?? 1) === 0 || (pillowScore ?? 1) === 0));
+      const structuredSelling = offerBehavior !== 'اعتماد زائد على العروض' && (padScore ?? 1) >= 1 && (pillowScore ?? 1) >= 1 && consistencyScore >= 1 && (strongMix || supportiveMix || !narrowMix);
       const sellingStructure = structuredSelling ? 'بيع منظم' : scatteredSelling ? 'البيع غير متوازن' : 'بيع جزئي';
-      const weightedScoreParts = [salesScore, atvScore, paceScore, dailyRiskStatus === 'manageable' ? 2 : dailyRiskStatus === 'needs_push' ? 1 : 0, consistencyScore, duvetScore, padScore, pillowScore, offerScore].filter((value) => value !== null) as number[];
+      const weightedScoreParts = [salesScore, atvScore, paceScore, dailyRiskStatus === 'manageable' ? 2 : dailyRiskStatus === 'needs_push' ? 1 : 0, consistencyScore, duvetScore, padScore, pillowScore, offerScore, mixScore].filter((value) => value !== null) as number[];
       const score = weightedScoreParts.reduce((sum, value) => sum + value, 0) / Math.max(weightedScoreParts.length, 1);
       const level = score >= 1.45 ? 'A' : score < 0.9 ? 'C' : 'B';
       const levelLabel = level === 'A' ? 'A - قوي' : level === 'B' ? 'B - متوسط' : 'C - يحتاج تدخل';
       let pattern = 'Balanced Seller';
       if (offerBehavior === 'اعتماد زائد على العروض') pattern = 'Offer Driven';
+      else if (narrowMix && (padScore ?? 1) <= 1 && (pillowScore ?? 1) <= 1) pattern = 'Scattered Seller';
       else if (row.trans >= transMedian * 1.15 && row.avgTicket < atvMedian * 0.92) pattern = 'Volume Seller';
       else if (row.avgTicket >= atvMedian * 1.08 && offerBehavior === 'بيع مباشر قوي') pattern = 'Premium Seller';
       else if ((duvetScore ?? 0) === 2 && (padScore ?? 0) <= 1 && (pillowScore ?? 0) <= 1) pattern = 'Duvet Seller';
-      else if ((padScore ?? 0) === 2 || (pillowScore ?? 0) === 2) pattern = 'Add-on Seller';
+      else if ((padScore ?? 0) === 2 || (pillowScore ?? 0) === 2 || supportiveMix) pattern = 'Add-on Seller';
       else if (hasProductData && ((padScore ?? 1) === 0 || (pillowScore ?? 1) === 0)) pattern = 'Weak Attach';
       else if (atvScore === 0) pattern = 'Weak Basket';
 
@@ -730,7 +824,7 @@ export default function EmployeeAnalysisPage() {
       const padQuality = !hasProductData ? 'لا توجد بيانات' : classifyPadQuality(weightedPadAttach);
       const padFocus = !hasProductData ? 'لا توجد بيانات' : focusLabel([{ label: 'منخفض', value: p.kingPadModels.model5 + p.fullPadModels.model5 }, { label: 'متوسط', value: p.kingPadModels.model10 + p.fullPadModels.model10 }, { label: 'مرتفع', value: p.kingPadModels.model15 + p.fullPadModels.model15 }]);
       const pillowStatus = !hasProductData ? 'لا توجد بيانات' : classifyPillowStatus(weightedPillowAttach);
-      const strengths = [{ label: 'على مسار الهدف', score: paceScore }, { label: 'ATV فوق متوسط الفرع', score: atvScore }, { label: 'بيع اللحاف', score: duvetScore ?? -1 }, { label: 'ربط اللباد', score: padScore ?? -1 }, { label: 'إكمال المخدة', score: pillowScore ?? -1 }, { label: offerBehavior === 'بيع مباشر قوي' ? 'بيع مباشر قوي' : 'استخدام جيد للعروض', score: offerScore ?? -1 }, { label: periodPerformance === 'يتحسن عبر الفترات' ? 'تحسن عبر الفترات' : 'استقرار الأداء', score: consistencyScore }].sort((a, b) => b.score - a.score);
+      const strengths = [{ label: 'على مسار الهدف', score: paceScore }, { label: 'ATV فوق متوسط الفرع', score: atvScore }, { label: 'بيع اللحاف', score: duvetScore ?? -1 }, { label: 'ربط اللباد', score: padScore ?? -1 }, { label: 'إكمال المخدة', score: pillowScore ?? -1 }, { label: mixSummary.diversityLabel === 'تنوع صحي' ? 'تنوع بيعي صحي' : 'دعم من منتجات إضافية', score: mixScore ?? -1 }, { label: offerBehavior === 'بيع مباشر قوي' ? 'بيع مباشر قوي' : 'استخدام جيد للعروض', score: offerScore ?? -1 }, { label: periodPerformance === 'يتحسن عبر الفترات' ? 'تحسن عبر الفترات' : 'استقرار الأداء', score: consistencyScore }].sort((a, b) => b.score - a.score);
       const strength = strengths[0]?.label || 'أداء متوازن';
 
       let weakness = 'الثبات';
@@ -738,12 +832,14 @@ export default function EmployeeAnalysisPage() {
       else if (targetPaceStatus === 'significantly_behind') weakness = 'وضع الهدف الحالي';
       else if (offerBehavior === 'اعتماد زائد على العروض') weakness = 'الاعتماد على العروض';
       else if (offerBehavior === 'استخدام ضعيف للعروض') weakness = 'الاعتماد على العروض';
+      else if (hasProductData && narrowMix) weakness = 'تنوع المنتجات';
       else if (hasProductData && pillowStatus === 'ضعيف') weakness = 'إكمال المخدة';
       else if (hasProductData && padQuality === 'ضعيف') weakness = 'تركيز اللباد';
       else if (hasProductData && duvetStatus === 'ضعيف') weakness = 'بيع اللحاف';
       else if (atvVsStore === 'below_store_average') weakness = 'ATV';
 
       const actionMap: Record<string, string> = {
+        'تنوع المنتجات': 'توسيع المزج البيعي وعدم الاكتفاء بفئة واحدة فقط',
         'وضع المطلوب اليومي': 'رفع الإغلاق اليومي ومتابعة المطلوب المتبقي',
         'وضع الهدف الحالي': 'زيادة الدفع اليومي للوصول إلى النسبة المطلوبة',
         'الاعتماد على العروض': 'تقليل الاعتماد على العرض ودعم البيع المباشر',
@@ -875,7 +971,7 @@ export default function EmployeeAnalysisPage() {
         body: JSON.stringify({
           filters: { manager: effectiveManager, city, branch, customStart, customEnd, productsPeriodKey },
           summary: { employees: topCards.summary.employees, sales: Math.round(topCards.summary.sales), transactions: Math.round(topCards.summary.trans), avgTicket: Number(topCards.summary.avgTicket.toFixed(1)) },
-          rows: sortedRows.map((row) => ({ employee: row.name, employeeId: row.id, store: row.storeName, level: row.level, pattern: row.pattern, structure: row.sellingStructure, strength: row.strength, weakness: row.weakness, action: row.action, duvetStatus: row.duvetStatus, padFocus: row.padFocus, padQuality: row.padQuality, pillowStatus: row.pillowStatus, offerBehavior: row.offerBehavior, avgTicket: row.avgTicket, atvVsStore: row.atvVsStoreLabel, sales: row.sales, transactions: row.trans, duvetTotal: row.totalDuvet, padAttachPct: row.weightedPadAttach, pillowAttachPct: row.weightedPillowAttach, offerFocusPct: row.productInsights.offerFocusPct, targetAchievementPct: row.targetAchievementPct, targetPaceStatus: row.targetPaceLabel, dailyRiskStatus: row.dailyRiskLabel, avgDailySales: row.avgDailySales, requiredRemainingDailySales: row.requiredRemainingDailySales, periodPerformance: row.periodPerformance, periodBuckets: row.periodBuckets, duvetKingBands: row.productInsights.kingDuvetBands, duvetFullBands: row.productInsights.fullDuvetBands, padKingModels: row.productInsights.kingPadModels, padFullModels: row.productInsights.fullPadModels, pillowKing: row.productInsights.kingPillowDetail, pillowFull: row.productInsights.fullPillowDetail, topOffers: row.productInsights.offerTopItems })),
+          rows: sortedRows.map((row) => ({ employee: row.name, employeeId: row.id, store: row.storeName, level: row.level, pattern: row.pattern, structure: row.sellingStructure, strength: row.strength, weakness: row.weakness, action: row.action, duvetStatus: row.duvetStatus, padFocus: row.padFocus, padQuality: row.padQuality, pillowStatus: row.pillowStatus, offerBehavior: row.offerBehavior, avgTicket: row.avgTicket, atvVsStore: row.atvVsStoreLabel, sales: row.sales, transactions: row.trans, duvetTotal: row.totalDuvet, padAttachPct: row.weightedPadAttach, pillowAttachPct: row.weightedPillowAttach, offerFocusPct: row.productInsights.offerFocusPct, targetAchievementPct: row.targetAchievementPct, targetPaceStatus: row.targetPaceLabel, dailyRiskStatus: row.dailyRiskLabel, avgDailySales: row.avgDailySales, requiredRemainingDailySales: row.requiredRemainingDailySales, periodPerformance: row.periodPerformance, periodBuckets: row.periodBuckets, duvetKingBands: row.productInsights.kingDuvetBands, duvetFullBands: row.productInsights.fullDuvetBands, padKingModels: row.productInsights.kingPadModels, padFullModels: row.productInsights.fullPadModels, pillowKing: row.productInsights.kingPillowDetail, pillowFull: row.productInsights.fullPillowDetail, topOffers: row.productInsights.offerTopItems, productMix: row.productInsights.mixSummary, padKingPriceFocus: row.productInsights.kingPadModels.priceFocus, padFullPriceFocus: row.productInsights.fullPadModels.priceFocus })),
         }),
       });
       if (!res.ok) throw new Error();
