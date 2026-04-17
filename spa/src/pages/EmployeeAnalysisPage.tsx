@@ -1,10 +1,28 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { getCurrentUser } from '../auth/storage';
-import { loadEmployeeProductsData, loadEmployeesData, loadManagementData } from '../services/upstreamData';
+import { loadEmployeeProductsData, loadEmployeesData, loadManagementData, loadOffersData } from '../services/upstreamData';
 import { mtdRangeThroughYesterday } from '../utils/mtdDateRange';
 import { getEmployeeTargetForEffectiveDate, sumEmployeeTargetForDateRange } from '../utils/march2026Targets';
 import { buildBucketsForDateRange, daysInclusiveYMD } from '../utils/targetSplitPeriods';
+
+const PAD_MODEL_CODE_MAP: Record<string, 5 | 10 | 15> = {
+  '9300': 5,
+  '9611': 10,
+  '9629': 15,
+  '130010008': 5,
+  '130010023': 10,
+  '130010024': 15,
+};
+
+const PAD_NAME_MODEL_MAP: Array<{ pattern: RegExp; model: 5 | 10 | 15 }> = [
+  { pattern: /cloud\s*drea?m\s*15cm/i, model: 15 },
+  { pattern: /cloud\s*drea?m/i, model: 10 },
+  { pattern: /just\s*relax/i, model: 5 },
+  { pattern: /15\s*cm/i, model: 15 },
+  { pattern: /10\s*cm/i, model: 10 },
+  { pattern: /5\s*cm/i, model: 5 },
+];
 
 function safeNum(x: unknown) {
   const n = Number(x);
@@ -35,6 +53,10 @@ function normText(v: string) {
     .replace(/ى/g, 'ي')
     .replace(/ـ/g, '')
     .trim();
+}
+
+function normalizeProductKey(raw: unknown) {
+  return String(raw || '').trim().toLowerCase().replace(/\s+/g, '');
 }
 
 function normalizeEmpId(raw: unknown) {
@@ -89,15 +111,56 @@ function isOfferLikeItem(name: string) {
   return t.includes('عرض') || t.includes('offer') || t.includes('promo') || t.includes('special');
 }
 
+function parsePadModelFromItem(item: any): 5 | 10 | 15 | null {
+  const keys = [
+    item?.alias,
+    item?.dynamic_code,
+    item?.dynamicCode,
+    item?.old_code,
+    item?.oldCode,
+    item?.new_code,
+    item?.newCode,
+    item?.product_code,
+    item?.productCode,
+    item?.code,
+    item?.id,
+  ]
+    .map(normalizeProductKey)
+    .filter(Boolean);
+
+  for (const key of keys) {
+    if (PAD_MODEL_CODE_MAP[key]) return PAD_MODEL_CODE_MAP[key];
+  }
+
+  const normalizedName = normalizeProductKey(normText(String(item?.name || '')));
+  for (const rule of PAD_NAME_MODEL_MAP) {
+    if (rule.pattern.test(normalizedName)) return rule.model;
+  }
+
+  return parsePadModel(String(item?.name || ''));
+}
+
+function targetPaceLabel(status: string) {
+  if (status === 'on_track') return 'على مسار الهدف';
+  if (status === 'slightly_behind') return 'أقل من المطلوب قليلاً';
+  return 'أقل من المطلوب بشكل واضح';
+}
+
+function dailyNeedLabel(status: string) {
+  if (status === 'manageable') return 'المطلوب اليومي مناسب';
+  if (status === 'needs_push') return 'يحتاج دفع يومي';
+  return 'المطلوب اليومي مرتفع';
+}
+
 function formatMetricValue(value: number | null, hasData: boolean, suffix = '') {
   if (!hasData || value == null || !Number.isFinite(value)) return 'لا توجد بيانات';
   return `${value.toFixed(0)}${suffix}`;
 }
 
 function chipTone(kind: string) {
-  if (/(قوي|ممتاز|A|Premium|Balanced|بيع مباشر|فوق|منظ|on track|manageable|healthy)/i.test(kind)) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  if (/(متوسط|طبيعي|B|Volume|Duvet|Add-on|متوازن|near|slightly|push|average)/i.test(kind)) return 'bg-amber-50 text-amber-800 border-amber-200';
-  if (/(ضعيف|C|Weak|اعتماد|نشاط|below|behind|risky|dependence|مشتت)/i.test(kind)) return 'bg-red-50 text-red-700 border-red-200';
+  if (/(قوي|ممتاز|A|Premium|Balanced|بيع مباشر|فوق|منظ|بيع منظم|على مسار الهدف|مناسب|healthy)/i.test(kind)) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (/(متوسط|طبيعي|B|Volume|Duvet|Add-on|متوازن|near|slightly|push|average|قليلاً|يحتاج دفع)/i.test(kind)) return 'bg-amber-50 text-amber-800 border-amber-200';
+  if (/(ضعيف|C|Weak|اعتماد|نشاط|below|behind|risky|dependence|مشتت|غير متوازن|مرتفع|واضح)/i.test(kind)) return 'bg-red-50 text-red-700 border-red-200';
   return 'bg-neutral-100 text-neutral-700 border-neutral-200';
 }
 
@@ -251,6 +314,7 @@ export default function EmployeeAnalysisPage() {
   const user = getCurrentUser();
   const [empRaw, setEmpRaw] = useState<any>(null);
   const [empProductsRaw, setEmpProductsRaw] = useState<any>(null);
+  const [offersRaw, setOffersRaw] = useState<any>(null);
   const [mgmt, setMgmt] = useState<any>(null);
   const [manager, setManager] = useState('all');
   const [branch, setBranch] = useState('all');
@@ -265,10 +329,11 @@ export default function EmployeeAnalysisPage() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   useEffect(() => {
-    Promise.all([loadEmployeesData(), loadManagementData(), loadEmployeeProductsData()]).then(([e, m, ep]) => {
+    Promise.all([loadEmployeesData(), loadManagementData(), loadEmployeeProductsData(), loadOffersData()]).then(([e, m, ep, offers]) => {
       setEmpRaw(e);
       setMgmt(m);
       setEmpProductsRaw(ep);
+      setOffersRaw(offers);
       const r = mtdRangeThroughYesterday(new Date());
       setCustomStart(r.start);
       setCustomEnd(r.end);
@@ -370,6 +435,39 @@ export default function EmployeeAnalysisPage() {
 
     const periods = empProductsRaw?.periods || {};
     const scoped = periods?.[productsPeriodKey] || periods?.mtd || {};
+    const rawOffers = Array.isArray(offersRaw) ? offersRaw : Array.isArray(offersRaw?.offers) ? offersRaw.offers : [];
+    const offerProductIndex = new Map<string, Set<string>>();
+
+    rawOffers.forEach((offer: any) => {
+      const offerName = String(offer?.name || offer?.offer_name || offer?.id || offer?.code || '').trim();
+      const aggregatedItems = Array.isArray(offer?.aggregatedItems) ? offer.aggregatedItems : [];
+      if (!offerName || !aggregatedItems.length) return;
+
+      aggregatedItems.forEach((item: any) => {
+        const keys = [
+          item?.alias,
+          item?.dynamic_code,
+          item?.dynamicCode,
+          item?.old_code,
+          item?.oldCode,
+          item?.new_code,
+          item?.newCode,
+          item?.product_code,
+          item?.productCode,
+          item?.code,
+          item?.id,
+          normText(String(item?.name || '')),
+        ]
+          .map(normalizeProductKey)
+          .filter(Boolean);
+
+        keys.forEach((key) => {
+          const linked = offerProductIndex.get(key) || new Set<string>();
+          linked.add(offerName);
+          offerProductIndex.set(key, linked);
+        });
+      });
+    });
 
     Array.from(byEmp.entries()).forEach(([empId, row]) => {
       const idNorm = normalizeEmpId(empId);
@@ -412,20 +510,49 @@ export default function EmployeeAnalysisPage() {
           else p.fullDuvetBands.high += qty;
         }
         if (cat === 'king_pad') {
-          const model = parsePadModel(name);
+          const model = parsePadModelFromItem(it);
           if (model === 5) p.kingPadModels.model5 += qty;
           else if (model === 10) p.kingPadModels.model10 += qty;
           else if (model === 15) p.kingPadModels.model15 += qty;
           else p.kingPadModels.unclassified += qty;
         }
         if (cat === 'full_pad') {
-          const model = parsePadModel(name);
+          const model = parsePadModelFromItem(it);
           if (model === 5) p.fullPadModels.model5 += qty;
           else if (model === 10) p.fullPadModels.model10 += qty;
           else if (model === 15) p.fullPadModels.model15 += qty;
           else p.fullPadModels.unclassified += qty;
         }
-        if (isOfferLikeItem(name)) {
+        const offerKeys = [
+          it?.alias,
+          it?.dynamic_code,
+          it?.dynamicCode,
+          it?.old_code,
+          it?.oldCode,
+          it?.new_code,
+          it?.newCode,
+          it?.product_code,
+          it?.productCode,
+          it?.code,
+          it?.id,
+          normText(name),
+        ]
+          .map(normalizeProductKey)
+          .filter(Boolean);
+        const linkedOfferNames = Array.from(
+          offerKeys.reduce((acc, key) => {
+            const linked = offerProductIndex.get(key);
+            if (linked) linked.forEach((offerName) => acc.add(offerName));
+            return acc;
+          }, new Set<string>()),
+        );
+
+        if (linkedOfferNames.length) {
+          const distributedQty = qty / linkedOfferNames.length;
+          linkedOfferNames.forEach((offerName) => {
+            offerMap.set(offerName, (offerMap.get(offerName) || 0) + distributedQty);
+          });
+        } else if (isOfferLikeItem(name)) {
           offerMap.set(name, (offerMap.get(name) || 0) + qty);
         }
       });
@@ -483,7 +610,7 @@ export default function EmployeeAnalysisPage() {
       elapsedDays: daysInclusiveYMD(monthStart, end),
       totalMonthDays: daysInMonthFromYmd(end),
     };
-  }, [branch, city, customEnd, customStart, effectiveManager, empProductsRaw, empRaw, mgmt, productsPeriodKey]);
+  }, [branch, city, customEnd, customStart, effectiveManager, empProductsRaw, empRaw, mgmt, offersRaw, productsPeriodKey]);
 
   const decisionRows = useMemo(() => {
     if (!derived.rows.length || !derived.monthStart || !derived.paceEnd) return [];
@@ -520,13 +647,13 @@ export default function EmployeeAnalysisPage() {
       const targetAchievementPct = monthTarget > 0 ? (row.monthSales / monthTarget) * 100 : 0;
       const expectedPacePct = derived.totalMonthDays > 0 ? (derived.elapsedDays / derived.totalMonthDays) * 100 : 0;
       const targetPaceStatus = targetAchievementPct >= expectedPacePct * 0.98 ? 'on_track' : targetAchievementPct >= expectedPacePct * 0.82 ? 'slightly_behind' : 'significantly_behind';
-      const targetPaceLabel = targetPaceStatus === 'on_track' ? 'on track' : targetPaceStatus === 'slightly_behind' ? 'slightly behind' : 'significantly behind';
+      const targetPaceLabelText = targetPaceLabel(targetPaceStatus);
       const remainingDays = Math.max(0, derived.totalMonthDays - derived.elapsedDays);
       const avgDailySales = derived.elapsedDays > 0 ? row.monthSales / derived.elapsedDays : 0;
       const remainingTarget = Math.max(0, monthTarget - row.monthSales);
       const requiredRemainingDailySales = remainingDays > 0 ? remainingTarget / remainingDays : 0;
       const dailyRiskStatus = remainingDays === 0 || remainingTarget <= 0 ? 'manageable' : requiredRemainingDailySales <= avgDailySales * 1.15 ? 'manageable' : requiredRemainingDailySales <= avgDailySales * 1.45 ? 'needs_push' : 'risky';
-      const dailyRiskLabel = dailyRiskStatus === 'manageable' ? 'manageable' : dailyRiskStatus === 'needs_push' ? 'needs push' : 'risky';
+      const dailyRiskLabelText = dailyNeedLabel(dailyRiskStatus);
 
       const bucketSnapshots: PeriodSnapshot[] = buckets.map((bucket, index) => {
         const effectiveEnd = clampYmd(bucket.end, derived.paceEnd);
@@ -542,10 +669,10 @@ export default function EmployeeAnalysisPage() {
       let offerBehavior = hasProductData ? 'متوازن' : 'لا توجد بيانات';
       let offerScore: number | null = hasProductData ? 1 : null;
       if (hasProductData) {
-        if (p.offerFocusPct >= 35 && row.sales >= salesMedian) { offerBehavior = 'استفادة صحية من العروض'; offerScore = 2; }
-        else if (p.offerFocusPct >= 35 && row.sales < salesMedian * 0.9) { offerBehavior = 'اعتماد على العروض'; offerScore = 0; }
+        if (p.offerFocusPct >= 35 && row.sales >= salesMedian) { offerBehavior = 'استخدام جيد للعروض'; offerScore = 2; }
+        else if (p.offerFocusPct >= 35 && row.sales < salesMedian * 0.9) { offerBehavior = 'اعتماد زائد على العروض'; offerScore = 0; }
         else if (p.offerFocusPct < 18 && row.sales >= salesMedian) { offerBehavior = 'بيع مباشر قوي'; offerScore = 2; }
-        else if (p.offerFocusPct < 18 && row.sales < salesMedian * 0.9) { offerBehavior = 'نشاط تجاري ضعيف'; offerScore = 0; }
+        else if (p.offerFocusPct < 18 && row.sales < salesMedian * 0.9) { offerBehavior = 'استخدام ضعيف للعروض'; offerScore = 0; }
       }
 
       const salesScore = row.sales >= salesMedian * 1.15 ? 2 : row.sales >= salesMedian * 0.8 ? 1 : 0;
@@ -555,15 +682,15 @@ export default function EmployeeAnalysisPage() {
       const padScore = !hasProductData ? null : weightedPadAttach != null && weightedPadAttach >= 85 ? 2 : weightedPadAttach != null && weightedPadAttach >= 55 ? 1 : 0;
       const pillowScore = !hasProductData ? null : weightedPillowAttach != null && weightedPillowAttach > 100 ? 2 : weightedPillowAttach != null && weightedPillowAttach >= 70 ? 1 : 0;
       const productFocuses = [p.kingDuvetBands.focus, p.fullDuvetBands.focus, p.kingPadModels.focus, p.fullPadModels.focus].filter((focus) => focus !== 'لا توجد بيانات' && focus !== 'متوازن');
-      const scatteredSelling = offerBehavior === 'اعتماد على العروض' || periodPerformance === 'أداء متذبذب' || periodPerformance === 'بداية قوية ثم تراجع' || productFocuses.length >= 3;
-      const structuredSelling = offerBehavior !== 'اعتماد على العروض' && (padScore ?? 1) >= 1 && (pillowScore ?? 1) >= 1 && consistencyScore >= 1;
-      const sellingStructure = structuredSelling ? 'منظّم' : scatteredSelling ? 'مشتت' : 'جزئي';
+      const scatteredSelling = offerBehavior === 'اعتماد زائد على العروض' || periodPerformance === 'أداء متذبذب' || periodPerformance === 'بداية قوية ثم تراجع' || productFocuses.length >= 3;
+      const structuredSelling = offerBehavior !== 'اعتماد زائد على العروض' && (padScore ?? 1) >= 1 && (pillowScore ?? 1) >= 1 && consistencyScore >= 1;
+      const sellingStructure = structuredSelling ? 'بيع منظم' : scatteredSelling ? 'البيع غير متوازن' : 'بيع جزئي';
       const weightedScoreParts = [salesScore, atvScore, paceScore, dailyRiskStatus === 'manageable' ? 2 : dailyRiskStatus === 'needs_push' ? 1 : 0, consistencyScore, duvetScore, padScore, pillowScore, offerScore].filter((value) => value !== null) as number[];
       const score = weightedScoreParts.reduce((sum, value) => sum + value, 0) / Math.max(weightedScoreParts.length, 1);
       const level = score >= 1.45 ? 'A' : score < 0.9 ? 'C' : 'B';
       const levelLabel = level === 'A' ? 'A - قوي' : level === 'B' ? 'B - متوسط' : 'C - يحتاج تدخل';
       let pattern = 'Balanced Seller';
-      if (offerBehavior === 'اعتماد على العروض') pattern = 'Offer Driven';
+      if (offerBehavior === 'اعتماد زائد على العروض') pattern = 'Offer Driven';
       else if (row.trans >= transMedian * 1.15 && row.avgTicket < atvMedian * 0.92) pattern = 'Volume Seller';
       else if (row.avgTicket >= atvMedian * 1.08 && offerBehavior === 'بيع مباشر قوي') pattern = 'Premium Seller';
       else if ((duvetScore ?? 0) === 2 && (padScore ?? 0) <= 1 && (pillowScore ?? 0) <= 1) pattern = 'Duvet Seller';
@@ -575,24 +702,23 @@ export default function EmployeeAnalysisPage() {
       const padQuality = !hasProductData ? 'لا توجد بيانات' : classifyPadQuality(weightedPadAttach);
       const padFocus = !hasProductData ? 'لا توجد بيانات' : focusLabel([{ label: 'منخفض', value: p.kingPadModels.model5 + p.fullPadModels.model5 }, { label: 'متوسط', value: p.kingPadModels.model10 + p.fullPadModels.model10 }, { label: 'مرتفع', value: p.kingPadModels.model15 + p.fullPadModels.model15 }]);
       const pillowStatus = !hasProductData ? 'لا توجد بيانات' : classifyPillowStatus(weightedPillowAttach);
-      const strengths = [{ label: 'تحقيق الإيقاع المستهدف', score: paceScore }, { label: 'ATV فوق متوسط الفرع', score: atvScore }, { label: 'بيع اللحاف', score: duvetScore ?? -1 }, { label: 'ربط اللباد', score: padScore ?? -1 }, { label: 'إكمال المخدة', score: pillowScore ?? -1 }, { label: offerBehavior === 'بيع مباشر قوي' ? 'بيع مباشر قوي' : 'استخدام صحي للعروض', score: offerScore ?? -1 }, { label: periodPerformance === 'يتحسن عبر الفترات' ? 'تحسن عبر الفترات' : 'استقرار الأداء', score: consistencyScore }].sort((a, b) => b.score - a.score);
+      const strengths = [{ label: 'على مسار الهدف', score: paceScore }, { label: 'ATV فوق متوسط الفرع', score: atvScore }, { label: 'بيع اللحاف', score: duvetScore ?? -1 }, { label: 'ربط اللباد', score: padScore ?? -1 }, { label: 'إكمال المخدة', score: pillowScore ?? -1 }, { label: offerBehavior === 'بيع مباشر قوي' ? 'بيع مباشر قوي' : 'استخدام جيد للعروض', score: offerScore ?? -1 }, { label: periodPerformance === 'يتحسن عبر الفترات' ? 'تحسن عبر الفترات' : 'استقرار الأداء', score: consistencyScore }].sort((a, b) => b.score - a.score);
       const strength = strengths[0]?.label || 'أداء متوازن';
 
       let weakness = 'الثبات';
-      if (dailyRiskStatus === 'risky') weakness = 'الخطر اليومي';
-      else if (targetPaceStatus === 'significantly_behind') weakness = 'إيقاع الهدف';
-      else if (offerBehavior === 'اعتماد على العروض') weakness = 'الاعتماد على العروض';
-      else if (offerBehavior === 'نشاط تجاري ضعيف') weakness = 'النشاط التجاري';
+      if (dailyRiskStatus === 'risky') weakness = 'وضع المطلوب اليومي';
+      else if (targetPaceStatus === 'significantly_behind') weakness = 'وضع الهدف الحالي';
+      else if (offerBehavior === 'اعتماد زائد على العروض') weakness = 'الاعتماد على العروض';
+      else if (offerBehavior === 'استخدام ضعيف للعروض') weakness = 'الاعتماد على العروض';
       else if (hasProductData && pillowStatus === 'ضعيف') weakness = 'إكمال المخدة';
       else if (hasProductData && padQuality === 'ضعيف') weakness = 'تركيز اللباد';
       else if (hasProductData && duvetStatus === 'ضعيف') weakness = 'بيع اللحاف';
       else if (atvVsStore === 'below_store_average') weakness = 'ATV';
 
       const actionMap: Record<string, string> = {
-        'الخطر اليومي': 'رفع الإغلاق اليومي ومتابعة المطلوب المتبقي',
-        'إيقاع الهدف': 'زيادة الدفع اليومي للوصول إلى إيقاع الهدف',
+        'وضع المطلوب اليومي': 'رفع الإغلاق اليومي ومتابعة المطلوب المتبقي',
+        'وضع الهدف الحالي': 'زيادة الدفع اليومي للوصول إلى النسبة المطلوبة',
         'الاعتماد على العروض': 'تقليل الاعتماد على العرض ودعم البيع المباشر',
-        'النشاط التجاري': 'متابعة يومية على النشاط التجاري والتواصل',
         'إكمال المخدة': 'زيادة إكمال المخدة مع كل لحاف',
         'تركيز اللباد': 'دفع مزج 10 و15 سم مع كل فرصة مناسبة',
         'بيع اللحاف': 'تنشيط بيع اللحاف بسلم سعري أوضح',
@@ -626,12 +752,12 @@ export default function EmployeeAnalysisPage() {
         targetAchievementPct,
         expectedPacePct,
         targetPaceStatus,
-        targetPaceLabel,
+        targetPaceLabel: targetPaceLabelText,
         avgDailySales,
         remainingTarget,
         requiredRemainingDailySales,
         dailyRiskStatus,
-        dailyRiskLabel,
+        dailyRiskLabel: dailyRiskLabelText,
         periodPerformance,
         periodBuckets: bucketSnapshots,
         quickSummary: `${levelLabel} | ${sellingStructure} | ${atvVsStoreLabel} | ${offerBehavior}`,
@@ -727,7 +853,7 @@ export default function EmployeeAnalysisPage() {
     }
   }
 
-  if (!empRaw || !mgmt || !empProductsRaw) return <div className="p-6">جارٍ تحميل بيانات تحليل الموظفين...</div>;
+  if (!empRaw || !mgmt || !empProductsRaw || !offersRaw) return <div className="p-6">جارٍ تحميل بيانات تحليل الموظفين...</div>;
 
   return (
     <div className="space-y-5 pb-16">
@@ -782,8 +908,8 @@ export default function EmployeeAnalysisPage() {
                 <th className="px-3 py-3 text-center">نقطة القوة</th>
                 <th className="px-3 py-3 text-center">نقطة الضعف</th>
                 <th className="px-3 py-3 text-center"><div className="flex flex-col items-center gap-1"><div className="font-bold">اللحاف</div><button type="button" className="text-[11px] text-neutral-500 underline" onClick={() => toggleSort('sales')}>ترتيب بالمبيعات</button></div></th>
-                <th className="px-3 py-3 text-center"><div className="flex flex-col items-center gap-1"><div className="font-bold">اللباد</div><button type="button" className="text-[11px] text-neutral-500 underline" onClick={() => toggleSort('dailyRisk')}>ترتيب بالخطر اليومي</button></div></th>
-                <th className="px-3 py-3 text-center"><div className="flex flex-col items-center gap-1"><div className="font-bold">المخدة</div><button type="button" className="text-[11px] text-neutral-500 underline" onClick={() => toggleSort('targetPace')}>ترتيب بإيقاع الهدف</button></div></th>
+                <th className="px-3 py-3 text-center"><div className="flex flex-col items-center gap-1"><div className="font-bold">اللباد</div><button type="button" className="text-[11px] text-neutral-500 underline" onClick={() => toggleSort('dailyRisk')}>ترتيب بوضع المطلوب اليومي</button></div></th>
+                <th className="px-3 py-3 text-center"><div className="flex flex-col items-center gap-1"><div className="font-bold">المخدة</div><button type="button" className="text-[11px] text-neutral-500 underline" onClick={() => toggleSort('targetPace')}>ترتيب بوضع الهدف الحالي</button></div></th>
                 <th className="px-3 py-3 text-center"><SortableHeader label="متوسط الفاتورة" sortKey="avgTicket" activeKey={sortKey} direction={sortDir} onClick={toggleSort} /></th>
                 <th className="px-3 py-3 text-center"><div className="flex flex-col items-center gap-1"><div className="font-bold">الإجراء</div><button type="button" className="text-[11px] text-neutral-500 underline" onClick={() => toggleSort('targetAchievement')}>ترتيب بالإنجاز</button></div></th>
               </tr>
@@ -804,7 +930,7 @@ export default function EmployeeAnalysisPage() {
                     <td className="px-3 py-3 text-center"><div className="font-black text-neutral-900">{formatSAR(row.avgTicket)}</div><div className="text-xs text-neutral-500">{row.atvVsStoreLabel}</div></td>
                     <td className="px-3 py-3 text-center"><div className="mx-auto max-w-[180px] text-xs font-semibold leading-5 text-neutral-700">{row.action}<div className="text-neutral-500">الإنجاز: {row.targetAchievementPct.toFixed(1)}%</div></div></td>
                   </tr>
-                  {expandedId === row.id ? <tr className="border-t border-orange-100 bg-orange-50/30"><td colSpan={11} className="px-4 py-4"><div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4"><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="text-xs text-neutral-500">المبيعات / العمليات / القطع</div><div className="mt-1 font-black text-neutral-900">{formatSAR(row.sales)}</div><div className="mt-1 text-xs text-neutral-500">العمليات: {Math.round(row.trans).toLocaleString()}</div><div className="text-xs text-neutral-500">القطع: {Math.round(row.items).toLocaleString()}</div><div className="mt-2 rounded-lg bg-neutral-50 p-2 text-xs text-neutral-600">{row.quickSummary}</div></div><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="text-xs text-neutral-500">الهدف والإيقاع والخطر اليومي</div><div className="mt-2 flex flex-wrap gap-2"><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.targetPaceLabel)}`}>{row.targetPaceLabel}</span><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.dailyRiskLabel)}`}>{row.dailyRiskLabel}</span></div><div className="mt-2 space-y-1 text-xs text-neutral-600"><div>تحقيق الهدف: {row.targetAchievementPct.toFixed(1)}%</div><div>الإيقاع المتوقع: {row.expectedPacePct.toFixed(1)}%</div><div>متوسط البيع اليومي: {formatSAR(row.avgDailySales)}</div><div>المطلوب اليومي المتبقي: {formatSAR(row.requiredRemainingDailySales)}</div></div></div><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="text-xs text-neutral-500">المقارنة مع الفرع والفترات</div><div className="mt-2 flex flex-wrap gap-2"><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.atvVsStoreLabel)}`}>{row.atvVsStoreLabel}</span><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.periodPerformance)}`}>{row.periodPerformance}</span></div><div className="mt-2 space-y-1 text-xs text-neutral-600">{row.periodBuckets.length ? row.periodBuckets.map((bucket: PeriodSnapshot) => <div key={bucket.label} className="flex items-center justify-between rounded-lg bg-neutral-50 px-2 py-1"><span>{bucket.label}</span><span>{bucket.achievementPct.toFixed(0)}% - {periodStrengthLabel(bucket.achievementPct)}</span></div>) : <div>لا توجد بيانات فترات</div>}</div></div><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="text-xs text-neutral-500">ملخص سريع</div><div className="mt-2 space-y-2 text-xs text-neutral-600"><div><span className="font-bold text-neutral-900">القوة:</span> {row.strength}</div><div><span className="font-bold text-neutral-900">الضعف:</span> {row.weakness}</div><div><span className="font-bold text-neutral-900">البنية البيعية:</span> {row.sellingStructure}</div><div><span className="font-bold text-neutral-900">سلوك العروض:</span> {row.offerBehavior}</div><div><span className="font-bold text-neutral-900">الإجراء:</span> {row.action}</div></div></div></div><div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2"><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="mb-2 text-sm font-bold text-neutral-900">تفاصيل اللحاف</div><div className="grid grid-cols-1 gap-3 md:grid-cols-2"><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">King</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-1 space-y-1 text-xs text-neutral-600"><div>Low 99-300: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.low) : 'لا توجد بيانات'}</div><div>Medium 301-600: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.medium) : 'لا توجد بيانات'}</div><div>High +600: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.high) : 'لا توجد بيانات'}</div><div className="font-bold text-neutral-900">التركيز: {row.hasProductData ? row.productInsights.kingDuvetBands.focus : 'لا توجد بيانات'}</div></div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">Full</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-1 space-y-1 text-xs text-neutral-600"><div>Low حتى 300: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.low) : 'لا توجد بيانات'}</div><div>Medium 301-499: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.medium) : 'لا توجد بيانات'}</div><div>High 500+: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.high) : 'لا توجد بيانات'}</div><div className="font-bold text-neutral-900">التركيز: {row.hasProductData ? row.productInsights.fullDuvetBands.focus : 'لا توجد بيانات'}</div></div></div></div></div><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="mb-2 text-sm font-bold text-neutral-900">تفاصيل اللباد</div><div className="grid grid-cols-1 gap-3 md:grid-cols-2"><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">King</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-1 space-y-1 text-xs text-neutral-600"><div>5 سم: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.model5) : 'لا توجد بيانات'}</div><div>10 سم: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.model10) : 'لا توجد بيانات'}</div><div>15 سم: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.model15) : 'لا توجد بيانات'}</div><div>الربط: {formatMetricValue(row.productInsights.kingPadModels.attachPct, row.hasProductData, '%')}</div><div>التركيز: {row.hasProductData ? row.productInsights.kingPadModels.focus : 'لا توجد بيانات'}</div><div>الجودة: {row.hasProductData ? row.productInsights.kingPadModels.quality : 'لا توجد بيانات'}</div>{row.hasProductData && row.productInsights.kingPadModels.unclassified > 0 ? <div>غير محدد: {Math.round(row.productInsights.kingPadModels.unclassified)}</div> : null}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">Full</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-1 space-y-1 text-xs text-neutral-600"><div>5 سم: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.model5) : 'لا توجد بيانات'}</div><div>10 سم: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.model10) : 'لا توجد بيانات'}</div><div>15 سم: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.model15) : 'لا توجد بيانات'}</div><div>الربط: {formatMetricValue(row.productInsights.fullPadModels.attachPct, row.hasProductData, '%')}</div><div>التركيز: {row.hasProductData ? row.productInsights.fullPadModels.focus : 'لا توجد بيانات'}</div><div>الجودة: {row.hasProductData ? row.productInsights.fullPadModels.quality : 'لا توجد بيانات'}</div>{row.hasProductData && row.productInsights.fullPadModels.unclassified > 0 ? <div>غير محدد: {Math.round(row.productInsights.fullPadModels.unclassified)}</div> : null}</div></div></div></div></div><div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-3"><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="mb-2 text-sm font-bold text-neutral-900">تفاصيل المخدة</div><div className="space-y-2 text-xs text-neutral-600"><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">King</div><div>الإجمالي: {row.hasProductData ? Math.round(row.productInsights.kingPillowDetail.total) : 'لا توجد بيانات'}</div><div>الربط: {formatMetricValue(row.productInsights.kingPillowDetail.attachPct, row.hasProductData, '%')}</div><div>الحالة: {row.hasProductData ? row.productInsights.kingPillowDetail.status : 'لا توجد بيانات'}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">Full</div><div>الإجمالي: {row.hasProductData ? Math.round(row.productInsights.fullPillowDetail.total) : 'لا توجد بيانات'}</div><div>الربط: {formatMetricValue(row.productInsights.fullPillowDetail.attachPct, row.hasProductData, '%')}</div><div>الحالة: {row.hasProductData ? row.productInsights.fullPillowDetail.status : 'لا توجد بيانات'}</div></div></div></div><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="mb-2 text-sm font-bold text-neutral-900">أعلى 5 عروض / عناصر عرض</div>{row.productInsights.offerTopItems.length ? <div className="space-y-2 text-xs text-neutral-600">{row.productInsights.offerTopItems.map((offer) => <div key={offer.name} className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">{offer.name}</div><div>الكمية: {Math.round(offer.qty)}</div><div>الحصة: {offer.pct.toFixed(1)}%</div></div>)}</div> : <div className="rounded-xl bg-neutral-50 p-3 text-xs text-neutral-500">لا توجد بيانات</div>}</div><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="mb-2 text-sm font-bold text-neutral-900">مؤشرات القرار</div><div className="space-y-2 text-xs text-neutral-600"><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">إيقاع الهدف</div><div>{row.targetPaceLabel}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">الخطر اليومي</div><div>{row.dailyRiskLabel}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">البنية البيعية</div><div>{row.sellingStructure}</div></div></div></div></div></td></tr> : null}
+                  {expandedId === row.id ? <tr className="border-t border-orange-100 bg-orange-50/30"><td colSpan={11} className="px-4 py-5"><div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="text-xs text-neutral-500">المبيعات / العمليات / القطع</div><div className="mt-1 font-black text-neutral-900">{formatSAR(row.sales)}</div><div className="mt-1 text-xs text-neutral-500">العمليات: {Math.round(row.trans).toLocaleString()}</div><div className="text-xs text-neutral-500">القطع: {Math.round(row.items).toLocaleString()}</div><div className="mt-3 rounded-xl bg-neutral-50 p-3 text-xs text-neutral-600">{row.quickSummary}</div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="text-xs text-neutral-500">الهدف والمطلوب اليومي</div><div className="mt-2 flex flex-wrap gap-2"><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.targetPaceLabel)}`}>{row.targetPaceLabel}</span><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.dailyRiskLabel)}`}>{row.dailyRiskLabel}</span></div><div className="mt-3 space-y-1.5 text-xs text-neutral-600"><div>نسبة الإنجاز: {row.targetAchievementPct.toFixed(1)}%</div><div>النسبة المطلوبة حتى اليوم: {row.expectedPacePct.toFixed(1)}%</div><div>متوسط البيع اليومي: {formatSAR(row.avgDailySales)}</div><div>المطلوب اليومي المتبقي: {formatSAR(row.requiredRemainingDailySales)}</div></div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="text-xs text-neutral-500">المقارنة مع الفرع والفترات</div><div className="mt-2 flex flex-wrap gap-2"><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.atvVsStoreLabel)}`}>{row.atvVsStoreLabel}</span><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.periodPerformance)}`}>{row.periodPerformance}</span></div><div className="mt-3 space-y-1.5 text-xs text-neutral-600">{row.periodBuckets.length ? row.periodBuckets.map((bucket: PeriodSnapshot) => <div key={bucket.label} className="flex items-center justify-between rounded-xl bg-neutral-50 px-3 py-2"><span>{bucket.label}</span><span>{bucket.achievementPct.toFixed(0)}% - {periodStrengthLabel(bucket.achievementPct)}</span></div>) : <div>لا توجد بيانات فترات</div>}</div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="text-xs text-neutral-500">ملخص سريع</div><div className="mt-3 space-y-2 text-xs text-neutral-600"><div><span className="font-bold text-neutral-900">القوة:</span> {row.strength}</div><div><span className="font-bold text-neutral-900">الضعف:</span> {row.weakness}</div><div><span className="font-bold text-neutral-900">طريقة البيع:</span> {row.sellingStructure}</div><div><span className="font-bold text-neutral-900">الاعتماد على العروض:</span> {row.offerBehavior}</div><div><span className="font-bold text-neutral-900">الإجراء:</span> {row.action}</div></div></div></div><div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2"><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">تفاصيل اللحاف</div><div className="grid grid-cols-1 gap-3 md:grid-cols-2"><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">King</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-2 space-y-1 text-xs text-neutral-600"><div>منخفض 99-300: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.low) : 'لا توجد بيانات'}</div><div>متوسط 301-600: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.medium) : 'لا توجد بيانات'}</div><div>مرتفع 600+: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.high) : 'لا توجد بيانات'}</div><div className="font-bold text-neutral-900">التركيز: {row.hasProductData ? row.productInsights.kingDuvetBands.focus : 'لا توجد بيانات'}</div><div className="text-neutral-500">الحالة: {row.duvetStatus}</div></div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">Full</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-2 space-y-1 text-xs text-neutral-600"><div>منخفض حتى 300: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.low) : 'لا توجد بيانات'}</div><div>متوسط 301-499: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.medium) : 'لا توجد بيانات'}</div><div>مرتفع 500+: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.high) : 'لا توجد بيانات'}</div><div className="font-bold text-neutral-900">التركيز: {row.hasProductData ? row.productInsights.fullDuvetBands.focus : 'لا توجد بيانات'}</div><div className="text-neutral-500">الحالة: {row.duvetStatus}</div></div></div></div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">تفاصيل اللباد</div><div className="grid grid-cols-1 gap-3 md:grid-cols-2"><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">King</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-2 space-y-1 text-xs text-neutral-600"><div>5 سم: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.model5) : 'لا توجد بيانات'}</div><div>10 سم: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.model10) : 'لا توجد بيانات'}</div><div>15 سم: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.model15) : 'لا توجد بيانات'}</div><div>نسبة الربط: {formatMetricValue(row.productInsights.kingPadModels.attachPct, row.hasProductData, '%')}</div><div>التركيز: {row.hasProductData ? row.productInsights.kingPadModels.focus : 'لا توجد بيانات'}</div><div>الجودة: {row.hasProductData ? row.productInsights.kingPadModels.quality : 'لا توجد بيانات'}</div>{row.hasProductData && row.productInsights.kingPadModels.unclassified > 0 ? <div>غير محدد: {Math.round(row.productInsights.kingPadModels.unclassified)}</div> : null}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">Full</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-2 space-y-1 text-xs text-neutral-600"><div>5 سم: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.model5) : 'لا توجد بيانات'}</div><div>10 سم: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.model10) : 'لا توجد بيانات'}</div><div>15 سم: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.model15) : 'لا توجد بيانات'}</div><div>نسبة الربط: {formatMetricValue(row.productInsights.fullPadModels.attachPct, row.hasProductData, '%')}</div><div>التركيز: {row.hasProductData ? row.productInsights.fullPadModels.focus : 'لا توجد بيانات'}</div><div>الجودة: {row.hasProductData ? row.productInsights.fullPadModels.quality : 'لا توجد بيانات'}</div>{row.hasProductData && row.productInsights.fullPadModels.unclassified > 0 ? <div>غير محدد: {Math.round(row.productInsights.fullPadModels.unclassified)}</div> : null}</div></div></div></div></div><div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3"><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">تفاصيل المخدة</div><div className="rounded-xl bg-orange-50 p-3 text-xs text-neutral-700">المعيار: لكل لحاف يجب بيع 2 مخدة<div className="mt-1 text-neutral-500">طريقة الحساب: عدد المخدات ÷ (عدد اللحافات × 2)</div></div><div className="mt-3 space-y-2 text-xs text-neutral-600"><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">King</div><div>{row.hasProductData ? Math.round(row.productInsights.kingPillowDetail.total) : 'لا توجد بيانات'} مخدة / {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.total) : 'لا توجد بيانات'} لحاف</div><div>النسبة: {formatMetricValue(row.productInsights.kingPillowDetail.attachPct, row.hasProductData, '%')}</div><div>الحالة: {row.hasProductData ? row.productInsights.kingPillowDetail.status : 'لا توجد بيانات'}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">Full</div><div>{row.hasProductData ? Math.round(row.productInsights.fullPillowDetail.total) : 'لا توجد بيانات'} مخدة / {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.total) : 'لا توجد بيانات'} لحاف</div><div>النسبة: {formatMetricValue(row.productInsights.fullPillowDetail.attachPct, row.hasProductData, '%')}</div><div>الحالة: {row.hasProductData ? row.productInsights.fullPillowDetail.status : 'لا توجد بيانات'}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">الحالة النهائية</div><div>{row.pillowStatus}</div></div></div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">أعلى 5 عروض مرتبطة</div>{row.productInsights.offerTopItems.length ? <div className="space-y-2 text-xs text-neutral-600">{row.productInsights.offerTopItems.map((offer) => <div key={offer.name} className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">{offer.name}</div><div>التأثير: {Math.round(offer.qty)}</div><div>الأهمية النسبية: {offer.pct.toFixed(1)}%</div></div>)}</div> : <div className="rounded-xl bg-neutral-50 p-3 text-xs text-neutral-500">لا توجد بيانات</div>}</div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">حالة الموظف</div><div className="space-y-2 text-xs text-neutral-600"><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">وضع الهدف الحالي</div><div>{row.targetPaceLabel}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">وضع المطلوب اليومي</div><div>{row.dailyRiskLabel}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">طريقة البيع</div><div>{row.sellingStructure}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">الاعتماد على العروض</div><div>{row.offerBehavior}</div></div></div></div></div></td></tr> : null}
                 </Fragment>
               ))}
               {!sortedRows.length ? <tr><td colSpan={11} className="py-8 text-center text-neutral-400">لا توجد بيانات ضمن الفلاتر الحالية.</td></tr> : null}
