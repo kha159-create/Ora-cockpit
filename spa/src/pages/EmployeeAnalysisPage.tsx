@@ -27,10 +27,10 @@ function normText(v: string) {
   return String(v || '')
     .toLowerCase()
     .replace(/[\u064B-\u065F]/g, '')
-    .replace(/ط¥|ط£|ط¢/g, 'ط§')
-    .replace(/ط©/g, 'ظ‡')
-    .replace(/ظ‰/g, 'ظٹ')
-    .replace(/ظ€/g, '')
+    .replace(/[إأآ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/ـ/g, '')
     .trim();
 }
 
@@ -59,18 +59,23 @@ function resolveEmployeeName(rawId: string, fallbackName: string, employeeNames:
 
 function canonicalTop6Category(v: string) {
   const t = normText(v);
-  const isKing = t.includes('king') || t.includes('ظƒظٹظ†ط؛') || t.includes('ظƒظ†ط¬');
-  const isFull = t.includes('full') || t.includes('ظپظ„') || t.includes('twin') || t.includes('طھظˆظٹظ†');
-  const isPillow = t.includes('ظ…ط®ط¯ظ‡') || t.includes('ظ…ط®ط¯ط§طھ') || t.includes('pillow');
-  const isDuvet = t.includes('ظ„ط­ط§ظپ') || t.includes('ظ„ط­ط§ظپط§طھ') || t.includes('duvet');
-  const isPad = t.includes('ظ„ط¨ط§ط¯') || t.includes('ظ„ط¨ط¯ظ‡') || t.includes('mattress');
+  const isKing = t.includes('king') || t.includes('كينغ') || t.includes('كنج');
+  const isFull = t.includes('full') || t.includes('فل') || t.includes('twin') || t.includes('توين');
+  const isPillow = t.includes('مخده') || t.includes('مخدات') || t.includes('pillow');
+  const isDuvet = t.includes('لحاف') || t.includes('لحافات') || t.includes('duvet');
+  const isPad = t.includes('لباد') || t.includes('لبده') || t.includes('mattress');
   if (isDuvet && isKing) return 'king_duvet';
   if (isDuvet && isFull) return 'full_duvet';
   if (isPillow && isKing) return 'king_pillow';
-  if (isPillow && (t.includes('ط³طھط§ظ†ط¯ط±') || t.includes('standard') || isFull)) return 'full_pillow';
+  if (isPillow && (t.includes('ستاندر') || t.includes('standard') || isFull)) return 'full_pillow';
   if (isPad && isKing) return 'king_pad';
   if (isPad && isFull) return 'full_pad';
   return null;
+}
+
+function formatMetricValue(value: number, hasData: boolean, suffix = '') {
+  if (!hasData) return 'لا توجد بيانات';
+  return `${value.toFixed(0)}${suffix}`;
 }
 
 function chipTone(kind: string) {
@@ -116,6 +121,7 @@ type EmployeeRow = {
   trans: number;
   items: number;
   avgTicket: number;
+  hasProductData: boolean;
   productInsights: ProductInsights;
 };
 
@@ -193,6 +199,7 @@ export default function EmployeeAnalysisPage() {
             trans: safeNum(r?.[3]),
             items: safeNum(r?.[4]),
             avgTicket: 0,
+            hasProductData: false,
             productInsights: { kingDuvet: 0, fullDuvet: 0, kingPad: 0, fullPad: 0, kingPillow: 0, fullPillow: 0, kingAttachRate: 0, fullAttachRate: 0, kingPillowAttachRate: 0, fullPillowAttachRate: 0, kingPillowAttachAdj: 0, kingBandLow: 0, kingBandMid: 0, kingBandHigh: 0, fullBandLow: 0, fullBandMid: 0, fullBandHigh: 0, kingPadBandLow: 0, kingPadBandMid: 0, kingPadBandHigh: 0, offerFocusPct: 0 },
           });
         } else {
@@ -215,6 +222,7 @@ export default function EmployeeAnalysisPage() {
       const empBlock = scoped?.[empId] || scoped?.[empId.padStart(4, '0')] || scoped?.[idNorm] || scoped?.[idNorm.padStart(4, '0')] || Object.entries(scoped).find(([k]) => normalizeEmpId(k) === idNorm)?.[1] || null;
       const categories = Array.isArray((empBlock as any)?.categories) ? (empBlock as any).categories : [];
       const items = Array.isArray((empBlock as any)?.items) ? (empBlock as any).items : [];
+      const hasProductData = Boolean(empBlock && (categories.length > 0 || items.length > 0));
       const p: ProductInsights = { kingDuvet: 0, fullDuvet: 0, kingPad: 0, fullPad: 0, kingPillow: 0, fullPillow: 0, kingAttachRate: 0, fullAttachRate: 0, kingPillowAttachRate: 0, fullPillowAttachRate: 0, kingPillowAttachAdj: 0, kingBandLow: 0, kingBandMid: 0, kingBandHigh: 0, fullBandLow: 0, fullBandMid: 0, fullBandHigh: 0, kingPadBandLow: 0, kingPadBandMid: 0, kingPadBandHigh: 0, offerFocusPct: 0 };
       categories.forEach((c: any) => {
         const mapped = canonicalTop6Category(String(c?.name || ''));
@@ -271,6 +279,7 @@ export default function EmployeeAnalysisPage() {
       const offerUnits = p.kingPad + p.fullPad + p.kingPillow + p.fullPillow;
       const coreUnits = p.kingDuvet + p.fullDuvet + offerUnits;
       p.offerFocusPct = coreUnits > 0 ? (offerUnits / coreUnits) * 100 : 0;
+      row.hasProductData = hasProductData;
       row.productInsights = p;
     });
     return {
@@ -288,6 +297,7 @@ export default function EmployeeAnalysisPage() {
     const transMedian = median(rows.map((r) => r.trans));
     return rows.map((row) => {
       const p = row.productInsights;
+      const hasProductData = row.hasProductData;
       const totalDuvet = p.kingDuvet + p.fullDuvet;
       const totalPad = p.kingPad + p.fullPad;
       const totalPillow = p.kingPillow + p.fullPillow;
@@ -295,43 +305,55 @@ export default function EmployeeAnalysisPage() {
       const pillowAttach = totalDuvet > 0 ? (totalPillow / (totalDuvet * 2)) * 100 : 0;
       const salesScore = row.sales >= salesMedian * 1.15 ? 2 : row.sales >= salesMedian * 0.8 ? 1 : 0;
       const atvScore = row.avgTicket >= atvMedian * 1.08 ? 2 : row.avgTicket >= atvMedian * 0.92 ? 1 : 0;
-      const duvetScore = totalDuvet >= Math.max(1, duvetMedian * 1.15) ? 2 : totalDuvet >= Math.max(1, duvetMedian * 0.8) ? 1 : 0;
-      const padScore = padAttach >= 85 ? 2 : padAttach >= 55 ? 1 : 0;
-      const pillowScore = pillowAttach > 100 ? 2 : pillowAttach >= 70 ? 1 : 0;
-      let offerBehavior = 'متوازن';
-      let offerScore = 1;
-      if (p.offerFocusPct >= 55 && row.sales < salesMedian * 0.9) { offerBehavior = 'اعتماد على العروض'; offerScore = 0; }
-      else if (p.offerFocusPct <= 35 && row.sales >= salesMedian) { offerBehavior = 'بيع مباشر قوي'; offerScore = 2; }
-      else if (p.offerFocusPct <= 25 && row.sales < salesMedian * 0.85) { offerBehavior = 'نشاط تجاري ضعيف'; offerScore = 0; }
-      else if (p.offerFocusPct >= 55) offerBehavior = 'استفادة جيدة من العروض';
-      const score = (((salesScore + atvScore) / 2) * 1.4 + duvetScore + padScore + pillowScore + offerScore) / 5.4;
+      const duvetScore = !hasProductData ? null : totalDuvet >= Math.max(1, duvetMedian * 1.15) ? 2 : totalDuvet >= Math.max(1, duvetMedian * 0.8) ? 1 : 0;
+      const padScore = !hasProductData ? null : padAttach >= 85 ? 2 : padAttach >= 55 ? 1 : 0;
+      const pillowScore = !hasProductData ? null : pillowAttach > 100 ? 2 : pillowAttach >= 70 ? 1 : 0;
+      let offerBehavior = hasProductData ? 'متوازن' : 'لا توجد بيانات';
+      let offerScore = hasProductData ? 1 : null;
+      if (hasProductData) {
+        if (p.offerFocusPct >= 55 && row.sales < salesMedian * 0.9) { offerBehavior = 'اعتماد على العروض'; offerScore = 0; }
+        else if (p.offerFocusPct <= 35 && row.sales >= salesMedian) { offerBehavior = 'بيع مباشر قوي'; offerScore = 2; }
+        else if (p.offerFocusPct <= 25 && row.sales < salesMedian * 0.85) { offerBehavior = 'نشاط تجاري ضعيف'; offerScore = 0; }
+        else if (p.offerFocusPct >= 55) offerBehavior = 'استفادة جيدة من العروض';
+      }
+      const weightedScoreParts = [((salesScore + atvScore) / 2) * 1.4, duvetScore, padScore, pillowScore, offerScore].filter((value) => value !== null) as number[];
+      const weightedScoreDenominator = hasProductData ? 5.4 : 1.4;
+      const score = weightedScoreParts.reduce((sum, value) => sum + value, 0) / weightedScoreDenominator;
       const level = score >= 1.45 ? 'A' : score < 0.9 ? 'C' : 'B';
       const levelLabel = level === 'A' ? 'A - قوي' : level === 'B' ? 'B - متوسط' : 'C - يحتاج تدخل';
       const padBands = [{ label: 'منخفض', value: p.kingPadBandLow }, { label: 'متوسط', value: p.kingPadBandMid }, { label: 'مرتفع', value: p.kingPadBandHigh }];
       const bandTotal = padBands.reduce((s, b) => s + b.value, 0);
       const topBand = padBands.slice().sort((a, b) => b.value - a.value)[0];
       const padFocus = !bandTotal || topBand.value / bandTotal < 0.55 ? 'متوازن' : topBand.label;
-      const duvetStatus = duvetScore === 2 ? 'قوي' : duvetScore === 1 ? 'متوسط' : 'ضعيف';
-      const padQuality = padScore === 2 ? 'قوي' : padScore === 1 ? 'متوسط' : 'ضعيف';
-      const pillowStatus = pillowScore === 2 ? 'ممتاز' : pillowScore === 1 ? 'طبيعي' : 'ضعيف';
+      const duvetStatus = !hasProductData ? 'لا توجد بيانات' : duvetScore === 2 ? 'قوي' : duvetScore === 1 ? 'متوسط' : 'ضعيف';
+      const padQuality = !hasProductData ? 'لا توجد بيانات' : padScore === 2 ? 'قوي' : padScore === 1 ? 'متوسط' : 'ضعيف';
+      const pillowStatus = !hasProductData ? 'لا توجد بيانات' : pillowScore === 2 ? 'ممتاز' : pillowScore === 1 ? 'طبيعي' : 'ضعيف';
       let pattern = 'Balanced Seller';
       if (offerBehavior === 'اعتماد على العروض') pattern = 'Offer Driven';
       else if (row.trans >= transMedian * 1.15 && row.avgTicket < atvMedian * 0.92) pattern = 'Volume Seller';
       else if (row.avgTicket >= atvMedian * 1.08 && offerBehavior === 'بيع مباشر قوي') pattern = 'Premium Seller';
-      else if (duvetScore === 2 && padScore <= 1 && pillowScore <= 1) pattern = 'Duvet Seller';
+      else if (duvetScore === 2 && (padScore ?? 0) <= 1 && (pillowScore ?? 0) <= 1) pattern = 'Duvet Seller';
       else if (padScore === 2 || pillowScore === 2) pattern = 'Add-on Seller';
-      else if (padScore === 0 || pillowScore === 0) pattern = 'Weak Attach';
+      else if (hasProductData && (padScore === 0 || pillowScore === 0)) pattern = 'Weak Attach';
       else if (atvScore === 0) pattern = 'Weak Basket';
-      const strength = [{ label: 'جودة بيع قوية', score: (salesScore + atvScore) / 2 }, { label: 'بيع اللحاف', score: duvetScore }, { label: 'ربط اللباد', score: padScore }, { label: 'إكمال المخدة', score: pillowScore }, { label: offerBehavior === 'بيع مباشر قوي' ? 'بيع مباشر قوي' : 'سلوك تجاري جيد', score: offerScore }].sort((a, b) => b.score - a.score)[0]?.label || 'متوازن';
+      const strength = [
+        { label: 'جودة بيع قوية', score: (salesScore + atvScore) / 2 },
+        ...(hasProductData ? [
+          { label: 'بيع اللحاف', score: duvetScore as number },
+          { label: 'ربط اللباد', score: padScore as number },
+          { label: 'إكمال المخدة', score: pillowScore as number },
+          { label: offerBehavior === 'بيع مباشر قوي' ? 'بيع مباشر قوي' : 'سلوك تجاري جيد', score: offerScore as number },
+        ] : []),
+      ].sort((a, b) => b.score - a.score)[0]?.label || 'متوازن';
       let weakness = 'الثبات';
       if (offerBehavior === 'اعتماد على العروض') weakness = 'الاعتماد على العروض';
       else if (offerBehavior === 'نشاط تجاري ضعيف') weakness = 'النشاط التجاري';
-      else if (pillowScore === 0) weakness = 'إكمال المخدة';
-      else if (padScore === 0) weakness = 'تركيز اللباد';
-      else if (duvetScore === 0) weakness = 'بيع اللحاف';
+      else if (hasProductData && pillowScore === 0) weakness = 'إكمال المخدة';
+      else if (hasProductData && padScore === 0) weakness = 'تركيز اللباد';
+      else if (hasProductData && duvetScore === 0) weakness = 'بيع اللحاف';
       else if (atvScore === 0) weakness = 'ATV';
       const actionMap: Record<string, string> = { ATV: 'رفع قيمة السلة في كل فاتورة', 'بيع اللحاف': 'تنشيط بيع اللحاف يومياً', 'تركيز اللباد': 'دفع مزج اللباد المتوسط/العالي', 'إكمال المخدة': 'زيادة إكمال المخدة مع كل لحاف', 'الاعتماد على العروض': 'تقليل الاعتماد على العرض فقط', 'النشاط التجاري': 'متابعة يومية على النشاط التجاري', 'الثبات': 'كوچنغ يومي على الإغلاق' };
-      return { ...row, level, levelLabel, pattern, strength, weakness, action: actionMap[weakness] || 'متابعة يومية', duvetStatus, padFocus, padQuality, pillowStatus, offerBehavior, totalDuvet, totalPad, totalPillow, weightedPadAttach: padAttach, weightedPillowAttach: pillowAttach, salesQualityScore: (salesScore + atvScore) / 2, duvetScore, padScore, pillowScore };
+      return { ...row, level, levelLabel, pattern, strength, weakness, action: actionMap[weakness] || 'متابعة يومية', duvetStatus, padFocus: hasProductData ? padFocus : 'لا توجد بيانات', padQuality, pillowStatus, offerBehavior, totalDuvet, totalPad, totalPillow, weightedPadAttach: padAttach, weightedPillowAttach: pillowAttach, salesQualityScore: (salesScore + atvScore) / 2, duvetScore, padScore, pillowScore, hasProductData };
     }).sort((a, b) => ({ C: 0, B: 1, A: 2 }[a.level] - { C: 0, B: 1, A: 2 }[b.level] || b.sales - a.sales));
   }, [rows]);
 
@@ -463,13 +485,13 @@ export default function EmployeeAnalysisPage() {
                     <td className="px-3 py-3 text-center"><span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${chipTone(row.pattern)}`}>{row.pattern}</span></td>
                     <td className="px-3 py-3 text-center"><span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${chipTone(row.strength)}`}>{row.strength}</span></td>
                     <td className="px-3 py-3 text-center"><span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${chipTone(row.weakness)}`}>{row.weakness}</span></td>
-                    <td className="px-3 py-3 text-center"><div className="flex flex-col items-center gap-1"><span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${chipTone(row.duvetStatus)}`}>{row.duvetStatus}</span><span className="text-xs text-neutral-500">{Math.round(row.totalDuvet)} قطعة</span></div></td>
-                    <td className="px-3 py-3 text-center"><div className="flex flex-col items-center gap-1"><span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${chipTone(row.padQuality)}`}>{row.padFocus} | {row.padQuality}</span><span className="text-xs text-neutral-500">{row.weightedPadAttach.toFixed(0)}%</span></div></td>
-                    <td className="px-3 py-3 text-center"><div className="flex flex-col items-center gap-1"><span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${chipTone(row.pillowStatus)}`}>{row.pillowStatus}</span><span className="text-xs text-neutral-500">{row.weightedPillowAttach.toFixed(0)}%</span></div></td>
+                    <td className="px-3 py-3 text-center"><div className="flex flex-col items-center gap-1"><span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${chipTone(row.duvetStatus)}`}>{row.duvetStatus}</span><span className="text-xs text-neutral-500">{row.hasProductData ? `${Math.round(row.totalDuvet)} قطعة` : 'لا توجد بيانات'}</span></div></td>
+                    <td className="px-3 py-3 text-center"><div className="flex flex-col items-center gap-1"><span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${chipTone(row.padQuality)}`}>{row.hasProductData ? `${row.padFocus} | ${row.padQuality}` : 'لا توجد بيانات'}</span><span className="text-xs text-neutral-500">{formatMetricValue(row.weightedPadAttach, row.hasProductData, '%')}</span></div></td>
+                    <td className="px-3 py-3 text-center"><div className="flex flex-col items-center gap-1"><span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${chipTone(row.pillowStatus)}`}>{row.pillowStatus}</span><span className="text-xs text-neutral-500">{formatMetricValue(row.weightedPillowAttach, row.hasProductData, '%')}</span></div></td>
                     <td className="px-3 py-3 text-center"><div className="font-black text-neutral-900">{formatSAR(row.avgTicket)}</div><div className="text-xs text-neutral-500">{row.offerBehavior}</div></td>
                     <td className="px-3 py-3 text-center"><div className="mx-auto max-w-[180px] text-xs font-semibold leading-5 text-neutral-700">{row.action}</div></td>
                   </tr>
-                  {expandedId === row.id ? <tr className="border-t border-orange-100 bg-orange-50/30"><td colSpan={11} className="px-4 py-4"><div className="grid grid-cols-1 gap-3 md:grid-cols-4"><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="text-xs text-neutral-500">المبيعات / العمليات</div><div className="mt-1 font-black text-neutral-900">{formatSAR(row.sales)}</div><div className="mt-1 text-xs text-neutral-500">عدد العمليات: {Math.round(row.trans).toLocaleString()}</div><div className="text-xs text-neutral-500">عدد القطع: {Math.round(row.items).toLocaleString()}</div></div><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="text-xs text-neutral-500">تفصيل اللحاف</div><div className="mt-1 text-sm font-bold text-neutral-900">كينج: {Math.round(row.productInsights.kingDuvet).toLocaleString()}</div><div className="text-sm font-bold text-neutral-900">فل: {Math.round(row.productInsights.fullDuvet).toLocaleString()}</div><div className="mt-1 text-xs text-neutral-500">الحالة العامة: {row.duvetStatus}</div></div><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="text-xs text-neutral-500">تفصيل اللباد</div><div className="mt-1 text-sm font-bold text-neutral-900">الربط: {row.weightedPadAttach.toFixed(1)}%</div><div className="text-xs text-neutral-500">التركيز: {row.padFocus}</div><div className="mt-1 text-xs text-neutral-500">منخفض / متوسط / مرتفع = {Math.round(row.productInsights.kingPadBandLow)} / {Math.round(row.productInsights.kingPadBandMid)} / {Math.round(row.productInsights.kingPadBandHigh)}</div></div><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="text-xs text-neutral-500">تفصيل المخدة والعروض</div><div className="mt-1 text-sm font-bold text-neutral-900">المخدة: {row.weightedPillowAttach.toFixed(1)}%</div><div className="text-xs text-neutral-500">التصنيف: {row.pillowStatus}</div><div className="mt-1 text-xs text-neutral-500">تركيز العروض: {row.productInsights.offerFocusPct.toFixed(1)}%</div><div className="text-xs text-neutral-500">السلوك: {row.offerBehavior}</div></div></div></td></tr> : null}
+                  {expandedId === row.id ? <tr className="border-t border-orange-100 bg-orange-50/30"><td colSpan={11} className="px-4 py-4"><div className="grid grid-cols-1 gap-3 md:grid-cols-4"><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="text-xs text-neutral-500">المبيعات / العمليات</div><div className="mt-1 font-black text-neutral-900">{formatSAR(row.sales)}</div><div className="mt-1 text-xs text-neutral-500">عدد العمليات: {Math.round(row.trans).toLocaleString()}</div><div className="text-xs text-neutral-500">عدد القطع: {Math.round(row.items).toLocaleString()}</div></div><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="text-xs text-neutral-500">تفصيل اللحاف</div><div className="mt-1 text-sm font-bold text-neutral-900">كينج: {row.hasProductData ? Math.round(row.productInsights.kingDuvet).toLocaleString() : 'لا توجد بيانات'}</div><div className="text-sm font-bold text-neutral-900">فل: {row.hasProductData ? Math.round(row.productInsights.fullDuvet).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-1 text-xs text-neutral-500">الحالة العامة: {row.duvetStatus}</div></div><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="text-xs text-neutral-500">تفصيل اللباد</div><div className="mt-1 text-sm font-bold text-neutral-900">الربط: {formatMetricValue(row.weightedPadAttach, row.hasProductData, '%')}</div><div className="text-xs text-neutral-500">التركيز: {row.padFocus}</div><div className="mt-1 text-xs text-neutral-500">منخفض / متوسط / مرتفع = {row.hasProductData ? `${Math.round(row.productInsights.kingPadBandLow)} / ${Math.round(row.productInsights.kingPadBandMid)} / ${Math.round(row.productInsights.kingPadBandHigh)}` : 'لا توجد بيانات'}</div></div><div className="rounded-xl border border-neutral-200 bg-white p-3"><div className="text-xs text-neutral-500">تفصيل المخدة والعروض</div><div className="mt-1 text-sm font-bold text-neutral-900">المخدة: {formatMetricValue(row.weightedPillowAttach, row.hasProductData, '%')}</div><div className="text-xs text-neutral-500">التصنيف: {row.pillowStatus}</div><div className="mt-1 text-xs text-neutral-500">تركيز العروض: {formatMetricValue(row.productInsights.offerFocusPct, row.hasProductData, '%')}</div><div className="text-xs text-neutral-500">السلوك: {row.offerBehavior}</div></div></div></td></tr> : null}
                 </Fragment>
               ))}
               {!decisionRows.length ? <tr><td colSpan={11} className="py-8 text-center text-neutral-400">لا توجد بيانات ضمن الفلاتر الحالية.</td></tr> : null}
