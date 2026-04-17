@@ -4,6 +4,9 @@
   "functions": {
     "api/d365-sales.ts": {
       "maxDuration": 60
+    },
+    "api/employee-analysis.ts": {
+      "maxDuration": 60
     }
   }
 }
