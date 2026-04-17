@@ -22,6 +22,7 @@ import {
   XIcon, // For modal close if needed
 } from '../components/Icons';
 import { loadManagementData, loadProductAnalysisData, loadStockData } from '../services/upstreamData';
+import { mtdRangeThroughYesterday } from '../utils/mtdDateRange';
 import { ProductInquiryModal } from '../components/products/ProductInquiryModal';
 import { LiveSalesModal } from '../components/dashboard/LiveSalesModal';
 import { formatSAR } from '../utils/formatting';
@@ -130,13 +131,7 @@ export default function MainLayout() {
         loadStockData()
       ]);
       setGlobalMeta(mgmtRaw);
-      const pad2 = (n: number) => String(n).padStart(2, '0');
-      const toYMD = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-      const nowReal = new Date();
-      const effectiveToday = new Date(nowReal);
-      if (nowReal.getHours() < 12) effectiveToday.setDate(nowReal.getDate() - 1);
-      const todayYMD = toYMD(effectiveToday);
-      const monthStartYMD = `${todayYMD.substring(0, 8)}01`;
+      const { start: monthStartYMD, end: mtdEndYMD } = mtdRangeThroughYesterday(new Date());
       const getP = (p: string) => prodRaw.periods?.[p]?.catalog && Object.keys(prodRaw.periods[p].catalog).length > 0 ? prodRaw.periods[p] : null;
       const pData = getP('mtd') || getP('30d') || getP('14d') || getP('7d') || null;
       if (!pData) return;
@@ -150,7 +145,7 @@ export default function MainLayout() {
         rows.forEach((r: any) => {
           const ds = String(r?.date || '').substring(0, 10);
           const sid = String(r?.store || '');
-          if (!ds || ds < monthStartYMD || ds > todayYMD) return;
+          if (!ds || ds < monthStartYMD || ds > mtdEndYMD) return;
           const qty = Number(r?.qty) || 0;
           const amount = Number(r?.amount) || 0;
           if (!mtdByItem.has(itemId)) mtdByItem.set(itemId, { qty: 0, amount: 0, byStore: {} });

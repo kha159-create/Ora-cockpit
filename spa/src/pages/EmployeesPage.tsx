@@ -13,6 +13,7 @@ import {
   dateWithinMarchPhaseSalesBounds,
   sumEmployeeTargetForDateRange,
 } from '../utils/march2026Targets';
+import { mtdRangeThroughYesterday } from '../utils/mtdDateRange';
 
 type Period = 'today' | 'yesterday' | 'mtd' | 'month' | 'custom';
 type SortKey =
@@ -773,8 +774,8 @@ export default function EmployeesPage() {
       if (mode === 'today') return { start: toLocalYMD(today), end: toLocalYMD(today) };
       if (mode === 'yesterday') return { start: toLocalYMD(yesterday), end: toLocalYMD(yesterday) };
       if (mode === 'mtd') {
-        const endMtd = yesterday.getMonth() !== startOfCurrentMonth.getMonth() ? today : yesterday;
-        return { start: toLocalYMD(startOfCurrentMonth), end: toLocalYMD(endMtd) };
+        const r = mtdRangeThroughYesterday(today);
+        return { start: r.start, end: r.end };
       }
       if (mode === 'month' && selYear && selMonth) {
         const startOfMonth = new Date(selYear, selMonth - 1, 1);

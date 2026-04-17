@@ -7,6 +7,7 @@ import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { CubeIcon, SalesIcon, InvoicesIcon, VisitorsIcon, XIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
 import { generateProductSummaryPDF } from '../services/pdf/pdfService';
+import { calendarYesterday, mtdRangeThroughYesterday } from '../utils/mtdDateRange';
 
 type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest' | 'custom';
 type RepSearchMode = 'sales_stock' | 'stock_only';
@@ -43,13 +44,7 @@ function formatSAR(val: number) {
 function getDateRangeForMode(m: PeriodMode, customStart?: string, customEnd?: string): { start: string; end: string } {
   const pad = (n: number) => String(n).padStart(2, '0');
   const nowReal = new Date();
-  const today = new Date(nowReal);
-  if (nowReal.getHours() < 12) {
-    today.setDate(nowReal.getDate() - 1);
-  }
-  const yest = new Date(today);
-  yest.setDate(today.getDate() - 1);
-  const todayYMD = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  const yest = calendarYesterday(nowReal);
   const yestYMD = `${yest.getFullYear()}-${pad(yest.getMonth() + 1)}-${pad(yest.getDate())}`;
   if (m === 'yest') return { start: yestYMD, end: yestYMD };
   if (m === 'custom' && customStart && customEnd) {
@@ -58,19 +53,19 @@ function getDateRangeForMode(m: PeriodMode, customStart?: string, customEnd?: st
       : { start: customEnd, end: customStart };
   }
   if (m === '7d') {
-    const s = new Date(today); s.setDate(today.getDate() - 7);
-    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end: todayYMD };
+    const s = new Date(yest); s.setDate(yest.getDate() - 7);
+    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end: yestYMD };
   }
   if (m === '14d') {
-    const s = new Date(today); s.setDate(today.getDate() - 14);
-    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end: todayYMD };
+    const s = new Date(yest); s.setDate(yest.getDate() - 14);
+    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end: yestYMD };
   }
   if (m === '30d') {
-    const s = new Date(today); s.setDate(today.getDate() - 30);
-    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end: todayYMD };
+    const s = new Date(yest); s.setDate(yest.getDate() - 30);
+    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end: yestYMD };
   }
-  const start = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-01`;
-  return { start, end: todayYMD };
+  const r = mtdRangeThroughYesterday(nowReal);
+  return { start: r.start, end: r.end };
 }
 
 function isAdminOrAuditor(role?: string) {

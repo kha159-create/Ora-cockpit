@@ -8,6 +8,7 @@ import { getCurrentUser } from '../auth/storage';
 import { getAvailableSeasonsList, getSeasonDateRange, formatHijriDate } from '../utils/seasons';
 import * as XLSX from 'xlsx';
 import { DrillDownModal } from '../components/dashboard/DrillDownModal';
+import { mtdRangeThroughYesterday } from '../utils/mtdDateRange';
 
 function isAdminOrAuditor(role?: string) { return role === 'Admin' || role === 'Auditor'; }
 
@@ -23,9 +24,8 @@ const getRange = (mode: RangeMode, stdYear: number, stdMonth: string, customStar
     if (mode === 'today') return { start: toYMD(today), end: toYMD(today) };
     if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
     if (mode === 'mtd') {
-        const start = new Date(today.getFullYear(), today.getMonth(), 1);
-        const endMtd = yesterday.getMonth() !== today.getMonth() ? today : yesterday;
-        return { start: toYMD(start), end: toYMD(endMtd) };
+        const r = mtdRangeThroughYesterday(today);
+        return { start: r.start, end: r.end };
     }
     if (mode === 'last_month') {
         const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);

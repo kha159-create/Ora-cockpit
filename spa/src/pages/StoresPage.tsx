@@ -18,6 +18,7 @@ import {
   sumEmployeeTargetForDateRange,
   sumManagementTargetsForDateRange,
 } from '../utils/march2026Targets';
+import { calendarYesterday } from '../utils/mtdDateRange';
 
 type Mode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
 
@@ -108,20 +109,20 @@ function getRange(
 ) {
   const now = new Date();
   const today = new Date(now);
-  if (now.getHours() < 12) {
-    today.setDate(now.getDate() - 1);
-  }
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
+  const yesterday = calendarYesterday(now);
 
   let currStart: Date;
   let currEnd: Date;
 
   if (mode === 'mtd') {
     currStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0);
-    const mtdEnd = today;
+    const mtdEnd = yesterday;
     currEnd = new Date(mtdEnd);
     currEnd.setHours(23, 59, 59, 999);
+    if (currEnd < currStart) {
+      currEnd = new Date(currStart);
+      currEnd.setHours(23, 59, 59, 999);
+    }
   } else if (mode === 'yesterday') {
     currStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0);
     currEnd = new Date(yesterday);
@@ -848,13 +849,15 @@ export default function StoresPage() {
     const branchMonthTarget: Record<string, number> = {};
     const todayNow = new Date();
     const ymdToday = toLocalYMD(todayNow);
+    const ymdYest = toLocalYMD(calendarYesterday(todayNow));
     const curMonthStart = `${ymdToday.substring(0, 8)}01`;
     const refForPhase = range.endYMD <= ymdToday ? range.endYMD : ymdToday;
     const phaseSalesBounds = getMarch2026PhaseSalesBounds(ymdToday);
     const mtdSalesStart = phaseSalesBounds?.start ?? curMonthStart;
-    const mtdSalesEnd = phaseSalesBounds?.end ?? ymdToday;
+    const minStr = (a: string, b: string) => (a <= b ? a : b);
+    const mtdSalesEnd = phaseSalesBounds?.end ? minStr(phaseSalesBounds.end, ymdYest) : ymdYest;
     const monthKey = ymdToday.substring(0, 7);
-    const phaseMonthTargets = sumManagementTargetsForMonth(raw.targets, monthKey, ymdToday);
+    const phaseMonthTargets = sumManagementTargetsForMonth(raw.targets, monthKey, ymdYest);
     Object.entries(phaseMonthTargets).forEach(([s, v]) => {
       branchMonthTarget[s] = safeNum(v);
     });

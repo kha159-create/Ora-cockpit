@@ -123,7 +123,7 @@ export default function OffersPage() {
     }
     if (period === 'mtd') {
       const s = new Date(now.getFullYear(), now.getMonth(), 1);
-      const endMtd = yesterday.getMonth() !== now.getMonth() ? now : yesterday;
+      const endMtd = yesterday.getMonth() !== s.getMonth() ? s : yesterday;
       return { start: ymd(s), end: ymd(endMtd), label: 'الشهر الحالي' };
     }
     if (period === 'custom' && customStart && customEnd) {

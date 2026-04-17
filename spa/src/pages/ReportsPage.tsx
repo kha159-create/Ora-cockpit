@@ -13,6 +13,7 @@ import {
   getEmployeeTargetForEffectiveDate,
   getMarch2026PhaseSalesBounds,
 } from '../utils/march2026Targets';
+import { mtdRangeThroughYesterday } from '../utils/mtdDateRange';
 import * as XLSX from 'xlsx';
 
 type FilterMode = 'mtd' | 'yesterday' | 'today' | 'standard' | 'custom';
@@ -46,9 +47,8 @@ function getRange(
   if (mode === 'today') return { start: toYMD(today), end: toYMD(today) };
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
   if (mode === 'mtd') {
-    const start = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endMtd = yesterday.getMonth() !== today.getMonth() ? today : yesterday;
-    return { start: toYMD(start), end: toYMD(endMtd) };
+    const r = mtdRangeThroughYesterday(today);
+    return { start: r.start, end: r.end };
   }
   if (mode === 'custom') {
     const start = customStart || toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -360,11 +360,7 @@ export default function ReportsPage() {
     yesterday.setDate(today.getDate() - 1);
     const yStr = toYMD(yesterday);
 
-    // MTD month-boundary fix
-    const mtdStartObj = new Date(today.getFullYear(), today.getMonth(), 1);
-    const mtdEndObj = yesterday.getMonth() !== today.getMonth() ? today : yesterday;
-    const mtdStart = toYMD(mtdStartObj);
-    const mtdEndStr = toYMD(mtdEndObj);
+    const { start: mtdStart, end: mtdEndStr } = mtdRangeThroughYesterday(today);
     const marchMtd = getMarch2026PhaseSalesBounds(mtdEndStr);
     const effMtdStart = marchMtd?.start ?? mtdStart;
     const effMtdEnd = marchMtd?.end ?? mtdEndStr;
@@ -638,7 +634,7 @@ export default function ReportsPage() {
       const today = new Date();
       const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
       const yesterdayYMD = toYMD(yesterdayDate);
-      const mtdStartYMD = toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
+      const { start: mtdStartYMD, end: mtdEndStr } = mtdRangeThroughYesterday(today);
 
       title = `أداء الموظفين (أمس vs MTD)`;
       const history = rawEmp?.history || {};
@@ -646,8 +642,6 @@ export default function ReportsPage() {
       const selectedIdsArray = Array.from(selectedEmpIds);
       const storesMap = rawMgmt.stores || {};
 
-      const mtdEndObj = yesterdayDate.getMonth() !== today.getMonth() ? today : yesterdayDate;
-      const mtdEndStr = toYMD(mtdEndObj);
       const marchMtdYe = getMarch2026PhaseSalesBounds(mtdEndStr);
       const effMtdStartYe = marchMtdYe?.start ?? mtdStartYMD;
       const effMtdEndYe = marchMtdYe?.end ?? mtdEndStr;
@@ -742,9 +736,7 @@ export default function ReportsPage() {
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
 
-    const mtdStart = toYMD(new Date(today.getFullYear(), today.getMonth(), 1));
-    const mtdEndObj = yesterday.getMonth() !== today.getMonth() ? today : yesterday;
-    const mtdEndStr = toYMD(mtdEndObj);
+    const { start: mtdStart, end: mtdEndStr } = mtdRangeThroughYesterday(today);
     const marchTpl = getMarch2026PhaseSalesBounds(mtdEndStr);
     const effTplStart = marchTpl?.start ?? mtdStart;
     const effTplEnd = marchTpl?.end ?? mtdEndStr;

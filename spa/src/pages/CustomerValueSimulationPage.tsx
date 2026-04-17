@@ -6,6 +6,7 @@ import { CustomerValueSimulationTable } from '../components/dashboard/CustomerVa
 import { buildTopStoresRankForPeriod, mapBranchesDataWithLocations } from '../utils/customerValueBranchRows';
 import { getComparisonPrevRange, formatComparisonRangeForDisplay } from '../utils/seasons';
 import { useComparisonCalendar } from '../context/ComparisonCalendarContext';
+import { calendarYesterday, mtdRangeThroughYesterday } from '../utils/mtdDateRange';
 
 function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
@@ -22,15 +23,14 @@ function toYMD(d: Date) {
 
 function getDefaultRange(mode: Mode, selYear?: number, selMonth?: number) {
   const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
+  const yesterday = calendarYesterday(now);
   const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
   if (mode === 'today') return { start: toYMD(now), end: toYMD(now) };
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
   if (mode === 'mtd') {
-    const endMtd = yesterday.getMonth() !== now.getMonth() ? now : yesterday;
-    return { start: toYMD(startOfCurrentMonth), end: toYMD(endMtd) };
+    const r = mtdRangeThroughYesterday(now);
+    return { start: r.start, end: r.end };
   }
   if (mode === 'month' && selYear != null && selMonth != null) {
     if (selMonth === 0) {

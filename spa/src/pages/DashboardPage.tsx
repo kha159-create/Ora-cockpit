@@ -26,6 +26,7 @@ import {
   sumEmployeeTargetForDateRange,
   sumManagementTargetsForDateRange,
 } from '../utils/march2026Targets';
+import { calendarYesterday, mtdRangeThroughYesterday } from '../utils/mtdDateRange';
 
 function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
@@ -40,27 +41,16 @@ function toYMD(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
-function getEffectiveDate() {
-  const now = new Date();
-  // If before 12 PM, treat it as previous business day.
-  if (now.getHours() < 12) {
-    const d = new Date(now);
-    d.setDate(now.getDate() - 1);
-    return d;
-  }
-  return now;
-}
-
 function getDefaultRange(mode: Mode, selYear?: number, selMonth?: number) {
-  const now = getEffectiveDate();
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
+  const now = new Date();
+  const yesterday = calendarYesterday(now);
   const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
   if (mode === 'today') return { start: toYMD(now), end: toYMD(now) };
   if (mode === 'yesterday') return { start: toYMD(yesterday), end: toYMD(yesterday) };
   if (mode === 'mtd') {
-    return { start: toYMD(startOfCurrentMonth), end: toYMD(now) };
+    const r = mtdRangeThroughYesterday(now);
+    return { start: r.start, end: r.end };
   }
   if (mode === 'month' && selYear != null && selMonth != null) {
     if (selMonth === 0) {
@@ -616,8 +606,7 @@ export default function DashboardPage() {
   );
 
   // أمس + مقارنة العام الماضي — قبل أي return حتى تبقى hooks أسفلها صالحة
-  const effectiveDate = getEffectiveDate();
-  const yesterdayStr = toYMD(effectiveDate);
+  const yesterdayStr = toYMD(calendarYesterday(new Date()));
   const lastYearYesterdayStr = getComparisonPrevDate(yesterdayStr, calendar);
 
   const handlePrintEmployeeReport = () => {
