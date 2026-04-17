@@ -105,7 +105,8 @@ type EmployeeRow = {
   productInsights: ProductInsights;
 };
 
-const BUILT_IN_OPENAI_KEY = (import.meta.env.VITE_OPENAI_API_KEY as string | undefined) || '';
+const STATIC_AI_FALLBACK_MESSAGE =
+  'التحليل الذكي المباشر غير متاح في نسخة GitHub Pages الحالية لأن هذا النوع من الطلبات يحتاج تنفيذًا آمنًا من جهة الخادم. جميع مؤشرات الموظفين والبيانات المحلية ما زالت تعمل بشكل طبيعي.';
 
 export default function EmployeeAnalysisPage() {
   const user = getCurrentUser();
@@ -118,7 +119,6 @@ export default function EmployeeAnalysisPage() {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [productsPeriodKey, setProductsPeriodKey] = useState<ProductPeriodKey>('mtd');
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('openai_api_key') || BUILT_IN_OPENAI_KEY || '');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState('');
 
@@ -405,104 +405,9 @@ export default function EmployeeAnalysisPage() {
 
   const analyzeWithAI = async () => {
     if (!rows.length) return;
-    const key = apiKey || BUILT_IN_OPENAI_KEY;
-    if (!key) {
-      alert('أدخل OpenAI API Key أو أضف VITE_OPENAI_API_KEY في أسرار GitHub عند البناء.');
-      return;
-    }
     try {
       setAiLoading(true);
-      if (apiKey) localStorage.setItem('openai_api_key', apiKey);
-
-      const atvList = rows.map((r) => r.avgTicket).filter((x) => x > 0).sort((a, b) => a - b);
-      const medianAtv = atvList.length ? atvList[Math.floor(atvList.length / 2)] : 0;
-
-      const top = rows.slice(0, 40).map((r) => {
-        const p = r.productInsights;
-        const salesPerTrans = r.trans > 0 ? r.sales / r.trans : 0;
-        const itemsPerTrans = r.trans > 0 ? r.items / r.trans : 0;
-        return {
-          id: r.id,
-          name: r.name,
-          store: r.storeName,
-          sales: Math.round(r.sales),
-          transactions: Math.round(r.trans),
-          avgTicket: Number(r.avgTicket.toFixed(1)),
-          itemsPerInvoice: Number(itemsPerTrans.toFixed(2)),
-          salesPerTransaction: Number(salesPerTrans.toFixed(1)),
-          kingBlanketsSold: Math.round(p.kingDuvet),
-          fullBlanketsSold: Math.round(p.fullDuvet),
-          kingPadsSold: Math.round(p.kingPad),
-          fullPadsSold: Math.round(p.fullPad),
-          kingPillowsSold: Math.round(p.kingPillow),
-          fullPillowsSold: Math.round(p.fullPillow),
-          pillowAttachRateAdjustedPct: Number(p.kingPillowAttachAdj.toFixed(1)),
-          padAttachKingPct: Number(p.kingAttachRate.toFixed(1)),
-          padAttachFullPct: Number(p.fullAttachRate.toFixed(1)),
-          kingDuvetPriceMixLowMedHigh: [Math.round(p.kingBandLow), Math.round(p.kingBandMid), Math.round(p.kingBandHigh)],
-          kingPadPriceMixLowMedHigh: [Math.round(p.kingPadBandLow), Math.round(p.kingPadBandMid), Math.round(p.kingPadBandHigh)],
-          offerFocusPct: Number(p.offerFocusPct.toFixed(1)),
-          vsMedianAtv: medianAtv > 0 ? Number(((r.avgTicket / medianAtv - 1) * 100).toFixed(1)) : 0,
-        };
-      });
-
-      const context = {
-        role: 'Senior retail performance manager analysis',
-        filters: { customStart, customEnd, manager, city, branch, productsPeriodKey },
-        cohortMedianAtv: Number(medianAtv.toFixed(1)),
-        summary: {
-          employees: rows.length,
-          sales: Math.round(summary.sales),
-          transactions: Math.round(summary.trans),
-          avgTicket: Number(summary.avgTicket.toFixed(1)),
-          kingDuvet: Math.round(summary.kingDuvet),
-          fullDuvet: Math.round(summary.fullDuvet),
-          kingPadAttach: Number(summary.kingPadAttach.toFixed(1)),
-          fullPadAttach: Number(summary.fullPadAttach.toFixed(1)),
-          kingPillowAttach: Number(summary.kingPillowAttach.toFixed(1)),
-          fullPillowAttach: Number(summary.fullPillowAttach.toFixed(1)),
-          dataIntegrityBandVsKing: Number(summary.integrityBandVsKing.toFixed(1)),
-        },
-        instructions: [
-          'For EACH employee in the payload, output in order:',
-          '1) EXACT weakness category: ATV | Conversion | Attach | Offer misuse | Consistency (pick one primary).',
-          '2) Classify: A (high) | B (average) | C (weak).',
-          '3) Behavior pattern: Discount seller | Premium seller | Volume seller | Balanced seller.',
-          '4) ACTIONABLE: one instruction for manager + one for employee (specific, not generic).',
-          '5) Red flags if any (zero attach, high ATV low sales, high transactions low revenue).',
-          'Use Arabic for narrative but keep category labels as specified in English where shown.',
-          'Be decision-oriented, short bullets, no fluff.',
-        ],
-      };
-
-      const resp = await fetch('https://api.openai.com/v1/responses', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4.1-mini',
-          input: [
-            {
-              role: 'system',
-              content:
-                'Act as a senior retail performance manager. Analyze each employee individually using the metrics provided. Output structured, short, decision-oriented Arabic (with the English category tokens where required). Avoid generic analysis; focus on WHAT TO DO.',
-            },
-            {
-              role: 'user',
-              content: `Context:\n${JSON.stringify(context)}\n\nEmployees:\n${JSON.stringify(top)}`,
-            },
-          ],
-        }),
-      });
-      if (!resp.ok) {
-        const errText = await resp.text();
-        throw new Error(`OpenAI API ${resp.status}: ${errText}`);
-      }
-      const json = await resp.json();
-      const text = json?.output_text || json?.output?.[0]?.content?.[0]?.text || 'لم يصل رد واضح من النموذج.';
-      setAiResult(String(text));
+      setAiResult(STATIC_AI_FALLBACK_MESSAGE);
     } catch (e: any) {
       setAiResult(`فشل التحليل: ${e?.message || 'خطأ غير متوقع'}`);
     } finally {
@@ -587,19 +492,10 @@ export default function EmployeeAnalysisPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="md:col-span-3 space-y-1">
-            <div className="text-xs font-semibold text-neutral-500">OpenAI API Key</div>
-            {BUILT_IN_OPENAI_KEY ? (
-              <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1.5">
-                تم حقن المفتاح من البناء (GitHub Secret → VITE_OPENAI_API_KEY). يمكنك ترك الحقل فارغًا أو لصق مفتاحًا آخر للتجربة محليًا.
-              </div>
-            ) : null}
-            <input
-              type="password"
-              className="input"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={BUILT_IN_OPENAI_KEY ? 'اختياري — المفتاح محمّل من النشر' : 'sk-...'}
-            />
+            <div className="text-xs font-semibold text-neutral-500">حالة التحليل الذكي</div>
+            <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-2">
+              تم إيقاف الطلب المباشر من المتصفح في النشر الثابت لحماية المفاتيح الحساسة. يمكنك متابعة استخدام جميع الجداول والمؤشرات الحالية بدون تغيير.
+            </div>
           </div>
           <div className="flex items-end">
             <button
@@ -763,7 +659,7 @@ export default function EmployeeAnalysisPage() {
 
       <div className="bg-white rounded-2xl border border-neutral-200 shadow-lg p-4">
         <h3 className="font-bold text-neutral-900 mb-2">مخرجات الذكاء الاصطناعي</h3>
-        <div className="text-sm whitespace-pre-wrap text-neutral-700 min-h-16">{aiResult || 'شغّل التحليل لعرض تقييم كل موظف (A/B/C) والضعف الدقيق والتوصيات.'}</div>
+        <div className="text-sm whitespace-pre-wrap text-neutral-700 min-h-16">{aiResult || 'التحليل الذكي المباشر معطل في نسخة GitHub Pages الحالية لحماية البيانات الحساسة.'}</div>
       </div>
     </div>
   );
