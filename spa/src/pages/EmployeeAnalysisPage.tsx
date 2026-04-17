@@ -327,6 +327,7 @@ export default function EmployeeAnalysisPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('level');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [showActiveOnly, setShowActiveOnly] = useState(true);
 
   useEffect(() => {
     Promise.all([loadEmployeesData(), loadManagementData(), loadEmployeeProductsData(), loadOffersData()]).then(([e, m, ep, offers]) => {
@@ -726,6 +727,7 @@ export default function EmployeeAnalysisPage() {
         الثبات: 'كوچنغ يومي لرفع الثبات بين الفترات',
       };
       const action = actionMap[weakness] || 'متابعة يومية';
+      const isActive = monthTarget > 0 || row.sales > 0 || row.trans > 0 || hasProductData;
 
       return {
         ...row,
@@ -765,6 +767,7 @@ export default function EmployeeAnalysisPage() {
         duvetScore,
         padScore,
         pillowScore,
+        isActive,
       };
     });
   }, [derived, empRaw]);
@@ -788,10 +791,15 @@ export default function EmployeeAnalysisPage() {
     });
   }, [decisionRows, sortDir, sortKey]);
 
+  const visibleRows = useMemo(() => {
+    if (!showActiveOnly) return sortedRows;
+    return sortedRows.filter((row) => row.isActive);
+  }, [showActiveOnly, sortedRows]);
+
   const topCards = useMemo(() => {
     const weakCounts = new Map<string, number>();
     const storeMap = new Map<string, { attach: number; basket: number; count: number }>();
-    sortedRows.forEach((row) => {
+    visibleRows.forEach((row) => {
       weakCounts.set(row.weakness, (weakCounts.get(row.weakness) || 0) + 1);
       const prev = storeMap.get(row.storeName) || { attach: 0, basket: 0, count: 0 };
       prev.attach += ((row.duvetScore ?? 0) + (row.padScore ?? 0) + (row.pillowScore ?? 0)) / 3;
@@ -802,20 +810,20 @@ export default function EmployeeAnalysisPage() {
     const commonWeakness = Array.from(weakCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || 'لا يوجد';
     const stores = Array.from(storeMap.entries()).map(([store, val]) => ({ store, attach: val.attach / Math.max(val.count, 1), basket: val.basket / Math.max(val.count, 1) }));
     return {
-      a: sortedRows.filter((r) => r.level === 'A').length,
-      b: sortedRows.filter((r) => r.level === 'B').length,
-      c: sortedRows.filter((r) => r.level === 'C').length,
+      a: visibleRows.filter((r) => r.level === 'A').length,
+      b: visibleRows.filter((r) => r.level === 'B').length,
+      c: visibleRows.filter((r) => r.level === 'C').length,
       commonWeakness,
       strongestStore: stores.slice().sort((x, y) => y.attach - x.attach)[0]?.store || 'لا يوجد',
       weakestStore: stores.slice().sort((x, y) => x.basket - y.basket)[0]?.store || 'لا يوجد',
       summary: {
-        employees: sortedRows.length,
-        sales: sortedRows.reduce((s, r) => s + r.sales, 0),
-        trans: sortedRows.reduce((s, r) => s + r.trans, 0),
-        avgTicket: sortedRows.reduce((s, r) => s + r.sales, 0) / Math.max(sortedRows.reduce((s, r) => s + r.trans, 0), 1),
+        employees: visibleRows.length,
+        sales: visibleRows.reduce((s, r) => s + r.sales, 0),
+        trans: visibleRows.reduce((s, r) => s + r.trans, 0),
+        avgTicket: visibleRows.reduce((s, r) => s + r.sales, 0) / Math.max(visibleRows.reduce((s, r) => s + r.trans, 0), 1),
       },
     };
-  }, [sortedRows]);
+  }, [visibleRows]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -878,7 +886,13 @@ export default function EmployeeAnalysisPage() {
         </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="text-sm text-neutral-500">انقر على صف الموظف نفسه لفتح التقرير التفصيلي، ويمكنك فرز الجدول من رؤوس الأعمدة.</div>
-          <button type="button" onClick={analyzeWithAI} disabled={aiLoading} className="rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-5 py-2.5 font-black text-white shadow-md transition hover:from-orange-600 hover:to-orange-700 disabled:cursor-not-allowed disabled:opacity-70">{aiLoading ? 'جارٍ التحليل...' : 'تحليل ذكي'}</button>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <label className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-700">
+              <input type="checkbox" checked={showActiveOnly} onChange={(e) => setShowActiveOnly(e.target.checked)} />
+              <span>عرض الموظفين النشطين فقط</span>
+            </label>
+            <button type="button" onClick={analyzeWithAI} disabled={aiLoading} className="rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-5 py-2.5 font-black text-white shadow-md transition hover:from-orange-600 hover:to-orange-700 disabled:cursor-not-allowed disabled:opacity-70">{aiLoading ? 'جارٍ التحليل...' : 'تحليل ذكي'}</button>
+          </div>
         </div>
       </div>
 
@@ -915,7 +929,7 @@ export default function EmployeeAnalysisPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedRows.map((row) => (
+              {visibleRows.map((row) => (
                 <Fragment key={row.id}>
                   <tr className="cursor-pointer border-t border-neutral-100 align-top transition hover:bg-orange-50/40" onClick={() => setExpandedId((prev) => prev === row.id ? null : row.id)}>
                     <td className="px-3 py-3"><div className="font-semibold text-neutral-900">{row.name}</div><div className="mt-1 flex items-center gap-2 text-xs text-neutral-500"><span className="font-mono">{row.id}</span><span className="rounded-full border border-neutral-200 px-2 py-0.5">{expandedId === row.id ? 'إخفاء التقرير' : 'فتح التقرير'}</span></div></td>
@@ -933,7 +947,7 @@ export default function EmployeeAnalysisPage() {
                   {expandedId === row.id ? <tr className="border-t border-orange-100 bg-orange-50/30"><td colSpan={11} className="px-4 py-5"><div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="text-xs text-neutral-500">المبيعات / العمليات / القطع</div><div className="mt-1 font-black text-neutral-900">{formatSAR(row.sales)}</div><div className="mt-1 text-xs text-neutral-500">العمليات: {Math.round(row.trans).toLocaleString()}</div><div className="text-xs text-neutral-500">القطع: {Math.round(row.items).toLocaleString()}</div><div className="mt-3 rounded-xl bg-neutral-50 p-3 text-xs text-neutral-600">{row.quickSummary}</div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="text-xs text-neutral-500">الهدف والمطلوب اليومي</div><div className="mt-2 flex flex-wrap gap-2"><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.targetPaceLabel)}`}>{row.targetPaceLabel}</span><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.dailyRiskLabel)}`}>{row.dailyRiskLabel}</span></div><div className="mt-3 space-y-1.5 text-xs text-neutral-600"><div>نسبة الإنجاز: {row.targetAchievementPct.toFixed(1)}%</div><div>النسبة المطلوبة حتى اليوم: {row.expectedPacePct.toFixed(1)}%</div><div>متوسط البيع اليومي: {formatSAR(row.avgDailySales)}</div><div>المطلوب اليومي المتبقي: {formatSAR(row.requiredRemainingDailySales)}</div></div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="text-xs text-neutral-500">المقارنة مع الفرع والفترات</div><div className="mt-2 flex flex-wrap gap-2"><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.atvVsStoreLabel)}`}>{row.atvVsStoreLabel}</span><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.periodPerformance)}`}>{row.periodPerformance}</span></div><div className="mt-3 space-y-1.5 text-xs text-neutral-600">{row.periodBuckets.length ? row.periodBuckets.map((bucket: PeriodSnapshot) => <div key={bucket.label} className="flex items-center justify-between rounded-xl bg-neutral-50 px-3 py-2"><span>{bucket.label}</span><span>{bucket.achievementPct.toFixed(0)}% - {periodStrengthLabel(bucket.achievementPct)}</span></div>) : <div>لا توجد بيانات فترات</div>}</div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="text-xs text-neutral-500">ملخص سريع</div><div className="mt-3 space-y-2 text-xs text-neutral-600"><div><span className="font-bold text-neutral-900">القوة:</span> {row.strength}</div><div><span className="font-bold text-neutral-900">الضعف:</span> {row.weakness}</div><div><span className="font-bold text-neutral-900">طريقة البيع:</span> {row.sellingStructure}</div><div><span className="font-bold text-neutral-900">الاعتماد على العروض:</span> {row.offerBehavior}</div><div><span className="font-bold text-neutral-900">الإجراء:</span> {row.action}</div></div></div></div><div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2"><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">تفاصيل اللحاف</div><div className="grid grid-cols-1 gap-3 md:grid-cols-2"><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">King</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-2 space-y-1 text-xs text-neutral-600"><div>منخفض 99-300: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.low) : 'لا توجد بيانات'}</div><div>متوسط 301-600: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.medium) : 'لا توجد بيانات'}</div><div>مرتفع 600+: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.high) : 'لا توجد بيانات'}</div><div className="font-bold text-neutral-900">التركيز: {row.hasProductData ? row.productInsights.kingDuvetBands.focus : 'لا توجد بيانات'}</div><div className="text-neutral-500">الحالة: {row.duvetStatus}</div></div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">Full</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-2 space-y-1 text-xs text-neutral-600"><div>منخفض حتى 300: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.low) : 'لا توجد بيانات'}</div><div>متوسط 301-499: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.medium) : 'لا توجد بيانات'}</div><div>مرتفع 500+: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.high) : 'لا توجد بيانات'}</div><div className="font-bold text-neutral-900">التركيز: {row.hasProductData ? row.productInsights.fullDuvetBands.focus : 'لا توجد بيانات'}</div><div className="text-neutral-500">الحالة: {row.duvetStatus}</div></div></div></div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">تفاصيل اللباد</div><div className="grid grid-cols-1 gap-3 md:grid-cols-2"><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">King</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-2 space-y-1 text-xs text-neutral-600"><div>5 سم: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.model5) : 'لا توجد بيانات'}</div><div>10 سم: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.model10) : 'لا توجد بيانات'}</div><div>15 سم: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.model15) : 'لا توجد بيانات'}</div><div>نسبة الربط: {formatMetricValue(row.productInsights.kingPadModels.attachPct, row.hasProductData, '%')}</div><div>التركيز: {row.hasProductData ? row.productInsights.kingPadModels.focus : 'لا توجد بيانات'}</div><div>الجودة: {row.hasProductData ? row.productInsights.kingPadModels.quality : 'لا توجد بيانات'}</div>{row.hasProductData && row.productInsights.kingPadModels.unclassified > 0 ? <div>غير محدد: {Math.round(row.productInsights.kingPadModels.unclassified)}</div> : null}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">Full</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-2 space-y-1 text-xs text-neutral-600"><div>5 سم: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.model5) : 'لا توجد بيانات'}</div><div>10 سم: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.model10) : 'لا توجد بيانات'}</div><div>15 سم: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.model15) : 'لا توجد بيانات'}</div><div>نسبة الربط: {formatMetricValue(row.productInsights.fullPadModels.attachPct, row.hasProductData, '%')}</div><div>التركيز: {row.hasProductData ? row.productInsights.fullPadModels.focus : 'لا توجد بيانات'}</div><div>الجودة: {row.hasProductData ? row.productInsights.fullPadModels.quality : 'لا توجد بيانات'}</div>{row.hasProductData && row.productInsights.fullPadModels.unclassified > 0 ? <div>غير محدد: {Math.round(row.productInsights.fullPadModels.unclassified)}</div> : null}</div></div></div></div></div><div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3"><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">تفاصيل المخدة</div><div className="rounded-xl bg-orange-50 p-3 text-xs text-neutral-700">المعيار: لكل لحاف يجب بيع 2 مخدة<div className="mt-1 text-neutral-500">طريقة الحساب: عدد المخدات ÷ (عدد اللحافات × 2)</div></div><div className="mt-3 space-y-2 text-xs text-neutral-600"><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">King</div><div>{row.hasProductData ? Math.round(row.productInsights.kingPillowDetail.total) : 'لا توجد بيانات'} مخدة / {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.total) : 'لا توجد بيانات'} لحاف</div><div>النسبة: {formatMetricValue(row.productInsights.kingPillowDetail.attachPct, row.hasProductData, '%')}</div><div>الحالة: {row.hasProductData ? row.productInsights.kingPillowDetail.status : 'لا توجد بيانات'}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">Full</div><div>{row.hasProductData ? Math.round(row.productInsights.fullPillowDetail.total) : 'لا توجد بيانات'} مخدة / {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.total) : 'لا توجد بيانات'} لحاف</div><div>النسبة: {formatMetricValue(row.productInsights.fullPillowDetail.attachPct, row.hasProductData, '%')}</div><div>الحالة: {row.hasProductData ? row.productInsights.fullPillowDetail.status : 'لا توجد بيانات'}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">الحالة النهائية</div><div>{row.pillowStatus}</div></div></div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">أعلى 5 عروض مرتبطة</div>{row.productInsights.offerTopItems.length ? <div className="space-y-2 text-xs text-neutral-600">{row.productInsights.offerTopItems.map((offer) => <div key={offer.name} className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">{offer.name}</div><div>التأثير: {Math.round(offer.qty)}</div><div>الأهمية النسبية: {offer.pct.toFixed(1)}%</div></div>)}</div> : <div className="rounded-xl bg-neutral-50 p-3 text-xs text-neutral-500">لا توجد بيانات</div>}</div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">حالة الموظف</div><div className="space-y-2 text-xs text-neutral-600"><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">وضع الهدف الحالي</div><div>{row.targetPaceLabel}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">وضع المطلوب اليومي</div><div>{row.dailyRiskLabel}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">طريقة البيع</div><div>{row.sellingStructure}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">الاعتماد على العروض</div><div>{row.offerBehavior}</div></div></div></div></div></td></tr> : null}
                 </Fragment>
               ))}
-              {!sortedRows.length ? <tr><td colSpan={11} className="py-8 text-center text-neutral-400">لا توجد بيانات ضمن الفلاتر الحالية.</td></tr> : null}
+              {!visibleRows.length ? <tr><td colSpan={11} className="py-8 text-center text-neutral-400">لا توجد بيانات ضمن الفلاتر الحالية.</td></tr> : null}
             </tbody>
           </table>
         </div>
