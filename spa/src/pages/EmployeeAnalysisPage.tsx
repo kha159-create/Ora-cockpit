@@ -10,15 +10,23 @@ const PAD_MODEL_CODE_MAP: Record<string, 5 | 10 | 15> = {
   '9300': 5,
   '9611': 10,
   '9629': 15,
+  '9612': 5,
+  '9615': 10,
+  '9630': 15,
   '130010008': 5,
   '130010023': 10,
   '130010024': 15,
+  '130030008': 5,
+  '130030009': 10,
+  '130030010': 15,
 };
 
 const PAD_NAME_MODEL_MAP: Array<{ pattern: RegExp; model: 5 | 10 | 15 }> = [
-  { pattern: /cloud\s*drea?m\s*15cm/i, model: 15 },
-  { pattern: /cloud\s*drea?m/i, model: 10 },
-  { pattern: /just\s*relax/i, model: 5 },
+  { pattern: /justrelax|matresspadkingjustrelax/, model: 5 },
+  { pattern: /clouddre+a?m15cm|matresspadfullclouddre+a?m15cm|fullclouddre+a?m15cm/, model: 15 },
+  { pattern: /clouddream10cm|matresspadfullclouddream10cm/, model: 10 },
+  { pattern: /clouddream5cm|matresspadfullclouddream5cm/, model: 5 },
+  { pattern: /matresspadkingclouddream|kingclouddream|clouddreammatresspadking/, model: 10 },
   { pattern: /15\s*cm/i, model: 15 },
   { pattern: /10\s*cm/i, model: 10 },
   { pattern: /5\s*cm/i, model: 5 },
@@ -317,7 +325,7 @@ export default function EmployeeAnalysisPage() {
   const [offersRaw, setOffersRaw] = useState<any>(null);
   const [mgmt, setMgmt] = useState<any>(null);
   const [manager, setManager] = useState('all');
-  const [branch, setBranch] = useState('all');
+  const [branch, setBranch] = useState(user?.storeId || 'all');
   const [city, setCity] = useState('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
@@ -370,13 +378,32 @@ export default function EmployeeAnalysisPage() {
     const cSet = new Set<string>();
     Object.values(storeMeta).forEach((m: any) => {
       if (m?.manager) mSet.add(String(m.manager));
+    });
+
+    Object.entries(storeMeta).forEach(([sid, m]: [string, any]) => {
+      if (user?.role === 'BranchManager' && sid !== user?.storeId) return;
+      if (effectiveManager !== 'all' && String(m?.manager || '') !== effectiveManager) return;
       if (m?.city) cSet.add(String(m.city));
     });
+
+    const scopedBranchList = Object.keys(stores)
+      .filter((sid) => {
+        const meta = storeMeta[sid] || {};
+        if (user?.role === 'BranchManager' && sid !== user?.storeId) return false;
+        if (!isAdminOrAuditor(user?.role) && user?.role !== 'BranchManager' && String(meta?.manager || '') !== String(user?.name || '')) return false;
+        if (effectiveManager !== 'all' && String(meta?.manager || '') !== effectiveManager) return false;
+        if (city !== 'all' && String(meta?.city || '') !== city) return false;
+        return true;
+      })
+      .map((sid) => ({ id: sid, name: stores[sid] || sid }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
     const byEmp = new Map<string, EmployeeRow>();
 
     Object.entries(history).forEach(([sid, recs]: [string, any]) => {
       const meta = storeMeta[sid] || {};
+      if (user?.role === 'BranchManager' && sid !== user?.storeId) return;
+      if (!isAdminOrAuditor(user?.role) && user?.role !== 'BranchManager' && String(meta?.manager || '') !== String(user?.name || '')) return;
       if (branch !== 'all' && sid !== branch) return;
       if (effectiveManager !== 'all' && String(meta?.manager || '') !== effectiveManager) return;
       if (city !== 'all' && String(meta?.city || '') !== city) return;
@@ -603,7 +630,7 @@ export default function EmployeeAnalysisPage() {
     return {
       rows: Array.from(byEmp.values()),
       managers: Array.from(mSet).sort((a, b) => a.localeCompare(b, 'ar')),
-      branches: Object.keys(stores).map((sid) => ({ id: sid, name: stores[sid] || sid })).sort((a, b) => a.name.localeCompare(b.name, 'ar')),
+      branches: scopedBranchList,
       cities: Array.from(cSet).sort((a, b) => a.localeCompare(b, 'ar')),
       monthStart,
       monthEnd,
@@ -611,7 +638,7 @@ export default function EmployeeAnalysisPage() {
       elapsedDays: daysInclusiveYMD(monthStart, end),
       totalMonthDays: daysInMonthFromYmd(end),
     };
-  }, [branch, city, customEnd, customStart, effectiveManager, empProductsRaw, empRaw, mgmt, offersRaw, productsPeriodKey]);
+  }, [branch, city, customEnd, customStart, effectiveManager, empProductsRaw, empRaw, mgmt, offersRaw, productsPeriodKey, user?.name, user?.role, user?.storeId]);
 
   const decisionRows = useMemo(() => {
     if (!derived.rows.length || !derived.monthStart || !derived.paceEnd) return [];
@@ -879,9 +906,9 @@ export default function EmployeeAnalysisPage() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
           <div><div className="mb-1 text-xs font-semibold text-neutral-500">من</div><input type="date" className="input" value={customStart} onChange={(e) => setCustomStart(e.target.value)} /></div>
           <div><div className="mb-1 text-xs font-semibold text-neutral-500">إلى</div><input type="date" className="input" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} /></div>
-          <div><div className="mb-1 text-xs font-semibold text-neutral-500">مدير المنطقة</div><select className="input" value={manager} onChange={(e) => setManager(e.target.value)}><option value="all">الكل</option>{derived.managers.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
-          <div><div className="mb-1 text-xs font-semibold text-neutral-500">المدينة</div><select className="input" value={city} onChange={(e) => setCity(e.target.value)}><option value="all">الكل</option>{derived.cities.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
-          <div><div className="mb-1 text-xs font-semibold text-neutral-500">الفرع</div><select className="input" value={branch} onChange={(e) => setBranch(e.target.value)}><option value="all">كافة الفروع</option>{derived.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+          {isAdminOrAuditor(user?.role) ? <div><div className="mb-1 text-xs font-semibold text-neutral-500">مدير المنطقة</div><select className="input" value={manager} onChange={(e) => setManager(e.target.value)}><option value="all">الكل</option>{derived.managers.map((m) => <option key={m} value={m}>{m}</option>)}</select></div> : null}
+          <div className={user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}><div className="mb-1 text-xs font-semibold text-neutral-500">المدينة</div><select className="input" value={city} onChange={(e) => setCity(e.target.value)}><option value="all">الكل</option>{derived.cities.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+          <div className={user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}><div className="mb-1 text-xs font-semibold text-neutral-500">الفرع</div><select className="input" value={branch} onChange={(e) => setBranch(e.target.value)}><option value="all">كافة الفروع</option>{derived.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
           <div><div className="mb-1 text-xs font-semibold text-neutral-500">مصدر أصناف الموظف</div><select className="input" value={productsPeriodKey} onChange={(e) => setProductsPeriodKey(e.target.value as ProductPeriodKey)}><option value="mtd">MTD (حتى أمس)</option><option value="30d">آخر 30 يوم</option><option value="14d">آخر 14 يوم</option><option value="7d">آخر 7 أيام</option><option value="yest">أمس</option></select></div>
         </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
