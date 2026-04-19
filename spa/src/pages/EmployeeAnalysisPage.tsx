@@ -1,5 +1,6 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { getCurrentUser } from '../auth/storage';
 import { loadEmployeeProductsData, loadEmployeesData, loadManagementData, loadOffersData } from '../services/upstreamData';
 import { mtdRangeThroughYesterday } from '../utils/mtdDateRange';
@@ -365,6 +366,16 @@ function SortableHeader({ label, sortKey, activeKey, direction, onClick, align =
   const indicator = activeKey !== sortKey ? '<>' : direction === 'asc' ? '^' : 'v';
   const className = align === 'right' ? 'flex items-center gap-2 font-bold' : 'mx-auto flex items-center gap-2 font-bold';
   return <button type="button" className={className} onClick={() => onClick(sortKey)}>{label} <span className="text-xs">{indicator}</span></button>;
+}
+
+function formatExportDate(value: Date) {
+  return value.toLocaleString('ar-SA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export default function EmployeeAnalysisPage() {
@@ -919,6 +930,29 @@ export default function EmployeeAnalysisPage() {
     return sortedRows.filter((row) => row.isActive);
   }, [showActiveOnly, sortedRows]);
 
+  const groupedVisibleRows = useMemo(() => {
+    const branchOrder = new Map(derived.branches.map((item, index) => [item.id, index]));
+    const grouped = new Map<string, { storeId: string; storeName: string; rows: typeof visibleRows }>();
+
+    visibleRows.forEach((row) => {
+      const current = grouped.get(row.storeId);
+      if (current) {
+        current.rows.push(row);
+        return;
+      }
+      grouped.set(row.storeId, { storeId: row.storeId, storeName: row.storeName, rows: [row] });
+    });
+
+    return Array.from(grouped.values()).sort((a, b) => {
+      const aIndex = branchOrder.get(a.storeId);
+      const bIndex = branchOrder.get(b.storeId);
+      if (aIndex != null && bIndex != null) return aIndex - bIndex;
+      if (aIndex != null) return -1;
+      if (bIndex != null) return 1;
+      return a.storeName.localeCompare(b.storeName, 'ar');
+    });
+  }, [derived.branches, visibleRows]);
+
   const topCards = useMemo(() => {
     const weakCounts = new Map<string, number>();
     const storeMap = new Map<string, { attach: number; basket: number; count: number }>();
@@ -958,7 +992,7 @@ export default function EmployeeAnalysisPage() {
   }
 
   async function analyzeWithAI() {
-    if (!sortedRows.length) {
+    if (!visibleRows.length) {
       setAiResult('لا توجد بيانات كافية للتحليل الذكي حالياً.');
       return;
     }
@@ -969,9 +1003,9 @@ export default function EmployeeAnalysisPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          filters: { manager: effectiveManager, city, branch, customStart, customEnd, productsPeriodKey },
+          filters: { manager: effectiveManager, city, branch, customStart, customEnd, productsPeriodKey, activeOnly: showActiveOnly },
           summary: { employees: topCards.summary.employees, sales: Math.round(topCards.summary.sales), transactions: Math.round(topCards.summary.trans), avgTicket: Number(topCards.summary.avgTicket.toFixed(1)) },
-          rows: sortedRows.map((row) => ({ employee: row.name, employeeId: row.id, store: row.storeName, level: row.level, pattern: row.pattern, structure: row.sellingStructure, strength: row.strength, weakness: row.weakness, action: row.action, duvetStatus: row.duvetStatus, padFocus: row.padFocus, padQuality: row.padQuality, pillowStatus: row.pillowStatus, offerBehavior: row.offerBehavior, avgTicket: row.avgTicket, atvVsStore: row.atvVsStoreLabel, sales: row.sales, transactions: row.trans, duvetTotal: row.totalDuvet, padAttachPct: row.weightedPadAttach, pillowAttachPct: row.weightedPillowAttach, offerFocusPct: row.productInsights.offerFocusPct, targetAchievementPct: row.targetAchievementPct, targetPaceStatus: row.targetPaceLabel, dailyRiskStatus: row.dailyRiskLabel, avgDailySales: row.avgDailySales, requiredRemainingDailySales: row.requiredRemainingDailySales, periodPerformance: row.periodPerformance, periodBuckets: row.periodBuckets, duvetKingBands: row.productInsights.kingDuvetBands, duvetFullBands: row.productInsights.fullDuvetBands, padKingModels: row.productInsights.kingPadModels, padFullModels: row.productInsights.fullPadModels, pillowKing: row.productInsights.kingPillowDetail, pillowFull: row.productInsights.fullPillowDetail, topOffers: row.productInsights.offerTopItems, productMix: row.productInsights.mixSummary, padKingPriceFocus: row.productInsights.kingPadModels.priceFocus, padFullPriceFocus: row.productInsights.fullPadModels.priceFocus })),
+          rows: visibleRows.map((row) => ({ employee: row.name, employeeId: row.id, store: row.storeName, level: row.level, pattern: row.pattern, structure: row.sellingStructure, strength: row.strength, weakness: row.weakness, action: row.action, duvetStatus: row.duvetStatus, padFocus: row.padFocus, padQuality: row.padQuality, pillowStatus: row.pillowStatus, offerBehavior: row.offerBehavior, avgTicket: row.avgTicket, atvVsStore: row.atvVsStoreLabel, sales: row.sales, transactions: row.trans, duvetTotal: row.totalDuvet, padAttachPct: row.weightedPadAttach, pillowAttachPct: row.weightedPillowAttach, offerFocusPct: row.productInsights.offerFocusPct, targetAchievementPct: row.targetAchievementPct, targetPaceStatus: row.targetPaceLabel, dailyRiskStatus: row.dailyRiskLabel, avgDailySales: row.avgDailySales, requiredRemainingDailySales: row.requiredRemainingDailySales, periodPerformance: row.periodPerformance, periodBuckets: row.periodBuckets, duvetKingBands: row.productInsights.kingDuvetBands, duvetFullBands: row.productInsights.fullDuvetBands, padKingModels: row.productInsights.kingPadModels, padFullModels: row.productInsights.fullPadModels, pillowKing: row.productInsights.kingPillowDetail, pillowFull: row.productInsights.fullPillowDetail, topOffers: row.productInsights.offerTopItems, productMix: row.productInsights.mixSummary, padKingPriceFocus: row.productInsights.kingPadModels.priceFocus, padFullPriceFocus: row.productInsights.fullPadModels.priceFocus })),
         }),
       });
       if (!res.ok) throw new Error();
@@ -982,6 +1016,71 @@ export default function EmployeeAnalysisPage() {
     } finally {
       setAiLoading(false);
     }
+  }
+
+  function exportToExcel() {
+    if (!visibleRows.length) return;
+
+    const filtersUsed = [
+      `مدير المنطقة: ${effectiveManager === 'all' ? 'الكل' : effectiveManager}`,
+      `المدينة: ${city === 'all' ? 'الكل' : city}`,
+      `الفرع: ${branch === 'all' ? 'كافة الفروع' : derived.branches.find((item) => item.id === branch)?.name || branch}`,
+      `الفترة: ${customStart || '-'} إلى ${customEnd || '-'}`,
+      `مصدر الأصناف: ${productsPeriodKey}`,
+    ].join(' | ');
+
+    const exportRows = groupedVisibleRows.flatMap((group) =>
+      group.rows.map((row) => ({
+        'اسم الموظف': row.name,
+        'الفرع': group.storeName,
+        'المستوى': row.levelLabel,
+        'المبيعات': Math.round(row.sales),
+        'معدل الفاتورة': Number(row.avgTicket.toFixed(1)),
+        'نسبة تحقيق التارجت': Number(row.targetAchievementPct.toFixed(1)),
+        'وضع الهدف الحالي': row.targetPaceLabel,
+        'وضع المطلوب اليومي': row.dailyRiskLabel,
+        'النمط البيعي': row.pattern,
+        'نقطة القوة': row.strength,
+        'نقطة الضعف': row.weakness,
+        'الإجراء': row.action,
+        'اللحاف': row.duvetStatus,
+        'اللباد': row.padQuality,
+        'المخدة': row.pillowStatus,
+      })),
+    );
+
+    const workbook = XLSX.utils.book_new();
+    const mainSheet = XLSX.utils.json_to_sheet(exportRows);
+    mainSheet['!cols'] = [
+      { wch: 24 },
+      { wch: 20 },
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 22 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 34 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+    ];
+    XLSX.utils.book_append_sheet(workbook, mainSheet, 'تحليل الموظفين');
+
+    const metadataSheet = XLSX.utils.aoa_to_sheet([
+      ['البيان', 'القيمة'],
+      ['تاريخ التصدير', formatExportDate(new Date())],
+      ['عدد الموظفين', visibleRows.length],
+      ['الفلاتر المستخدمة', filtersUsed],
+      ['النشطين فقط', showActiveOnly ? 'نعم' : 'لا'],
+    ]);
+    metadataSheet['!cols'] = [{ wch: 20 }, { wch: 80 }];
+    XLSX.utils.book_append_sheet(workbook, metadataSheet, 'معلومات التصدير');
+
+    XLSX.writeFile(workbook, `employee-analysis-${customEnd || 'export'}.xlsx`);
   }
 
   if (!empRaw || !mgmt || !empProductsRaw || !offersRaw) return <div className="p-6">جارٍ تحميل بيانات تحليل الموظفين...</div>;
@@ -1014,6 +1113,7 @@ export default function EmployeeAnalysisPage() {
               <input type="checkbox" checked={showActiveOnly} onChange={(e) => setShowActiveOnly(e.target.checked)} />
               <span>عرض الموظفين النشطين فقط</span>
             </label>
+            <button type="button" onClick={exportToExcel} disabled={!visibleRows.length} className="rounded-xl border border-neutral-300 bg-white px-5 py-2.5 font-bold text-neutral-700 shadow-sm transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50">تصدير Excel</button>
             <button type="button" onClick={analyzeWithAI} disabled={aiLoading} className="rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-5 py-2.5 font-black text-white shadow-md transition hover:from-orange-600 hover:to-orange-700 disabled:cursor-not-allowed disabled:opacity-70">{aiLoading ? 'جارٍ التحليل...' : 'تحليل ذكي'}</button>
           </div>
         </div>
@@ -1052,8 +1152,18 @@ export default function EmployeeAnalysisPage() {
               </tr>
             </thead>
             <tbody>
-              {visibleRows.map((row) => (
-                <Fragment key={row.id}>
+              {groupedVisibleRows.map((group) => (
+                <Fragment key={group.storeId}>
+                  <tr className="border-t border-neutral-200 bg-gradient-to-r from-orange-50 to-white">
+                    <td colSpan={11} className="px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-black text-neutral-900">{group.storeName}</div>
+                        <div className="text-xs text-neutral-500">عدد الموظفين: {group.rows.length}</div>
+                      </div>
+                    </td>
+                  </tr>
+                  {group.rows.map((row) => (
+                    <Fragment key={row.id}>
                   <tr className="cursor-pointer border-t border-neutral-100 align-top transition hover:bg-orange-50/40" onClick={() => setExpandedId((prev) => prev === row.id ? null : row.id)}>
                     <td className="px-3 py-3"><div className="font-semibold text-neutral-900">{row.name}</div><div className="mt-1 flex items-center gap-2 text-xs text-neutral-500"><span className="font-mono">{row.id}</span><span className="rounded-full border border-neutral-200 px-2 py-0.5">{expandedId === row.id ? 'إخفاء التقرير' : 'فتح التقرير'}</span></div></td>
                     <td className="px-3 py-3 text-neutral-700">{row.storeName}</td>
@@ -1068,6 +1178,8 @@ export default function EmployeeAnalysisPage() {
                     <td className="px-3 py-3 text-center"><div className="mx-auto max-w-[180px] text-xs font-semibold leading-5 text-neutral-700">{row.action}<div className="text-neutral-500">الإنجاز: {row.targetAchievementPct.toFixed(1)}%</div></div></td>
                   </tr>
                   {expandedId === row.id ? <tr className="border-t border-orange-100 bg-orange-50/30"><td colSpan={11} className="px-4 py-5"><div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="text-xs text-neutral-500">المبيعات / العمليات / القطع</div><div className="mt-1 font-black text-neutral-900">{formatSAR(row.sales)}</div><div className="mt-1 text-xs text-neutral-500">العمليات: {Math.round(row.trans).toLocaleString()}</div><div className="text-xs text-neutral-500">القطع: {Math.round(row.items).toLocaleString()}</div><div className="mt-3 rounded-xl bg-neutral-50 p-3 text-xs text-neutral-600">{row.quickSummary}</div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="text-xs text-neutral-500">الهدف والمطلوب اليومي</div><div className="mt-2 flex flex-wrap gap-2"><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.targetPaceLabel)}`}>{row.targetPaceLabel}</span><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.dailyRiskLabel)}`}>{row.dailyRiskLabel}</span></div><div className="mt-3 space-y-1.5 text-xs text-neutral-600"><div>نسبة الإنجاز: {row.targetAchievementPct.toFixed(1)}%</div><div>النسبة المطلوبة حتى اليوم: {row.expectedPacePct.toFixed(1)}%</div><div>متوسط البيع اليومي: {formatSAR(row.avgDailySales)}</div><div>المطلوب اليومي المتبقي: {formatSAR(row.requiredRemainingDailySales)}</div></div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="text-xs text-neutral-500">المقارنة مع الفرع والفترات</div><div className="mt-2 flex flex-wrap gap-2"><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.atvVsStoreLabel)}`}>{row.atvVsStoreLabel}</span><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-bold ${chipTone(row.periodPerformance)}`}>{row.periodPerformance}</span></div><div className="mt-3 space-y-1.5 text-xs text-neutral-600">{row.periodBuckets.length ? row.periodBuckets.map((bucket: PeriodSnapshot) => <div key={bucket.label} className="flex items-center justify-between rounded-xl bg-neutral-50 px-3 py-2"><span>{bucket.label}</span><span>{bucket.achievementPct.toFixed(0)}% - {periodStrengthLabel(bucket.achievementPct)}</span></div>) : <div>لا توجد بيانات فترات</div>}</div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="text-xs text-neutral-500">ملخص سريع</div><div className="mt-3 space-y-2 text-xs text-neutral-600"><div><span className="font-bold text-neutral-900">القوة:</span> {row.strength}</div><div><span className="font-bold text-neutral-900">الضعف:</span> {row.weakness}</div><div><span className="font-bold text-neutral-900">طريقة البيع:</span> {row.sellingStructure}</div><div><span className="font-bold text-neutral-900">الاعتماد على العروض:</span> {row.offerBehavior}</div><div><span className="font-bold text-neutral-900">الإجراء:</span> {row.action}</div></div></div></div><div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2"><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">تفاصيل اللحاف</div><div className="grid grid-cols-1 gap-3 md:grid-cols-2"><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">King</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-2 space-y-1 text-xs text-neutral-600"><div>منخفض 99-300: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.low) : 'لا توجد بيانات'}</div><div>متوسط 301-600: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.medium) : 'لا توجد بيانات'}</div><div>مرتفع 600+: {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.high) : 'لا توجد بيانات'}</div><div className="font-bold text-neutral-900">التركيز: {row.hasProductData ? row.productInsights.kingDuvetBands.focus : 'لا توجد بيانات'}</div><div className="text-neutral-500">الحالة: {row.duvetStatus}</div></div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">Full</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-2 space-y-1 text-xs text-neutral-600"><div>منخفض حتى 300: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.low) : 'لا توجد بيانات'}</div><div>متوسط 301-499: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.medium) : 'لا توجد بيانات'}</div><div>مرتفع 500+: {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.high) : 'لا توجد بيانات'}</div><div className="font-bold text-neutral-900">التركيز: {row.hasProductData ? row.productInsights.fullDuvetBands.focus : 'لا توجد بيانات'}</div><div className="text-neutral-500">الحالة: {row.duvetStatus}</div></div></div></div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">تفاصيل اللباد</div><div className="grid grid-cols-1 gap-3 md:grid-cols-2"><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">King</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-2 space-y-1 text-xs text-neutral-600"><div>5 سم: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.model5) : 'لا توجد بيانات'}</div><div>10 سم: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.model10) : 'لا توجد بيانات'}</div><div>15 سم: {row.hasProductData ? Math.round(row.productInsights.kingPadModels.model15) : 'لا توجد بيانات'}</div><div>نسبة الربط: {formatMetricValue(row.productInsights.kingPadModels.attachPct, row.hasProductData, '%')}</div><div>التركيز: {row.hasProductData ? row.productInsights.kingPadModels.focus : 'لا توجد بيانات'}</div><div>الجودة: {row.hasProductData ? row.productInsights.kingPadModels.quality : 'لا توجد بيانات'}</div>{row.hasProductData && row.productInsights.kingPadModels.unclassified > 0 ? <div>غير محدد: {Math.round(row.productInsights.kingPadModels.unclassified)}</div> : null}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="text-xs text-neutral-500">Full</div><div className="mt-1 text-sm font-bold text-neutral-900">الإجمالي: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.total).toLocaleString() : 'لا توجد بيانات'}</div><div className="mt-2 space-y-1 text-xs text-neutral-600"><div>5 سم: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.model5) : 'لا توجد بيانات'}</div><div>10 سم: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.model10) : 'لا توجد بيانات'}</div><div>15 سم: {row.hasProductData ? Math.round(row.productInsights.fullPadModels.model15) : 'لا توجد بيانات'}</div><div>نسبة الربط: {formatMetricValue(row.productInsights.fullPadModels.attachPct, row.hasProductData, '%')}</div><div>التركيز: {row.hasProductData ? row.productInsights.fullPadModels.focus : 'لا توجد بيانات'}</div><div>الجودة: {row.hasProductData ? row.productInsights.fullPadModels.quality : 'لا توجد بيانات'}</div>{row.hasProductData && row.productInsights.fullPadModels.unclassified > 0 ? <div>غير محدد: {Math.round(row.productInsights.fullPadModels.unclassified)}</div> : null}</div></div></div></div></div><div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3"><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">تفاصيل المخدة</div><div className="rounded-xl bg-orange-50 p-3 text-xs text-neutral-700">المعيار: لكل لحاف يجب بيع 2 مخدة<div className="mt-1 text-neutral-500">طريقة الحساب: عدد المخدات ÷ (عدد اللحافات × 2)</div></div><div className="mt-3 space-y-2 text-xs text-neutral-600"><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">King</div><div>{row.hasProductData ? Math.round(row.productInsights.kingPillowDetail.total) : 'لا توجد بيانات'} مخدة / {row.hasProductData ? Math.round(row.productInsights.kingDuvetBands.total) : 'لا توجد بيانات'} لحاف</div><div>النسبة: {formatMetricValue(row.productInsights.kingPillowDetail.attachPct, row.hasProductData, '%')}</div><div>الحالة: {row.hasProductData ? row.productInsights.kingPillowDetail.status : 'لا توجد بيانات'}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">Full</div><div>{row.hasProductData ? Math.round(row.productInsights.fullPillowDetail.total) : 'لا توجد بيانات'} مخدة / {row.hasProductData ? Math.round(row.productInsights.fullDuvetBands.total) : 'لا توجد بيانات'} لحاف</div><div>النسبة: {formatMetricValue(row.productInsights.fullPillowDetail.attachPct, row.hasProductData, '%')}</div><div>الحالة: {row.hasProductData ? row.productInsights.fullPillowDetail.status : 'لا توجد بيانات'}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">الحالة النهائية</div><div>{row.pillowStatus}</div></div></div></div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">أعلى 5 عروض مرتبطة</div>{row.productInsights.offerTopItems.length ? <div className="space-y-2 text-xs text-neutral-600">{row.productInsights.offerTopItems.map((offer) => <div key={offer.name} className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">{offer.name}</div><div>التأثير: {Math.round(offer.qty)}</div><div>الأهمية النسبية: {offer.pct.toFixed(1)}%</div></div>)}</div> : <div className="rounded-xl bg-neutral-50 p-3 text-xs text-neutral-500">لا توجد بيانات</div>}</div><div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"><div className="mb-3 text-sm font-bold text-neutral-900">حالة الموظف</div><div className="space-y-2 text-xs text-neutral-600"><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">وضع الهدف الحالي</div><div>{row.targetPaceLabel}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">وضع المطلوب اليومي</div><div>{row.dailyRiskLabel}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">طريقة البيع</div><div>{row.sellingStructure}</div></div><div className="rounded-xl bg-neutral-50 p-3"><div className="font-bold text-neutral-900">الاعتماد على العروض</div><div>{row.offerBehavior}</div></div></div></div></div></td></tr> : null}
+                    </Fragment>
+                  ))}
                 </Fragment>
               ))}
               {!visibleRows.length ? <tr><td colSpan={11} className="py-8 text-center text-neutral-400">لا توجد بيانات ضمن الفلاتر الحالية.</td></tr> : null}
