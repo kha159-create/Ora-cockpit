@@ -10,6 +10,10 @@ function formatSAR(val: number) {
   return val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 }
 
+function formatQty(val: number) {
+  return Math.round(val || 0).toLocaleString('en-US');
+}
+
 function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
 }
@@ -144,7 +148,7 @@ export default function OffersPage() {
       let yestSales = 0, yestDisc = 0, yestOps = 0;
       let periodSales = 0, periodDisc = 0, periodOps = 0;
 
-      const storeBreakdown: Record<string, { sales: number; disc: number; ops: number; name: string }> = {};
+      const storeBreakdown: Record<string, { sales: number; disc: number; ops: number; qty: number; name: string }> = {};
 
       // Aggregate from stats (daily per-store sale records)
       const statsArray = o.stats || [];
@@ -161,7 +165,7 @@ export default function OffersPage() {
           periodDisc += disc;
           periodOps += cnt;
 
-          if (!storeBreakdown[sid]) storeBreakdown[sid] = { sales: 0, disc: 0, ops: 0, name: storesMap[sid] || sid };
+          if (!storeBreakdown[sid]) storeBreakdown[sid] = { sales: 0, disc: 0, ops: 0, qty: 0, name: storesMap[sid] || sid };
           storeBreakdown[sid].sales += sale;
           storeBreakdown[sid].disc += disc;
           storeBreakdown[sid].ops += cnt;
@@ -188,7 +192,7 @@ export default function OffersPage() {
             yestDisc += Number(sObj.d_y ?? 0);
             yestOps += Number(sObj.t_y ?? 0);
 
-            if (!storeBreakdown[sid]) storeBreakdown[sid] = { sales: 0, disc: 0, ops: 0, name: storesMap[sid] || sid };
+            if (!storeBreakdown[sid]) storeBreakdown[sid] = { sales: 0, disc: 0, ops: 0, qty: 0, name: storesMap[sid] || sid };
             storeBreakdown[sid].sales += sale;
             storeBreakdown[sid].disc += disc;
             storeBreakdown[sid].ops += ops;
@@ -208,6 +212,10 @@ export default function OffersPage() {
           const itemName = String(it.n || it.name || it.item_name || itemId);
           const qty = Math.abs(Number(it.q || it.qty || it.quantity || 0));
           if (!itemId) return;
+          if (sid) {
+            if (!storeBreakdown[sid]) storeBreakdown[sid] = { sales: 0, disc: 0, ops: 0, qty: 0, name: storesMap[sid] || sid };
+            storeBreakdown[sid].qty += qty;
+          }
           if (!itemAgg[itemId]) itemAgg[itemId] = { id: itemId, name: itemName, qty: 0 };
           itemAgg[itemId].qty += qty;
           // Use the longest/most descriptive name
@@ -388,14 +396,21 @@ export default function OffersPage() {
 
   const copyOfferDetails = (offer: any, e: React.MouseEvent) => {
     e.stopPropagation();
-    const text = `
-*${offer.name || offer.offer_name}*
-📊 المبيعات: ${formatSAR(offer.periodSales)}
-📉 الخصم: ${formatSAR(offer.periodDisc)}
-🎯 الكفاءة: ${offer.periodEff.toFixed(1)}%
-🛒 العمليات: ${offer.periodOps}
- متوسط السلة: ${formatSAR(offer.periodAvgBasket)}
-`.trim();
+    const totalQty = (offer.aggregatedItems || []).reduce((sum: number, item: any) => sum + Number(item.qty || 0), 0);
+    const storesText = Object.values(offer.storeBreakdown || {})
+      .sort((a: any, b: any) => (b.sales - a.sales) || (b.qty - a.qty))
+      .map((store: any) => `- ${store.name}: الكمية ${formatQty(store.qty)}`)
+      .join('\n');
+    const text = [
+      `*${offer.name || offer.offer_name}*`,
+      `المبيعات: ${formatSAR(offer.periodSales)}`,
+      `الخصم: ${formatSAR(offer.periodDisc)}`,
+      `الكفاءة: ${offer.periodEff.toFixed(1)}%`,
+      `العمليات: ${offer.periodOps}`,
+      `متوسط السلة: ${formatSAR(offer.periodAvgBasket)}`,
+      `الكمية المباعة: ${formatQty(totalQty)}`,
+      ...(storesText ? ['المعارض والكميات:', storesText] : []),
+    ].join('\n');
     navigator.clipboard.writeText(text).then(() => {
       alert('تم نسخ تفاصيل العرض!');
     });
@@ -998,23 +1013,18 @@ export default function OffersPage() {
                         <tr className="bg-neutral-50">
                           <th className="py-2 px-3 text-right text-xs font-semibold text-neutral-500">المعرض</th>
                           <th className="py-2 px-3 text-center text-xs font-semibold text-neutral-500">المبيعات</th>
-                          <th className="py-2 px-3 text-center text-xs font-semibold text-neutral-500">الخصم</th>
-                          <th className="py-2 px-3 text-center text-xs font-semibold text-neutral-500">العمليات</th>
-                          <th className="py-2 px-3 text-center text-xs font-semibold text-neutral-500">كفاءة %</th>
+                          <th className="py-2 px-3 text-center text-xs font-semibold text-neutral-500">الكمية المباعة</th>
                         </tr>
                       </thead>
                       <tbody>
                         {Object.entries(selectedOffer.storeBreakdown)
                           .sort(([, a]: any, [, b]: any) => b.sales - a.sales)
                           .map(([sid, s]: [string, any]) => {
-                            const eff = s.sales > 0 ? (s.sales / (s.sales + s.disc)) * 100 : 0;
                             return (
                               <tr key={sid} className="border-t border-neutral-100 hover:bg-blue-50 transition-colors">
                                 <td className="py-2 px-3 font-semibold text-neutral-900">{s.name}</td>
                                 <td className="py-2 px-3 text-center font-bold text-green-700">{formatSAR(s.sales)}</td>
-                                <td className="py-2 px-3 text-center text-red-500">{formatSAR(s.disc)}</td>
-                                <td className="py-2 px-3 text-center">{s.ops.toLocaleString()}</td>
-                                <td className={`py-2 px-3 text-center font-bold ${eff >= 80 ? 'text-green-600' : eff >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{eff.toFixed(1)}%</td>
+                                <td className="py-2 px-3 text-center font-bold text-orange-700">{formatQty(s.qty)}</td>
                               </tr>
                             );
                           })}
