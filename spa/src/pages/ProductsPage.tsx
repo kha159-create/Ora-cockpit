@@ -95,9 +95,23 @@ type ValueAnalysisBucket = {
   total: { qty: number; amount: number; count: number };
 };
 
-const MATTRESS_PAD_KING_IDS = new Set(['130010008', '130010024', '130010023']);
-const MATTRESS_PAD_FULL_IDS = new Set(['130030010', '130030008', '130030009']);
-const MATTRESS_PAD_PROTECTOR_IDS = new Set(['130010025', '130030011', '9621', '9622', '9625', '9626']);
+const MATTRESS_PAD_CODE_BY_ITEM_ID: Record<string, string> = {
+  '130010008': '9300',
+  '130010024': '9626',
+  '130010023': '9611',
+  '130030010': '9630',
+  '130030009': '9615',
+  '130030008': '9612',
+};
+
+const MATTRESS_PAD_TIERS: Record<string, { group: 'king' | 'full'; tier: 'low' | 'medium' | 'high'; price: number }> = {
+  '9300': { group: 'king', tier: 'low', price: 194 },
+  '9611': { group: 'king', tier: 'medium', price: 399 },
+  '9626': { group: 'king', tier: 'high', price: 499 },
+  '9612': { group: 'full', tier: 'low', price: 189 },
+  '9630': { group: 'full', tier: 'medium', price: 200 },
+  '9615': { group: 'full', tier: 'high', price: 249 },
+};
 
 function normText(v: string) {
   return String(v || '')
@@ -639,14 +653,26 @@ export default function ProductsPage() {
       catalogRows.forEach(item => {
         const avgPrice = item.qty > 0 ? item.amount / item.qty : 0;
         const catText = `${item.category || ''} ${item.name || ''}`;
-        const itemCodes = [item.id, item.alias, item.old_code, item.dCode].map((v) => String(v || '').trim()).filter(Boolean);
+        const itemCodes = [MATTRESS_PAD_CODE_BY_ITEM_ID[String(item.id || '').trim()], item.id, item.alias, item.old_code, item.dCode]
+          .map((v) => String(v || '').trim())
+          .filter(Boolean);
+        const mattressPadCode = itemCodes.find((code) => MATTRESS_PAD_TIERS[code]);
+        const mattressPadTier = mattressPadCode ? MATTRESS_PAD_TIERS[mattressPadCode] : null;
+
+        if (mattressPadTier) {
+          const bucket = mattressPadTier.group === 'king' ? mattressPadKing : mattressPadFull;
+          const tier = bucket[mattressPadTier.tier];
+          bucket.total.qty += item.qty;
+          bucket.total.amount += item.qty * mattressPadTier.price;
+          bucket.total.count += 1;
+          tier.qty += item.qty;
+          tier.amount += item.qty * mattressPadTier.price;
+          tier.count += 1;
+          return;
+        }
+
         let canon = canonicalTargetCategory(catText);
-        if (itemCodes.some((code) => MATTRESS_PAD_KING_IDS.has(code))) canon = 'لباد كينج';
-        if (itemCodes.some((code) => MATTRESS_PAD_FULL_IDS.has(code))) canon = 'لباد فل';
-        if (
-          (canon === 'لباد كينج' || canon === 'لباد فل') &&
-          (itemCodes.some((code) => MATTRESS_PAD_PROTECTOR_IDS.has(code)) || normText(catText).includes('عازل') || catText.toLowerCase().includes('protector'))
-        ) {
+        if (canon === 'لباد كينج' || canon === 'لباد فل') {
           return;
         }
 
@@ -662,12 +688,6 @@ export default function ProductsPage() {
         } else if (canon === 'لحافات فل') {
           bucket = duvetFull;
           ranges = [300, 499, 999999]; // Low <=300, Med 301-499, High 500+
-        } else if (canon === 'لباد كينج') {
-          bucket = mattressPadKing;
-          ranges = [194, 399, 999999]; // Low <=194, Med 195-399, High 400+
-        } else if (canon === 'لباد فل') {
-          bucket = mattressPadFull;
-          ranges = [189, 249, 999999]; // Low <=189, Med 190-249, High 250+
         } else {
           bucket = others;
           ranges = [200, 500, 999999];
@@ -1289,7 +1309,7 @@ export default function ProductsPage() {
             <ValueTierGroup
               title="لباد فل"
               bucket={derived.valueAnalysis.mattressPadFull}
-              tierLabels={['قيمة منخفضة (189 ر.س)', 'قيمة متوسطة (249 ر.س)', 'قيمة عالية (299 ر.س)']}
+              tierLabels={['قيمة منخفضة (189 ر.س)', 'قيمة متوسطة (200 ر.س)', 'قيمة عالية (249 ر.س)']}
               totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
             />
             <ValueTierGroup
