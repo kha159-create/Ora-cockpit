@@ -657,10 +657,10 @@ export default function ProductsPage() {
           ranges = [300, 499, 999999]; // Low <=300, Med 301-499, High 500+
         } else if (canon === 'لباد كينج') {
           bucket = mattressPadKing;
-          ranges = [300, 600, 999999]; // Low <=300, Med 301-600, High 600+
+          ranges = [194, 399, 999999]; // Low <=194, Med 195-399, High 400+
         } else if (canon === 'لباد فل') {
           bucket = mattressPadFull;
-          ranges = [300, 499, 999999]; // Low <=300, Med 301-499, High 500+
+          ranges = [189, 249, 999999]; // Low <=189, Med 190-249, High 250+
         } else {
           bucket = others;
           ranges = [200, 500, 999999];
@@ -1276,13 +1276,13 @@ export default function ProductsPage() {
             <ValueTierGroup
               title="لباد كينج"
               bucket={derived.valueAnalysis.mattressPadKing}
-              tierLabels={['قيمة منخفضة (99–300 ر.س)', 'قيمة متوسطة (301–600 ر.س)', 'قيمة عالية (أكثر من 600 ر.س)']}
+              tierLabels={['قيمة منخفضة (194 ر.س)', 'قيمة متوسطة (399 ر.س)', 'قيمة عالية (499 ر.س)']}
               totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
             />
             <ValueTierGroup
               title="لباد فل"
               bucket={derived.valueAnalysis.mattressPadFull}
-              tierLabels={['قيمة منخفضة (حتى 300 ر.س)', 'قيمة متوسطة (301–499 ر.س)', 'قيمة عالية (500 ر.س فأكثر)']}
+              tierLabels={['قيمة منخفضة (189 ر.س)', 'قيمة متوسطة (249 ر.س)', 'قيمة عالية (299 ر.س)']}
               totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
             />
             <ValueTierGroup
