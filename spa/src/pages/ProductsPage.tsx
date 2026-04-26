@@ -95,6 +95,9 @@ type ValueAnalysisBucket = {
   total: { qty: number; amount: number; count: number };
 };
 
+const MATTRESS_PAD_KING_IDS = new Set(['130010008', '130010024', '130010023']);
+const MATTRESS_PAD_FULL_IDS = new Set(['130030010', '130030008', '130030009']);
+
 function normText(v: string) {
   return String(v || '')
     .toLowerCase()
@@ -614,7 +617,7 @@ export default function ProductsPage() {
       return pairs.slice(0, 10);
     })();
 
-    // ===== Sales Analysis by Value (Duvet King, Duvet Full, Pillows) =====
+    // ===== Sales Analysis by Value (Duvet King, Duvet Full, Mattress Pads, Pillows) =====
     const valueAnalysis = (() => {
       // Classify catalog items by category keywords and price range
       type ValueBucket = { low: { qty: number; amount: number; count: number }; medium: { qty: number; amount: number; count: number }; high: { qty: number; amount: number; count: number }; total: { qty: number; amount: number; count: number } };
@@ -627,13 +630,18 @@ export default function ProductsPage() {
 
       const duvetKing = makeBucket();
       const duvetFull = makeBucket();
+      const mattressPadKing = makeBucket();
+      const mattressPadFull = makeBucket();
       const pillows = makeBucket();
       const others = makeBucket();
 
       catalogRows.forEach(item => {
         const avgPrice = item.qty > 0 ? item.amount / item.qty : 0;
         const catText = `${item.category || ''} ${item.name || ''}`;
-        const canon = canonicalTargetCategory(catText);
+        const itemCodes = [item.id, item.alias, item.old_code, item.dCode].map((v) => String(v || '').trim()).filter(Boolean);
+        let canon = canonicalTargetCategory(catText);
+        if (itemCodes.some((code) => MATTRESS_PAD_KING_IDS.has(code))) canon = 'لباد كينج';
+        if (itemCodes.some((code) => MATTRESS_PAD_FULL_IDS.has(code))) canon = 'لباد فل';
 
         let bucket: ValueBucket;
         let ranges: [number, number, number]; // low max, medium max
@@ -646,6 +654,12 @@ export default function ProductsPage() {
           ranges = [300, 600, 999999]; // Low <=300, Med 301-600, High 600+
         } else if (canon === 'لحافات فل') {
           bucket = duvetFull;
+          ranges = [300, 499, 999999]; // Low <=300, Med 301-499, High 500+
+        } else if (canon === 'لباد كينج') {
+          bucket = mattressPadKing;
+          ranges = [300, 600, 999999]; // Low <=300, Med 301-600, High 600+
+        } else if (canon === 'لباد فل') {
+          bucket = mattressPadFull;
           ranges = [300, 499, 999999]; // Low <=300, Med 301-499, High 500+
         } else {
           bucket = others;
@@ -671,7 +685,7 @@ export default function ProductsPage() {
         }
       });
 
-      return { duvetKing, duvetFull, pillows, others };
+      return { duvetKing, duvetFull, mattressPadKing, mattressPadFull, pillows, others };
     })();
 
     return {
@@ -1256,6 +1270,18 @@ export default function ProductsPage() {
             <ValueTierGroup
               title="لحاف فل"
               bucket={derived.valueAnalysis.duvetFull}
+              tierLabels={['قيمة منخفضة (حتى 300 ر.س)', 'قيمة متوسطة (301–499 ر.س)', 'قيمة عالية (500 ر.س فأكثر)']}
+              totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
+            />
+            <ValueTierGroup
+              title="لباد كينج"
+              bucket={derived.valueAnalysis.mattressPadKing}
+              tierLabels={['قيمة منخفضة (99–300 ر.س)', 'قيمة متوسطة (301–600 ر.س)', 'قيمة عالية (أكثر من 600 ر.س)']}
+              totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
+            />
+            <ValueTierGroup
+              title="لباد فل"
+              bucket={derived.valueAnalysis.mattressPadFull}
               tierLabels={['قيمة منخفضة (حتى 300 ر.س)', 'قيمة متوسطة (301–499 ر.س)', 'قيمة عالية (500 ر.س فأكثر)']}
               totalUnitsLabel={mode === 'mtd' ? 'إجمالي الوحدات (منذ بداية الشهر)' : 'إجمالي الوحدات (الفترة المحددة)'}
             />
