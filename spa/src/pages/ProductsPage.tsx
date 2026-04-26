@@ -97,6 +97,7 @@ type ValueAnalysisBucket = {
 
 const MATTRESS_PAD_KING_IDS = new Set(['130010008', '130010024', '130010023']);
 const MATTRESS_PAD_FULL_IDS = new Set(['130030010', '130030008', '130030009']);
+const MATTRESS_PAD_PROTECTOR_IDS = new Set(['130010025', '130030011', '9621', '9622', '9625', '9626']);
 
 function normText(v: string) {
   return String(v || '')
@@ -642,6 +643,12 @@ export default function ProductsPage() {
         let canon = canonicalTargetCategory(catText);
         if (itemCodes.some((code) => MATTRESS_PAD_KING_IDS.has(code))) canon = 'لباد كينج';
         if (itemCodes.some((code) => MATTRESS_PAD_FULL_IDS.has(code))) canon = 'لباد فل';
+        if (
+          (canon === 'لباد كينج' || canon === 'لباد فل') &&
+          (itemCodes.some((code) => MATTRESS_PAD_PROTECTOR_IDS.has(code)) || normText(catText).includes('عازل') || catText.toLowerCase().includes('protector'))
+        ) {
+          return;
+        }
 
         let bucket: ValueBucket;
         let ranges: [number, number, number]; // low max, medium max
