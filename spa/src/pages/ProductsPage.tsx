@@ -97,7 +97,7 @@ type ValueAnalysisBucket = {
 
 const MATTRESS_PAD_CODE_BY_ITEM_ID: Record<string, string> = {
   '130010008': '9300',
-  '130010024': '9626',
+  '130010024': '9629',
   '130010023': '9611',
   '130030010': '9630',
   '130030009': '9615',
@@ -107,7 +107,7 @@ const MATTRESS_PAD_CODE_BY_ITEM_ID: Record<string, string> = {
 const MATTRESS_PAD_TIERS: Record<string, { group: 'king' | 'full'; tier: 'low' | 'medium' | 'high'; price: number }> = {
   '9300': { group: 'king', tier: 'low', price: 194 },
   '9611': { group: 'king', tier: 'medium', price: 399 },
-  '9626': { group: 'king', tier: 'high', price: 499 },
+  '9629': { group: 'king', tier: 'high', price: 499 },
   '9612': { group: 'full', tier: 'low', price: 189 },
   '9630': { group: 'full', tier: 'medium', price: 200 },
   '9615': { group: 'full', tier: 'high', price: 249 },
