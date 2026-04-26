@@ -997,14 +997,15 @@ export default function ProductsPage() {
         { label: labels[2], qty: bucket.high.qty, amount: bucket.high.amount, percentage: (bucket.high.qty / totalQty) * 100 },
       ];
     };
+    const ratio = (part: number, base: number) => base > 0 ? ((part / base) * 100).toFixed(1) : '0.0';
     return [
       {
-        title: 'لحاف كينج',
+        title: `لحاف كينج | نسبة لباد الكينج للحاف الكينج: ${ratio(valueAnalysis.mattressPadKing.total.qty, valueAnalysis.duvetKing.total.qty)}%`,
         rows: makeRows(valueAnalysis.duvetKing, ['قيمة منخفضة (99-300 ر.س)', 'قيمة متوسطة (301-600 ر.س)', 'قيمة عالية (أكثر من 600 ر.س)']),
         totalQty: valueAnalysis.duvetKing.total.qty,
       },
       {
-        title: 'لحاف فل',
+        title: `لحاف فل | نسبة لباد الفل للحاف الفل: ${ratio(valueAnalysis.mattressPadFull.total.qty, valueAnalysis.duvetFull.total.qty)}%`,
         rows: makeRows(valueAnalysis.duvetFull, ['قيمة منخفضة (حتى 300 ر.س)', 'قيمة متوسطة (301-499 ر.س)', 'قيمة عالية (500 ر.س فأكثر)']),
         totalQty: valueAnalysis.duvetFull.total.qty,
       },
