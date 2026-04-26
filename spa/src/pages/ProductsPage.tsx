@@ -6,7 +6,7 @@ import { ChartCard, KPICard, LineChart } from '../components/DashboardComponents
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { CubeIcon, SalesIcon, InvoicesIcon, VisitorsIcon, XIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
-import { generateProductSummaryPDF } from '../services/pdf/pdfService';
+import { generateProductSummaryPDF, generateProductValueAnalysisPDF } from '../services/pdf/pdfService';
 import { calendarYesterday, mtdRangeThroughYesterday } from '../utils/mtdDateRange';
 
 type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest' | 'custom';
@@ -633,9 +633,8 @@ export default function ProductsPage() {
     })();
 
     // ===== Sales Analysis by Value (Duvet King, Duvet Full, Mattress Pads, Pillows) =====
-    const valueAnalysis = (() => {
-      // Classify catalog items by category keywords and price range
-      type ValueBucket = { low: { qty: number; amount: number; count: number }; medium: { qty: number; amount: number; count: number }; high: { qty: number; amount: number; count: number }; total: { qty: number; amount: number; count: number } };
+    type ValueBucket = { low: { qty: number; amount: number; count: number }; medium: { qty: number; amount: number; count: number }; high: { qty: number; amount: number; count: number }; total: { qty: number; amount: number; count: number } };
+    const calculateValueAnalysis = (scopeStoreId?: string) => {
       const makeBucket = (): ValueBucket => ({
         low: { qty: 0, amount: 0, count: 0 },
         medium: { qty: 0, amount: 0, count: 0 },
@@ -651,7 +650,12 @@ export default function ProductsPage() {
       const others = makeBucket();
 
       catalogRows.forEach(item => {
-        const avgPrice = item.qty > 0 ? item.amount / item.qty : 0;
+        const scopedStore = scopeStoreId ? item.salesByStore?.[scopeStoreId] : null;
+        const scopedQty = scopeStoreId ? safeNum(scopedStore?.q) : item.qty;
+        const scopedAmount = scopeStoreId ? safeNum(scopedStore?.a) : item.amount;
+        if (scopedQty === 0 && scopedAmount === 0) return;
+
+        const avgPrice = scopedQty > 0 ? scopedAmount / scopedQty : 0;
         const catText = `${item.category || ''} ${item.name || ''}`;
         const itemCodes = [MATTRESS_PAD_CODE_BY_ITEM_ID[String(item.id || '').trim()], item.id, item.alias, item.old_code, item.dCode]
           .map((v) => String(v || '').trim())
@@ -662,11 +666,11 @@ export default function ProductsPage() {
         if (mattressPadTier) {
           const bucket = mattressPadTier.group === 'king' ? mattressPadKing : mattressPadFull;
           const tier = bucket[mattressPadTier.tier];
-          bucket.total.qty += item.qty;
-          bucket.total.amount += item.qty * mattressPadTier.price;
+          bucket.total.qty += scopedQty;
+          bucket.total.amount += scopedQty * mattressPadTier.price;
           bucket.total.count += 1;
-          tier.qty += item.qty;
-          tier.amount += item.qty * mattressPadTier.price;
+          tier.qty += scopedQty;
+          tier.amount += scopedQty * mattressPadTier.price;
           tier.count += 1;
           return;
         }
@@ -693,27 +697,39 @@ export default function ProductsPage() {
           ranges = [200, 500, 999999];
         }
 
-        bucket.total.qty += item.qty;
-        bucket.total.amount += item.amount;
+        bucket.total.qty += scopedQty;
+        bucket.total.amount += scopedAmount;
         bucket.total.count += 1;
 
         if (avgPrice <= ranges[0]) {
-          bucket.low.qty += item.qty;
-          bucket.low.amount += item.amount;
+          bucket.low.qty += scopedQty;
+          bucket.low.amount += scopedAmount;
           bucket.low.count += 1;
         } else if (avgPrice <= ranges[1]) {
-          bucket.medium.qty += item.qty;
-          bucket.medium.amount += item.amount;
+          bucket.medium.qty += scopedQty;
+          bucket.medium.amount += scopedAmount;
           bucket.medium.count += 1;
         } else {
-          bucket.high.qty += item.qty;
-          bucket.high.amount += item.amount;
+          bucket.high.qty += scopedQty;
+          bucket.high.amount += scopedAmount;
           bucket.high.count += 1;
         }
       });
 
       return { duvetKing, duvetFull, mattressPadKing, mattressPadFull, pillows, others };
-    })();
+    };
+    const valueAnalysis = calculateValueAnalysis();
+    const storeValueAnalysisReports =
+      activeStore === 'all' && effectiveManager !== 'all'
+        ? storeOptions
+          .filter((s) => storeInScope(s.id))
+          .map((s) => ({
+            id: s.id,
+            name: s.name,
+            manager: s.manager,
+            valueAnalysis: calculateValueAnalysis(s.id),
+          }))
+        : [];
 
     return {
       dateRangeLabel: isCustomMode ? `${dateRange.start} → ${dateRange.end}` : (pData?.date_range || '-'),
@@ -735,6 +751,7 @@ export default function ProductsPage() {
       selectedPairs,
       storesMap,
       valueAnalysis,
+      storeValueAnalysisReports,
       selectedStoreLabel,
     };
   }, [city, customEnd, customStart, effectiveManager, mgmt, mode, priceMax, priceMin, productId, raw, search, selectedCategory, store, user?.name, user?.role]);
@@ -965,6 +982,67 @@ export default function ProductsPage() {
           amount: r.amount || 0,
         })),
         { start: derived.dateRangeStart, end: derived.dateRangeEnd }
+      );
+    } catch (e: any) {
+      alert(e?.message || 'تعذر إنشاء PDF');
+    }
+  };
+
+  const valuePdfSections = (valueAnalysis: any) => {
+    const makeRows = (bucket: ValueAnalysisBucket, labels: [string, string, string]) => {
+      const totalQty = Math.max(1, bucket.total.qty);
+      return [
+        { label: labels[0], qty: bucket.low.qty, amount: bucket.low.amount, percentage: (bucket.low.qty / totalQty) * 100 },
+        { label: labels[1], qty: bucket.medium.qty, amount: bucket.medium.amount, percentage: (bucket.medium.qty / totalQty) * 100 },
+        { label: labels[2], qty: bucket.high.qty, amount: bucket.high.amount, percentage: (bucket.high.qty / totalQty) * 100 },
+      ];
+    };
+    return [
+      {
+        title: 'لحاف كينج',
+        rows: makeRows(valueAnalysis.duvetKing, ['قيمة منخفضة (99-300 ر.س)', 'قيمة متوسطة (301-600 ر.س)', 'قيمة عالية (أكثر من 600 ر.س)']),
+        totalQty: valueAnalysis.duvetKing.total.qty,
+      },
+      {
+        title: 'لحاف فل',
+        rows: makeRows(valueAnalysis.duvetFull, ['قيمة منخفضة (حتى 300 ر.س)', 'قيمة متوسطة (301-499 ر.س)', 'قيمة عالية (500 ر.س فأكثر)']),
+        totalQty: valueAnalysis.duvetFull.total.qty,
+      },
+      {
+        title: 'لباد كينج',
+        rows: makeRows(valueAnalysis.mattressPadKing, ['قيمة منخفضة (9300 - 194 ر.س)', 'قيمة متوسطة (9611 - 399 ر.س)', 'قيمة عالية (9629 - 499 ر.س)']),
+        totalQty: valueAnalysis.mattressPadKing.total.qty,
+      },
+      {
+        title: 'لباد فل',
+        rows: makeRows(valueAnalysis.mattressPadFull, ['قيمة منخفضة (9612 - 189 ر.س)', 'قيمة متوسطة (9630 - 200 ر.س)', 'قيمة عالية (9615 - 249 ر.س)']),
+        totalQty: valueAnalysis.mattressPadFull.total.qty,
+      },
+      {
+        title: 'مخدات',
+        rows: makeRows(valueAnalysis.pillows, ['قيمة منخفضة (حتى 99 ر.س)', 'قيمة متوسطة (100-189 ر.س)', 'قيمة عالية (190 ر.س فأكثر)']),
+        totalQty: valueAnalysis.pillows.total.qty,
+      },
+    ];
+  };
+
+  const exportValueAnalysisPDF = async () => {
+    if (!derived) return;
+    try {
+      const summary = {
+        title: 'تحليل المبيعات حسب القيمة',
+        subtitle: `النطاق: ${derived.selectedStoreLabel}`,
+        sections: valuePdfSections(derived.valueAnalysis),
+      };
+      const storeBlocks = (derived.storeValueAnalysisReports || []).map((s: any) => ({
+        title: `تحليل المبيعات حسب القيمة - ${s.name}`,
+        subtitle: `${s.id}${s.manager ? ` | ${s.manager}` : ''}`,
+        sections: valuePdfSections(s.valueAnalysis),
+      }));
+      await generateProductValueAnalysisPDF(
+        summary,
+        { start: derived.dateRangeStart, end: derived.dateRangeEnd },
+        storeBlocks
       );
     } catch (e: any) {
       alert(e?.message || 'تعذر إنشاء PDF');
@@ -1277,7 +1355,16 @@ export default function ProductsPage() {
       <div className="mt-2">
         <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-5 flex flex-col min-h-0">
           <div className="border-b border-neutral-100 pb-3 mb-4 shrink-0">
-            <h3 className="text-lg font-bold text-neutral-900">تحليل المبيعات حسب القيمة</h3>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <h3 className="text-lg font-bold text-neutral-900">تحليل المبيعات حسب القيمة</h3>
+              <button
+                type="button"
+                onClick={exportValueAnalysisPDF}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm font-semibold"
+              >
+                📄 تصدير PDF
+              </button>
+            </div>
             <p className="text-xs text-neutral-500 mt-1">
               متوسط سعر القطعة يحدد الشريحة — الفترة: <span className="font-semibold text-neutral-700">{derived.dateRangeLabel}</span>
             </p>

@@ -787,6 +787,63 @@ export const generateProductSummaryPDF = async (
     doc.save(`تحليل_المنتجات_${dateRange.start}_${dateRange.end}.pdf`);
 };
 
+type ProductValuePdfSection = {
+    title: string;
+    rows: { label: string; qty: number; amount?: number; percentage: number }[];
+    totalQty: number;
+};
+
+type ProductValuePdfBlock = {
+    title: string;
+    subtitle?: string;
+    sections: ProductValuePdfSection[];
+};
+
+export const generateProductValueAnalysisPDF = async (
+    summary: ProductValuePdfBlock,
+    dateRange: { start: string; end: string },
+    storeBlocks: ProductValuePdfBlock[] = []
+) => {
+    const doc = setupDoc('l');
+    const addBlock = (block: ProductValuePdfBlock, pageIndex: number) => {
+        if (pageIndex > 0) doc.addPage();
+        addPageHeader(doc, block.title, block.subtitle);
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(10);
+        doc.text(`الفترة: ${dateRange.start} إلى ${dateRange.end}`, 282, 28, { align: 'right' });
+
+        let startY = 35;
+        block.sections.forEach((section) => {
+            doc.setFontSize(11);
+            doc.text(`${section.title} - إجمالي الوحدات: ${Math.round(section.totalQty).toLocaleString()}`, 282, startY, { align: 'right' });
+            const tableRows = section.rows.map((r) => [
+                r.label,
+                Math.round(r.qty || 0).toLocaleString(),
+                `${(r.percentage || 0).toFixed(1)}%`,
+                Math.round(r.amount || 0).toLocaleString(),
+            ]);
+            (doc as any).autoTable({
+                head: [['الشريحة', 'الوحدات', 'النسبة', 'القيمة']],
+                body: tableRows,
+                startY: startY + 4,
+                styles: { font: 'Amiri', halign: 'center', fontSize: 8 },
+                headStyles: { fillColor: [254, 121, 0], textColor: 255 },
+                alternateRowStyles: { fillColor: [245, 245, 245] },
+                margin: { left: 14, right: 14 },
+            });
+            startY = ((doc as any).lastAutoTable?.finalY || startY + 22) + 10;
+            if (startY > 190) {
+                doc.addPage();
+                addPageHeader(doc, block.title, block.subtitle);
+                startY = 30;
+            }
+        });
+    };
+
+    [summary, ...storeBlocks].forEach((block, idx) => addBlock(block, idx));
+    doc.save(`تحليل_المبيعات_حسب_القيمة_${dateRange.start}_${dateRange.end}.pdf`);
+};
+
 type TargetSplitPdfMetrics = {
     target: number;
     sales: number;
