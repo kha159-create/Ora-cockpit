@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { toPng } from 'html-to-image';
-import JSZip from 'jszip';
 import { SalesIcon, InvoicesIcon, ChevronDownIcon, VisitorsIcon, DownloadIcon } from '../Icons';
 import { useLiveSalesData } from '../../hooks/useLiveSalesData';
 import { loadD365SalesRange } from '../../services/d365Live';
@@ -414,18 +413,14 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     const handleDownloadAllStoreImages = async () => {
         if (!enhancedStores.length) return;
         const previousExpanded = expandedStoreId;
-        const zip = new JSZip();
 
         try {
             setCaptureBusy('all');
             for (const store of enhancedStores) {
                 setCaptureBusy(String(store.sid));
                 const dataUrl = await captureStoreImage(store);
-                zip.file(`${sanitizeFilePart(store.name)}-${targetDateStr}.png`, dataUrlToBlob(dataUrl));
+                downloadBlob(dataUrlToBlob(dataUrl), `${sanitizeFilePart(store.name)}-${targetDateStr}.png`);
             }
-            setCaptureBusy('all');
-            const blob = await zip.generateAsync({ type: 'blob' });
-            downloadBlob(blob, `store-sales-screenshots-${targetDateStr}.zip`);
         } finally {
             setExpandedStoreId(previousExpanded);
             setCaptureBusy(null);
@@ -535,10 +530,10 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                             onClick={handleDownloadAllStoreImages}
                             disabled={captureBusy !== null || enhancedStores.length === 0}
                             className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold border border-orange-500 bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-300 shadow-sm"
-                            title="Download one clear PNG per store in a ZIP file"
+                            title="Download one clear PNG per store"
                         >
                             <span className="w-4 h-4 inline-flex items-center justify-center"><DownloadIcon /></span>
-                            <span>{captureBusy ? 'جاري تجهيز الصور...' : 'تحميل صور المعارض ZIP'}</span>
+                            <span>{captureBusy ? 'جاري تنزيل الصور...' : 'تحميل صور المعارض'}</span>
                         </button>
                         <button
                             onClick={() => setShowRamadanShifts(!showRamadanShifts)}
