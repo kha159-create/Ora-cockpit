@@ -1,8 +1,44 @@
-import React, { useState, useMemo } from 'react';
-import { SalesIcon, InvoicesIcon, ChevronDownIcon, VisitorsIcon } from '../Icons';
+import React, { useState, useMemo, useRef } from 'react';
+import { toPng } from 'html-to-image';
+import JSZip from 'jszip';
+import { SalesIcon, InvoicesIcon, ChevronDownIcon, VisitorsIcon, DownloadIcon } from '../Icons';
 import { useLiveSalesData } from '../../hooks/useLiveSalesData';
 import { loadD365SalesRange } from '../../services/d365Live';
 import { getCurrentUser } from '../../auth/storage';
+
+const waitForCardRender = () => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+});
+
+function sanitizeFilePart(value: string) {
+    return String(value || 'store')
+        .replace(/[\\/:*?"<>|]/g, '-')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 90) || 'store';
+}
+
+function dataUrlToBlob(dataUrl: string) {
+    const [header, data] = dataUrl.split(',');
+    const mime = header.match(/:(.*?);/)?.[1] || 'image/png';
+    const binary = atob(data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: mime });
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}
 
 function KPICard({ title, value, format, icon, trendValue, className, onClick }: any) {
     return (
@@ -68,6 +104,8 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     const [liveRefreshTick, setLiveRefreshTick] = useState(0);
     const [visitorsHourlyOpen, setVisitorsHourlyOpen] = useState(false);
     const [visitorsHourlyContext, setVisitorsHourlyContext] = useState<{ sid: string; name: string } | null>(null);
+    const [captureBusy, setCaptureBusy] = useState<string | null>(null);
+    const storeCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
     const isAdminOrAuditor = checkAdmin;
 
@@ -334,6 +372,65 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
     if (!isOpen) return null;
 
     const hourlyRows = visitorsByHourForStore.filter((h) => h.count > 0);
+    const captureStoreImage = async (store: any) => {
+        const sid = String(store.sid);
+        const wasExpanded = expandedStoreId;
+        setExpandedEmpId(null);
+        setExpandedStoreId(sid);
+        try {
+            await waitForCardRender();
+
+            const node = storeCardRefs.current[sid];
+            if (!node) throw new Error('Store card is not ready for export');
+
+            return await toPng(node, {
+                cacheBust: true,
+                pixelRatio: Math.min(3, window.devicePixelRatio || 2),
+                backgroundColor: '#ffffff',
+                filter: (domNode) => {
+                    if (!(domNode instanceof HTMLElement)) return true;
+                    return domNode.dataset.exportHidden !== 'true';
+                },
+                style: {
+                    margin: '0',
+                    boxShadow: '0 10px 28px rgba(15, 23, 42, 0.10)',
+                },
+            });
+        } finally {
+            if (wasExpanded !== sid) setExpandedStoreId(wasExpanded);
+        }
+    };
+
+    const handleDownloadStoreImage = async (store: any) => {
+        try {
+            setCaptureBusy(String(store.sid));
+            const dataUrl = await captureStoreImage(store);
+            downloadBlob(dataUrlToBlob(dataUrl), `${sanitizeFilePart(store.name)}-${targetDateStr}.png`);
+        } finally {
+            setCaptureBusy(null);
+        }
+    };
+
+    const handleDownloadAllStoreImages = async () => {
+        if (!enhancedStores.length) return;
+        const previousExpanded = expandedStoreId;
+        const zip = new JSZip();
+
+        try {
+            setCaptureBusy('all');
+            for (const store of enhancedStores) {
+                setCaptureBusy(String(store.sid));
+                const dataUrl = await captureStoreImage(store);
+                zip.file(`${sanitizeFilePart(store.name)}-${targetDateStr}.png`, dataUrlToBlob(dataUrl));
+            }
+            setCaptureBusy('all');
+            const blob = await zip.generateAsync({ type: 'blob' });
+            downloadBlob(blob, `store-sales-screenshots-${targetDateStr}.zip`);
+        } finally {
+            setExpandedStoreId(previousExpanded);
+            setCaptureBusy(null);
+        }
+    };
 
     return (
         <>
@@ -432,7 +529,17 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                     </div>
 
                     {/* Shift Toggle Button */}
-                    <div className="flex justify-start">
+                    <div className="flex flex-wrap justify-start gap-2">
+                        <button
+                            type="button"
+                            onClick={handleDownloadAllStoreImages}
+                            disabled={captureBusy !== null || enhancedStores.length === 0}
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold border border-orange-500 bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-300 shadow-sm"
+                            title="Download one clear PNG per store in a ZIP file"
+                        >
+                            <span className="w-4 h-4 inline-flex items-center justify-center"><DownloadIcon /></span>
+                            <span>{captureBusy ? 'جاري تجهيز الصور...' : 'تحميل صور المعارض ZIP'}</span>
+                        </button>
                         <button
                             onClick={() => setShowRamadanShifts(!showRamadanShifts)}
                             className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold border transition-all duration-300 shadow-sm ${showRamadanShifts
@@ -485,6 +592,9 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                             return (
                                 <div
                                     key={store.sid}
+                                    ref={(node) => {
+                                        storeCardRefs.current[String(store.sid)] = node;
+                                    }}
                                     className="bg-white rounded-2xl shadow-sm border border-neutral-200 overflow-hidden identity-card"
                                 >
                                     <div
@@ -506,6 +616,19 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                                     <ChevronDownIcon />
                                                 </div>
                                                 <span className="font-bold text-lg text-neutral-900 leading-tight whitespace-normal">{store.name}</span>
+                                                <button
+                                                    type="button"
+                                                    data-export-hidden="true"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDownloadStoreImage(store);
+                                                    }}
+                                                    disabled={captureBusy !== null}
+                                                    className="inline-flex items-center justify-center rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] font-black text-orange-700 hover:bg-orange-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                    title="Download this store as PNG"
+                                                >
+                                                    {captureBusy === String(store.sid) ? '...' : 'PNG'}
+                                                </button>
                                             </div>
                                             <span className="text-xl font-black text-orange-600" dir="ltr">{formatSAR(store.sales)}</span>
                                         </div>
