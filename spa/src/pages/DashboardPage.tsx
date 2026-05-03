@@ -1406,14 +1406,16 @@ export default function DashboardPage() {
                   <th className="text-right py-3 px-4 font-semibold">النمو</th>
                   <th className="text-right py-3 px-4 font-semibold">المطلوب يومياً</th>
                   <th className="text-right py-3 px-4 font-semibold">الفواتير</th>
+                  <th className="text-right py-3 px-4 font-semibold">معدل الفاتورة</th>
                   <th className="text-right py-3 px-4 font-semibold">الزوار</th>
+                  <th className="text-right py-3 px-4 font-semibold">زوار LY</th>
                   <th className="text-right py-3 px-4 font-semibold">التحويل</th>
                   <th className="text-right py-3 px-4 font-semibold">ق.ع</th>
                 </tr>
               </thead>
               <tbody>
                 {dailyReportData.length === 0 ? (
-                  <tr><td colSpan={10} className="py-8 px-4 text-center text-neutral-500">لا توجد بيانات معارض ليوم أمس ضمن الفلاتر الحالية.</td></tr>
+                  <tr><td colSpan={12} className="py-8 px-4 text-center text-neutral-500">لا توجد بيانات معارض ليوم أمس ضمن الفلاتر الحالية.</td></tr>
                 ) : dailyReportData.map((row: any, idx: number) => (
                   <tr key={row.sid} className={`border-b border-neutral-100 hover:bg-orange-50/40 ${idx % 2 === 0 ? 'bg-white' : 'bg-neutral-50'}`}>
                     <td className="py-3 px-4 text-neutral-500">{idx + 1}</td>
@@ -1423,7 +1425,9 @@ export default function DashboardPage() {
                     <td className={`py-3 px-4 font-bold ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`} dir="ltr">{row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%</td>
                     <td className="py-3 px-4 text-red-500 font-semibold" dir="ltr">{formatSAR(row.dailyReq)}</td>
                     <td className="py-3 px-4" dir="ltr">{row.trans.toLocaleString()}</td>
+                    <td className="py-3 px-4" dir="ltr">{Math.round(row.avgInv).toLocaleString()}</td>
                     <td className="py-3 px-4" dir="ltr">{row.visitors.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-neutral-500" dir="ltr">{row.prevVisitors.toLocaleString()}</td>
                     <td className="py-3 px-4 text-orange-600 font-bold" dir="ltr">{row.conversion.toFixed(1)}%</td>
                     <td className="py-3 px-4 font-bold" dir="ltr">{Math.round(row.customerValue).toLocaleString()}</td>
                   </tr>
