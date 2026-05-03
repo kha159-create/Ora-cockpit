@@ -441,7 +441,11 @@ export default function EmployeeAnalysisPage() {
 
   const applyDateMode = (nextMode: DatePeriodKey) => {
     setDateMode(nextMode);
-    if (nextMode !== 'custom') setProductsPeriodKey(nextMode);
+    if (nextMode !== 'custom') {
+      const range = getDateRangeForMode(nextMode, customStart, customEnd);
+      setCustomStart(range.start);
+      setCustomEnd(range.end);
+    }
   };
 
   const effectiveManager = useMemo(() => (isAdminOrAuditor(user?.role) ? manager : user?.name || manager), [manager, user?.name, user?.role]);
@@ -558,9 +562,7 @@ export default function EmployeeAnalysisPage() {
     });
 
     const periods = empProductsRaw?.periods || {};
-    const productSourceEnd = String(empProductsRaw?.metadata?.yesterday_date || empProductsRaw?.metadata?.period_end || '');
-    const productPeriodMatches = !productSourceEnd || dateMode === 'custom' || productSourceEnd === end;
-    const scoped = productPeriodMatches ? (periods?.[productsPeriodKey] || periods?.mtd || {}) : {};
+    const scoped = periods?.[productsPeriodKey] || periods?.mtd || {};
     const rawOffers = Array.isArray(offersRaw) ? offersRaw : Array.isArray(offersRaw?.offers) ? offersRaw.offers : [];
     const offerProductIndex = new Map<string, Set<string>>();
 
