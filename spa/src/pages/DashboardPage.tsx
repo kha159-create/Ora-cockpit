@@ -374,7 +374,7 @@ export default function DashboardPage() {
         const rawId = rec?.[1];
         let id = String(rawId || '').split('-')[0].trim();
         if (!id || id === 'مرتجع') continue;
-        if (!isOriginalActiveEmployee(activeStatusMap, id)) continue;
+        if (!useSelection && !isOriginalActiveEmployee(activeStatusMap, id)) continue;
 
         // selection check
         if (useSelection && selectedEmployees.size > 0 && !selectedEmployees.has(id)) continue;
@@ -632,30 +632,46 @@ export default function DashboardPage() {
   const lastYearYesterdayStr = getComparisonPrevDate(yesterdayStr, calendar);
 
   const handlePrintEmployeeReport = () => {
-    void handleGenerateEmployeeReport(false);
+    const activeIds = employeeListForSelection
+      .filter((emp: any) => emp.status === 'active')
+      .map((emp: any) => emp.id);
+    setSelectedEmployees(new Set(activeIds));
+    setEmpFilterStatus(new Set(['active']));
+    setEmployeeReportModalOpen(true);
   };
 
   // Calculate employee list for selection modal
   const employeeListForSelection = useMemo(() => {
     if (!empRaw?.history || !empRaw?.employee_names || !raw?.stores) return [];
     const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
+    const marchBounds = getMarch2026PhaseSalesBounds(yesterdayStr);
+    const mtdStart = marchBounds?.start ?? startOfMonth;
+    const mtdEnd = marchBounds?.end ?? yesterdayStr;
+    const statusMap = buildOriginalEmployeeStatusMap(
+      empRaw,
+      (storeId) => allowedStoreIds.has(storeId),
+      mtdStart,
+      mtdEnd,
+      new Date(`${yesterdayStr}T12:00:00`)
+    );
     const historyData: Record<string, any[]> = empRaw.history;
     const names: Record<string, string> = empRaw.employee_names;
     const storesMap = raw.stores || {};
 
-    const empData: Record<string, { id: string; name: string; storeId: string; storeName: string; sales: number }> = {};
+    const empData: Record<string, { id: string; name: string; storeId: string; storeName: string; sales: number; status: string; reasons: string[] }> = {};
 
     Object.entries(historyData).forEach(([sid, recs]: [string, any]) => {
       if (!allowedStoreIds.has(sid)) return;
       (recs || []).forEach((rec: any) => {
         const dt = rec?.[0];
-        if (dt < startOfMonth || dt > yesterdayStr) return;
+        if (dt < mtdStart || dt > mtdEnd) return;
         const rawId = rec?.[1];
         let empId = String(rawId || '').split('-')[0].trim();
         if (!empId || empId === 'مرتجع') return;
 
         const sales = Number(rec?.[2]) || 0;
         const empName = names[empId] || names[empId.padStart(4, '0')] || rawId;
+        const statusInfo = statusMap[empId] || statusMap[empId.padStart(4, '0')];
 
         if (!empData[empId]) {
           empData[empId] = {
@@ -663,14 +679,23 @@ export default function DashboardPage() {
             name: empName,
             storeId: sid,
             storeName: storesMap[sid] || sid,
-            sales: 0
+            sales: 0,
+            status: statusInfo?.status || 'active',
+            reasons: statusInfo?.reasons || [],
           };
         }
         empData[empId].sales += sales;
       });
     });
 
-    return Object.values(empData).sort((a, b) => b.sales - a.sales);
+    const order: Record<string, number> = { active: 0, medium: 1, high: 2 };
+    return Object.values(empData).sort((a, b) => {
+      const storeCmp = a.storeName.localeCompare(b.storeName, 'ar');
+      if (storeCmp !== 0) return storeCmp;
+      const statusCmp = (order[a.status] ?? 9) - (order[b.status] ?? 9);
+      if (statusCmp !== 0) return statusCmp;
+      return b.sales - a.sales;
+    });
   }, [empRaw, raw, yesterdayStr, allowedStoreIds]);
 
   const dailyEmployeeReportData = useMemo(() => {

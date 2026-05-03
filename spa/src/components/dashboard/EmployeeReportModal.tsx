@@ -26,6 +26,16 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
     isGenerating = false
 }) => {
     if (!isOpen) return null;
+    const selectedStatusSet = empFilterStatus.size > 0 ? empFilterStatus : new Set(['active', 'review', 'resigned']);
+    const statusToFilterKey = (status: string) => status === 'high' ? 'resigned' : status === 'medium' ? 'review' : 'active';
+    const visibleEmployees = employeeList.filter((emp) => selectedStatusSet.has(statusToFilterKey(emp.status)));
+    const activeEmployees = employeeList.filter((emp) => emp.status === 'active');
+    const statusLabel = (status: string) => status === 'high' ? 'مستقيل' : status === 'medium' ? 'مراجعة' : 'نشط';
+    const statusClass = (status: string) => {
+        if (status === 'high') return 'bg-red-100 text-red-700';
+        if (status === 'medium') return 'bg-yellow-100 text-yellow-800';
+        return 'bg-emerald-100 text-emerald-700';
+    };
 
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4" onClick={onClose}>
@@ -96,10 +106,10 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
 
                     <div className="flex items-center gap-3 mt-3">
                         <button
-                            onClick={() => setSelectedEmployees(new Set(employeeList.map(e => e.id)))}
+                            onClick={() => setSelectedEmployees(new Set(visibleEmployees.map(e => e.id)))}
                             className="text-sm bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg hover:bg-orange-200 transition-colors"
                         >
-                            ✓ تحديد الكل
+                            ✓ تحديد الظاهر
                         </button>
                         <button
                             onClick={() => setSelectedEmployees(new Set())}
@@ -109,8 +119,8 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
                         </button>
                         <button
                             onClick={() => {
-                                const activeEmps = employeeList.filter(e => e.sales > 0).map(e => e.id);
-                                setSelectedEmployees(new Set(activeEmps));
+                                setSelectedEmployees(new Set(activeEmployees.map(e => e.id)));
+                                setEmpFilterStatus(new Set(['active']));
                             }}
                             className="text-sm bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors"
                         >
@@ -127,12 +137,16 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
                                 <th className="p-3 text-right w-10">
                                     <input
                                         type="checkbox"
-                                        checked={selectedEmployees.size === employeeList.length && employeeList.length > 0}
+                                        checked={visibleEmployees.length > 0 && visibleEmployees.every(emp => selectedEmployees.has(emp.id))}
                                         onChange={(e) => {
                                             if (e.target.checked) {
-                                                setSelectedEmployees(new Set(employeeList.map(emp => emp.id)));
+                                                const next = new Set(selectedEmployees);
+                                                visibleEmployees.forEach(emp => next.add(emp.id));
+                                                setSelectedEmployees(next);
                                             } else {
-                                                setSelectedEmployees(new Set());
+                                                const next = new Set(selectedEmployees);
+                                                visibleEmployees.forEach(emp => next.delete(emp.id));
+                                                setSelectedEmployees(next);
                                             }
                                         }}
                                         className="w-4 h-4"
@@ -145,7 +159,7 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
                             </tr>
                         </thead>
                         <tbody>
-                            {employeeList.map((emp, idx) => (
+                            {visibleEmployees.map((emp, idx) => (
                                 <tr key={emp.id} className={`border-b hover:bg-gray-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
                                     <td className="p-3">
                                         <input
@@ -166,16 +180,19 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
                                     <td className="p-3 text-gray-600 text-xs">{emp.storeName}</td>
                                     <td className="p-3 font-bold text-gray-800" dir="ltr">{Math.round(emp.sales).toLocaleString()}</td>
                                     <td className="p-3 text-center">
-                                        <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold">نشط</span>
+                                        <span className={`${statusClass(emp.status)} px-2 py-1 rounded text-xs font-bold`}>{statusLabel(emp.status)}</span>
+                                        {emp.reasons?.length > 0 && (
+                                            <div className="mt-1 text-[10px] text-gray-500">{emp.reasons.join('، ')}</div>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
-                    {employeeList.length === 0 && (
+                    {visibleEmployees.length === 0 && (
                         <div className="text-center py-12 text-gray-400">
                             <div className="text-4xl mb-2">👥</div>
-                            <div>لا توجد بيانات موظفين للفترة المحددة</div>
+                            <div>لا توجد بيانات موظفين حسب التصفية الحالية</div>
                         </div>
                     )}
                 </div>
