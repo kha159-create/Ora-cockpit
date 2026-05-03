@@ -10,6 +10,7 @@ interface EmployeeReportModalProps {
     employeeList: any[];
     yesterdayStr: string;
     onGenerate: () => void;
+    isGenerating?: boolean;
 }
 
 export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
@@ -21,7 +22,8 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
     setSelectedEmployees,
     employeeList,
     yesterdayStr,
-    onGenerate
+    onGenerate,
+    isGenerating = false
 }) => {
     if (!isOpen) return null;
 
@@ -193,9 +195,9 @@ export const EmployeeReportModal: React.FC<EmployeeReportModalProps> = ({
                         <button
                             onClick={onGenerate}
                             className="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all shadow-md font-bold flex items-center gap-2"
-                            disabled={selectedEmployees.size === 0}
+                            disabled={selectedEmployees.size === 0 || isGenerating}
                         >
-                            📄 إنشاء التقرير
+                            {isGenerating ? '...جاري إنشاء التقرير' : '📄 إنشاء التقرير'}
                         </button>
                     </div>
                 </div>

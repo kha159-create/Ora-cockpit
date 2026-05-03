@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { toPng } from 'html-to-image';
-import { SalesIcon, InvoicesIcon, ChevronDownIcon, VisitorsIcon, DownloadIcon } from '../Icons';
+import { SalesIcon, InvoicesIcon, ChevronDownIcon, VisitorsIcon } from '../Icons';
 import { useLiveSalesData } from '../../hooks/useLiveSalesData';
 import { loadD365SalesRange } from '../../services/d365Live';
 import { getCurrentUser } from '../../auth/storage';
@@ -410,23 +410,6 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
         }
     };
 
-    const handleDownloadAllStoreImages = async () => {
-        if (!enhancedStores.length) return;
-        const previousExpanded = expandedStoreId;
-
-        try {
-            setCaptureBusy('all');
-            for (const store of enhancedStores) {
-                setCaptureBusy(String(store.sid));
-                const dataUrl = await captureStoreImage(store);
-                downloadBlob(dataUrlToBlob(dataUrl), `${sanitizeFilePart(store.name)}-${targetDateStr}.png`);
-            }
-        } finally {
-            setExpandedStoreId(previousExpanded);
-            setCaptureBusy(null);
-        }
-    };
-
     return (
         <>
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm" onClick={onClose}>
@@ -525,16 +508,6 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
 
                     {/* Shift Toggle Button */}
                     <div className="flex flex-wrap justify-start gap-2">
-                        <button
-                            type="button"
-                            onClick={handleDownloadAllStoreImages}
-                            disabled={captureBusy !== null || enhancedStores.length === 0}
-                            className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold border border-orange-500 bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-300 shadow-sm"
-                            title="Download one clear PNG per store"
-                        >
-                            <span className="w-4 h-4 inline-flex items-center justify-center"><DownloadIcon /></span>
-                            <span>{captureBusy ? 'جاري تنزيل الصور...' : 'تحميل صور المعارض'}</span>
-                        </button>
                         <button
                             onClick={() => setShowRamadanShifts(!showRamadanShifts)}
                             className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold border transition-all duration-300 shadow-sm ${showRamadanShifts
@@ -652,8 +625,14 @@ export const LiveSalesModal: React.FC<LiveSalesModalProps> = ({
                                                         tabIndex={0}
                                                         title="عرض الزوار بالساعة لهذا الفرع"
                                                     >
-                                                        <span className="text-neutral-500 text-xs">زوار:</span>
-                                                        <span className="font-bold text-orange-700 underline-offset-2 group-hover:underline">{Math.round(store.visitors || 0).toLocaleString()}</span>
+                                                        <span className="flex items-center gap-1">
+                                                            <span className="text-neutral-500 text-xs">زوار:</span>
+                                                            <span className="font-bold text-orange-700 underline-offset-2 group-hover:underline">{Math.round(store.visitors || 0).toLocaleString()}</span>
+                                                        </span>
+                                                        <span className="flex items-center gap-1 border-r border-neutral-200 pr-2 mr-1">
+                                                            <span className="text-neutral-500 text-xs">ق.ع:</span>
+                                                            <span className="font-bold text-neutral-700" dir="ltr">{(store.visitors || 0) > 0 ? formatSAR(store.sales / store.visitors) : formatSAR(0)}</span>
+                                                        </span>
                                                     </div>
                                                     <div className="flex justify-between items-center bg-neutral-50 px-2 py-1 rounded">
                                                         <span className="text-neutral-500 text-xs">تحويل:</span>

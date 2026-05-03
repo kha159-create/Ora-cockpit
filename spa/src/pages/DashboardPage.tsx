@@ -96,6 +96,7 @@ export default function DashboardPage() {
   const [includeAllPages, setIncludeAllPages] = useState(true);
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [empFilterStatus, setEmpFilterStatus] = useState<Set<string>>(new Set(['active']));
+  const [employeeReportGenerating, setEmployeeReportGenerating] = useState(false);
   const isManager = user?.role === 'Manager' || (user?.role !== 'Admin' && user?.role !== 'Auditor' && user?.name && user?.name !== 'Sales Manager' && user?.role !== 'BranchManager');
 
   const effectiveManager = useMemo(() => {
@@ -314,7 +315,13 @@ export default function DashboardPage() {
   };
 
   const handleGenerateEmployeeReport = async () => {
-    if (!empRaw?.history || !empRaw?.employee_names || !raw?.stores) return;
+    if (!empRaw?.history || !empRaw?.employee_names || !raw?.stores) {
+      alert('بيانات الموظفين غير جاهزة بعد، جرّب بعد ثواني.');
+      return;
+    }
+
+    setEmployeeReportGenerating(true);
+    try {
 
     const historyData: Record<string, any[]> = empRaw.history;
     const names: Record<string, string> = empRaw.employee_names;
@@ -396,7 +403,7 @@ export default function DashboardPage() {
       .map(([storeId, emps]) => {
         const storeTotalYSales = Object.values(emps).reduce((s: number, e: any) => s + (e.ySales || 0), 0);
         const storeTotalMSales = Object.values(emps).reduce((s: number, e: any) => s + (e.mSales || 0), 0);
-        const targetM = getMarch2026TargetMetrics(yesterday);
+        const targetM = getMarch2026TargetMetrics(new Date(`${yesterdayStr}T12:00:00`));
         const remainingDays = targetM.remainingDaysExclusive;
 
         const employees = Object.values(emps).map((e: any) => {
@@ -430,8 +437,18 @@ export default function DashboardPage() {
         return bSales - aSales;
       });
 
+    if (storesData.length === 0) {
+      alert('لا توجد بيانات موظفين مطابقة للاختيار الحالي.');
+      return;
+    }
+
     await generateEmployeeReportByStore(storesData, { yesterday: yesterdayStr, monthStart: startOfMonth });
     setEmployeeReportModalOpen(false);
+    } catch (e: any) {
+      alert(e?.message || 'تعذر إنشاء تقرير الموظفين.');
+    } finally {
+      setEmployeeReportGenerating(false);
+    }
   };
 
   const isBranchManager = user?.role === 'BranchManager';
@@ -1341,6 +1358,7 @@ export default function DashboardPage() {
           employeeList={employeeListForSelection}
           yesterdayStr={yesterdayStr}
           onGenerate={handleGenerateEmployeeReport}
+          isGenerating={employeeReportGenerating}
         />
       }
 
