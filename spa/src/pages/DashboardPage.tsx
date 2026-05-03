@@ -1,18 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { loadManagementData, loadEmployeesData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { KPIGrid } from '../components/dashboard/KPIGrid';
 import { SalesChart } from '../components/dashboard/SalesChart';
-import { QuickAccess } from '../components/dashboard/QuickAccess';
 import { RankWidgets } from '../components/dashboard/RankWidgets';
 import { TopSellingWidget } from '../components/dashboard/TopSellingWidget';
 import { DailyReportModal } from '../components/dashboard/DailyReportModal';
 import { StoreReportModal } from '../components/dashboard/StoreReportModal';
 import { EmployeeReportModal } from '../components/dashboard/EmployeeReportModal';
 import { DrillDownModal } from '../components/dashboard/DrillDownModal';
-import { BranchesMap } from '../components/dashboard/BranchesMap';
-import { buildTopStoresRankForPeriod, mapBranchesDataWithLocations } from '../utils/customerValueBranchRows';
+import { buildTopStoresRankForPeriod } from '../utils/customerValueBranchRows';
 import { useComparisonCalendar } from '../context/ComparisonCalendarContext';
 
 import { generateStoreReportWithDaily, generateEmployeeReportByStore } from '../services/pdf/pdfService';
@@ -616,11 +613,6 @@ export default function DashboardPage() {
       achievement: v.target > 0 ? (v.sales / v.target) * 100 : 0,
     }));
   }, [empRaw, range.start, range.end, allowedStoreIds, raw?.store_meta, mode]);
-
-  const mapBranchesData = useMemo(
-    () => mapBranchesDataWithLocations(topStoresRank, raw?.store_meta),
-    [topStoresRank, raw?.store_meta],
-  );
 
   // أمس + مقارنة العام الماضي — قبل أي return حتى تبقى hooks أسفلها صالحة
   const yesterdayStr = toYMD(calendarYesterday(new Date()));
@@ -1256,30 +1248,58 @@ export default function DashboardPage() {
         formatSAR={formatSAR}
       />
 
-      {/* Portal the Daily Report Button to the MainLayout Header */}
-      {document.getElementById('daily-report-portal-target') && createPortal(
-        <button
-          type="button"
-          onClick={() => setDailyReportModalOpen(true)}
-          className="flex justify-center w-full bg-gradient-to-r from-neutral-800 to-neutral-900 text-white px-4 py-2.5 rounded-xl shadow-md items-center gap-2 hover:scale-105 transition-transform border border-neutral-700"
-        >
-          <span className="text-base leading-none">📄</span>
-          <span className="font-bold text-xs sm:text-sm whitespace-nowrap">التقرير اليومي</span>
-        </button>,
-        document.getElementById('daily-report-portal-target')!
-      )}
-
-      {/* خريطة الفروع المباشرة */}
-      <div className="bg-white rounded-xl shadow-md border border-neutral-200 p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            🗺️ خريطة الفروع المباشرة
-          </h2>
-          <div className="text-xs font-bold bg-emerald-50 text-emerald-600 px-2 py-1 rounded border border-emerald-100">
-            أداء الفروع النشطة
-          </div>
+      {/* بطاقة التقرير اليومي */}
+      <div className="bg-white rounded-xl shadow-md border border-neutral-200 p-4 overflow-hidden relative">
+        <div className="absolute top-3 left-3 text-[10px] font-black bg-orange-50 text-orange-600 px-2 py-1 rounded border border-orange-100">
+          PDF
         </div>
-        <BranchesMap branches={mapBranchesData} formatSAR={formatSAR} />
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              📄 التقرير اليومي
+            </h2>
+            <p className="text-xs text-neutral-500 mt-1">
+              تقرير أمس للمعارض والموظفين، مع نافذة اختيار قبل التصدير.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDailyReportModalOpen(true)}
+            className="self-start lg:self-auto px-4 py-2 rounded-xl bg-neutral-900 text-white text-sm font-bold hover:bg-neutral-800 transition-colors shadow-sm"
+          >
+            عرض التفاصيل
+          </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={handlePrintDailyReport}
+            className="text-right p-4 rounded-xl border border-orange-100 bg-orange-50/60 hover:bg-orange-50 hover:border-orange-300 transition-all"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-black text-neutral-900">نافذة المعارض</div>
+                <div className="text-xs text-neutral-500 mt-1">اختيار المعارض ثم تصدير PDF</div>
+              </div>
+              <span className="text-lg">🏬</span>
+            </div>
+            <div className="mt-3 text-xs font-bold text-orange-700">تصدير تقرير المعارض</div>
+          </button>
+          <button
+            type="button"
+            onClick={handlePrintEmployeeReport}
+            className="text-right p-4 rounded-xl border border-neutral-200 bg-neutral-50 hover:bg-white hover:border-orange-300 transition-all"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-black text-neutral-900">نافذة الموظفين</div>
+                <div className="text-xs text-neutral-500 mt-1">اختيار الموظفين ثم تصدير PDF</div>
+              </div>
+              <span className="text-lg">👥</span>
+            </div>
+            <div className="mt-3 text-xs font-bold text-neutral-700">تصدير تقرير الموظفين</div>
+          </button>
+        </div>
       </div>
 
       {/* أعلى الموظفين / أعلى الفروع — هوية برتقالي وأسود */}
