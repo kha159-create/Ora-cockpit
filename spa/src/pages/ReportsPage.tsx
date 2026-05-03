@@ -673,72 +673,77 @@ export default function ReportsPage() {
     const storesMap = rawMgmt.stores || {};
 
     const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-
     const { start: mtdStart, end: mtdEndStr } = mtdRangeThroughYesterday(today);
     const marchTpl = getMarch2026PhaseSalesBounds(mtdEndStr);
     const effTplStart = marchTpl?.start ?? mtdStart;
     const effTplEnd = marchTpl?.end ?? mtdEndStr;
+    const originalStatus = buildOriginalEmployeeStatusMap(rawEmp, passFilter, effTplStart, effTplEnd, today);
 
     const getTarget = (rawId: string) => getEmployeeTargetForEffectiveDate(rawEmp, rawId, mtdEndStr);
 
-    // Build employee list with MTD sales + عدد الأيام الفعلية التي باع فيها الموظف
     const empMap: Record<string, any> = {};
     const empDaysMap: Record<string, Set<string>> = {};
     Object.entries(history).forEach(([sid, recs]: [string, any]) => {
       if (!passFilter(sid)) return;
       (recs || []).forEach((rec: any[]) => {
-        const d = rec[0];
-        const rawId = String(rec[1] || '').split('-')[0].trim();
+        const d = String(rec[0] || '').substring(0, 10);
+        if (d < effTplStart || d > effTplEnd) return;
+
+        const employeeValue = String(rec[1] || '');
+        const rawId = employeeValue.split('-')[0].trim();
         if (!rawId || rawId === 'مرتجع') return;
-        const id = rawId.padStart(4, '0');
+        const id4 = rawId.padStart(4, '0');
+        const nameFromRecord = employeeValue.includes('-') ? employeeValue.split('-').slice(1).join('-').trim() : '';
         const sales = Number(rec[2]) || 0;
         const trans = Number(rec[3]) || 0;
+        const statusInfo = originalStatus[rawId] || originalStatus[id4];
+        const name = names[rawId] || names[id4] || nameFromRecord || rawId;
 
-        if (!empMap[id]) {
-          empMap[id] = {
-            id,
-            name: names[id] || names[rawId] || rawId,
+        if (!empMap[rawId]) {
+          empMap[rawId] = {
+            id: rawId,
+            id4,
+            name,
             storeId: sid,
             storeName: storesMap[sid] || sid,
             mtdSales: 0,
             mtdTrans: 0,
-            target: getTarget(id),
-            active: false,
+            workingDays: 0,
+            target: getTarget(rawId),
+            status: statusInfo?.status || 'active',
+            statusReasons: statusInfo?.reasons || [],
+            active: (statusInfo?.status || 'active') === 'active',
+            lastSaleDate: '',
           };
         }
-        if (d >= effTplStart && d <= effTplEnd) {
-          empMap[id].mtdSales += sales;
-          empMap[id].mtdTrans += trans;
-          if (sales > 0) {
-            if (!empDaysMap[id]) empDaysMap[id] = new Set<string>();
-            empDaysMap[id].add(String(d).substring(0, 10));
+
+        empMap[rawId].mtdSales += sales;
+        empMap[rawId].mtdTrans += trans;
+        if (sales > 0) {
+          if (!empDaysMap[rawId]) empDaysMap[rawId] = new Set<string>();
+          empDaysMap[rawId].add(d);
+          if (!empMap[rawId].lastSaleDate || d >= empMap[rawId].lastSaleDate) {
+            empMap[rawId].storeId = sid;
+            empMap[rawId].storeName = storesMap[sid] || sid;
+            empMap[rawId].lastSaleDate = d;
           }
         }
       });
     });
 
-    // بعد بناء البيانات، نحدد من هو "نشط" فعلياً:
-    // تعريف النشاط:
-    // - باع في 3 أيام مختلفة على الأقل خلال الشهر، و
-    // - حصته من مبيعات الفرع الذي يعمل فيه ليست هامشية جداً (>= 1% من مبيعات الفرع MTD).
-    const storeTotals: Record<string, number> = {};
     Object.values(empMap).forEach((e: any) => {
-      storeTotals[e.storeId] = (storeTotals[e.storeId] || 0) + (e.mtdSales || 0);
-    });
-    Object.values(empMap).forEach((e: any) => {
-      const daysCount = empDaysMap[e.id]?.size || 0;
-      const storeTotal = storeTotals[e.storeId] || 0;
-      const share = storeTotal > 0 ? (e.mtdSales || 0) / storeTotal : 0;
-      const isActiveByDays = daysCount >= 3;
-      const isActiveByShare = share >= 0.01; // 1% على الأقل من مبيعات الفرع
-      e.active = isActiveByDays && isActiveByShare;
+      e.workingDays = empDaysMap[e.id]?.size || 0;
     });
 
-    const list = Object.values(empMap).sort((a: any, b: any) => b.mtdSales - a.mtdSales);
+    const statusOrder: Record<string, number> = { active: 0, medium: 1, high: 2 };
+    const list = Object.values(empMap).sort((a: any, b: any) => {
+      const storeCompare = String(a.storeName || '').localeCompare(String(b.storeName || ''), 'ar');
+      if (storeCompare !== 0) return storeCompare;
+      const statusCompare = (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
+      if (statusCompare !== 0) return statusCompare;
+      return b.mtdSales - a.mtdSales;
+    });
     setTargetEmpList(list);
-    // Default: select active employees
     setTargetSelected(new Set(list.filter((e: any) => e.active).map((e: any) => e.id)));
     setShowTargetModal(true);
   };
@@ -748,17 +753,18 @@ export default function ReportsPage() {
     if (selectedEmps.length === 0) { alert('الرجاء اختيار موظف واحد على الأقل'); return; }
 
     const data = selectedEmps.map((e: any) => ({
+      'Store ID': e.storeId,
+      'Store Name': e.storeName,
       'Employee ID': String(e.id).replace(/unknown/gi, '').replace(/unkown/gi, '').trim(),
       'Employee Name': e.name,
-      'Store': e.storeName,
-      'Current Target': e.target || '',
-      'Target Amount': '', // Empty for user input
+      'Working Days': e.workingDays || '',
+      'Target': '',
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);
-    ws['!cols'] = [{ wch: 15 }, { wch: 30 }, { wch: 20 }, { wch: 15 }, { wch: 15 }];
+    ws['!cols'] = [{ wch: 14 }, { wch: 28 }, { wch: 15 }, { wch: 30 }, { wch: 14 }, { wch: 15 }];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Targets Template');
+    XLSX.utils.book_append_sheet(wb, ws, 'Employee Targets');
 
     const nextMonth = new Date();
     nextMonth.setMonth(nextMonth.getMonth() + 1);
@@ -1102,6 +1108,7 @@ export default function ReportsPage() {
                       <th className="p-2 text-right">الموظف</th>
                       <th className="p-2 text-right">الفرع</th>
                       <th className="p-2 text-center">المبيعات (MTD)</th>
+                      <th className="p-2 text-center">أيام البيع</th>
                       <th className="p-2 text-center">التارجت الحالي</th>
                       <th className="p-2 text-center">الحالة</th>
                     </tr>
@@ -1109,7 +1116,13 @@ export default function ReportsPage() {
                   <tbody className="divide-y divide-neutral-100">
                     {targetEmpList.map((emp: any) => {
                       const isSelected = targetSelected.has(emp.id);
-                      const bgClass = emp.active ? '' : 'bg-red-50';
+                      const statusClass = emp.status === 'high'
+                        ? 'bg-red-100 text-red-700'
+                        : emp.status === 'medium'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-green-100 text-green-700';
+                      const statusLabel = emp.status === 'high' ? 'مستقيل' : emp.status === 'medium' ? 'مراجعة' : 'نشط';
+                      const bgClass = emp.status === 'high' ? 'bg-red-50' : emp.status === 'medium' ? 'bg-amber-50' : '';
                       return (
                         <tr
                           key={emp.id}
@@ -1127,13 +1140,15 @@ export default function ReportsPage() {
                           <td className="p-2 font-medium text-neutral-800">{emp.name}</td>
                           <td className="p-2 text-neutral-600">{emp.storeName}</td>
                           <td className="p-2 text-center font-mono">{Math.round(emp.mtdSales).toLocaleString()}</td>
+                          <td className="p-2 text-center font-mono text-neutral-600">{emp.workingDays || '-'}</td>
                           <td className="p-2 text-center font-mono text-neutral-500">{emp.target ? Math.round(emp.target).toLocaleString() : '-'}</td>
                           <td className="p-2 text-center">
-                            {emp.active ? (
-                              <span className="text-xs font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">نشط</span>
-                            ) : (
-                              <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-100 text-red-600">غير نشط</span>
-                            )}
+                            <span
+                              className={`text-xs font-bold px-2 py-0.5 rounded ${statusClass}`}
+                              title={(emp.statusReasons || []).join('، ')}
+                            >
+                              {statusLabel}
+                            </span>
                           </td>
                         </tr>
                       );
