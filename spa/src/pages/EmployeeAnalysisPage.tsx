@@ -3,7 +3,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { getCurrentUser } from '../auth/storage';
 import { loadEmployeeProductsData, loadEmployeesData, loadManagementData, loadOffersData } from '../services/upstreamData';
-import { mtdRangeThroughYesterday } from '../utils/mtdDateRange';
+import { calendarYesterday, mtdRangeThroughYesterday, toLocalYMD } from '../utils/mtdDateRange';
 import { getEmployeeTargetForEffectiveDate, sumEmployeeTargetForDateRange } from '../utils/march2026Targets';
 import { buildBucketsForDateRange, daysInclusiveYMD } from '../utils/targetSplitPeriods';
 
@@ -294,6 +294,7 @@ function paceRank(status: string) {
 }
 
 type ProductPeriodKey = 'mtd' | 'yest' | '7d' | '14d' | '30d';
+type DatePeriodKey = ProductPeriodKey | 'custom';
 type SortKey = 'name' | 'store' | 'level' | 'sales' | 'avgTicket' | 'targetAchievement' | 'dailyRisk' | 'targetPace';
 type SortDir = 'asc' | 'desc';
 type OfferItem = { name: string; qty: number; pct: number };
@@ -302,6 +303,34 @@ type PadModels = { model5: number; model10: number; model15: number; total: numb
 type PillowDetail = { total: number; attachPct: number | null; status: string };
 type PeriodSnapshot = { label: string; sales: number; target: number; achievementPct: number };
 type ProductMixSummary = { topCategory: string; concentrationPct: number; otherSharePct: number; coreSharePct: number; distinctCategories: number; diversityLabel: string; supportLabel: string };
+
+function getDateRangeForMode(mode: DatePeriodKey, customStart?: string, customEnd?: string): { start: string; end: string } {
+  const now = new Date();
+  const yest = calendarYesterday(now);
+  const yestYMD = toLocalYMD(yest);
+  if (mode === 'yest') return { start: yestYMD, end: yestYMD };
+  if (mode === 'custom' && customStart && customEnd) {
+    return customStart <= customEnd
+      ? { start: customStart, end: customEnd }
+      : { start: customEnd, end: customStart };
+  }
+  if (mode === '7d') {
+    const s = new Date(yest);
+    s.setDate(yest.getDate() - 7);
+    return { start: toLocalYMD(s), end: yestYMD };
+  }
+  if (mode === '14d') {
+    const s = new Date(yest);
+    s.setDate(yest.getDate() - 14);
+    return { start: toLocalYMD(s), end: yestYMD };
+  }
+  if (mode === '30d') {
+    const s = new Date(yest);
+    s.setDate(yest.getDate() - 30);
+    return { start: toLocalYMD(s), end: yestYMD };
+  }
+  return mtdRangeThroughYesterday(now);
+}
 
 type ProductInsights = {
   kingDuvet: number;
@@ -389,6 +418,7 @@ export default function EmployeeAnalysisPage() {
   const [city, setCity] = useState('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [dateMode, setDateMode] = useState<DatePeriodKey>('mtd');
   const [productsPeriodKey, setProductsPeriodKey] = useState<ProductPeriodKey>('mtd');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState('');
@@ -408,6 +438,11 @@ export default function EmployeeAnalysisPage() {
       setCustomEnd(r.end);
     });
   }, []);
+
+  const applyDateMode = (nextMode: DatePeriodKey) => {
+    setDateMode(nextMode);
+    if (nextMode !== 'custom') setProductsPeriodKey(nextMode);
+  };
 
   const effectiveManager = useMemo(() => (isAdminOrAuditor(user?.role) ? manager : user?.name || manager), [manager, user?.name, user?.role]);
 
@@ -430,8 +465,9 @@ export default function EmployeeAnalysisPage() {
     const stores = mgmt.stores || {};
     const history = empRaw.history || {};
     const employeeNames: Record<string, string> = empRaw.employee_names || {};
-    const start = customStart || '1900-01-01';
-    const end = customEnd || '2999-12-31';
+    const selectedRange = getDateRangeForMode(dateMode, customStart, customEnd);
+    const start = selectedRange.start || '1900-01-01';
+    const end = selectedRange.end || '2999-12-31';
     const monthStart = firstDayOfMonth(end);
     const monthEnd = lastDayOfMonth(end);
     const mSet = new Set<string>();
@@ -522,7 +558,9 @@ export default function EmployeeAnalysisPage() {
     });
 
     const periods = empProductsRaw?.periods || {};
-    const scoped = periods?.[productsPeriodKey] || periods?.mtd || {};
+    const productSourceEnd = String(empProductsRaw?.metadata?.yesterday_date || empProductsRaw?.metadata?.period_end || '');
+    const productPeriodMatches = !productSourceEnd || dateMode === 'custom' || productSourceEnd === end;
+    const scoped = productPeriodMatches ? (periods?.[productsPeriodKey] || periods?.mtd || {}) : {};
     const rawOffers = Array.isArray(offersRaw) ? offersRaw : Array.isArray(offersRaw?.offers) ? offersRaw.offers : [];
     const offerProductIndex = new Map<string, Set<string>>();
 
@@ -737,7 +775,7 @@ export default function EmployeeAnalysisPage() {
       elapsedDays: daysInclusiveYMD(monthStart, end),
       totalMonthDays: daysInMonthFromYmd(end),
     };
-  }, [branch, city, customEnd, customStart, effectiveManager, empProductsRaw, empRaw, mgmt, offersRaw, productsPeriodKey, user?.name, user?.role, user?.storeId]);
+  }, [branch, city, customEnd, customStart, dateMode, effectiveManager, empProductsRaw, empRaw, mgmt, offersRaw, productsPeriodKey, user?.name, user?.role, user?.storeId]);
 
   const decisionRows = useMemo(() => {
     if (!derived.rows.length || !derived.monthStart || !derived.paceEnd) return [];
@@ -982,6 +1020,8 @@ export default function EmployeeAnalysisPage() {
     };
   }, [visibleRows]);
 
+  const activeDateRange = getDateRangeForMode(dateMode, customStart, customEnd);
+
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
       setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -1003,7 +1043,7 @@ export default function EmployeeAnalysisPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          filters: { manager: effectiveManager, city, branch, customStart, customEnd, productsPeriodKey, activeOnly: showActiveOnly },
+          filters: { manager: effectiveManager, city, branch, dateStart: activeDateRange.start, dateEnd: activeDateRange.end, productsPeriodKey, activeOnly: showActiveOnly },
           summary: { employees: topCards.summary.employees, sales: Math.round(topCards.summary.sales), transactions: Math.round(topCards.summary.trans), avgTicket: Number(topCards.summary.avgTicket.toFixed(1)) },
           rows: visibleRows.map((row) => ({ employee: row.name, employeeId: row.id, store: row.storeName, level: row.level, pattern: row.pattern, structure: row.sellingStructure, strength: row.strength, weakness: row.weakness, action: row.action, duvetStatus: row.duvetStatus, padFocus: row.padFocus, padQuality: row.padQuality, pillowStatus: row.pillowStatus, offerBehavior: row.offerBehavior, avgTicket: row.avgTicket, atvVsStore: row.atvVsStoreLabel, sales: row.sales, transactions: row.trans, duvetTotal: row.totalDuvet, padAttachPct: row.weightedPadAttach, pillowAttachPct: row.weightedPillowAttach, offerFocusPct: row.productInsights.offerFocusPct, targetAchievementPct: row.targetAchievementPct, targetPaceStatus: row.targetPaceLabel, dailyRiskStatus: row.dailyRiskLabel, avgDailySales: row.avgDailySales, requiredRemainingDailySales: row.requiredRemainingDailySales, periodPerformance: row.periodPerformance, periodBuckets: row.periodBuckets, duvetKingBands: row.productInsights.kingDuvetBands, duvetFullBands: row.productInsights.fullDuvetBands, padKingModels: row.productInsights.kingPadModels, padFullModels: row.productInsights.fullPadModels, pillowKing: row.productInsights.kingPillowDetail, pillowFull: row.productInsights.fullPillowDetail, topOffers: row.productInsights.offerTopItems, productMix: row.productInsights.mixSummary, padKingPriceFocus: row.productInsights.kingPadModels.priceFocus, padFullPriceFocus: row.productInsights.fullPadModels.priceFocus })),
         }),
@@ -1025,7 +1065,7 @@ export default function EmployeeAnalysisPage() {
       `مدير المنطقة: ${effectiveManager === 'all' ? 'الكل' : effectiveManager}`,
       `المدينة: ${city === 'all' ? 'الكل' : city}`,
       `الفرع: ${branch === 'all' ? 'كافة الفروع' : derived.branches.find((item) => item.id === branch)?.name || branch}`,
-      `الفترة: ${customStart || '-'} إلى ${customEnd || '-'}`,
+      `الفترة: ${activeDateRange.start || '-'} إلى ${activeDateRange.end || '-'}`,
       `مصدر الأصناف: ${productsPeriodKey}`,
     ].join(' | ');
 
@@ -1092,9 +1132,24 @@ export default function EmployeeAnalysisPage() {
       </div>
 
       <div className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-4 shadow-lg">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => applyDateMode('mtd')} className={`rounded-xl px-4 py-2 text-sm font-bold transition ${dateMode === 'mtd' ? 'bg-orange-500 text-white shadow-md' : 'border border-neutral-200 bg-white text-neutral-700 hover:bg-orange-50'}`}>الشهر الحالي</button>
+            <button type="button" onClick={() => applyDateMode('7d')} className={`rounded-xl px-4 py-2 text-sm font-bold transition ${dateMode === '7d' ? 'bg-orange-500 text-white shadow-md' : 'border border-neutral-200 bg-white text-neutral-700 hover:bg-orange-50'}`}>7 أيام</button>
+            <button type="button" onClick={() => applyDateMode('14d')} className={`rounded-xl px-4 py-2 text-sm font-bold transition ${dateMode === '14d' ? 'bg-orange-500 text-white shadow-md' : 'border border-neutral-200 bg-white text-neutral-700 hover:bg-orange-50'}`}>14 يوم</button>
+            <button type="button" onClick={() => applyDateMode('30d')} className={`rounded-xl px-4 py-2 text-sm font-bold transition ${dateMode === '30d' ? 'bg-orange-500 text-white shadow-md' : 'border border-neutral-200 bg-white text-neutral-700 hover:bg-orange-50'}`}>30 يوم</button>
+            <button type="button" onClick={() => applyDateMode('yest')} className={`rounded-xl px-4 py-2 text-sm font-bold transition ${dateMode === 'yest' ? 'bg-orange-500 text-white shadow-md' : 'border border-neutral-200 bg-white text-neutral-700 hover:bg-orange-50'}`}>أمس</button>
+            <button type="button" onClick={() => applyDateMode('custom')} className={`rounded-xl px-4 py-2 text-sm font-bold transition ${dateMode === 'custom' ? 'bg-orange-500 text-white shadow-md' : 'border border-neutral-200 bg-white text-neutral-700 hover:bg-orange-50'}`}>فترة مخصصة</button>
+          </div>
+          <div className="text-sm font-semibold text-neutral-600 dir-ltr">{derived.monthStart ? `${activeDateRange.start} → ${activeDateRange.end}` : ''}</div>
+        </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
-          <div><div className="mb-1 text-xs font-semibold text-neutral-500">من</div><input type="date" className="input" value={customStart} onChange={(e) => setCustomStart(e.target.value)} /></div>
-          <div><div className="mb-1 text-xs font-semibold text-neutral-500">إلى</div><input type="date" className="input" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} /></div>
+          {dateMode === 'custom' ? (
+            <>
+              <div><div className="mb-1 text-xs font-semibold text-neutral-500">من</div><input type="date" className="input" value={customStart} onChange={(e) => setCustomStart(e.target.value)} /></div>
+              <div><div className="mb-1 text-xs font-semibold text-neutral-500">إلى</div><input type="date" className="input" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} /></div>
+            </>
+          ) : null}
           {isAdminOrAuditor(user?.role) ? <div><div className="mb-1 text-xs font-semibold text-neutral-500">مدير المنطقة</div><select className="input" value={manager} onChange={(e) => setManager(e.target.value)}><option value="all">الكل</option>{derived.managers.map((m) => <option key={m} value={m}>{m}</option>)}</select></div> : null}
           <div className={user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}><div className="mb-1 text-xs font-semibold text-neutral-500">المدينة</div><select className="input" value={city} onChange={(e) => setCity(e.target.value)}><option value="all">الكل</option>{derived.cities.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
           <div className={user?.role === 'BranchManager' ? 'pointer-events-none opacity-60' : ''}><div className="mb-1 text-xs font-semibold text-neutral-500">الفرع</div><select className="input" value={branch} onChange={(e) => setBranch(e.target.value)}><option value="all">كافة الفروع</option>{derived.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>

@@ -7,7 +7,7 @@ import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { CubeIcon, SalesIcon, InvoicesIcon, VisitorsIcon, XIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
 import { generateProductSummaryPDF, generateProductValueAnalysisPDF } from '../services/pdf/pdfService';
-import { calendarYesterday, mtdRangeThroughYesterday } from '../utils/mtdDateRange';
+import { calendarYesterday, mtdRangeThroughYesterday, toLocalYMD } from '../utils/mtdDateRange';
 
 type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest' | 'custom';
 type RepSearchMode = 'sales_stock' | 'stock_only';
@@ -42,10 +42,9 @@ function formatSAR(val: number) {
 }
 
 function getDateRangeForMode(m: PeriodMode, customStart?: string, customEnd?: string): { start: string; end: string } {
-  const pad = (n: number) => String(n).padStart(2, '0');
   const nowReal = new Date();
   const yest = calendarYesterday(nowReal);
-  const yestYMD = `${yest.getFullYear()}-${pad(yest.getMonth() + 1)}-${pad(yest.getDate())}`;
+  const yestYMD = toLocalYMD(yest);
   if (m === 'yest') return { start: yestYMD, end: yestYMD };
   if (m === 'custom' && customStart && customEnd) {
     return customStart <= customEnd
@@ -54,18 +53,24 @@ function getDateRangeForMode(m: PeriodMode, customStart?: string, customEnd?: st
   }
   if (m === '7d') {
     const s = new Date(yest); s.setDate(yest.getDate() - 7);
-    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end: yestYMD };
+    return { start: toLocalYMD(s), end: yestYMD };
   }
   if (m === '14d') {
     const s = new Date(yest); s.setDate(yest.getDate() - 14);
-    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end: yestYMD };
+    return { start: toLocalYMD(s), end: yestYMD };
   }
   if (m === '30d') {
     const s = new Date(yest); s.setDate(yest.getDate() - 30);
-    return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`, end: yestYMD };
+    return { start: toLocalYMD(s), end: yestYMD };
   }
   const r = mtdRangeThroughYesterday(nowReal);
   return { start: r.start, end: r.end };
+}
+
+function parsePeriodDateRange(value: unknown): { start: string; end: string } | null {
+  const dates = String(value || '').match(/\d{4}-\d{2}-\d{2}/g);
+  if (!dates?.length) return null;
+  return { start: dates[0], end: dates[1] || dates[0] };
 }
 
 function isAdminOrAuditor(role?: string) {
@@ -412,11 +417,31 @@ export default function ProductsPage() {
     const dateRange = getDateRangeForMode(mode, customStart, customEnd);
     const isCustomMode = mode === 'custom';
     const pData = !isCustomMode ? (raw.periods?.[mode] || null) : null;
-    const analysisSource: Record<string, any> = (isCustomMode ? raw.periods?.mtd?.analysis : pData?.analysis || {}) as any;
-    const catalog: Record<string, any[]> = (pData?.catalog || {}) as any;
-    const missedByStore: Record<string, any[]> = ((isCustomMode ? raw.periods?.mtd?.missed_opportunities : pData?.missed_opportunities) || {}) as any;
-    const marketBasketAll: Record<string, any[]> = raw.market_basket || {};
     const dailyHistory: Record<string, any[]> = raw.product_daily_history || {};
+    const pDataRange = parsePeriodDateRange(pData?.date_range);
+    const useDailyHistoryMode = isCustomMode || !pDataRange || pDataRange.start !== dateRange.start || pDataRange.end !== dateRange.end;
+    const historyStoreIds = new Set<string>();
+    if (useDailyHistoryMode) {
+      Object.values(dailyHistory).forEach((rows) => {
+        if (!Array.isArray(rows)) return;
+        rows.forEach((r: any) => {
+          const ds = String(r?.date || '').substring(0, 10);
+          const sid = String(r?.store || r?.s || '');
+          if (!ds || ds < dateRange.start || ds > dateRange.end || !sid) return;
+          historyStoreIds.add(sid);
+        });
+      });
+    }
+    const analysisSource: Record<string, any> = useDailyHistoryMode
+      ? Object.fromEntries(
+        Object.keys(storesMap)
+          .filter((sid) => !historyStoreIds.size || historyStoreIds.has(sid))
+          .map((sid) => [sid, { store_name: storesMap[sid] || sid }]),
+      )
+      : ((pData?.analysis || {}) as any);
+    const catalog: Record<string, any[]> = (pData?.catalog || {}) as any;
+    const missedByStore: Record<string, any[]> = ((useDailyHistoryMode ? {} : pData?.missed_opportunities) || {}) as any;
+    const marketBasketAll: Record<string, any[]> = raw.market_basket || {};
 
     const isStoreAccessible = (sid: string) => {
       if (isAdminOrAuditor(user?.role)) return true;
@@ -533,7 +558,7 @@ export default function ProductsPage() {
       });
     };
 
-    if (!isCustomMode) {
+    if (!useDailyHistoryMode) {
       Object.entries(catalog).forEach(([catName, items]) => {
         if (!Array.isArray(items)) return;
         for (const it of items) pushCatalogItem(catName, it);
@@ -732,7 +757,7 @@ export default function ProductsPage() {
         : [];
 
     return {
-      dateRangeLabel: isCustomMode ? `${dateRange.start} → ${dateRange.end}` : (pData?.date_range || '-'),
+      dateRangeLabel: useDailyHistoryMode ? `${dateRange.start} → ${dateRange.end}` : (pData?.date_range || `${dateRange.start} → ${dateRange.end}`),
       dateRangeStart: dateRange.start,
       dateRangeEnd: dateRange.end,
       managers,
