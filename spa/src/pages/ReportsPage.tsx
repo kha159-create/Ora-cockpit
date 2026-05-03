@@ -147,8 +147,6 @@ export default function ReportsPage() {
   const [excelExporting, setExcelExporting] = useState(false);
   const [excelType, setExcelType] = useState<'store' | 'employee'>('store');
   const [showExcelModal, setShowExcelModal] = useState(false);
-  const [showReportChoiceModal, setShowReportChoiceModal] = useState(false);
-  const [reportChoiceType, setReportChoiceType] = useState<'pdf' | 'excel' | null>(null);
   const [previewReport, setPreviewReport] = useState<{ type: string; data: any } | null>(null);
 
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
@@ -244,6 +242,17 @@ export default function ReportsPage() {
       if (!dataMap[k]) dataMap[k] = { date: d, storeId: s, sales: 0, trans: 0, visitors: 0, target: 0 };
       return dataMap[k];
     };
+    const exportDates: string[] = [];
+    let cursor = new Date(range.start);
+    const rangeEnd = new Date(range.end);
+    while (cursor <= rangeEnd) {
+      exportDates.push(toYMD(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    const exportStoreIds = branches.map((b) => b.id).filter((sid) => passFilter(sid));
+    exportStoreIds.forEach((sid) => {
+      exportDates.forEach((d) => ensure(d, sid));
+    });
     (rawMgmt.sales || []).forEach(([d, s, v]: any[]) => {
       if (inRange(d) && passFilter(s)) ensure(d, s).sales += v || 0;
     });
@@ -257,7 +266,7 @@ export default function ReportsPage() {
       if (inRange(d) && passFilter(s)) ensure(d, s).target += v || 0;
     });
     const rows = Object.values(dataMap).map((r) => {
-      const prevDate = r.date.replace(/^\d{4}/, (y) => String(Number(y) - 1));
+      const prevDate = getPrevYearDate(r.date);
       let prevSales = 0;
       let prevVisitors = 0;
       (rawMgmt.sales || []).forEach(([d, s, v]: any[]) => {
@@ -346,7 +355,6 @@ export default function ReportsPage() {
     });
 
     setPreviewReport({ type: 'global', data: reportData });
-    setShowReportChoiceModal(false);
   };
 
   const generateEmployeePerformance = () => {
@@ -441,14 +449,12 @@ export default function ReportsPage() {
       });
 
     setPreviewReport({ type: 'employee', data: storesData });
-    setShowReportChoiceModal(false);
   };
 
   const exportEmployeeExcel = () => {
     if (!rawMgmt || !rawEmp) return;
     const history = rawEmp.history || {};
     const empNames = rawEmp.employee_names || {};
-    const prevYearDate = (d: string) => d.replace(/^\d{4}/, (y) => String(Number(y) - 1));
     const empSalesByDateId: Record<string, number> = {};
     Object.entries(history).forEach(([sid, recs]) => {
       if (!passFilter(sid)) return;
@@ -477,7 +483,7 @@ export default function ReportsPage() {
             const nameFromParts = parts.slice(1).join('-').trim();
             if (nameFromParts) name = nameFromParts;
           }
-          const prevSales = empSalesByDateId[`${prevYearDate(date)}_${idPart}`] || 0;
+          const prevSales = empSalesByDateId[`${getPrevYearDate(date)}_${idPart}`] || 0;
           const targetVal = getEmployeeTargetForEffectiveDate(rawEmp, idPart, String(date).substring(0, 10));
           rows.push({
             'التاريخ': date,
@@ -513,8 +519,6 @@ export default function ReportsPage() {
       if (excelType === 'store') exportStoreExcel();
       else exportEmployeeExcel();
       setShowExcelModal(false);
-      setShowReportChoiceModal(false);
-      setReportChoiceType(null);
     } finally {
       setExcelExporting(false);
     }
@@ -827,15 +831,6 @@ export default function ReportsPage() {
     setShowTargetModal(false);
   };
 
-  const openReportChoice = (type: 'pdf' | 'excel') => {
-    setReportChoiceType(type);
-    setShowReportChoiceModal(true);
-  };
-
-
-
-
-
   const canExportEmployee = !!user;
 
   if (err) {
@@ -960,86 +955,75 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* التقرير اليومي (مطابق للريبو الأصلي) */}
-      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
-        <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">📊 التقرير اليومي</h3>
-        <p className="text-sm text-neutral-500 mb-4">تقرير أمس مقارنةً بنفس اليوم من العام الماضي (جدول المعارض).</p>
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => handlePdfGeneration('yesterday_store')}
-            className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
-          >
-            📄 عرض التقرير اليومي
-          </button>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-neutral-900 border-r-4 border-orange-500 pr-2">تقارير المعارض</h3>
+              <p className="text-sm text-neutral-500 mt-2">كل تقارير الفروع تستخدم نفس الفلاتر بالأعلى، مع مقارنة العام الماضي حسب منطق الريبو الأصلي.</p>
+            </div>
+            <span className="text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-100 rounded-full px-3 py-1">PDF / Excel</span>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => handlePdfGeneration('yesterday_store')}
+              className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-5 rounded-xl transition"
+            >
+              عرض تقرير المعارض
+            </button>
+            <button
+              type="button"
+              onClick={() => { setExcelType('store'); setShowExcelModal(true); }}
+              className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-5 rounded-xl transition"
+            >
+              تصدير Excel
+            </button>
+          </div>
+          <p className="text-xs text-neutral-400 mt-3">من المعاينة يمكنك طباعة جدول واحد أو إنشاء PDF ملخص لكل فرع.</p>
         </div>
-        <p className="text-xs text-neutral-400 mt-2">بعد العرض يمكنك طباعة PDF (جدول واحد) أو PDF ملخص لكل فرع.</p>
-      </div>
 
-      {/* تفاصيل الفروع (Detailed Report) - مطابق للريبو الأصلي */}
-      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
-        <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">تفاصيل الفروع (Detailed Report)</h3>
-        <p className="text-sm text-neutral-500 mb-4">تقرير المعارض حسب الفترة المختارة: المبيعات، العام الماضي، النمو، الفواتير، الزوار، التحويل.</p>
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => handlePdfGeneration('yesterday_store')}
-            className="bg-neutral-700 hover:bg-neutral-800 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
-          >
-            📄 PDF
-          </button>
-          <button
-            type="button"
-            onClick={() => { setExcelType('store'); setShowExcelModal(true); }}
-            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
-          >
-            📊 Excel
-          </button>
-        </div>
-        <p className="text-xs text-neutral-400 mt-2">PDF: يفتح المعاينة ثم اختر «طباعة PDF» أو «PDF ملخص لكل فرع».</p>
-      </div>
-
-      {/* ملخص عام والتقرير الشهري */}
-      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
-        <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">ملخص عام والتقرير الشهري</h3>
-        <p className="text-sm text-neutral-500 mb-4">تحليل الأداء اليومي (ملخص عام) أو ملخص الشهر حسب الفترة.</p>
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={generateGlobalSummary}
-            className="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
-          >
-            📈 ملخص عام (Global Summary)
-          </button>
-          <button
-            type="button"
-            onClick={() => handlePdfGeneration('monthly_summary')}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
-          >
-            📊 التقرير الشهري
-          </button>
+        <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-neutral-900 border-r-4 border-orange-500 pr-2">الملخصات الإدارية</h3>
+              <p className="text-sm text-neutral-500 mt-2">ملخص عام سريع أو تقرير شهري حسب الفترة المختارة، بدون نافذة اختيار إضافية.</p>
+            </div>
+            <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 rounded-full px-3 py-1">PDF</span>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={generateGlobalSummary}
+              className="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-5 rounded-xl transition"
+            >
+              ملخص عام
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePdfGeneration('monthly_summary')}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded-xl transition"
+            >
+              التقرير الشهري
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* تصدير Excel - مطابق للريبو الأصلي (نوع التقرير: مبيعات المعارض / مبيعات الموظفين) */}
-      <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
-        <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">📊 تصدير Excel</h3>
-        <p className="text-sm text-neutral-500 mb-4">اختر الفترة ونوع التقرير (مبيعات المعارض أو مبيعات الموظفين) ثم صدّر.</p>
-        <button
-          type="button"
-          onClick={() => setShowExcelModal(true)}
-          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
-        >
-          📊 فتح نافذة تصدير Excel
-        </button>
-        <p className="text-xs text-neutral-400 mt-2">نوع التقرير (Sales Manager / Admin): مبيعات المعارض (Store Sales) أو مبيعات الموظفين (Employee Sales).</p>
-      </div>
-
-      {/* تقارير الموظفين - مطابق للريبو الأصلي (أداء الموظفين، PDF، قالب تارجت) */}
       {canExportEmployee && (
         <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
-          <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">👥 تقارير الموظفين</h3>
-          <p className="text-sm text-neutral-500 mb-4">أداء الموظفين (أمس + الشهر الحالي)، تقرير أمس، تصدير Excel، قالب تارجت الشهر القادم.</p>
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-neutral-900 border-r-4 border-orange-500 pr-2">تقارير الموظفين</h3>
+              <p className="text-sm text-neutral-500 mt-2">أداء الموظفين، تقرير أمس، Excel، وقالب التارجت من مكان واحد.</p>
+            </div>
+            <Link
+              to="/employees"
+              className="text-sm font-semibold text-primary-600 hover:underline"
+            >
+              فتح صفحة أداء الموظفين
+            </Link>
+          </div>
           <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50/80 p-3">
             <span className="text-xs font-semibold text-neutral-600 sm:shrink-0">تصفية الموظفين:</span>
             <select
@@ -1056,104 +1040,44 @@ export default function ReportsPage() {
             <button
               type="button"
               onClick={() => generateEmployeePerformance()}
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-5 rounded-xl transition"
             >
-              📄 أداء الموظفين (عرض + PDF)
+              أداء الموظفين
             </button>
             <button
               type="button"
               onClick={() => handlePdfGeneration('yesterday_employee')}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-5 rounded-xl transition"
             >
-              📄 تقرير أمس (موظفين)
+              تقرير أمس
             </button>
             <button
               type="button"
               onClick={() => { setExcelType('employee'); setShowExcelModal(true); }}
-              className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
+              className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-5 rounded-xl transition"
             >
-              📊 تصدير Excel (موظفين)
+              تصدير Excel
             </button>
             <button
               type="button"
               onClick={openTargetTemplateModal}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-5 rounded-xl transition"
             >
-              🎯 قالب تارجت الشهر القادم
+              قالب تارجت الشهر القادم
             </button>
-            <Link
-              to="/employees"
-              className="bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-5 rounded-xl transition flex items-center gap-2"
-            >
-              👥 صفحة أداء الموظفين
-            </Link>
           </div>
         </div>
       )}
 
-      {/* روابط سريعة (تحليل المنتجات، المعارض، العروض) */}
+      {/* روابط سريعة */}
       <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-6">
         <h3 className="text-lg font-bold text-neutral-900 mb-2 border-r-4 border-orange-500 pr-2">صفحات ذات صلة</h3>
         <div className="flex flex-wrap gap-3">
-          <Link to="/products" className="text-primary-600 hover:underline font-medium">📦 تحليل المنتجات</Link>
-          <Link to="/stores" className="text-primary-600 hover:underline font-medium">🏬 تفاصيل المعارض</Link>
-          <Link to="/offers" className="text-primary-600 hover:underline font-medium">🏷️ تحليل العروض</Link>
+          <Link to="/products" className="text-primary-600 hover:underline font-medium">تحليل المنتجات</Link>
+          <Link to="/stores" className="text-primary-600 hover:underline font-medium">تفاصيل المعارض</Link>
+          <Link to="/offers" className="text-primary-600 hover:underline font-medium">تحليل العروض</Link>
         </div>
       </div>
-
-      {/* Report type choice modal */}
-      {
-        showReportChoiceModal && reportChoiceType && (
-          <div className="modal-center-screen" onClick={() => setShowReportChoiceModal(false)}>
-            <div className="modal-content max-w-md w-full p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
-              <h5 className="font-bold text-lg text-neutral-900 mb-4">
-                {reportChoiceType === 'pdf' ? 'اختر التقرير للمعاينة' : 'اختر تقرير Excel'}
-              </h5>
-              {reportChoiceType === 'pdf' ? (
-                <div className="space-y-3">
-                  <button
-                    type="button"
-                    onClick={generateGlobalSummary}
-                    className="w-full py-3 px-4 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600"
-                  >
-                    فتح تقرير ملخص عام (Global Summary)
-                  </button>
-                  {canExportEmployee && (
-                    <button
-                      type="button"
-                      onClick={() => { generateEmployeePerformance(); setShowReportChoiceModal(false); }}
-                      className="w-full py-3 px-4 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700"
-                    >
-                      فتح تقرير أداء الموظفين (Employee Performance)
-                    </button>
-                  )}
-                  <p className="text-sm text-neutral-500">سيتم فتح التقرير للمراجعة أولاً، ثم يمكنك اختيار الطباعة.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => { setExcelType('store'); setShowReportChoiceModal(false); setShowExcelModal(true); setReportChoiceType(null); }}
-                    className="w-full py-3 px-4 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700"
-                  >
-                    مبيعات المعارض (Excel)
-                  </button>
-                  {canExportEmployee && (
-                    <button
-                      type="button"
-                      onClick={() => { setExcelType('employee'); setShowReportChoiceModal(false); setShowExcelModal(true); setReportChoiceType(null); }}
-                      className="w-full py-3 px-4 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700"
-                    >
-                      مبيعات الموظفين (Excel)
-                    </button>
-                  )}
-                </div>
-              )}
-              <button type="button" className="mt-4 w-full btn-secondary py-2" onClick={() => { setShowReportChoiceModal(false); setReportChoiceType(null); }}>إلغاء</button>
-            </div>
-          </div>
-        )
-      }
 
       {/* نافذة تصدير Excel - مطابقة للريبو الأصلي (اختر الفترة + نوع التقرير) */}
       {
@@ -1410,24 +1334,27 @@ export default function ReportsPage() {
                       if (previewReport.type === 'global') {
                         await generateGlobalSalesPDF(previewReport.data, { start: range.start, end: range.end });
                       } else if (previewReport.type === 'stores') {
-                        const yDate = range.start;
-                        const lyDate = getPrevYearDate(range.start);
+                        const yDate = range.start === range.end ? range.start : `${range.start} إلى ${range.end}`;
+                        const lyRange = getPrevYearRange(range.start, range.end);
+                        const lyDate = lyRange.start === lyRange.end ? lyRange.start : `${lyRange.start} إلى ${lyRange.end}`;
                         await generateDailyReportPDF(previewReport.data, { yesterday: yDate, lastYear: lyDate });
                       } else if (previewReport.type === 'employee') {
                         const today = new Date();
                         const yest = new Date(today); yest.setDate(today.getDate() - 1);
-                        const mStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                        const employeeMtd = mtdRangeThroughYesterday(today);
+                        const employeeMarchMtd = getMarch2026PhaseSalesBounds(employeeMtd.end);
+                        const employeeMonthStart = employeeMarchMtd?.start ?? employeeMtd.start;
 
                         // Check if we have store-grouped data
                         if (previewReport.data[0]?.storeId && previewReport.data[0]?.employees) {
                           await generateEmployeeReportByStore(previewReport.data, {
-                            yesterday: yest.toISOString().split('T')[0],
-                            monthStart: mStart.toISOString().split('T')[0]
+                            yesterday: toYMD(yest),
+                            monthStart: employeeMonthStart
                           });
                         } else {
                           await generateEmployeePerformancePDF(previewReport.data, {
-                            yesterday: yest.toISOString().split('T')[0],
-                            monthStart: mStart.toISOString().split('T')[0]
+                            yesterday: toYMD(yest),
+                            monthStart: employeeMonthStart
                           });
                         }
                       }

@@ -5,7 +5,6 @@ import { KPIGrid } from '../components/dashboard/KPIGrid';
 import { SalesChart } from '../components/dashboard/SalesChart';
 import { RankWidgets } from '../components/dashboard/RankWidgets';
 import { TopSellingWidget } from '../components/dashboard/TopSellingWidget';
-import { DailyReportModal } from '../components/dashboard/DailyReportModal';
 import { StoreReportModal } from '../components/dashboard/StoreReportModal';
 import { EmployeeReportModal } from '../components/dashboard/EmployeeReportModal';
 import { DrillDownModal } from '../components/dashboard/DrillDownModal';
@@ -82,7 +81,7 @@ export default function DashboardPage() {
   const [selMonth, setSelMonth] = useState<number>(() => new Date().getMonth() + 1);
   /** آذار 2026 + MTD: الفترة 1 (1–19) أو 2 (20–31) — مثل المعارض/الموظفين */
   const [marchMtdPhase, setMarchMtdPhase] = useState<'1' | '2'>('1');
-  const [dailyReportModalOpen, setDailyReportModalOpen] = useState(false);
+  const [dailyReportView, setDailyReportView] = useState<'stores' | 'employees'>('stores');
   const [drillDownDate, setDrillDownDate] = useState<string | null>(null);
   const [chartMode, setChartMode] = useState<'SALES' | 'VISITORS' | 'TARGET'>('SALES');
   const [topSellingMetric, setTopSellingMetric] = useState<'qty' | 'val'>('qty');
@@ -93,6 +92,7 @@ export default function DashboardPage() {
   const [includeAllPages, setIncludeAllPages] = useState(true);
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [empFilterStatus, setEmpFilterStatus] = useState<Set<string>>(new Set(['active']));
+  const [storeReportGenerating, setStoreReportGenerating] = useState(false);
   const [employeeReportGenerating, setEmployeeReportGenerating] = useState(false);
   const isManager = user?.role === 'Manager' || (user?.role !== 'Admin' && user?.role !== 'Auditor' && user?.name && user?.name !== 'Sales Manager' && user?.role !== 'BranchManager');
 
@@ -176,14 +176,13 @@ export default function DashboardPage() {
   );
 
   const handlePrintDailyReport = () => {
-    // Open store report modal
-    setSelectedBranch('all');
-    setIncludeAllPages(true);
-    setStoreReportModalOpen(true);
+    void handleGenerateStoreReport('all', true);
   };
 
-  const handleGenerateStoreReport = async () => {
+  const handleGenerateStoreReport = async (branchOverride = selectedBranch, forceIncludeAllPages = includeAllPages) => {
     if (!raw?.sales || !raw?.stores) return;
+    setStoreReportGenerating(true);
+    try {
 
     const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
     const dateRange = { start: startOfMonth, end: yesterdayStr };
@@ -212,9 +211,9 @@ export default function DashboardPage() {
     const byStorePrev: Record<string, Record<string, { sales: number; trans: number; visitors: number }>> = {};
 
     // Initialize all stores and dates
-    const storeIds = selectedBranch === 'all'
+    const storeIds = branchOverride === 'all'
       ? Object.keys(storesMap).filter(sid => allowedStoreIds.has(sid))
-      : [selectedBranch];
+      : [branchOverride];
 
     storeIds.forEach(sid => {
       byStore[sid] = {};
@@ -269,7 +268,7 @@ export default function DashboardPage() {
     });
 
     // Build store data
-    const storesData = includeAllPages ? storeIds.map(sid => {
+    const storesData = forceIncludeAllPages ? storeIds.map(sid => {
       const storeName = storesMap[sid] || sid;
       const storeMeta = meta[sid] || {};
       const monthKey = startOfMonth.substring(0, 7);
@@ -309,9 +308,14 @@ export default function DashboardPage() {
 
     await generateStoreReportWithDaily(globalData, storesData, dateRange, storeIds.length);
     setStoreReportModalOpen(false);
+    } catch (e: any) {
+      alert(e?.message || 'تعذر إنشاء تقرير المعارض.');
+    } finally {
+      setStoreReportGenerating(false);
+    }
   };
 
-  const handleGenerateEmployeeReport = async () => {
+  const handleGenerateEmployeeReport = async (useSelection = true) => {
     if (!empRaw?.history || !empRaw?.employee_names || !raw?.stores) {
       alert('بيانات الموظفين غير جاهزة بعد، جرّب بعد ثواني.');
       return;
@@ -364,7 +368,7 @@ export default function DashboardPage() {
         if (!id || id === 'مرتجع') continue;
 
         // selection check
-        if (selectedEmployees.size > 0 && !selectedEmployees.has(id)) continue;
+        if (useSelection && selectedEmployees.size > 0 && !selectedEmployees.has(id)) continue;
 
         const empName = names[id] || names[id.padStart(4, '0')] || id;
         const target = getEmployeeTargetForEffectiveDate(empRaw, id, yesterdayStr);
@@ -619,22 +623,7 @@ export default function DashboardPage() {
   const lastYearYesterdayStr = getComparisonPrevDate(yesterdayStr, calendar);
 
   const handlePrintEmployeeReport = () => {
-    // Initialize employee selection with all active employees
-    const allEmpIds = new Set<string>();
-    const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
-    Object.entries(empRaw?.history || {}).forEach(([sid, recs]: [string, any]) => {
-      if (!allowedStoreIds.has(sid)) return;
-      (recs || []).forEach((rec: any) => {
-        const dt = rec?.[0];
-        if (dt >= startOfMonth && dt <= yesterdayStr) {
-          const empId = String(rec?.[1] || '').split('-')[0].trim();
-          if (empId && empId !== 'مرتجع') allEmpIds.add(empId);
-        }
-      });
-    });
-    setSelectedEmployees(allEmpIds);
-    setEmpFilterStatus(new Set(['active']));
-    setEmployeeReportModalOpen(true);
+    void handleGenerateEmployeeReport(false);
   };
 
   // Calculate employee list for selection modal
@@ -673,6 +662,67 @@ export default function DashboardPage() {
     });
 
     return Object.values(empData).sort((a, b) => b.sales - a.sales);
+  }, [empRaw, raw, yesterdayStr, allowedStoreIds]);
+
+  const dailyEmployeeReportData = useMemo(() => {
+    if (!empRaw?.history || !empRaw?.employee_names || !raw?.stores) return [];
+    const startOfMonth = `${yesterdayStr.substring(0, 8)}01`;
+    const marchBounds = getMarch2026PhaseSalesBounds(yesterdayStr);
+    const mtdStart = marchBounds?.start ?? startOfMonth;
+    const mtdEnd = marchBounds?.end ?? yesterdayStr;
+    const historyData: Record<string, any[]> = empRaw.history;
+    const names: Record<string, string> = empRaw.employee_names;
+    const storesMap = raw.stores || {};
+    const empData: Record<string, {
+      id: string;
+      name: string;
+      storeName: string;
+      ySales: number;
+      yTrans: number;
+      mSales: number;
+      target: number;
+      achievement: number;
+    }> = {};
+
+    Object.entries(historyData).forEach(([sid, recs]: [string, any]) => {
+      if (!allowedStoreIds.has(sid)) return;
+      (recs || []).forEach((rec: any) => {
+        const dt = String(rec?.[0] || '').substring(0, 10);
+        if (dt < mtdStart || dt > mtdEnd) return;
+        const empId = String(rec?.[1] || '').split('-')[0].trim();
+        if (!empId || empId === 'مرتجع') return;
+
+        if (!empData[empId]) {
+          const target = getEmployeeTargetForEffectiveDate(empRaw, empId, yesterdayStr);
+          empData[empId] = {
+            id: empId,
+            name: names[empId] || names[empId.padStart(4, '0')] || empId,
+            storeName: storesMap[sid] || sid,
+            ySales: 0,
+            yTrans: 0,
+            mSales: 0,
+            target,
+            achievement: 0,
+          };
+        }
+
+        const sales = Number(rec?.[2]) || 0;
+        const trans = Number(rec?.[3]) || 0;
+        empData[empId].mSales += sales;
+        if (dt === yesterdayStr) {
+          empData[empId].ySales += sales;
+          empData[empId].yTrans += trans;
+        }
+      });
+    });
+
+    return Object.values(empData)
+      .map((emp) => ({
+        ...emp,
+        achievement: emp.target > 0 ? (emp.mSales / emp.target) * 100 : 0,
+      }))
+      .filter((emp) => emp.ySales > 0 || emp.mSales > 0)
+      .sort((a, b) => b.ySales - a.ySales || b.mSales - a.mSales);
   }, [empRaw, raw, yesterdayStr, allowedStoreIds]);
 
   const dailyReportData = useMemo(() => {
@@ -1249,56 +1299,125 @@ export default function DashboardPage() {
       />
 
       {/* بطاقة التقرير اليومي */}
-      <div className="bg-white rounded-xl shadow-md border border-neutral-200 p-4 overflow-hidden relative">
-        <div className="absolute top-3 left-3 text-[10px] font-black bg-orange-50 text-orange-600 px-2 py-1 rounded border border-orange-100">
-          PDF
-        </div>
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+      <div className="bg-white rounded-xl shadow-md border border-neutral-200 overflow-hidden">
+        <div className="p-4 border-b border-neutral-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              📄 التقرير اليومي
-            </h2>
+            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">📄 التقرير اليومي</h2>
             <p className="text-xs text-neutral-500 mt-1">
-              تقرير أمس للمعارض والموظفين، مع نافذة اختيار قبل التصدير.
+              تفاصيل أمس داخل البطاقة نفسها: بدّل بين المعارض والموظفين ثم صدّر PDF.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setDailyReportModalOpen(true)}
-            className="self-start lg:self-auto px-4 py-2 rounded-xl bg-neutral-900 text-white text-sm font-bold hover:bg-neutral-800 transition-colors shadow-sm"
-          >
-            عرض التفاصيل
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-xl border border-neutral-200 bg-neutral-50 p-1">
+              <button
+                type="button"
+                onClick={() => setDailyReportView('stores')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition ${dailyReportView === 'stores' ? 'bg-orange-500 text-white shadow-sm' : 'text-neutral-600 hover:bg-white'}`}
+              >
+                المعارض
+              </button>
+              <button
+                type="button"
+                onClick={() => setDailyReportView('employees')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition ${dailyReportView === 'employees' ? 'bg-orange-500 text-white shadow-sm' : 'text-neutral-600 hover:bg-white'}`}
+              >
+                الموظفين
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={dailyReportView === 'stores' ? handlePrintDailyReport : handlePrintEmployeeReport}
+              disabled={dailyReportView === 'stores' ? storeReportGenerating : employeeReportGenerating}
+              className="px-4 py-2 rounded-xl bg-neutral-900 text-white text-sm font-bold hover:bg-neutral-800 transition-colors shadow-sm disabled:opacity-60"
+            >
+              {dailyReportView === 'stores'
+                ? storeReportGenerating ? 'جاري إنشاء PDF...' : 'PDF المعارض'
+                : employeeReportGenerating ? 'جاري إنشاء PDF...' : 'PDF الموظفين'}
+            </button>
+          </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={handlePrintDailyReport}
-            className="text-right p-4 rounded-xl border border-orange-100 bg-orange-50/60 hover:bg-orange-50 hover:border-orange-300 transition-all"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-black text-neutral-900">نافذة المعارض</div>
-                <div className="text-xs text-neutral-500 mt-1">اختيار المعارض ثم تصدير PDF</div>
-              </div>
-              <span className="text-lg">🏬</span>
-            </div>
-            <div className="mt-3 text-xs font-bold text-orange-700">تصدير تقرير المعارض</div>
-          </button>
-          <button
-            type="button"
-            onClick={handlePrintEmployeeReport}
-            className="text-right p-4 rounded-xl border border-neutral-200 bg-neutral-50 hover:bg-white hover:border-orange-300 transition-all"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-black text-neutral-900">نافذة الموظفين</div>
-                <div className="text-xs text-neutral-500 mt-1">اختيار الموظفين ثم تصدير PDF</div>
-              </div>
-              <span className="text-lg">👥</span>
-            </div>
-            <div className="mt-3 text-xs font-bold text-neutral-700">تصدير تقرير الموظفين</div>
-          </button>
+
+        <div className="px-4 py-3 bg-neutral-50/70 border-b border-neutral-100 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
+          <span>أمس: <span className="font-mono text-neutral-700">{yesterdayStr}</span></span>
+          <span>المقارنة: <span className="font-mono text-neutral-700">{lastYearYesterdayStr}</span></span>
+          {mode === 'mtd' &&
+            new Date().getFullYear() === 2026 &&
+            new Date().getMonth() === 2 &&
+            yesterdayStr.startsWith('2026-03') && (
+              <span className="font-semibold text-orange-700">
+                {marchMtdPhase === '1' ? 'فترة التارجت: 1-19 آذار' : 'فترة التارجت: 20-31 آذار'}
+              </span>
+            )}
+        </div>
+
+        <div className="overflow-x-auto max-h-[420px]">
+          {dailyReportView === 'stores' ? (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-orange-500 text-white z-10">
+                <tr>
+                  <th className="text-right py-3 px-4 font-semibold">#</th>
+                  <th className="text-right py-3 px-4 font-semibold">الفرع</th>
+                  <th className="text-right py-3 px-4 font-semibold">مبيعات أمس</th>
+                  <th className="text-right py-3 px-4 font-semibold">LY</th>
+                  <th className="text-right py-3 px-4 font-semibold">النمو</th>
+                  <th className="text-right py-3 px-4 font-semibold">المطلوب يومياً</th>
+                  <th className="text-right py-3 px-4 font-semibold">الفواتير</th>
+                  <th className="text-right py-3 px-4 font-semibold">الزوار</th>
+                  <th className="text-right py-3 px-4 font-semibold">التحويل</th>
+                  <th className="text-right py-3 px-4 font-semibold">ق.ع</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailyReportData.length === 0 ? (
+                  <tr><td colSpan={10} className="py-8 px-4 text-center text-neutral-500">لا توجد بيانات معارض ليوم أمس ضمن الفلاتر الحالية.</td></tr>
+                ) : dailyReportData.map((row: any, idx: number) => (
+                  <tr key={row.sid} className={`border-b border-neutral-100 hover:bg-orange-50/40 ${idx % 2 === 0 ? 'bg-white' : 'bg-neutral-50'}`}>
+                    <td className="py-3 px-4 text-neutral-500">{idx + 1}</td>
+                    <td className="py-3 px-4 font-bold text-neutral-900">{row.name}</td>
+                    <td className="py-3 px-4 font-semibold" dir="ltr">{formatSAR(row.sales)}</td>
+                    <td className="py-3 px-4 text-neutral-500" dir="ltr">{formatSAR(row.prevSales)}</td>
+                    <td className={`py-3 px-4 font-bold ${row.growth >= 0 ? 'text-green-600' : 'text-red-500'}`} dir="ltr">{row.growth >= 0 ? '+' : ''}{row.growth.toFixed(1)}%</td>
+                    <td className="py-3 px-4 text-red-500 font-semibold" dir="ltr">{formatSAR(row.dailyReq)}</td>
+                    <td className="py-3 px-4" dir="ltr">{row.trans.toLocaleString()}</td>
+                    <td className="py-3 px-4" dir="ltr">{row.visitors.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-orange-600 font-bold" dir="ltr">{row.conversion.toFixed(1)}%</td>
+                    <td className="py-3 px-4 font-bold" dir="ltr">{Math.round(row.customerValue).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-neutral-900 text-white z-10">
+                <tr>
+                  <th className="text-right py-3 px-4 font-semibold">#</th>
+                  <th className="text-right py-3 px-4 font-semibold">الموظف</th>
+                  <th className="text-right py-3 px-4 font-semibold">المعرض</th>
+                  <th className="text-right py-3 px-4 font-semibold">مبيعات أمس</th>
+                  <th className="text-right py-3 px-4 font-semibold">فواتير أمس</th>
+                  <th className="text-right py-3 px-4 font-semibold">MTD</th>
+                  <th className="text-right py-3 px-4 font-semibold">التارجت</th>
+                  <th className="text-right py-3 px-4 font-semibold">التحقيق</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailyEmployeeReportData.length === 0 ? (
+                  <tr><td colSpan={8} className="py-8 px-4 text-center text-neutral-500">لا توجد بيانات موظفين ليوم أمس ضمن الفلاتر الحالية.</td></tr>
+                ) : dailyEmployeeReportData.map((emp: any, idx: number) => (
+                  <tr key={emp.id} className={`border-b border-neutral-100 hover:bg-neutral-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-neutral-50'}`}>
+                    <td className="py-3 px-4 text-neutral-500">{idx + 1}</td>
+                    <td className="py-3 px-4 font-bold text-neutral-900">{emp.name}</td>
+                    <td className="py-3 px-4 text-neutral-600">{emp.storeName}</td>
+                    <td className="py-3 px-4 font-semibold" dir="ltr">{formatSAR(emp.ySales)}</td>
+                    <td className="py-3 px-4" dir="ltr">{emp.yTrans.toLocaleString()}</td>
+                    <td className="py-3 px-4" dir="ltr">{formatSAR(emp.mSales)}</td>
+                    <td className="py-3 px-4 text-neutral-500" dir="ltr">{emp.target > 0 ? formatSAR(emp.target) : '-'}</td>
+                    <td className="py-3 px-4 text-orange-600 font-bold" dir="ltr">{emp.achievement.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
@@ -1309,30 +1428,6 @@ export default function DashboardPage() {
         topStores={topStoresRank}
         formatSAR={formatSAR}
       />
-
-      {/* نافذة التقرير اليومي */}
-      {
-        <DailyReportModal
-          isOpen={dailyReportModalOpen}
-          onClose={() => setDailyReportModalOpen(false)}
-          dailyReportData={dailyReportData}
-          yesterdayStr={yesterdayStr}
-          lastYearYesterdayStr={lastYearYesterdayStr}
-          formatSAR={formatSAR}
-          onPrintDailyReport={handlePrintDailyReport}
-          onPrintEmployeeReport={handlePrintEmployeeReport}
-          marchPeriodNote={
-            mode === 'mtd' &&
-            new Date().getFullYear() === 2026 &&
-            new Date().getMonth() === 2 &&
-            yesterdayStr.startsWith('2026-03')
-              ? marchMtdPhase === '1'
-                ? 'مبيعات ومتطلبات التارجت (MTD): الفترة الأولى 1–19 آذار'
-                : 'مبيعات ومتطلبات التارجت (MTD): الفترة الثانية 20–31 آذار'
-              : undefined
-          }
-        />
-      }
 
       {/* Top Selling & Category Performance */}
       {
