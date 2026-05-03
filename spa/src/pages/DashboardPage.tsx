@@ -23,6 +23,7 @@ import {
   sumManagementTargetsForDateRange,
 } from '../utils/march2026Targets';
 import { calendarYesterday, mtdRangeThroughYesterday } from '../utils/mtdDateRange';
+import { buildOriginalEmployeeStatusMap, isOriginalActiveEmployee } from '../utils/originalEmployeeStatus';
 
 function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
@@ -332,6 +333,13 @@ export default function DashboardPage() {
     const marchBounds = getMarch2026PhaseSalesBounds(yesterdayStr);
     const mtdStart = marchBounds?.start ?? startOfMonth;
     const mtdEnd = marchBounds?.end ?? yesterdayStr;
+    const activeStatusMap = buildOriginalEmployeeStatusMap(
+      empRaw,
+      (storeId) => allowedStoreIds.has(storeId),
+      mtdStart,
+      mtdEnd,
+      new Date(`${yesterdayStr}T12:00:00`)
+    );
 
     // Group employees by their PRIMARY store (the one where they last made a sale in the current period)
     const empPrimaryStore: Record<string, string> = {};
@@ -366,6 +374,7 @@ export default function DashboardPage() {
         const rawId = rec?.[1];
         let id = String(rawId || '').split('-')[0].trim();
         if (!id || id === 'مرتجع') continue;
+        if (!isOriginalActiveEmployee(activeStatusMap, id)) continue;
 
         // selection check
         if (useSelection && selectedEmployees.size > 0 && !selectedEmployees.has(id)) continue;
@@ -670,6 +679,13 @@ export default function DashboardPage() {
     const marchBounds = getMarch2026PhaseSalesBounds(yesterdayStr);
     const mtdStart = marchBounds?.start ?? startOfMonth;
     const mtdEnd = marchBounds?.end ?? yesterdayStr;
+    const activeStatusMap = buildOriginalEmployeeStatusMap(
+      empRaw,
+      (storeId) => allowedStoreIds.has(storeId),
+      mtdStart,
+      mtdEnd,
+      new Date(`${yesterdayStr}T12:00:00`)
+    );
     const historyData: Record<string, any[]> = empRaw.history;
     const names: Record<string, string> = empRaw.employee_names;
     const storesMap = raw.stores || {};
@@ -677,6 +693,7 @@ export default function DashboardPage() {
       id: string;
       name: string;
       storeName: string;
+      status: string;
       ySales: number;
       yTrans: number;
       mSales: number;
@@ -691,6 +708,7 @@ export default function DashboardPage() {
         if (dt < mtdStart || dt > mtdEnd) return;
         const empId = String(rec?.[1] || '').split('-')[0].trim();
         if (!empId || empId === 'مرتجع') return;
+        if (!isOriginalActiveEmployee(activeStatusMap, empId)) return;
 
         if (!empData[empId]) {
           const target = getEmployeeTargetForEffectiveDate(empRaw, empId, yesterdayStr);
@@ -698,6 +716,7 @@ export default function DashboardPage() {
             id: empId,
             name: names[empId] || names[empId.padStart(4, '0')] || empId,
             storeName: storesMap[sid] || sid,
+            status: activeStatusMap[empId]?.status || activeStatusMap[empId.padStart(4, '0')]?.status || 'active',
             ySales: 0,
             yTrans: 0,
             mSales: 0,
@@ -1398,11 +1417,12 @@ export default function DashboardPage() {
                   <th className="text-right py-3 px-4 font-semibold">MTD</th>
                   <th className="text-right py-3 px-4 font-semibold">التارجت</th>
                   <th className="text-right py-3 px-4 font-semibold">التحقيق</th>
+                  <th className="text-right py-3 px-4 font-semibold">الحالة</th>
                 </tr>
               </thead>
               <tbody>
                 {dailyEmployeeReportData.length === 0 ? (
-                  <tr><td colSpan={8} className="py-8 px-4 text-center text-neutral-500">لا توجد بيانات موظفين ليوم أمس ضمن الفلاتر الحالية.</td></tr>
+                  <tr><td colSpan={9} className="py-8 px-4 text-center text-neutral-500">لا توجد بيانات موظفين نشطين ليوم أمس ضمن الفلاتر الحالية.</td></tr>
                 ) : dailyEmployeeReportData.map((emp: any, idx: number) => (
                   <tr key={emp.id} className={`border-b border-neutral-100 hover:bg-neutral-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-neutral-50'}`}>
                     <td className="py-3 px-4 text-neutral-500">{idx + 1}</td>
@@ -1413,6 +1433,7 @@ export default function DashboardPage() {
                     <td className="py-3 px-4" dir="ltr">{formatSAR(emp.mSales)}</td>
                     <td className="py-3 px-4 text-neutral-500" dir="ltr">{emp.target > 0 ? formatSAR(emp.target) : '-'}</td>
                     <td className="py-3 px-4 text-orange-600 font-bold" dir="ltr">{emp.achievement.toFixed(1)}%</td>
+                    <td className="py-3 px-4"><span className="text-xs font-bold px-2 py-1 rounded bg-emerald-100 text-emerald-700">نشط</span></td>
                   </tr>
                 ))}
               </tbody>
