@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { loadManagementData, loadEmployeesData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { KPIGrid } from '../components/dashboard/KPIGrid';
@@ -85,6 +86,7 @@ export default function DashboardPage() {
   const [marchMtdPhase, setMarchMtdPhase] = useState<'1' | '2'>('1');
   const [dailyReportView, setDailyReportView] = useState<'stores' | 'employees'>('stores');
   const [hourlyModalOpen, setHourlyModalOpen] = useState(false);
+  const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLElement | null>(null);
   const [drillDownDate, setDrillDownDate] = useState<string | null>(null);
   const [chartMode, setChartMode] = useState<'SALES' | 'VISITORS' | 'TARGET'>('SALES');
   const [topSellingMetric, setTopSellingMetric] = useState<'qty' | 'val'>('qty');
@@ -121,6 +123,10 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    setHeaderPortalTarget(document.getElementById('daily-report-portal-target'));
+  }, []);
 
   // تحميل بيانات تحليل المنتجات بعد أول رسم للوحة (لا نعيق الفتح — الملف كبير ~70MB)
   useEffect(() => {
@@ -1189,6 +1195,16 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
+      {headerPortalTarget ? createPortal(
+        <button
+          type="button"
+          onClick={() => setHourlyModalOpen(true)}
+          className="flex justify-center bg-orange-500 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-md shadow-orange-200 items-center gap-2 hover:bg-orange-600 hover:scale-105 transition-transform border border-orange-400"
+        >
+          <span className="font-bold text-xs sm:text-sm whitespace-nowrap">المبيعات بالساعة</span>
+        </button>,
+        headerPortalTarget
+      ) : null}
       <div className="bg-white rounded-xl shadow-md border border-neutral-200 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <span className="text-sm text-neutral-500">
@@ -1354,13 +1370,6 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setHourlyModalOpen(true)}
-              className="px-4 py-2 rounded-xl bg-orange-500 text-white text-sm font-black hover:bg-orange-600 transition-colors shadow-lg shadow-orange-200"
-            >
-              المبيعات بالساعة
-            </button>
             <div className="flex rounded-xl border border-neutral-200 bg-neutral-50 p-1">
               <button
                 type="button"

@@ -793,7 +793,15 @@ export default function EmployeeAnalysisPage() {
       const padQuality = !hasProductData ? 'لا توجد بيانات' : classifyPadQuality(weightedPadAttach);
       const padFocus = !hasProductData ? 'لا توجد بيانات' : focusLabel([{ label: 'منخفض', value: p.kingPadModels.model5 + p.fullPadModels.model5 }, { label: 'متوسط', value: p.kingPadModels.model10 + p.fullPadModels.model10 }, { label: 'مرتفع', value: p.kingPadModels.model15 + p.fullPadModels.model15 }]);
       const pillowStatus = !hasProductData ? 'لا توجد بيانات' : classifyPillowStatus(weightedPillowAttach);
-      const strengths = [{ label: '??? ???? ?????', score: paceScore }, { label: 'ATV ??? ????? ?????', score: atvScore }, { label: '??? ??????', score: duvetScore ?? -1 }, { label: '??? ??????', score: padScore ?? -1 }, { label: '????? ??????', score: pillowScore ?? -1 }, { label: mixSummary.diversityLabel === '???? ???' ? '???? ???? ???' : '??? ?? ?????? ??????', score: mixScore ?? -1 }, { label: periodPerformance === '????? ??? ???????' ? '???? ??? ???????' : '??????? ??????', score: consistencyScore }].sort((a, b) => b.score - a.score);
+      const strengths = [
+        { label: 'وضع الهدف الحالي', score: paceScore },
+        { label: 'قيمة العميل ATV', score: atvScore },
+        { label: 'بيع اللحاف', score: duvetScore ?? -1 },
+        { label: 'بيع اللباد', score: padScore ?? -1 },
+        { label: 'بيع المخدة', score: pillowScore ?? -1 },
+        { label: strongMix ? 'تنوع منتجات قوي' : 'تنوع المنتجات', score: mixScore ?? -1 },
+        { label: consistencyScore >= 2 ? 'تحسن عبر الفترة' : 'ثبات الأداء', score: consistencyScore },
+      ].sort((a, b) => b.score - a.score);
       const strength = strengths[0]?.label || 'أداء متوازن';
 
       let weakness = 'الثبات';
@@ -1130,6 +1138,71 @@ export default function EmployeeAnalysisPage() {
                     <td className="px-3 py-3 text-center"><div className="font-black text-neutral-900">{formatSAR(row.avgTicket)}</div><div className="text-xs text-neutral-500">{row.atvVsStoreLabel}</div></td>
                     <td className="px-3 py-3 text-center"><div className="mx-auto max-w-[180px] text-xs font-semibold leading-5 text-neutral-700">{row.action}<div className="text-neutral-500">الإنجاز: {row.targetAchievementPct.toFixed(1)}%</div></div></td>
                   </tr>
+                  {expandedId === row.id ? (
+                    <tr className="border-t border-orange-100 bg-orange-50/35">
+                      <td colSpan={9} className="px-4 py-4">
+                        <div className="rounded-2xl border border-orange-100 bg-white p-4 shadow-sm">
+                          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <div className="text-lg font-black text-neutral-900">{row.name}</div>
+                              <div className="text-xs text-neutral-500">{row.storeName} - رقم الموظف {row.id}</div>
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-xs font-bold">
+                              <span className={`rounded-full border px-3 py-1 ${chipTone(row.levelLabel)}`}>{row.levelLabel}</span>
+                              <span className={`rounded-full border px-3 py-1 ${chipTone(row.sellingStructure)}`}>{row.sellingStructure}</span>
+                              <span className={`rounded-full border px-3 py-1 ${chipTone(row.targetPaceLabel)}`}>{row.targetPaceLabel}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-3 md:grid-cols-4">
+                            <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-3">
+                              <div className="text-xs text-neutral-500">المبيعات</div>
+                              <div className="text-xl font-black text-neutral-900">{formatSAR(row.sales)}</div>
+                              <div className="text-xs text-neutral-500">الفواتير: {Math.round(row.trans)}</div>
+                            </div>
+                            <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-3">
+                              <div className="text-xs text-neutral-500">متوسط الفاتورة</div>
+                              <div className="text-xl font-black text-neutral-900">{formatSAR(row.avgTicket)}</div>
+                              <div className="text-xs text-neutral-500">{row.atvVsStoreLabel}</div>
+                            </div>
+                            <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-3">
+                              <div className="text-xs text-neutral-500">إنجاز الهدف</div>
+                              <div className="text-xl font-black text-neutral-900">{row.targetAchievementPct.toFixed(1)}%</div>
+                              <div className="text-xs text-neutral-500">المتبقي: {formatSAR(row.remainingTarget)}</div>
+                            </div>
+                            <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-3">
+                              <div className="text-xs text-neutral-500">المطلوب اليومي</div>
+                              <div className="text-xl font-black text-neutral-900">{formatSAR(row.requiredRemainingDailySales)}</div>
+                              <div className="text-xs text-neutral-500">{row.dailyRiskLabel}</div>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                            <div className="rounded-xl border border-neutral-100 p-3">
+                              <div className="mb-2 font-black text-neutral-900">أرقام المنتجات</div>
+                              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                                <div className="rounded-lg bg-orange-50 p-2"><div className="font-black text-orange-700">{Math.round(row.totalDuvet)}</div><div className="text-neutral-500">لحاف</div></div>
+                                <div className="rounded-lg bg-orange-50 p-2"><div className="font-black text-orange-700">{Math.round(row.totalPad)}</div><div className="text-neutral-500">لباد</div></div>
+                                <div className="rounded-lg bg-orange-50 p-2"><div className="font-black text-orange-700">{Math.round(row.totalPillow)}</div><div className="text-neutral-500">مخدة</div></div>
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-neutral-100 p-3">
+                              <div className="mb-2 font-black text-neutral-900">نقاط القراءة</div>
+                              <div className="flex flex-wrap gap-2 text-xs font-bold">
+                                <span className={`rounded-full border px-2.5 py-1 ${chipTone(row.strength)}`}>قوة: {row.strength}</span>
+                                <span className={`rounded-full border px-2.5 py-1 ${chipTone(row.weakness)}`}>ضعف: {row.weakness}</span>
+                                <span className={`rounded-full border px-2.5 py-1 ${chipTone(row.pattern)}`}>{row.pattern}</span>
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-neutral-100 p-3">
+                              <div className="mb-2 font-black text-neutral-900">الإجراء المقترح</div>
+                              <div className="text-sm font-semibold leading-6 text-neutral-700">{row.action}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
                     </Fragment>
                   ))}
                 </Fragment>

@@ -1123,7 +1123,7 @@ export default function ProductsPage() {
             onClick={() => setOffersOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm font-black shadow-lg shadow-orange-200"
           >
-            ????? ??????
+            قائمة العروض
           </button>
           </div>
         </div>

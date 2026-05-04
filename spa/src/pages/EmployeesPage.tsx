@@ -1326,7 +1326,7 @@ export default function EmployeesPage() {
           onClick={() => setShowCommissionsModal(true)}
           className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-black py-2 px-4 rounded-xl text-sm transition-colors shadow-lg shadow-orange-200"
         >
-          <span>﷼</span> العمولات
+          العمولات
         </button>
         <button
           type="button"

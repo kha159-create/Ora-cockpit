@@ -387,7 +387,7 @@ export default function ComparisonPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-neutral-900 flex items-center gap-2">
                         <ChartBarIcon />
-                        ???????? ??.?
+                        المقارنة وق.ع
                     </h1>
                     <p className="text-neutral-500 text-sm mt-1">مقارنة الأداء مع الفترة المماثلة من العام السابق</p>
                 <button
@@ -395,7 +395,7 @@ export default function ComparisonPage() {
                     onClick={() => setCustomerValueOpen(true)}
                     className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600"
                 >
-                    ?.? ?????????
+                    ق.ع والمحاكاة
                 </button>
                 </div>
             </div>
