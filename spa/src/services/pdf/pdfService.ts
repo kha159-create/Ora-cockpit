@@ -1033,7 +1033,7 @@ export const generateTargetSplitStorePDF = async (
         const m = row.metrics;
         const expected = (m.dailyTargetDynamic ?? m.target) || 0;
         const sales = m.sales || 0;
-        const acquisition = expected > 0 ? (sales / expected) * 100 : 0;
+        const acquisition = m.conversion || 0;
         drawPeriodMetricCard(
             doc,
             15 + idx * (cardW + cardGap),
