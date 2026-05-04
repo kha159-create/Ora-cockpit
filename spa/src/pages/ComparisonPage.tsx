@@ -395,7 +395,7 @@ export default function ComparisonPage() {
                     onClick={() => setCustomerValueOpen(true)}
                     className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600"
                 >
-                    ق.ع والمحاكاة
+                    قيمة العميل والمحاكاة
                 </button>
                 </div>
             </div>

@@ -23,6 +23,8 @@ import { ProductInquiryModal } from '../components/products/ProductInquiryModal'
 import { LiveSalesModal } from '../components/dashboard/LiveSalesModal';
 import { formatSAR } from '../utils/formatting';
 
+const HourlyPage = React.lazy(() => import('../pages/HourlyPage'));
+
 const baseNavItems = [
   { to: '/', label: 'لوحة التحكم', icon: <HomeIcon /> },
   { to: '/stores', label: 'المعارض', icon: <OfficeBuildingIcon /> },
@@ -76,6 +78,7 @@ export default function MainLayout() {
 
   // Live Sales Modal State
   const [liveModalOpen, setLiveModalOpen] = useState(false);
+  const [hourlyModalOpen, setHourlyModalOpen] = useState(false);
 
 
   // Global Keyboard Shortcut for Search (Ctrl+K or Cmd+K)
@@ -359,15 +362,19 @@ export default function MainLayout() {
             </div>
 
             <div className="w-full md:w-auto grid grid-cols-2 md:flex items-stretch md:items-center gap-2 md:gap-3 flex-shrink-0">
-              {/* Target div for Dashboard's Daily Report Button Portal */}
-              <div id="daily-report-portal-target" className="min-w-0 [&:empty]:hidden" />
-
               <button
                 onClick={() => setLiveModalOpen(true)}
                 className="flex justify-center bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-md items-center gap-2 animate-pulse hover:scale-105 transition-transform border border-orange-400"
               >
                 <div className="w-5 h-5"><FireIcon /></div>
                 <span className="font-bold text-xs sm:text-sm whitespace-nowrap">مبيعات اليوم</span>
+              </button>
+
+              <button
+                onClick={() => setHourlyModalOpen(true)}
+                className="flex justify-center bg-orange-500 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-md shadow-orange-200 items-center gap-2 hover:bg-orange-600 hover:scale-105 transition-transform border border-orange-400"
+              >
+                <span className="font-bold text-xs sm:text-sm whitespace-nowrap">المبيعات بالساعة</span>
               </button>
 
               <button
@@ -422,6 +429,22 @@ export default function MainLayout() {
         onClose={() => setLiveModalOpen(false)}
         formatSAR={formatSAR}
       />
+
+      {hourlyModalOpen && (
+        <div className="fixed inset-0 z-[120] bg-black/60 p-3 sm:p-5" onClick={() => setHourlyModalOpen(false)}>
+          <div className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-neutral-50 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3">
+              <div className="font-black text-neutral-900">المبيعات بالساعة</div>
+              <button type="button" className="rounded-xl border border-neutral-200 px-3 py-1.5 text-sm font-bold hover:bg-neutral-50" onClick={() => setHourlyModalOpen(false)}>إغلاق</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <React.Suspense fallback={<div className="p-6 text-center text-neutral-500">جاري التحميل...</div>}>
+                <HourlyPage />
+              </React.Suspense>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

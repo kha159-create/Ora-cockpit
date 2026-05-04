@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { loadManagementData, loadEmployeesData, loadProductAnalysisData } from '../services/upstreamData';
 import { getCurrentUser } from '../auth/storage';
 import { KPIGrid } from '../components/dashboard/KPIGrid';
@@ -25,7 +24,6 @@ import {
 } from '../utils/march2026Targets';
 import { calendarYesterday, mtdRangeThroughYesterday } from '../utils/mtdDateRange';
 import { buildOriginalEmployeeStatusMap, isOriginalActiveEmployee } from '../utils/originalEmployeeStatus';
-import HourlyPage from './HourlyPage';
 
 function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
@@ -85,8 +83,6 @@ export default function DashboardPage() {
   /** آذار 2026 + MTD: الفترة 1 (1–19) أو 2 (20–31) — مثل المعارض/الموظفين */
   const [marchMtdPhase, setMarchMtdPhase] = useState<'1' | '2'>('1');
   const [dailyReportView, setDailyReportView] = useState<'stores' | 'employees'>('stores');
-  const [hourlyModalOpen, setHourlyModalOpen] = useState(false);
-  const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLElement | null>(null);
   const [drillDownDate, setDrillDownDate] = useState<string | null>(null);
   const [chartMode, setChartMode] = useState<'SALES' | 'VISITORS' | 'TARGET'>('SALES');
   const [topSellingMetric, setTopSellingMetric] = useState<'qty' | 'val'>('qty');
@@ -123,10 +119,6 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  useEffect(() => {
-    setHeaderPortalTarget(document.getElementById('daily-report-portal-target'));
-  }, []);
 
   // تحميل بيانات تحليل المنتجات بعد أول رسم للوحة (لا نعيق الفتح — الملف كبير ~70MB)
   useEffect(() => {
@@ -1195,16 +1187,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      {headerPortalTarget ? createPortal(
-        <button
-          type="button"
-          onClick={() => setHourlyModalOpen(true)}
-          className="flex justify-center bg-orange-500 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl shadow-md shadow-orange-200 items-center gap-2 hover:bg-orange-600 hover:scale-105 transition-transform border border-orange-400"
-        >
-          <span className="font-bold text-xs sm:text-sm whitespace-nowrap">المبيعات بالساعة</span>
-        </button>,
-        headerPortalTarget
-      ) : null}
       <div className="bg-white rounded-xl shadow-md border border-neutral-200 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <span className="text-sm text-neutral-500">
@@ -1544,20 +1526,6 @@ export default function DashboardPage() {
           isGenerating={employeeReportGenerating}
         />
       }
-
-      {hourlyModalOpen && (
-        <div className="fixed inset-0 z-[120] bg-black/60 p-3 sm:p-5" onClick={() => setHourlyModalOpen(false)}>
-          <div className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-neutral-50 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3">
-              <div className="font-black text-neutral-900">المبيعات بالساعة</div>
-              <button type="button" className="rounded-xl border border-neutral-200 px-3 py-1.5 text-sm font-bold hover:bg-neutral-50" onClick={() => setHourlyModalOpen(false)}>إغلاق</button>
-            </div>
-            <div className="flex-1 overflow-auto p-4">
-              <HourlyPage />
-            </div>
-          </div>
-        </div>
-      )}
 
     </div >
   );
