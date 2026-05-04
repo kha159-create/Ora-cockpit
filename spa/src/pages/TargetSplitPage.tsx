@@ -100,13 +100,13 @@ function minYMD(a: string, b: string) {
 function applyWindowCarryChain(
   buckets: TargetBucket[],
   lastAvail: string,
-  getBase: (start: string, end: string) => number,
+  getBase: (bucket: TargetBucket) => number,
   getSales: (start: string, end: string) => number,
 ): { eff: number; base: number; sales: number }[] {
   const lastCompletedIdx = buckets.reduce((acc, b, i) => (b.end <= lastAvail ? i : acc), -1);
   let carry = 0;
   return buckets.map((b, i) => {
-    const base = getBase(b.start, b.end);
+    const base = getBase(b);
     const salesEnd = minYMD(b.end, lastAvail);
     const sales = b.start <= lastAvail ? getSales(b.start, salesEnd) : 0;
     let eff: number;
@@ -303,6 +303,7 @@ export default function TargetSplitPage() {
   const [selYear, setSelYear] = useState(() => new Date().getFullYear());
   const [selMonth, setSelMonth] = useState(() => new Date().getMonth() + 1);
   const [granularity, setGranularity] = useState<SplitGranularity>('10');
+  const [tenDayWeights, setTenDayWeights] = useState<Record<string, number>>({});
   const [expandedStores, setExpandedStores] = useState<Set<string>>(new Set());
   const [showEmpDetails, setShowEmpDetails] = useState<Set<string>>(new Set());
   type StoreSortKey = 'monthTarget' | 'monthSales' | 'monthAch' | 'gap';
@@ -369,6 +370,27 @@ export default function TargetSplitPage() {
       buckets: buildBucketsForDateRange(p.start, p.end, granularity, `${p.key}-`),
     }));
   }, [selYear, selMonth, monthStart, monthEnd, granularity]);
+
+  const getTenDayBucketPercent = useCallback(
+    (bucket: TargetBucket, phaseDays: number) => {
+      const custom = tenDayWeights[bucket.id];
+      if (Number.isFinite(custom)) return Math.max(0, custom);
+      return phaseDays > 0 ? (bucket.dayCount / phaseDays) * 100 : 0;
+    },
+    [tenDayWeights],
+  );
+
+  const tenDayPercentGroups = useMemo(() => {
+    return bucketPhaseGroups.map((phase) => {
+      const phaseDays = phase.buckets.reduce((sum, bucket) => sum + bucket.dayCount, 0) || 1;
+      const items = phase.buckets.map((bucket) => ({
+        bucket,
+        value: getTenDayBucketPercent(bucket, phaseDays),
+      }));
+      const total = items.reduce((sum, item) => sum + item.value, 0);
+      return { ...phase, items, total };
+    });
+  }, [bucketPhaseGroups, getTenDayBucketPercent]);
 
   const filtersDerived = useMemo(() => {
     if (!raw?.store_meta) {
@@ -528,7 +550,10 @@ export default function TargetSplitPage() {
           const chain = applyWindowCarryChain(
             phaseBuckets,
             lastAvailableInMonth,
-            (s, e) => sumManagementTargetsForDateRange(targetsRows, s, e)[sid] || 0,
+            (b) =>
+              granularity === '10'
+                ? (fullPhaseTarget * getTenDayBucketPercent(b, dimPhase)) / 100
+                : sumManagementTargetsForDateRange(targetsRows, b.start, b.end)[sid] || 0,
             (s, e) => aggregateMgmtForRange(raw, storeIds, s, e).sales,
           );
           phaseBuckets.forEach((b, i) => {
@@ -635,7 +660,10 @@ export default function TargetSplitPage() {
             const chain = applyWindowCarryChain(
               phaseBuckets,
               lastAvailableInMonth,
-              (s, e) => sumEmployeeTargetForDateRange(empRaw, eid, s, e) || 0,
+              (b) =>
+                granularity === '10'
+                  ? (empPhaseFullT * getTenDayBucketPercent(b, dimEmp)) / 100
+                  : sumEmployeeTargetForDateRange(empRaw, eid, b.start, b.end) || 0,
               (s, e) => {
                 let sum = 0;
                 Object.values(history).forEach((records: any) => {
@@ -732,6 +760,7 @@ export default function TargetSplitPage() {
     city,
     storeType,
     bucketPhaseGroups,
+    getTenDayBucketPercent,
     granularity,
     monthStart,
     monthEnd,
@@ -1175,6 +1204,79 @@ export default function TargetSplitPage() {
             </select>
           </div>
         </div>
+        {granularity === '10' && (
+          <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50/60 p-4 shadow-sm">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-extrabold text-orange-900">نسب تارجت فترات 10 أيام</div>
+                <div className="text-xs text-orange-800/80">النسبة هنا توزع تارجت كل مرحلة، وبعدها يتم تطبيق نفس ترحيل العجز والزيادة.</div>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-xs font-bold text-orange-800 shadow-sm transition hover:bg-orange-100"
+                onClick={() => {
+                  const visibleIds = new Set(bucketPhaseGroups.flatMap((phase) => phase.buckets.map((bucket) => bucket.id)));
+                  setTenDayWeights((prev) => {
+                    const next = { ...prev };
+                    visibleIds.forEach((id) => delete next[id]);
+                    return next;
+                  });
+                }}
+              >
+                إعادة التوزيع التلقائي
+              </button>
+            </div>
+            <div className="space-y-3">
+              {tenDayPercentGroups.map((phase) => {
+                const totalOk = Math.abs(phase.total - 100) < 0.05;
+                return (
+                  <div key={phase.key} className="rounded-xl border border-orange-100 bg-white/80 p-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs font-bold text-neutral-700">{phase.label || 'الشهر كامل'}</div>
+                      <span
+                        className={`rounded-full px-2 py-1 text-[11px] font-extrabold ${
+                          totalOk ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'
+                        }`}
+                      >
+                        المجموع {phase.total.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-3">
+                      {phase.items.map(({ bucket, value }) => (
+                        <label key={bucket.id} className="block rounded-lg border border-neutral-200 bg-white px-3 py-2">
+                          <span className="mb-1 block text-xs font-semibold text-neutral-600">{bucket.label}</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.1}
+                              className="input h-9 flex-1 text-center font-mono font-bold"
+                              value={Number(value.toFixed(1))}
+                              onChange={(e) => {
+                                const next = e.target.value === '' ? 0 : Number(e.target.value);
+                                setTenDayWeights((prev) => ({
+                                  ...prev,
+                                  [bucket.id]: Number.isFinite(next) ? Math.max(0, next) : 0,
+                                }));
+                              }}
+                            />
+                            <span className="text-sm font-bold text-neutral-500">%</span>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    {!totalOk && (
+                      <div className="mt-2 text-[11px] font-semibold text-amber-800">
+                        يفضل أن يكون مجموع هذه المرحلة 100% حتى يساوي كامل تارجت المرحلة.
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <p className="text-xs text-neutral-500 mt-3 border-t border-neutral-100 pt-3">
           البيانات حتى <span className="font-mono font-semibold">{lastAvailableInMonth}</span>
           {selYear === now.getFullYear() && selMonth === now.getMonth() + 1
