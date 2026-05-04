@@ -959,6 +959,32 @@ const drawTargetKpi = (
     doc.text(value, x + w - 7, y + 14, { align: 'right' });
 };
 
+const drawTrendKpi = (
+    doc: any,
+    x: number,
+    y: number,
+    w: number,
+    title: string,
+    value: string,
+    diff: number,
+    suffix = '',
+) => {
+    const positive = diff >= 0;
+    const trendColor: [number, number, number] = positive ? [22, 163, 74] : [220, 38, 38];
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(254, 121, 0);
+    doc.roundedRect(x, y, w, 18, 3, 3, 'FD');
+    doc.setTextColor(107, 114, 128);
+    doc.setFontSize(7.5);
+    doc.text(title, x + w - 6, y + 5.5, { align: 'right' });
+    doc.setTextColor(17, 24, 39);
+    doc.setFontSize(11);
+    doc.text(value, x + w - 6, y + 13.5, { align: 'right' });
+    doc.setTextColor(trendColor[0], trendColor[1], trendColor[2]);
+    doc.setFontSize(8);
+    doc.text(`${positive ? '▲' : '▼'} ${fmtN(Math.abs(diff))}${suffix}`, x + 7, y + 12, { align: 'left' });
+};
+
 export const generateTargetSplitStorePDF = async (
     store: TargetSplitPdfStore,
     opts: { monthLabel: string; granularityLabel: string; lastAvailableInMonth: string }
@@ -976,6 +1002,9 @@ export const generateTargetSplitStorePDF = async (
     const prevStore = storeActiveIndex > 0 ? storeFlatRows[storeActiveIndex - 1] : null;
     const prevExpected = prevStore ? (prevStore.metrics.dailyTargetDynamic ?? prevStore.metrics.target) || 0 : 0;
     const prevCarry = prevStore ? prevExpected - (prevStore.metrics.sales || 0) : 0;
+    const prevStoreMetrics = prevStore?.metrics || ({} as TargetSplitPdfMetrics);
+    const activeStoreAch = activeExpected > 0 ? (activeSales / activeExpected) * 100 : 0;
+    const prevStoreAch = prevExpected > 0 ? ((prevStoreMetrics.sales || 0) / prevExpected) * 100 : 0;
 
     doc.setFillColor(248, 250, 252);
     doc.rect(0, 20, 297, 190, 'F');
@@ -1002,6 +1031,10 @@ export const generateTargetSplitStorePDF = async (
     doc.text(`كسر السابقة: ${fmtN(Math.max(0, prevCarry))}`, 58, 74, { align: 'center' });
     doc.text(`نقص بسبب زيادة: ${fmtN(Math.max(0, -prevCarry))}`, 58, 84, { align: 'center' });
 
+    drawTrendKpi(doc, 198, 99, 78, 'استحواذ الفرع للفترة', `${activeStoreAch.toFixed(1)}%`, activeStoreAch - prevStoreAch, '%');
+    drawTrendKpi(doc, 109, 99, 78, 'معدل الفاتورة للفرع', fmtN(activeStoreMetrics.avgInv || 0), (activeStoreMetrics.avgInv || 0) - (prevStoreMetrics.avgInv || 0));
+    drawTrendKpi(doc, 20, 99, 78, 'قيمة عميل الفرع', fmtN(activeStoreMetrics.customerValue || 0), (activeStoreMetrics.customerValue || 0) - (prevStoreMetrics.customerValue || 0));
+
     const storeRows: any[] = [];
     storeFlatRows.forEach((row, idx) => {
         const m = row.metrics;
@@ -1018,6 +1051,7 @@ export const generateTargetSplitStorePDF = async (
             fmtN(expected),
             fmtN(sales),
             `${(expected > 0 ? (sales / expected) * 100 : 0).toFixed(1)}%`,
+            fmtN(m.avgInv || 0),
             fmtN(shortfall),
             fmtN(need.daily),
             targetStatus(sales, expected, row.range.end, opts.lastAvailableInMonth),
@@ -1025,15 +1059,15 @@ export const generateTargetSplitStorePDF = async (
     });
 
     (doc as any).autoTable({
-        startY: 101,
-        head: [['المرحلة', 'الفترة', 'كسر مرحل', 'نقص من زيادة', 'تارجت الفترة', 'مبيعات', 'تحقيق', 'المتبقي', 'مطلوب يومياً', 'الحالة']],
-        body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0', '0', '0.0%', '0', '0', '-']],
-        styles: { font: 'Amiri', halign: 'center', fontSize: 8.2, cellPadding: 1.8, lineColor: [229, 231, 235], lineWidth: 0.1 },
-        headStyles: { fillColor: [17, 24, 39], textColor: 255, fontStyle: 'bold' },
+        startY: 125,
+        head: [['المرحلة', 'الفترة', 'كسر مرحل', 'نقص من زيادة', 'تارجت الفترة', 'مبيعات', 'تحقيق', 'معدل فاتورة', 'المتبقي', 'مطلوب يومياً', 'الحالة']],
+        body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0', '0', '0.0%', '0', '0', '0', '-']],
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.6, lineColor: [255, 255, 255], lineWidth: 0.35 },
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', lineColor: [254, 121, 0], lineWidth: 0.45 },
         alternateRowStyles: { fillColor: [255, 255, 255] },
         bodyStyles: { fillColor: [248, 250, 252] },
         didParseCell: (data: any) => {
-            if (data.column.index === 2 || data.column.index === 7 || data.column.index === 8) {
+            if (data.column.index === 2 || data.column.index === 8 || data.column.index === 9) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.textColor = [153, 27, 27];
             }
@@ -1041,7 +1075,7 @@ export const generateTargetSplitStorePDF = async (
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.textColor = [22, 101, 52];
             }
-            if (data.column.index === 9) {
+            if (data.column.index === 10) {
                 data.cell.styles.fontStyle = 'bold';
                 const val = String(data.cell.raw || '');
                 if (val === 'محققة') {
@@ -1117,7 +1151,7 @@ export const generateTargetSplitStorePDF = async (
                 fmtN(expected),
                 fmtN(sales),
                 `${achPeriodPct.toFixed(1)}%`,
-                fmtN(m.items || 0),
+                fmtN(m.avgInv || 0),
                 fmtN(shortfall),
                 fmtN(need.daily),
                 targetStatus(sales, expected, row.range.end, opts.lastAvailableInMonth),
@@ -1132,10 +1166,10 @@ export const generateTargetSplitStorePDF = async (
 
     (doc as any).autoTable({
         startY: 36,
-        head: [['الموظف', 'الفترة', 'كسر مرحل', 'نقص من زيادة', 'تارجت الفترة', 'مبيعات', 'تحقيق', 'قطع', 'المتبقي', 'مطلوب يومياً', 'الحالة']],
+        head: [['الموظف', 'الفترة', 'كسر مرحل', 'نقص من زيادة', 'تارجت الفترة', 'مبيعات', 'تحقيق', 'معدل فاتورة', 'المتبقي', 'مطلوب يومياً', 'الحالة']],
         body: empRows.length ? empRows : [['-', '-', '0', '0', '0', '0', '0.0%', '0', '0', '0', '-']],
-        styles: { font: 'Amiri', halign: 'center', fontSize: 7.2, cellPadding: 1.4, lineColor: [229, 231, 235], lineWidth: 0.1 },
-        headStyles: { fillColor: [17, 24, 39], textColor: 255 },
+        styles: { font: 'Amiri', halign: 'center', fontSize: 7.2, cellPadding: 1.4, lineColor: [255, 255, 255], lineWidth: 0.35 },
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', lineColor: [254, 121, 0], lineWidth: 0.45 },
         alternateRowStyles: { fillColor: [255, 255, 255] },
         bodyStyles: { fillColor: [248, 250, 252] },
         columnStyles: {
