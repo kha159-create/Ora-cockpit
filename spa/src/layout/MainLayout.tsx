@@ -4,7 +4,6 @@ import { clearCurrentUser, getCurrentUser } from '../auth/storage';
 import GlobalSearch from '../components/GlobalSearch';
 import SeasonBanner from '../components/SeasonBanner';
 import {
-  CashIcon,
   ClipboardListIcon,
   CubeIcon,
   HomeIcon,
@@ -12,14 +11,11 @@ import {
   MenuIcon,
   OfficeBuildingIcon,
   SwitchHorizontalIcon,
-  TagIcon,
   TargetIcon,
   PremiumTargetIcon,
   UserGroupIcon,
   SearchIcon,
-  FireIcon, // Added
-  ClockIcon, // Added for Hourly
-  XIcon, // For modal close if needed
+  FireIcon,
 } from '../components/Icons';
 import { loadManagementData, loadProductAnalysisData, loadStockData } from '../services/upstreamData';
 import { mtdRangeThroughYesterday } from '../utils/mtdDateRange';
@@ -30,15 +26,11 @@ import { formatSAR } from '../utils/formatting';
 const baseNavItems = [
   { to: '/', label: 'لوحة التحكم', icon: <HomeIcon /> },
   { to: '/stores', label: 'المعارض', icon: <OfficeBuildingIcon /> },
-  { to: '/customer-value', label: 'ق.ع والمحاكاة', icon: <CashIcon /> },
-  { to: '/comparison', label: 'المقارنات', icon: <SwitchHorizontalIcon /> },
+  { to: '/comparison', label: 'المقارنة وق.ع', icon: <SwitchHorizontalIcon /> },
   { to: '/employees', label: 'الموظفين', icon: <UserGroupIcon /> },
   { to: '/target-split', label: 'تقسيمة التارجت', icon: <PremiumTargetIcon className="w-5 h-5" /> },
-  { to: '/commissions', label: 'العمولات', icon: <CashIcon /> },
-  { to: '/hourly', label: 'المبيعات بالساعه', icon: <ClockIcon /> },
   { to: '/employee-analysis', label: 'تحليل الموظفين', icon: <UserGroupIcon /> },
   { to: '/products', label: 'المنتجات', icon: <CubeIcon /> },
-  { to: '/offers', label: 'قائمة العروض', icon: <TagIcon /> },
   { to: '/reports', label: 'التقارير', icon: <ClipboardListIcon /> },
 ];
 
@@ -433,4 +425,3 @@ export default function MainLayout() {
     </div>
   );
 }
-

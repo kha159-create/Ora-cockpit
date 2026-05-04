@@ -24,6 +24,7 @@ import {
 } from '../utils/march2026Targets';
 import { calendarYesterday, mtdRangeThroughYesterday } from '../utils/mtdDateRange';
 import { buildOriginalEmployeeStatusMap, isOriginalActiveEmployee } from '../utils/originalEmployeeStatus';
+import HourlyPage from './HourlyPage';
 
 function isAdminOrAuditor(role?: string) {
   return role === 'Admin' || role === 'Auditor';
@@ -83,6 +84,7 @@ export default function DashboardPage() {
   /** آذار 2026 + MTD: الفترة 1 (1–19) أو 2 (20–31) — مثل المعارض/الموظفين */
   const [marchMtdPhase, setMarchMtdPhase] = useState<'1' | '2'>('1');
   const [dailyReportView, setDailyReportView] = useState<'stores' | 'employees'>('stores');
+  const [hourlyModalOpen, setHourlyModalOpen] = useState(false);
   const [drillDownDate, setDrillDownDate] = useState<string | null>(null);
   const [chartMode, setChartMode] = useState<'SALES' | 'VISITORS' | 'TARGET'>('SALES');
   const [topSellingMetric, setTopSellingMetric] = useState<'qty' | 'val'>('qty');
@@ -1352,6 +1354,13 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setHourlyModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-orange-500 text-white text-sm font-black hover:bg-orange-600 transition-colors shadow-lg shadow-orange-200"
+            >
+              المبيعات بالساعة
+            </button>
             <div className="flex rounded-xl border border-neutral-200 bg-neutral-50 p-1">
               <button
                 type="button"
@@ -1526,6 +1535,20 @@ export default function DashboardPage() {
           isGenerating={employeeReportGenerating}
         />
       }
+
+      {hourlyModalOpen && (
+        <div className="fixed inset-0 z-[120] bg-black/60 p-3 sm:p-5" onClick={() => setHourlyModalOpen(false)}>
+          <div className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-neutral-50 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3">
+              <div className="font-black text-neutral-900">المبيعات بالساعة</div>
+              <button type="button" className="rounded-xl border border-neutral-200 px-3 py-1.5 text-sm font-bold hover:bg-neutral-50" onClick={() => setHourlyModalOpen(false)}>إغلاق</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <HourlyPage />
+            </div>
+          </div>
+        </div>
+      )}
 
     </div >
   );

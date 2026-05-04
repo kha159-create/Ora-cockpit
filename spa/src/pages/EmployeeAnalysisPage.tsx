@@ -413,7 +413,6 @@ export default function EmployeeAnalysisPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('level');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [showActiveOnly, setShowActiveOnly] = useState(true);
 
   useEffect(() => {
     Promise.all([loadEmployeesData(), loadManagementData(), loadEmployeeProductsData()]).then(([e, m, ep]) => {
@@ -881,9 +880,8 @@ export default function EmployeeAnalysisPage() {
   }, [decisionRows, sortDir, sortKey]);
 
   const visibleRows = useMemo(() => {
-    if (!showActiveOnly) return sortedRows;
     return sortedRows.filter((row) => row.isActive);
-  }, [showActiveOnly, sortedRows]);
+  }, [sortedRows]);
 
   const groupedVisibleRows = useMemo(() => {
     const branchOrder = new Map(derived.branches.map((item, index) => [item.id, index]));
@@ -960,7 +958,7 @@ export default function EmployeeAnalysisPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          filters: { manager: effectiveManager, city, branch, dateStart: activeDateRange.start, dateEnd: activeDateRange.end, activeOnly: showActiveOnly },
+          filters: { manager: effectiveManager, city, branch, dateStart: activeDateRange.start, dateEnd: activeDateRange.end, activeOnly: true },
           summary: { employees: topCards.summary.employees, sales: Math.round(topCards.summary.sales), transactions: Math.round(topCards.summary.trans), avgTicket: Number(topCards.summary.avgTicket.toFixed(1)) },
           rows: visibleRows.map((row) => ({ employee: row.name, employeeId: row.id, store: row.storeName, level: row.level, pattern: row.pattern, structure: row.sellingStructure, strength: row.strength, weakness: row.weakness, action: row.action, duvetStatus: row.duvetStatus, padFocus: row.padFocus, padQuality: row.padQuality, pillowStatus: row.pillowStatus, avgTicket: row.avgTicket, atvVsStore: row.atvVsStoreLabel, sales: row.sales, transactions: row.trans, duvetTotal: row.totalDuvet, padTotal: row.totalPad, pillowTotal: row.totalPillow, padAttachPct: row.weightedPadAttach, pillowAttachPct: row.weightedPillowAttach, targetAchievementPct: row.targetAchievementPct, targetPaceStatus: row.targetPaceLabel, dailyRiskStatus: row.dailyRiskLabel, avgDailySales: row.avgDailySales, requiredRemainingDailySales: row.requiredRemainingDailySales, periodPerformance: row.periodPerformance, periodBuckets: row.periodBuckets, duvetKingBands: row.productInsights.kingDuvetBands, duvetFullBands: row.productInsights.fullDuvetBands, padKingModels: row.productInsights.kingPadModels, padFullModels: row.productInsights.fullPadModels, pillowKing: row.productInsights.kingPillowDetail, pillowFull: row.productInsights.fullPillowDetail, productMix: row.productInsights.mixSummary })),
         }),
@@ -1025,7 +1023,6 @@ export default function EmployeeAnalysisPage() {
       ['تاريخ التصدير', formatExportDate(new Date())],
       ['عدد الموظفين', visibleRows.length],
       ['الفلاتر المستخدمة', filtersUsed],
-      ['النشطين فقط', showActiveOnly ? 'نعم' : 'لا'],
     ]);
     metadataSheet['!cols'] = [{ wch: 20 }, { wch: 80 }];
     XLSX.utils.book_append_sheet(workbook, metadataSheet, 'معلومات التصدير');
@@ -1073,10 +1070,6 @@ export default function EmployeeAnalysisPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="text-sm text-neutral-500">انقر على صف الموظف نفسه لفتح التقرير التفصيلي، ويمكنك فرز الجدول من رؤوس الأعمدة.</div>
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <label className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-700">
-              <input type="checkbox" checked={showActiveOnly} onChange={(e) => setShowActiveOnly(e.target.checked)} />
-              <span>عرض الموظفين النشطين فقط</span>
-            </label>
             <button type="button" onClick={exportToExcel} disabled={!visibleRows.length} className="rounded-xl border border-neutral-300 bg-white px-5 py-2.5 font-bold text-neutral-700 shadow-sm transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50">تصدير Excel</button>
             <button type="button" onClick={analyzeWithAI} disabled={aiLoading} className="rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-5 py-2.5 font-black text-white shadow-md transition hover:from-orange-600 hover:to-orange-700 disabled:cursor-not-allowed disabled:opacity-70">{aiLoading ? 'جارٍ التحليل...' : 'تحليل ذكي'}</button>
           </div>

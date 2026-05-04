@@ -450,25 +450,25 @@ export const GrowthTrajectoryChart: React.FC<{
   const ySteps = [0, 0.25, 0.5, 0.75, 1];
 
   return (
-    <div className="growth-chart-container bg-white rounded-3xl md:rounded-[2.5rem] shadow-2xl border border-neutral-100 p-4 md:p-8 w-full relative group/chart mt-6 overflow-hidden">
+    <div className="growth-chart-container bg-white rounded-2xl md:rounded-3xl shadow-xl border border-neutral-100 p-3 md:p-5 w-full relative group/chart mt-4 overflow-hidden">
       <div className="absolute top-0 right-0 w-64 h-64 bg-orange-50 rounded-full -mr-32 -mt-32 blur-3xl opacity-50 pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-64 h-64 bg-slate-50 rounded-full -ml-32 -mb-32 blur-3xl opacity-50 pointer-events-none" />
 
-      <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-10 gap-6">
+      <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center mb-4 md:mb-5 gap-4">
         <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="h-6 w-1.5 bg-gradient-to-b from-orange-400 to-orange-600 rounded-full shadow-sm shadow-orange-200" />
+          <div className="flex items-center gap-2">
+            <div className="h-5 w-1.5 bg-gradient-to-b from-orange-400 to-orange-600 rounded-full shadow-sm shadow-orange-200" />
             <span className="text-[11px] font-black text-neutral-400 tracking-[0.25em] uppercase">
               {mode === 'TARGET' ? 'Target Achievement' : mode === 'VISITORS' ? 'Visitors Trend' : 'Growth Trajectory'}
             </span>
           </div>
-          <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex flex-wrap items-baseline gap-2">
+          <h2 className="text-lg md:text-xl font-black text-slate-900 tracking-tight flex flex-wrap items-baseline gap-2">
             {mode === 'TARGET' ? 'تحقيق الهدف الشهري' : mode === 'VISITORS' ? 'مؤشر الزوار الشهري' : ''}
             <span className="text-xs font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100 whitespace-nowrap">Live Analytics</span>
           </h2>
         </div>
 
-        <div className="flex flex-col items-end gap-5 w-full md:w-auto">
+        <div className="flex flex-col items-end gap-3 w-full md:w-auto">
           <div className="flex bg-neutral-100/80 backdrop-blur-sm p-1.5 rounded-2xl border border-neutral-200/50 shadow-inner w-full md:w-auto overflow-x-auto touch-pan-x">
             {(['SALES', 'VISITORS', 'TARGET'] as const).map(m => (
               <button
@@ -503,7 +503,7 @@ export const GrowthTrajectoryChart: React.FC<{
         </div>
       </div>
 
-      <div className="relative h-96 flex gap-2 md:gap-4 mt-4">
+      <div className="relative h-72 md:h-80 flex gap-2 md:gap-4 mt-2">
         {/* Y Axis - Fixed */}
         <div className="flex flex-col justify-between text-[10px] font-black text-neutral-400 z-10 py-2 pb-14 h-full shrink-0">
           {ySteps.slice().reverse().map(s => (

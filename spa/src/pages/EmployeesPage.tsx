@@ -7,6 +7,7 @@ import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, PremiumTargetIcon, VisitorsIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
 import EmployeeCompareModal from '../components/EmployeeCompareModal';
+import CommissionsPage from './CommissionsPage';
 import {
   getMarch2026TargetMetrics,
   getEmployeeTargetForEffectiveDate,
@@ -677,6 +678,7 @@ export default function EmployeesPage() {
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [showCompareModal, setShowCompareModal] = useState(false);
+  const [showCommissionsModal, setShowCommissionsModal] = useState(false);
 
   // Excel export states
   const [excelDropdownOpen, setExcelDropdownOpen] = useState(false);
@@ -1321,6 +1323,13 @@ export default function EmployeesPage() {
       <div className="flex flex-wrap items-center justify-end gap-2">
         <button
           type="button"
+          onClick={() => setShowCommissionsModal(true)}
+          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-black py-2 px-4 rounded-xl text-sm transition-colors shadow-lg shadow-orange-200"
+        >
+          <span>﷼</span> العمولات
+        </button>
+        <button
+          type="button"
           onClick={() => setShowCompareModal(true)}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-xl text-sm transition-colors"
         >
@@ -1720,6 +1729,20 @@ export default function EmployeesPage() {
         onClose={() => setShowCompareModal(false)}
         employees={derived.employees}
       />
+
+      {showCommissionsModal && (
+        <div className="fixed inset-0 z-[120] bg-black/60 p-3 sm:p-5" onClick={() => setShowCommissionsModal(false)}>
+          <div className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-neutral-50 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3">
+              <div className="font-black text-neutral-900">العمولات</div>
+              <button type="button" className="rounded-xl border border-neutral-200 px-3 py-1.5 text-sm font-bold hover:bg-neutral-50" onClick={() => setShowCommissionsModal(false)}>إغلاق</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <CommissionsPage />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Target Template Modal */}
       {showTargetModal && (

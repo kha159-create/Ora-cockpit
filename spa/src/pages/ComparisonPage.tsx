@@ -7,6 +7,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { getCurrentUser } from '../auth/storage';
 import { getAvailableSeasonsList, getSeasonDateRange, formatHijriDate } from '../utils/seasons';
 import * as XLSX from 'xlsx';
+import CustomerValueSimulationPage from './CustomerValueSimulationPage';
 import { DrillDownModal } from '../components/dashboard/DrillDownModal';
 import { mtdRangeThroughYesterday } from '../utils/mtdDateRange';
 
@@ -113,6 +114,7 @@ export default function ComparisonPage() {
     const [rangeMode, setRangeMode] = useState<RangeMode>('mtd');
     const [activeMetric, setActiveMetric] = useState<'sales' | 'visitors' | 'transactions' | 'atv' | 'conversion' | 'customer_value'>('sales');
     const [drillDownDate, setDrillDownDate] = useState<string | null>(null);
+    const [customerValueOpen, setCustomerValueOpen] = useState(false);
 
     // New filter states
     const [manager, setManager] = useState('all');
@@ -385,9 +387,16 @@ export default function ComparisonPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-neutral-900 flex items-center gap-2">
                         <ChartBarIcon />
-                        المقارنة (LFL Comparison)
+                        ???????? ??.?
                     </h1>
                     <p className="text-neutral-500 text-sm mt-1">مقارنة الأداء مع الفترة المماثلة من العام السابق</p>
+                <button
+                    type="button"
+                    onClick={() => setCustomerValueOpen(true)}
+                    className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-orange-200 transition hover:bg-orange-600"
+                >
+                    ?.? ?????????
+                </button>
                 </div>
             </div>
 
@@ -653,6 +662,19 @@ export default function ComparisonPage() {
                     </table>
                 </div>
             </div>
+            {customerValueOpen && (
+                <div className="fixed inset-0 z-[120] bg-black/60 p-3 sm:p-5" onClick={() => setCustomerValueOpen(false)}>
+                    <div className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-neutral-50 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3">
+                            <div className="font-black text-neutral-900">ق.ع والمحاكاة</div>
+                            <button type="button" className="rounded-xl border border-neutral-200 px-3 py-1.5 text-sm font-bold hover:bg-neutral-50" onClick={() => setCustomerValueOpen(false)}>إغلاق</button>
+                        </div>
+                        <div className="flex-1 overflow-auto p-4">
+                            <CustomerValueSimulationPage />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

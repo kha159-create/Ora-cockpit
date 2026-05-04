@@ -8,6 +8,7 @@ import { CubeIcon, SalesIcon, InvoicesIcon, VisitorsIcon, XIcon } from '../compo
 import * as XLSX from 'xlsx';
 import { generateProductSummaryPDF, generateProductValueAnalysisPDF } from '../services/pdf/pdfService';
 import { calendarYesterday, mtdRangeThroughYesterday, toLocalYMD } from '../utils/mtdDateRange';
+import OffersPage from './OffersPage';
 
 type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest' | 'custom';
 type RepSearchMode = 'sales_stock' | 'stock_only';
@@ -283,6 +284,7 @@ export default function ProductsPage() {
   const [priceMax, setPriceMax] = useState<string>('');
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [expandedRepOpen, setExpandedRepOpen] = useState(false);
+  const [offersOpen, setOffersOpen] = useState(false);
   const [repSearchMode, setRepSearchMode] = useState<RepSearchMode>('sales_stock');
   const [repStore, setRepStore] = useState<string>('all');
   const [repCategories, setRepCategories] = useState<string[]>([]);
@@ -1116,6 +1118,13 @@ export default function ProductsPage() {
             >
               📚 تقارير موسعة
             </button>
+          <button
+            type="button"
+            onClick={() => setOffersOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm font-black shadow-lg shadow-orange-200"
+          >
+            ????? ??????
+          </button>
           </div>
         </div>
         {mode === 'custom' && (
@@ -1917,6 +1926,10 @@ export default function ProductsPage() {
             )}
           </div>
         </div>
+      </Modal>
+
+      <Modal open={offersOpen} onClose={() => setOffersOpen(false)} title="قائمة العروض" maxWidthClass="max-w-[96vw]">
+        <OffersPage />
       </Modal>
 
       {/* Product details modal */}
