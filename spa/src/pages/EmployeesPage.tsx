@@ -6,7 +6,6 @@ import { ChartCard, KPICard, PieChart } from '../components/DashboardComponents'
 import { DashboardSkeleton } from '../components/SkeletonComponents';
 import { SalesIcon, PremiumTargetIcon, VisitorsIcon } from '../components/Icons';
 import * as XLSX from 'xlsx';
-import EmployeeCompareModal from '../components/EmployeeCompareModal';
 import CommissionsPage from './CommissionsPage';
 import {
   getMarch2026TargetMetrics,
@@ -677,7 +676,6 @@ export default function EmployeesPage() {
   const [chartOrder, setChartOrder] = useState<'desc' | 'asc'>('desc');
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
-  const [showCompareModal, setShowCompareModal] = useState(false);
   const [showCommissionsModal, setShowCommissionsModal] = useState(false);
 
   // Excel export states
@@ -1328,13 +1326,6 @@ export default function EmployeesPage() {
         >
           العمولات
         </button>
-        <button
-          type="button"
-          onClick={() => setShowCompareModal(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-xl text-sm transition-colors"
-        >
-          <span>⚖️</span> مقارنة موظفين
-        </button>
         <div ref={excelDropdownRef} className="relative">
           <button
             type="button"
@@ -1722,13 +1713,6 @@ export default function EmployeesPage() {
           productsPeriodKey={productsPeriodKey}
         />
       )}
-
-      {/* Employee Comparison Modal */}
-      <EmployeeCompareModal
-        open={showCompareModal}
-        onClose={() => setShowCompareModal(false)}
-        employees={derived.employees}
-      />
 
       {showCommissionsModal && (
         <div className="fixed inset-0 z-[120] bg-black/60 p-3 sm:p-5" onClick={() => setShowCommissionsModal(false)}>

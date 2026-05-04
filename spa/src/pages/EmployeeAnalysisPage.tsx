@@ -1199,6 +1199,97 @@ export default function EmployeeAnalysisPage() {
                               <div className="text-sm font-semibold leading-6 text-neutral-700">{row.action}</div>
                             </div>
                           </div>
+
+                          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                            <div className="rounded-xl border border-orange-100 bg-orange-50/40 p-3">
+                              <div className="mb-3 font-black text-neutral-900">تفصيل المنتجات الأساسية</div>
+                              <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+                                {[
+                                  ['لحاف كينج', row.productInsights.kingDuvet, row.productInsights.kingDuvetBands.focus],
+                                  ['لحاف فل', row.productInsights.fullDuvet, row.productInsights.fullDuvetBands.focus],
+                                  ['لباد كينج', row.productInsights.kingPad, `${row.productInsights.kingPadModels.focus} | ${row.productInsights.kingPadModels.priceFocus || 'لا توجد قراءة سعرية'}`],
+                                  ['لباد فل', row.productInsights.fullPad, `${row.productInsights.fullPadModels.focus} | ${row.productInsights.fullPadModels.priceFocus || 'لا توجد قراءة سعرية'}`],
+                                  ['مخدة كينج', row.productInsights.kingPillow, row.productInsights.kingPillowDetail.status],
+                                  ['مخدة ستاندرد', row.productInsights.fullPillow, row.productInsights.fullPillowDetail.status],
+                                ].map(([label, value, note]) => (
+                                  <div key={String(label)} className="rounded-lg border border-white/80 bg-white p-2 shadow-sm">
+                                    <div className="text-neutral-500">{label}</div>
+                                    <div className="mt-1 text-lg font-black text-orange-700">{Math.round(Number(value))}</div>
+                                    <div className="mt-1 min-h-4 text-[11px] font-semibold leading-4 text-neutral-500">{String(note)}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="rounded-xl border border-neutral-100 p-3">
+                              <div className="mb-3 font-black text-neutral-900">تركيز البيع والفئة السعرية</div>
+                              <div className="grid gap-2 text-xs">
+                                <div className="rounded-lg bg-neutral-50 p-2">
+                                  <div className="text-neutral-500">أكثر قسم مبيعاً</div>
+                                  <div className="mt-1 font-black text-neutral-900">{row.productInsights.mixSummary?.topCategory || 'لا توجد بيانات'}</div>
+                                  <div className="mt-1 text-neutral-500">تركيز {row.productInsights.mixSummary?.concentrationPct.toFixed(1) || '0.0'}% | {row.productInsights.mixSummary?.diversityLabel || 'لا توجد بيانات'}</div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="rounded-lg bg-neutral-50 p-2">
+                                    <div className="text-neutral-500">لحاف كينج</div>
+                                    <div className="font-bold text-neutral-900">{row.productInsights.kingDuvetBands.focus}</div>
+                                  </div>
+                                  <div className="rounded-lg bg-neutral-50 p-2">
+                                    <div className="text-neutral-500">لحاف فل</div>
+                                    <div className="font-bold text-neutral-900">{row.productInsights.fullDuvetBands.focus}</div>
+                                  </div>
+                                  <div className="rounded-lg bg-neutral-50 p-2">
+                                    <div className="text-neutral-500">لباد كينج</div>
+                                    <div className="font-bold text-neutral-900">{row.productInsights.kingPadModels.priceFocus || row.productInsights.kingPadModels.focus}</div>
+                                  </div>
+                                  <div className="rounded-lg bg-neutral-50 p-2">
+                                    <div className="text-neutral-500">لباد فل</div>
+                                    <div className="font-bold text-neutral-900">{row.productInsights.fullPadModels.priceFocus || row.productInsights.fullPadModels.focus}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 rounded-xl border border-neutral-100 p-3">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                              <div className="font-black text-neutral-900">تحليل التارجت والمطلوب اليومي</div>
+                              <span className={`rounded-full border px-3 py-1 text-xs font-black ${chipTone(row.dailyRiskLabel)}`}>{row.dailyRiskLabel}</span>
+                            </div>
+                            <div className="grid gap-3 lg:grid-cols-[260px,1fr]">
+                              <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-3 text-sm">
+                                <div className="mb-2 text-center text-xs font-bold text-neutral-400">الهدف والمطلوب اليومي</div>
+                                <div className={`mx-auto mb-2 w-fit rounded-full border px-3 py-1 text-xs font-black ${chipTone(row.targetPaceLabel)}`}>{row.targetPaceLabel}</div>
+                                <div className={`mx-auto mb-3 w-fit rounded-full border px-3 py-1 text-xs font-black ${chipTone(row.dailyRiskLabel)}`}>{row.dailyRiskLabel}</div>
+                                <div className="space-y-1 text-xs font-semibold text-neutral-500">
+                                  <div>نسبة الإنجاز: {row.targetAchievementPct.toFixed(1)}%</div>
+                                  <div>النسبة المطلوبة حتى اليوم: {row.expectedPacePct.toFixed(1)}%</div>
+                                  <div>المطلوب اليومي: {formatSAR(row.requiredRemainingDailySales)}</div>
+                                  <div>المطلوب المتبقي: {formatSAR(row.remainingTarget)}</div>
+                                </div>
+                              </div>
+                              <div className="grid gap-2 md:grid-cols-3">
+                                {row.periodBuckets.length ? row.periodBuckets.map((bucket) => {
+                                  const gap = bucket.sales - bucket.target;
+                                  return (
+                                    <div key={bucket.label} className="rounded-xl border border-neutral-100 bg-white p-3 text-xs shadow-sm">
+                                      <div className="font-black text-neutral-900">{bucket.label}</div>
+                                      <div className="mt-2 space-y-1 text-neutral-500">
+                                        <div>المبيعات: {formatSAR(bucket.sales)}</div>
+                                        <div>تارجت الفترة: {formatSAR(bucket.target)}</div>
+                                        <div className={gap >= 0 ? 'font-bold text-emerald-700' : 'font-bold text-red-600'}>
+                                          {gap >= 0 ? 'فائض' : 'كسر'}: {formatSAR(Math.abs(gap))}
+                                        </div>
+                                        <div>الإنجاز: {bucket.achievementPct.toFixed(1)}%</div>
+                                      </div>
+                                    </div>
+                                  );
+                                }) : (
+                                  <div className="rounded-xl border border-dashed border-neutral-200 p-4 text-center text-sm text-neutral-400 md:col-span-3">لا توجد فترات تارجت ضمن الفلتر الحالي.</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </td>
                     </tr>

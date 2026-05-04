@@ -36,8 +36,8 @@ const SimulationModal = ({ isOpen, onClose, employeeName, storeRate, target }: {
     // Calculate achievement based on entered sales and ACTUAL target
     const simulatedAchievement = target > 0 ? (sales / target) * 100 : 0;
 
-    // New Formula: (Personal Achievement % / 100) * Store Rate
-    const finalRate = (simulatedAchievement / 100) * simulatedStoreRate;
+    // Employees without targets follow the actual commission rule: sales * store rate.
+    const finalRate = target > 0 ? (simulatedAchievement / 100) * simulatedStoreRate : simulatedStoreRate;
     const commissionAmount = sales * (finalRate / 100);
 
     return (
@@ -101,8 +101,8 @@ const SimulationModal = ({ isOpen, onClose, employeeName, storeRate, target }: {
                             placeholder="0"
                         />
                         <div className="mt-1 flex justify-between px-1">
-                            <span className="text-[10px] text-neutral-400">الهدف الفعلي لهذا الموظف: {Math.round(target).toLocaleString()} SAR</span>
-                            <span className="text-[10px] font-bold text-orange-600">نسبة التحقيق: {simulatedAchievement.toFixed(1)}%</span>
+                            <span className="text-[10px] text-neutral-400">الهدف الفعلي لهذا الموظف: {target > 0 ? `${Math.round(target).toLocaleString()} SAR` : 'بدون هدف'}</span>
+                            <span className="text-[10px] font-bold text-orange-600">{target > 0 ? `نسبة التحقيق: ${simulatedAchievement.toFixed(1)}%` : 'يعتمد على نسبة المعرض'}</span>
                         </div>
                     </div>
 
