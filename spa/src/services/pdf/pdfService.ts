@@ -931,12 +931,6 @@ const pickActiveTargetBucket = (blocks: TargetSplitPdfBlock[], lastAvailableInMo
     return { rows, activeIndex: nextIndex >= 0 ? nextIndex : Math.max(0, rows.length - 1) };
 };
 
-const targetStatus = (sales: number, expected: number, rangeEnd: string, lastAvailableInMonth: string) => {
-    if (rangeEnd > lastAvailableInMonth) return 'حالية';
-    if (sales >= expected) return 'محققة';
-    return 'متأخرة';
-};
-
 const drawTargetKpi = (
     doc: any,
     x: number,
@@ -1031,9 +1025,9 @@ export const generateTargetSplitStorePDF = async (
     doc.text(`كسر السابقة: ${fmtN(Math.max(0, prevCarry))}`, 58, 74, { align: 'center' });
     doc.text(`نقص بسبب زيادة: ${fmtN(Math.max(0, -prevCarry))}`, 58, 84, { align: 'center' });
 
-    drawTrendKpi(doc, 198, 99, 78, 'استحواذ الفرع للفترة', `${activeStoreAch.toFixed(1)}%`, activeStoreAch - prevStoreAch, '%');
-    drawTrendKpi(doc, 109, 99, 78, 'معدل الفاتورة للفرع', fmtN(activeStoreMetrics.avgInv || 0), (activeStoreMetrics.avgInv || 0) - (prevStoreMetrics.avgInv || 0));
-    drawTrendKpi(doc, 20, 99, 78, 'قيمة عميل الفرع', fmtN(activeStoreMetrics.customerValue || 0), (activeStoreMetrics.customerValue || 0) - (prevStoreMetrics.customerValue || 0));
+    drawTrendKpi(doc, 198, 99, 78, 'استحواذ الفترة', `${activeStoreAch.toFixed(1)}%`, activeStoreAch - prevStoreAch, '%');
+    drawTrendKpi(doc, 109, 99, 78, 'معدل فاتورة الفترة', fmtN(activeStoreMetrics.avgInv || 0), (activeStoreMetrics.avgInv || 0) - (prevStoreMetrics.avgInv || 0));
+    drawTrendKpi(doc, 20, 99, 78, 'قيمة عميل الفترة', fmtN(activeStoreMetrics.customerValue || 0), (activeStoreMetrics.customerValue || 0) - (prevStoreMetrics.customerValue || 0));
 
     const storeRows: any[] = [];
     storeFlatRows.forEach((row, idx) => {
@@ -1054,18 +1048,24 @@ export const generateTargetSplitStorePDF = async (
             fmtN(m.avgInv || 0),
             fmtN(shortfall),
             fmtN(need.daily),
-            targetStatus(sales, expected, row.range.end, opts.lastAvailableInMonth),
         ]);
     });
 
     (doc as any).autoTable({
         startY: 125,
-        head: [['المرحلة', 'الفترة', 'كسر مرحل', 'نقص من زيادة', 'تارجت الفترة', 'مبيعات', 'تحقيق', 'معدل فاتورة', 'المتبقي', 'مطلوب يومياً', 'الحالة']],
-        body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0', '0', '0.0%', '0', '0', '0', '-']],
-        styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.6, lineColor: [255, 255, 255], lineWidth: 0.35 },
-        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', lineColor: [254, 121, 0], lineWidth: 0.45 },
+        head: [['المرحلة', 'الفترة', 'كسر مرحل', 'نقص من زيادة', 'تارجت الفترة', 'مبيعات', 'تحقيق', 'معدل فاتورة', 'المتبقي', 'مطلوب يومياً']],
+        body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0', '0', '0.0%', '0', '0', '0']],
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8.7, cellPadding: 2.1, lineColor: [255, 255, 255], lineWidth: 0.55, valign: 'middle' },
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', lineColor: [254, 121, 0], lineWidth: 0.55 },
         alternateRowStyles: { fillColor: [255, 255, 255] },
-        bodyStyles: { fillColor: [248, 250, 252] },
+        bodyStyles: { fillColor: [249, 250, 251], textColor: [31, 41, 55] },
+        columnStyles: {
+            0: { cellWidth: 24 },
+            1: { cellWidth: 36, fontStyle: 'bold' },
+            4: { fontStyle: 'bold', textColor: [17, 24, 39] },
+            5: { fontStyle: 'bold', textColor: [17, 24, 39] },
+            6: { fontStyle: 'bold', textColor: [30, 64, 175] },
+        },
         didParseCell: (data: any) => {
             if (data.column.index === 2 || data.column.index === 8 || data.column.index === 9) {
                 data.cell.styles.fontStyle = 'bold';
@@ -1074,20 +1074,6 @@ export const generateTargetSplitStorePDF = async (
             if (data.column.index === 3) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.textColor = [22, 101, 52];
-            }
-            if (data.column.index === 10) {
-                data.cell.styles.fontStyle = 'bold';
-                const val = String(data.cell.raw || '');
-                if (val === 'محققة') {
-                    data.cell.styles.fillColor = [220, 252, 231];
-                    data.cell.styles.textColor = [22, 101, 52];
-                } else if (val === 'حالية') {
-                    data.cell.styles.fillColor = [219, 234, 254];
-                    data.cell.styles.textColor = [30, 64, 175];
-                } else {
-                    data.cell.styles.fillColor = [254, 226, 226];
-                    data.cell.styles.textColor = [127, 29, 29];
-                }
             }
         },
     });
@@ -1102,7 +1088,7 @@ export const generateTargetSplitStorePDF = async (
     const empRows: any[] = [];
     const separatorRows = new Set<number>();
     const firstPeriodRows = new Map<number, boolean>();
-    const EMP_COLS = 11;
+    const EMP_COLS = 10;
     (store.employees || []).forEach((emp) => {
         const { rows: empFlatRows, activeIndex: empActiveIndex } = pickActiveTargetBucket(emp.bucketBlocks, opts.lastAvailableInMonth);
         const empActive = empFlatRows[empActiveIndex];
@@ -1154,7 +1140,6 @@ export const generateTargetSplitStorePDF = async (
                 fmtN(m.avgInv || 0),
                 fmtN(shortfall),
                 fmtN(need.daily),
-                targetStatus(sales, expected, row.range.end, opts.lastAvailableInMonth),
             ]);
             firstRowForEmployee = false;
             if (!markedFirstPeriod) {
@@ -1166,15 +1151,18 @@ export const generateTargetSplitStorePDF = async (
 
     (doc as any).autoTable({
         startY: 36,
-        head: [['الموظف', 'الفترة', 'كسر مرحل', 'نقص من زيادة', 'تارجت الفترة', 'مبيعات', 'تحقيق', 'معدل فاتورة', 'المتبقي', 'مطلوب يومياً', 'الحالة']],
-        body: empRows.length ? empRows : [['-', '-', '0', '0', '0', '0', '0.0%', '0', '0', '0', '-']],
-        styles: { font: 'Amiri', halign: 'center', fontSize: 7.2, cellPadding: 1.4, lineColor: [255, 255, 255], lineWidth: 0.35 },
-        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', lineColor: [254, 121, 0], lineWidth: 0.45 },
+        head: [['الموظف', 'الفترة', 'كسر مرحل', 'نقص من زيادة', 'تارجت الفترة', 'مبيعات', 'تحقيق', 'معدل فاتورة', 'المتبقي', 'مطلوب يومياً']],
+        body: empRows.length ? empRows : [['-', '-', '0', '0', '0', '0', '0.0%', '0', '0', '0']],
+        styles: { font: 'Amiri', halign: 'center', fontSize: 7.7, cellPadding: 1.75, lineColor: [255, 255, 255], lineWidth: 0.5, valign: 'middle' },
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', lineColor: [254, 121, 0], lineWidth: 0.55 },
         alternateRowStyles: { fillColor: [255, 255, 255] },
-        bodyStyles: { fillColor: [248, 250, 252] },
+        bodyStyles: { fillColor: [249, 250, 251], textColor: [31, 41, 55] },
         columnStyles: {
-            0: { halign: 'right', cellWidth: 30 },
-            1: { cellWidth: 28 },
+            0: { halign: 'right', cellWidth: 38 },
+            1: { cellWidth: 30, fontStyle: 'bold' },
+            4: { fontStyle: 'bold', textColor: [17, 24, 39] },
+            5: { fontStyle: 'bold', textColor: [17, 24, 39] },
+            6: { fontStyle: 'bold', textColor: [30, 64, 175] },
         },
         didParseCell: (data: any) => {
             const r = data.row.index;
@@ -1204,20 +1192,6 @@ export const generateTargetSplitStorePDF = async (
             if (data.column.index === 3) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.textColor = [22, 101, 52];
-            }
-            if (data.column.index === 10) {
-                data.cell.styles.fontStyle = 'bold';
-                const val = String(data.cell.raw || '');
-                if (val === 'محققة') {
-                    data.cell.styles.fillColor = [220, 252, 231];
-                    data.cell.styles.textColor = [22, 101, 52];
-                } else if (val === 'حالية') {
-                    data.cell.styles.fillColor = [219, 234, 254];
-                    data.cell.styles.textColor = [30, 64, 175];
-                } else {
-                    data.cell.styles.fillColor = [254, 226, 226];
-                    data.cell.styles.textColor = [127, 29, 29];
-                }
             }
         },
     });
