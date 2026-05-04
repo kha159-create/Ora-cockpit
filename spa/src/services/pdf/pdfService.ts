@@ -904,80 +904,186 @@ const periodNeed = (bucketLabel: string, shortfall: number, lastAvailableInMonth
     return { days, daily: days > 0 ? Math.max(0, shortfall) / days : 0 };
 };
 
+const parseBucketRange = (bucketLabel: string) => {
+    const parts = String(bucketLabel || '').split('—').map(s => s.trim());
+    return {
+        start: parts[0] || '',
+        end: parts.length > 1 ? parts[1] : parts[0] || '',
+    };
+};
+
+const flattenTargetBuckets = (blocks: TargetSplitPdfBlock[]) => {
+    return (blocks || []).flatMap((block) =>
+        (block.buckets || []).map((bucket) => ({
+            blockLabel: block.label || '-',
+            bucket,
+            range: parseBucketRange(bucket.label),
+            metrics: bucket.metrics || ({} as TargetSplitPdfMetrics),
+        })),
+    );
+};
+
+const pickActiveTargetBucket = (blocks: TargetSplitPdfBlock[], lastAvailableInMonth: string) => {
+    const rows = flattenTargetBuckets(blocks);
+    const activeIndex = rows.findIndex((row) => row.range.start <= lastAvailableInMonth && row.range.end >= lastAvailableInMonth);
+    if (activeIndex >= 0) return { rows, activeIndex };
+    const nextIndex = rows.findIndex((row) => row.range.start > lastAvailableInMonth);
+    return { rows, activeIndex: nextIndex >= 0 ? nextIndex : Math.max(0, rows.length - 1) };
+};
+
+const targetStatus = (sales: number, expected: number, rangeEnd: string, lastAvailableInMonth: string) => {
+    if (rangeEnd > lastAvailableInMonth) return 'حالية';
+    if (sales >= expected) return 'محققة';
+    return 'متأخرة';
+};
+
+const drawTargetKpi = (
+    doc: any,
+    x: number,
+    y: number,
+    w: number,
+    title: string,
+    value: string,
+    accent: [number, number, number] = [254, 121, 0],
+) => {
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(229, 231, 235);
+    doc.roundedRect(x, y, w, 18, 3, 3, 'FD');
+    doc.setFillColor(accent[0], accent[1], accent[2]);
+    doc.roundedRect(x + w - 3, y, 3, 18, 1.5, 1.5, 'F');
+    doc.setTextColor(107, 114, 128);
+    doc.setFontSize(8);
+    doc.text(title, x + w - 7, y + 6, { align: 'right' });
+    doc.setTextColor(17, 24, 39);
+    doc.setFontSize(13);
+    doc.text(value, x + w - 7, y + 14, { align: 'right' });
+};
+
 export const generateTargetSplitStorePDF = async (
     store: TargetSplitPdfStore,
     opts: { monthLabel: string; granularityLabel: string; lastAvailableInMonth: string }
 ) => {
     const doc = setupDoc('l');
-    addPageHeader(doc, `تقسيمة التارجت - ${store.name}`, `Manager: ${store.manager || '-'}`);
+    addPageHeader(doc, `تقرير تقسيمة التارجت - ${store.name}`, `Manager: ${store.manager || '-'}`);
 
-    doc.setTextColor(0, 0, 0);
+    const { rows: storeFlatRows, activeIndex: storeActiveIndex } = pickActiveTargetBucket(store.bucketBlocks, opts.lastAvailableInMonth);
+    const activeStore = storeFlatRows[storeActiveIndex];
+    const activeStoreMetrics = activeStore?.metrics || ({} as TargetSplitPdfMetrics);
+    const activeExpected = (activeStoreMetrics.dailyTargetDynamic ?? activeStoreMetrics.target) || 0;
+    const activeSales = activeStoreMetrics.sales || 0;
+    const activeShortfall = Math.max(0, activeExpected - activeSales);
+    const activeNeed = periodNeed(activeStore?.bucket.label || '', activeShortfall, opts.lastAvailableInMonth);
+    const prevStore = storeActiveIndex > 0 ? storeFlatRows[storeActiveIndex - 1] : null;
+    const prevExpected = prevStore ? (prevStore.metrics.dailyTargetDynamic ?? prevStore.metrics.target) || 0 : 0;
+    const prevCarry = prevStore ? prevExpected - (prevStore.metrics.sales || 0) : 0;
+
+    doc.setFillColor(248, 250, 252);
+    doc.rect(0, 20, 297, 190, 'F');
+    doc.setTextColor(55, 65, 81);
+    doc.setFontSize(9);
+    doc.text(`الشهر: ${opts.monthLabel} | التقسيم: ${opts.granularityLabel} | البيانات حتى: ${opts.lastAvailableInMonth}`, 282, 29, { align: 'right' });
+
+    drawTargetKpi(doc, 218, 37, 58, 'تارجت الفترة الحالية', fmtN(activeExpected), [254, 121, 0]);
+    drawTargetKpi(doc, 156, 37, 58, 'مبيعات الفترة', fmtN(activeSales), [16, 185, 129]);
+    drawTargetKpi(doc, 94, 37, 58, 'تحقيق الفترة', `${(activeExpected > 0 ? (activeSales / activeExpected) * 100 : 0).toFixed(1)}%`, [59, 130, 246]);
+    drawTargetKpi(doc, 32, 37, 58, 'المتبقي', fmtN(activeShortfall), [239, 68, 68]);
+
+    doc.setFillColor(239, 246, 255);
+    doc.setDrawColor(191, 219, 254);
+    doc.roundedRect(15, 63, 267, 30, 4, 4, 'FD');
+    doc.setTextColor(30, 64, 175);
+    doc.setFontSize(12);
+    doc.text('الفترة الحالية', 272, 73, { align: 'right' });
+    doc.setTextColor(17, 24, 39);
     doc.setFontSize(10);
-    doc.text(`الشهر: ${opts.monthLabel} | التقسيم: ${opts.granularityLabel} | البيانات حتى: ${opts.lastAvailableInMonth}`, 15, 28);
-    doc.text(
-        `تارجت الشهر: ${fmtN(store.monthTarget)} | المبيعات: ${fmtN(store.monthSales)} | التحقيق: ${store.monthAch.toFixed(1)}%`,
-        15,
-        34
-    );
+    doc.text(`${activeStore?.blockLabel || '-'} | ${activeStore?.bucket.label || '-'}`, 272, 84, { align: 'right' });
+    doc.text(`ترحيل من الفترة السابقة: ${prevCarry >= 0 ? '+' : '-'}${fmtN(Math.abs(prevCarry))}`, 158, 74, { align: 'right' });
+    doc.text(`مطلوب يومياً: ${fmtN(activeNeed.daily)} (${activeNeed.days} أيام)`, 158, 84, { align: 'right' });
+    doc.text(`كسر السابقة: ${fmtN(Math.max(0, prevCarry))}`, 58, 74, { align: 'center' });
+    doc.text(`نقص بسبب زيادة: ${fmtN(Math.max(0, -prevCarry))}`, 58, 84, { align: 'center' });
 
     const storeRows: any[] = [];
-    store.bucketBlocks.forEach((block) => {
-        (block.buckets || []).forEach((b) => {
-            const m = b.metrics || ({} as TargetSplitPdfMetrics);
-            const expected = (m.dailyTargetDynamic ?? m.target) || 0;
-            const shortfall = Math.max(0, expected - (m.sales || 0));
-            const need = periodNeed(b.label, shortfall, opts.lastAvailableInMonth);
-            storeRows.push([
-                block.label || '-',
-                b.label,
-                fmtN(expected),
-                fmtN(m.sales),
-                `${(m.achievement || 0).toFixed(1)}%`,
-                fmtN(m.avgInv),
-                `${(m.conversion || 0).toFixed(1)}%`,
-                fmtN(m.customerValue),
-                fmtN(shortfall),
-                String(need.days),
-                fmtN(need.daily),
-            ]);
-        });
+    storeFlatRows.forEach((row, idx) => {
+        const m = row.metrics;
+        const expected = (m.dailyTargetDynamic ?? m.target) || 0;
+        const sales = m.sales || 0;
+        const carry = idx > 0 ? ((storeFlatRows[idx - 1].metrics.dailyTargetDynamic ?? storeFlatRows[idx - 1].metrics.target) || 0) - (storeFlatRows[idx - 1].metrics.sales || 0) : 0;
+        const shortfall = Math.max(0, expected - sales);
+        const need = periodNeed(row.bucket.label, shortfall, opts.lastAvailableInMonth);
+        storeRows.push([
+            row.blockLabel,
+            row.bucket.label,
+            fmtN(Math.max(0, carry)),
+            carry < 0 ? fmtN(Math.abs(carry)) : '0',
+            fmtN(expected),
+            fmtN(sales),
+            `${(expected > 0 ? (sales / expected) * 100 : 0).toFixed(1)}%`,
+            fmtN(shortfall),
+            fmtN(need.daily),
+            targetStatus(sales, expected, row.range.end, opts.lastAvailableInMonth),
+        ]);
     });
 
     (doc as any).autoTable({
-        startY: 40,
-        head: [['المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق', 'معدل فاتورة', 'التحويل', 'قيمة عميل', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً']],
-        body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '0', '0']],
-        styles: { font: 'Amiri', halign: 'center', fontSize: 8, cellPadding: 1.5 },
-        headStyles: { fillColor: [254, 121, 0], textColor: 255 },
-        alternateRowStyles: { fillColor: [245, 245, 245] },
+        startY: 101,
+        head: [['المرحلة', 'الفترة', 'كسر مرحل', 'نقص من زيادة', 'تارجت الفترة', 'مبيعات', 'تحقيق', 'المتبقي', 'مطلوب يومياً', 'الحالة']],
+        body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0', '0', '0.0%', '0', '0', '-']],
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8.2, cellPadding: 1.8, lineColor: [229, 231, 235], lineWidth: 0.1 },
+        headStyles: { fillColor: [17, 24, 39], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [255, 255, 255] },
+        bodyStyles: { fillColor: [248, 250, 252] },
         didParseCell: (data: any) => {
-            if (data.column.index === 8 || data.column.index === 10) {
+            if (data.column.index === 2 || data.column.index === 7 || data.column.index === 8) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.textColor = [153, 27, 27];
             }
+            if (data.column.index === 3) {
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.textColor = [22, 101, 52];
+            }
             if (data.column.index === 9) {
                 data.cell.styles.fontStyle = 'bold';
-                data.cell.styles.fillColor = [255, 247, 237];
+                const val = String(data.cell.raw || '');
+                if (val === 'محققة') {
+                    data.cell.styles.fillColor = [220, 252, 231];
+                    data.cell.styles.textColor = [22, 101, 52];
+                } else if (val === 'حالية') {
+                    data.cell.styles.fillColor = [219, 234, 254];
+                    data.cell.styles.textColor = [30, 64, 175];
+                } else {
+                    data.cell.styles.fillColor = [254, 226, 226];
+                    data.cell.styles.textColor = [127, 29, 29];
+                }
             }
         },
     });
     doc.addPage();
-    addPageHeader(doc, `الموظفون - ${store.name}`, `${store.sid}`);
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(10);
-    doc.text(`الشهر: ${opts.monthLabel} | التقسيم: ${opts.granularityLabel}`, 15, 28);
+    addPageHeader(doc, `تفصيل الموظفين - ${store.name}`, `${store.sid}`);
+    doc.setFillColor(248, 250, 252);
+    doc.rect(0, 20, 297, 190, 'F');
+    doc.setTextColor(55, 65, 81);
+    doc.setFontSize(9);
+    doc.text(`الشهر: ${opts.monthLabel} | التقسيم: ${opts.granularityLabel} | البيانات حتى: ${opts.lastAvailableInMonth}`, 282, 29, { align: 'right' });
 
     const empRows: any[] = [];
     const separatorRows = new Set<number>();
     const firstPeriodRows = new Map<number, boolean>();
-    const EMP_COLS = 12;
+    const EMP_COLS = 11;
     (store.employees || []).forEach((emp) => {
-        const empAch = emp.monthTarget > 0 ? (emp.monthSales / emp.monthTarget) * 100 : 0;
+        const { rows: empFlatRows, activeIndex: empActiveIndex } = pickActiveTargetBucket(emp.bucketBlocks, opts.lastAvailableInMonth);
+        const empActive = empFlatRows[empActiveIndex];
+        const empActiveMetrics = empActive?.metrics || ({} as TargetSplitPdfMetrics);
+        const empExpected = (empActiveMetrics.dailyTargetDynamic ?? empActiveMetrics.target) || 0;
+        const empSales = empActiveMetrics.sales || 0;
+        const empAch = empExpected > 0 ? (empSales / empExpected) * 100 : 0;
+        const empPrev = empActiveIndex > 0 ? empFlatRows[empActiveIndex - 1] : null;
+        const empPrevExpected = empPrev ? (empPrev.metrics.dailyTargetDynamic ?? empPrev.metrics.target) || 0 : 0;
+        const empCarry = empPrev ? empPrevExpected - (empPrev.metrics.sales || 0) : 0;
         let markedFirstPeriod = false;
         const sepIndex = empRows.length;
         separatorRows.add(sepIndex);
         const sepText =
-            `الموظف: ${emp.name} (${emp.id}) — تارجت الشهر: ${fmtN(emp.monthTarget)} — تحقيق الشهر: ${empAch.toFixed(1)}%`;
+            `الموظف: ${emp.name} (${emp.id}) — الفترة الحالية: ${empActive?.bucket.label || '-'} — تارجت الفترة: ${fmtN(empExpected)} — تحقيق الفترة: ${empAch.toFixed(1)}% — ترحيل سابق: ${empCarry >= 0 ? '+' : '-'}${fmtN(Math.abs(empCarry))}`;
         empRows.push([
             {
                 content: sepText,
@@ -994,48 +1100,47 @@ export const generateTargetSplitStorePDF = async (
             },
         ]);
         let firstRowForEmployee = true;
-        (emp.bucketBlocks || []).forEach((block) => {
-            (block.buckets || []).forEach((b) => {
-                const m = b.metrics || ({} as TargetSplitPdfMetrics);
-                const expected = (m.dailyTargetDynamic ?? m.target) || 0;
-                const shortfall = Math.max(0, expected - (m.sales || 0));
-                const need = periodNeed(b.label, shortfall, opts.lastAvailableInMonth);
-                const achPeriodPct =
-                    expected > 0 ? ((m.sales || 0) / expected) * 100 : (m.achievement || 0);
-                const rowIndex = empRows.length;
-                empRows.push([
-                    firstRowForEmployee ? `${emp.name} (${emp.id})` : '↳',
-                    block.label || '-',
-                    b.label,
-                    fmtN(expected),
-                    fmtN(m.sales),
-                    `${achPeriodPct.toFixed(1)}%`,
-                    fmtN(m.avgInv),
-                    `${(m.contributionPct || 0).toFixed(1)}%`,
-                    fmtN(m.items || 0),
-                    fmtN(shortfall),
-                    String(need.days),
-                    fmtN(need.daily),
-                ]);
-                firstRowForEmployee = false;
-                if (!markedFirstPeriod) {
-                    firstPeriodRows.set(rowIndex, achPeriodPct >= 100);
-                    markedFirstPeriod = true;
-                }
-            });
+        empFlatRows.forEach((row, idx) => {
+            const m = row.metrics;
+            const expected = (m.dailyTargetDynamic ?? m.target) || 0;
+            const sales = m.sales || 0;
+            const carry = idx > 0 ? ((empFlatRows[idx - 1].metrics.dailyTargetDynamic ?? empFlatRows[idx - 1].metrics.target) || 0) - (empFlatRows[idx - 1].metrics.sales || 0) : 0;
+            const shortfall = Math.max(0, expected - sales);
+            const need = periodNeed(row.bucket.label, shortfall, opts.lastAvailableInMonth);
+            const achPeriodPct = expected > 0 ? (sales / expected) * 100 : 0;
+            const rowIndex = empRows.length;
+            empRows.push([
+                firstRowForEmployee ? `${emp.name} (${emp.id})` : '↳',
+                row.bucket.label,
+                fmtN(Math.max(0, carry)),
+                carry < 0 ? fmtN(Math.abs(carry)) : '0',
+                fmtN(expected),
+                fmtN(sales),
+                `${achPeriodPct.toFixed(1)}%`,
+                fmtN(m.items || 0),
+                fmtN(shortfall),
+                fmtN(need.daily),
+                targetStatus(sales, expected, row.range.end, opts.lastAvailableInMonth),
+            ]);
+            firstRowForEmployee = false;
+            if (!markedFirstPeriod) {
+                firstPeriodRows.set(rowIndex, achPeriodPct >= 100);
+                markedFirstPeriod = true;
+            }
         });
     });
 
     (doc as any).autoTable({
-        startY: 34,
-        head: [['', 'المرحلة', 'الفترة', 'التارجت', 'المبيعات', 'التحقيق (فترة)', 'ATV', 'المساهمة', 'القطع', 'متبقي الفترة', 'باقي أيام', 'مطلوب يومياً']],
-        body: empRows.length ? empRows : [['-', '-', '-', '0', '0', '0.0%', '0', '0.0%', '0', '0', '0', '0']],
-        styles: { font: 'Amiri', halign: 'center', fontSize: 7.2, cellPadding: 1.4 },
-        headStyles: { fillColor: [70, 85, 110], textColor: 255 },
-        alternateRowStyles: { fillColor: [245, 245, 245] },
+        startY: 36,
+        head: [['الموظف', 'الفترة', 'كسر مرحل', 'نقص من زيادة', 'تارجت الفترة', 'مبيعات', 'تحقيق', 'قطع', 'المتبقي', 'مطلوب يومياً', 'الحالة']],
+        body: empRows.length ? empRows : [['-', '-', '0', '0', '0', '0', '0.0%', '0', '0', '0', '-']],
+        styles: { font: 'Amiri', halign: 'center', fontSize: 7.2, cellPadding: 1.4, lineColor: [229, 231, 235], lineWidth: 0.1 },
+        headStyles: { fillColor: [17, 24, 39], textColor: 255 },
+        alternateRowStyles: { fillColor: [255, 255, 255] },
+        bodyStyles: { fillColor: [248, 250, 252] },
         columnStyles: {
             0: { halign: 'right', cellWidth: 30 },
-            2: { cellWidth: 28 },
+            1: { cellWidth: 28 },
         },
         didParseCell: (data: any) => {
             const r = data.row.index;
@@ -1058,13 +1163,27 @@ export const generateTargetSplitStorePDF = async (
                 data.cell.styles.fillColor = ok ? [220, 252, 231] : [254, 226, 226];
                 data.cell.styles.textColor = ok ? [22, 101, 52] : [127, 29, 29];
             }
-            if (data.column.index === 9 || data.column.index === 11) {
+            if (data.column.index === 2 || data.column.index === 8 || data.column.index === 9) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.textColor = [153, 27, 27];
             }
+            if (data.column.index === 3) {
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.textColor = [22, 101, 52];
+            }
             if (data.column.index === 10) {
                 data.cell.styles.fontStyle = 'bold';
-                data.cell.styles.fillColor = [255, 247, 237];
+                const val = String(data.cell.raw || '');
+                if (val === 'محققة') {
+                    data.cell.styles.fillColor = [220, 252, 231];
+                    data.cell.styles.textColor = [22, 101, 52];
+                } else if (val === 'حالية') {
+                    data.cell.styles.fillColor = [219, 234, 254];
+                    data.cell.styles.textColor = [30, 64, 175];
+                } else {
+                    data.cell.styles.fillColor = [254, 226, 226];
+                    data.cell.styles.textColor = [127, 29, 29];
+                }
             }
         },
     });
