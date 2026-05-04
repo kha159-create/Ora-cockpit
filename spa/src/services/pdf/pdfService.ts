@@ -953,30 +953,34 @@ const drawTargetKpi = (
     doc.text(value, x + w - 7, y + 14, { align: 'right' });
 };
 
-const drawTrendKpi = (
+const drawPeriodMetricCard = (
     doc: any,
     x: number,
     y: number,
     w: number,
-    title: string,
-    value: string,
-    diff: number,
-    suffix = '',
+    label: string,
+    acquisition: number,
+    avgInv: number,
+    customerValue: number,
+    achieved: boolean,
 ) => {
-    const positive = diff >= 0;
-    const trendColor: [number, number, number] = positive ? [22, 163, 74] : [220, 38, 38];
+    const tone: [number, number, number] = achieved ? [22, 163, 74] : [220, 38, 38];
+    const fill: [number, number, number] = achieved ? [240, 253, 244] : [254, 242, 242];
     doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(254, 121, 0);
-    doc.roundedRect(x, y, w, 18, 3, 3, 'FD');
-    doc.setTextColor(107, 114, 128);
-    doc.setFontSize(7.5);
-    doc.text(title, x + w - 6, y + 5.5, { align: 'right' });
-    doc.setTextColor(17, 24, 39);
-    doc.setFontSize(11);
-    doc.text(value, x + w - 6, y + 13.5, { align: 'right' });
-    doc.setTextColor(trendColor[0], trendColor[1], trendColor[2]);
+    doc.setDrawColor(229, 231, 235);
+    doc.roundedRect(x + 1.2, y + 1.2, w, 22, 3, 3, 'S');
+    doc.setFillColor(fill[0], fill[1], fill[2]);
+    doc.roundedRect(x, y, w, 22, 3, 3, 'FD');
+    doc.setFillColor(tone[0], tone[1], tone[2]);
+    doc.roundedRect(x + w - 3, y, 3, 22, 1.5, 1.5, 'F');
+    doc.setTextColor(tone[0], tone[1], tone[2]);
     doc.setFontSize(8);
-    doc.text(`${positive ? '▲' : '▼'} ${fmtN(Math.abs(diff))}${suffix}`, x + 7, y + 12, { align: 'left' });
+    doc.text(label, x + w - 7, y + 6, { align: 'right' });
+    doc.setTextColor(17, 24, 39);
+    doc.setFontSize(7.2);
+    doc.text(`استحواذ ${acquisition.toFixed(1)}%`, x + w - 7, y + 12, { align: 'right' });
+    doc.text(`معدل فاتورة ${fmtN(avgInv)}`, x + w - 7, y + 17, { align: 'right' });
+    doc.text(`قيمة عميل ${fmtN(customerValue)}`, x + w - 7, y + 21, { align: 'right' });
 };
 
 export const generateTargetSplitStorePDF = async (
@@ -996,9 +1000,6 @@ export const generateTargetSplitStorePDF = async (
     const prevStore = storeActiveIndex > 0 ? storeFlatRows[storeActiveIndex - 1] : null;
     const prevExpected = prevStore ? (prevStore.metrics.dailyTargetDynamic ?? prevStore.metrics.target) || 0 : 0;
     const prevCarry = prevStore ? prevExpected - (prevStore.metrics.sales || 0) : 0;
-    const prevStoreMetrics = prevStore?.metrics || ({} as TargetSplitPdfMetrics);
-    const activeStoreAch = activeExpected > 0 ? (activeSales / activeExpected) * 100 : 0;
-    const prevStoreAch = prevExpected > 0 ? ((prevStoreMetrics.sales || 0) / prevExpected) * 100 : 0;
 
     doc.setFillColor(248, 250, 252);
     doc.rect(0, 20, 297, 190, 'F');
@@ -1025,9 +1026,26 @@ export const generateTargetSplitStorePDF = async (
     doc.text(`كسر السابقة: ${fmtN(Math.max(0, prevCarry))}`, 58, 74, { align: 'center' });
     doc.text(`نقص بسبب زيادة: ${fmtN(Math.max(0, -prevCarry))}`, 58, 84, { align: 'center' });
 
-    drawTrendKpi(doc, 198, 99, 78, 'استحواذ الفترة', `${activeStoreAch.toFixed(1)}%`, activeStoreAch - prevStoreAch, '%');
-    drawTrendKpi(doc, 109, 99, 78, 'معدل فاتورة الفترة', fmtN(activeStoreMetrics.avgInv || 0), (activeStoreMetrics.avgInv || 0) - (prevStoreMetrics.avgInv || 0));
-    drawTrendKpi(doc, 20, 99, 78, 'قيمة عميل الفترة', fmtN(activeStoreMetrics.customerValue || 0), (activeStoreMetrics.customerValue || 0) - (prevStoreMetrics.customerValue || 0));
+    const metricCardRows = storeFlatRows.slice(0, 4);
+    const cardGap = 5;
+    const cardW = metricCardRows.length > 0 ? (267 - cardGap * (metricCardRows.length - 1)) / metricCardRows.length : 78;
+    metricCardRows.forEach((row, idx) => {
+        const m = row.metrics;
+        const expected = (m.dailyTargetDynamic ?? m.target) || 0;
+        const sales = m.sales || 0;
+        const acquisition = expected > 0 ? (sales / expected) * 100 : 0;
+        drawPeriodMetricCard(
+            doc,
+            15 + idx * (cardW + cardGap),
+            98,
+            cardW,
+            row.bucket.label,
+            acquisition,
+            m.avgInv || 0,
+            m.customerValue || 0,
+            sales >= expected && expected > 0,
+        );
+    });
 
     const storeRows: any[] = [];
     storeFlatRows.forEach((row, idx) => {
@@ -1055,8 +1073,8 @@ export const generateTargetSplitStorePDF = async (
         startY: 125,
         head: [['المرحلة', 'الفترة', 'كسر مرحل', 'نقص من زيادة', 'تارجت الفترة', 'مبيعات', 'تحقيق', 'معدل فاتورة', 'المتبقي', 'مطلوب يومياً']],
         body: storeRows.length ? storeRows : [['-', '-', '0', '0', '0', '0', '0.0%', '0', '0', '0']],
-        styles: { font: 'Amiri', halign: 'center', fontSize: 8.7, cellPadding: 2.1, lineColor: [254, 121, 0], lineWidth: 0.35, valign: 'middle' },
-        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', lineColor: [254, 121, 0], lineWidth: 0.55 },
+        styles: { font: 'Amiri', halign: 'center', fontSize: 8.7, cellPadding: 2.1, lineColor: [226, 232, 240], lineWidth: 0.25, valign: 'middle' },
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', lineColor: [203, 213, 225], lineWidth: 0.35 },
         alternateRowStyles: { fillColor: [255, 255, 255] },
         bodyStyles: { fillColor: [249, 250, 251], textColor: [31, 41, 55] },
         columnStyles: {
@@ -1067,6 +1085,13 @@ export const generateTargetSplitStorePDF = async (
             6: { fontStyle: 'bold', textColor: [30, 64, 175] },
         },
         didParseCell: (data: any) => {
+            if (data.section === 'body' && Array.isArray(data.row.raw)) {
+                const expected = Number(String(data.row.raw[4] || '0').replace(/[^\d.-]/g, ''));
+                const sales = Number(String(data.row.raw[5] || '0').replace(/[^\d.-]/g, ''));
+                if (Number.isFinite(expected) && expected > 0) {
+                    data.cell.styles.fillColor = sales >= expected ? [240, 253, 244] : [254, 242, 242];
+                }
+            }
             if (data.column.index === 2 || data.column.index === 8 || data.column.index === 9) {
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.textColor = [153, 27, 27];
@@ -1153,8 +1178,8 @@ export const generateTargetSplitStorePDF = async (
         startY: 36,
         head: [['الموظف', 'الفترة', 'كسر مرحل', 'نقص من زيادة', 'تارجت الفترة', 'مبيعات', 'تحقيق', 'معدل فاتورة', 'المتبقي', 'مطلوب يومياً']],
         body: empRows.length ? empRows : [['-', '-', '0', '0', '0', '0', '0.0%', '0', '0', '0']],
-        styles: { font: 'Amiri', halign: 'center', fontSize: 7.7, cellPadding: 1.75, lineColor: [254, 121, 0], lineWidth: 0.35, valign: 'middle' },
-        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', lineColor: [254, 121, 0], lineWidth: 0.55 },
+        styles: { font: 'Amiri', halign: 'center', fontSize: 7.7, cellPadding: 1.75, lineColor: [226, 232, 240], lineWidth: 0.25, valign: 'middle' },
+        headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', lineColor: [203, 213, 225], lineWidth: 0.35 },
         alternateRowStyles: { fillColor: [255, 255, 255] },
         bodyStyles: { fillColor: [249, 250, 251], textColor: [31, 41, 55] },
         columnStyles: {
@@ -1179,6 +1204,13 @@ export const generateTargetSplitStorePDF = async (
                 data.cell.styles.textColor = [15, 23, 42];
                 data.cell.styles.fontSize = 8.5;
                 data.cell.styles.halign = 'right';
+            }
+            if (!isSep && data.section === 'body' && Array.isArray(data.row.raw)) {
+                const expected = Number(String(data.row.raw[4] || '0').replace(/[^\d.-]/g, ''));
+                const sales = Number(String(data.row.raw[5] || '0').replace(/[^\d.-]/g, ''));
+                if (Number.isFinite(expected) && expected > 0) {
+                    data.cell.styles.fillColor = sales >= expected ? [240, 253, 244] : [254, 242, 242];
+                }
             }
             if (firstPeriodRows.has(r)) {
                 const ok = firstPeriodRows.get(r);
