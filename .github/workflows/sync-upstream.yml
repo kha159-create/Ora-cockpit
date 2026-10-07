@@ -3,8 +3,8 @@
 name: Sync Data From Upstream Every 15 Min
 
 on:
-  schedule:
-    - cron: '*/15 * * * *'
+  # Automatic 15-minute sync disabled on 2026-10-08 because upstream JSON files were removed.
+  # Keep manual dispatch available in case the upstream source is restored later.
   workflow_dispatch:
 
 jobs:
