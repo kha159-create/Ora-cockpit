@@ -1,102 +1,51 @@
-# Ora-cockpit — طريقة العمل والرفع
+# ORA Cockpit — تشغيل النسخة المستقلة (أكتوبر 2026)
 
-## المسارات (لا نغيّرها ولا نربط مشاريع جديدة)
+## مصدر البيانات
 
-| الدور | محلي | جت هب |
-|-------|------|--------|
-| **مشروعنا (نشتغل عليه)** | `C:\Users\Orange1\Desktop\Ora-cockpit` | https://github.com/kha159-create/Ora-cockpit |
-| **نأخذ منه التصاميم** | `C:\Users\Orange1\Desktop\cockpit` | — (مرجع فقط، لا ربط) |
-| **المشروع الأصلي (البيانات)** | `C:\Users\Orange1\Desktop\orangettdata222` | https://github.com/ALAAWF2/orange-dashboard |
+التطبيق المنشور من `spa/` يقرأ ملفات JSON المؤرشفة من **المستودع الخاص بالمشروع** فقط عبر `spa/src/services/upstreamData.ts`:
+- `spa/public/management_data.json`
+- `spa/public/employees_data.json`
+- `spa/public/product_analysis_data.json`
+- `spa/public/offers_data.json`
+- `spa/public/stagnant_data.json`
+- `spa/public/products_stock.json`
+- `spa/public/product_mapping.json`
 
-- **Ora-cockpit** = مشروعنا. كل التعديلات والرفع هنا.
-- **cockpit** = مرجع التصميم فقط (Vite + React) — لا ربط Git، نستوحى منه الواجهة.
-- **orangettdata222** = نسخة محلية من المشروع الأصلي (اختياري). **جميع أنواع البيانات** تأتي من الريبو الأصلي عبر الـ workflow كل 15 دقيقة.
+لم يعد التطبيق يعتمد أثناء القراءة على مستودعات خارجية؛ أُزيل Workflow الاستيراد القديم. البيانات محفوظة كما هي، بدون تعديل القيم الأصلية.
 
----
+## تغطية الأرشيف الفعلية (تم تدقيقها بـ GitHub Actions في 18 أكتوبر 2026)
 
-## التقنية — Vite + React (مثل مرجع التصميم) ✓
-- تطبيق الواجهة الرئيسي في **`spa/`**: Vite + React + TypeScript + Tailwind — **بدون صفحات HTML للتنقل**. نفس فكرة مرجع التصميم `cockpit`.
-- **اختيار أي صفحة من القائمة (لوحة التحكم، التقارير، الموظفين، المعارض، المنتجات)** يبقى **داخل React** عبر React Router (HashRouter). لا يحوّل المتصفح إلى ملفات `.html`.
-- نقطة الدخول للتطبيق: فتح **`spa/index.html`** (أو الصفحة المنشورة من الـ build) ثم التنقل عبر الروابط الداخلية — كلها مكونات React.
-- ملفات `.html` في جذر المشروع (مثل reports.html، login.html) للتوافق أو الوصول المباشر فقط؛ التصميم المرجعي مطبّق في الـ SPA.
-- **البيانات**: كلها من الريبو الأصلي ALAAWF2/orange-dashboard (تحديث تلقائي كل 15 دقيقة)، لا نعتمد على بيانات محلية.
-- البناء: `npm run build` من مجلد `spa/` ينتج `spa/dist/`؛ workflow النشر يرفع `spa/dist` إلى gh-pages.
+| مجموعة البيانات | أول سجل | آخر سجل | العدد |
+|---|---|---|---:|
+| `management.sales` | 2024-01-01 | 2026-09-25 | 48,519 |
+| `employees.history` | 2024-01-01 | 2026-09-25 | 285,346 |
+| `product_daily_history` | 2026-03-04 | 2026-05-07 | 305,893 |
 
----
+الحدود الزمنية لا تضمن وجود سجل لكل يوم. **أرشيف تفاصيل المنتجات حسب الموظف** `employee_products_data.json` غير متوفر. يُستخدم سجل المبيعات الفعلي في صفحات الموظفين وتحليل الموظفين، وتبقى مقاييس تفاصيل المنتجات غير المتاحة غير محتسبة.
 
-## الإعداد (تم ✓)
-- **origin** = الـ fork عندك: https://github.com/kha159-create/Ora-cockpit
-- **upstream** = المشروع الأصلي: https://github.com/ALAAWF2/orange-dashboard
-- **الفرع الوحيد الذي نعمل عليه:** **main**. التحديث التلقائي من الريبو الأصلي (كل 15 دقيقة) والرفع اليدوي كلاهما يروحون لنفس البرانش **main** على kha159-create/Ora-cockpit.
+لاختيار منتجات بتاريخ تتوفر فيه تفاصيل تاريخية، استخدم «شهر محدد» واختر أبريل 2026 أو أوائل مايو 2026. بقية الأشهر لا تُنشأ لها معاملات وهمية.
 
-### نشر التحديثات من الريبو الأصلي على الموقع
-- الـ workflow "Sync Data From Upstream Every 15 Min" يسحب ملفات JSON من ALAAWF2/orange-dashboard ويُدخلها كوميت على فرع **main** ثم يرفع (`git push origin main`).
-- عند أي push لـ **main** يغيّر ملفات تحت `spa/**` (بما فيها `spa/public/*.json`)، الـ workflow "Deploy SPA (gh-pages)" يشتغل تلقائياً: يبني الـ SPA ويُنشر الناتج على فرع **gh-pages**. لذلك تحديثات البيانات من الريبو الأصلي تنشر على موقعنا بشكل صحيح وعلى البرانش الصحيح (main للكود والبيانات، gh-pages لمخرجات الموقع).
+## المسار التقني
 
-### إعداد GitHub Pages (مهم لظهور الموقع)
-- الموقع يُخدم من **فرع gh-pages** (وليس من main) لأن الـ SPA يُبنى ويُنشر هناك تلقائياً عند كل push لـ `spa/` على main.
-- في الريبو: **Settings → Pages → Build and deployment → Source:** اختر **Deploy from a branch** ثم:
-  - **Branch:** اختر **gh-pages** (وليس main).
-  - **Folder:** / (root).
-  - احفظ. بعد دقائق الموقع https://kha159-create.github.io/Ora-cockpit/ يعمل ويُظهر تطبيق React.
-- إذا كانت الصفحة مضبوطة على **main** و **/ (root)** فستظهر 404 لأن في جذر main لا يوجد `index.html` (الـ SPA موجود داخل `spa/` ويُنشر إلى gh-pages).
+`spa/src/services/upstreamData.ts` → ملفات `spa/public/*.json` المرفقة مع إصدار الموقع → React → KPIs وتقارير.
 
----
+بيانات Dynamics المباشرة (`api/d365-sales.ts`) مسار مختلف تاريخياً ويمكن استخدامه فقط إذا عاد الاتصال والصلاحيات. توقفه لا يمنع قراءة الأرشيف.
 
-## ترتيب العمل الصحيح: سحب ثم رفع
+`api/daily-report-email.ts` (وهو نموذج API أولي غير مكتمل لإرسال البريد) يستخدم الآن مستودع المشروع الحالي عند قراءة الأرشيف، وليس مستودعاً آخر.
 
-**قبل أي رفع:** اسحب آخر التحديثات من الريبو (إما من origin أو من upstream)، ثم ارفع تعديلاتك. هكذا لا تضيع كوميتات ولا تسبب تعارضات.
+## البناء والنشر
 
-### 1) سحب التحديثات أولاً (من الـ fork أو من الأصلي)
+1. التعديل على `main` داخل هذا المستودع.
+2. GitHub Actions يشغّل `spa/scripts/archive-audit.mjs` قبل البناء.
+3. `npm ci` ثم `npm run build` داخل `spa/`.
+4. يُنشر `spa/dist` على فرع `gh-pages`.
 
-من الـ fork (إذا كان غيرك رفع أو الـ Actions رفعت بيانات):
-```powershell
-cd $env:USERPROFILE\Desktop\Ora-cockpit
-git fetch origin
-git pull origin main
-```
+قاعدة مهمة: لا تحذف ملفات `spa/public/*.json` أو تغيّر أسماءها؛ التطبيق يعتمد عليها.
 
-أو من المشروع الأصلي (إذا حاب تزامن مع orange-dashboard):
-```powershell
-cd $env:USERPROFILE\Desktop\Ora-cockpit
-git fetch upstream
-git merge upstream/main
-# إذا في تعارضات: حلها ثم git add . && git commit
-git push origin main
-```
+## نسخة العودة قبل الفصل
 
-### 2) تعديل الملفات
-عدّل في المشروع كما تريد.
+الفرع: `backup-before-independent-archive-20261018`، عند commit `f47b4e912ecba87abe33a165efb91c20965e2a77`. لا حاجة لاستخدامه ما دام البناء والواجهة يعملان.
 
-### 3) حفظ ورفع التعديلات
-```powershell
-cd $env:USERPROFILE\Desktop\Ora-cockpit
-git add .
-git status
-git commit -m "وصف التعديلات"
-git pull origin main   # سحب أي تحديث حصل أثناء شغلك (اختياري لكن موصى به)
-git push origin main
-```
+## تنبيه أمني للعرض الخارجي
 
-**الخلاصة:** سحب → تعديل → commit → (سحب مرة ثانية إذا طال الوقت) → رفع. بهذا الترتيب تضمن أن الريبو محدث ولا تضيع تغييرات.
-
-### التحقق قبل الرفع (اختياري)
-- من مجلد المشروع: `cd spa && npm run build` — التأكد أن البناء ينتج `spa/dist/` بدون أخطاء.
-- التنقل داخل التطبيق يبقى في React (لوحة التحكم، التقارير، الموظفين، المعارض، المنتجات) دون تحويل إلى صفحات `.html`.
-
----
-
-## إرسال تعديلات للمشروع الأصلي (Pull Request)
-- افتح: https://github.com/kha159-create/Ora-cockpit
-- **Contribute** → **Open pull request** تجاه **ALAAWF2/orange-dashboard**
-- أو: **Pull requests** → **New pull request** (base: ALAAWF2/orange-dashboard)
-
----
-
-## ⚠️ مهم — لا تضيع تعديلاتك
-- **لا تضغط "Discard X commits" على GitHub** — يمسح كوميتاتك من الـ fork.
-- السحب يكون من جهازك: `git fetch` + `git merge` (أو `git pull`) ثم `git push`. لا ترسل شيء للمشروع الأصلي إلا عبر Pull Request.
-- سكربت `sync_fork.bat`: يسحب من upstream ويُدخل التحديثات محلياً (إذا شغّلته أنت). **البيانات** تُحدَّث على GitHub عبر workflow كل 15 دقيقة من الأصلي.
-
----
-المجلد الجاهز للتعديل: `C:\Users\Orange1\Desktop\Ora-cockpit`
+الدخول بالـPIN الموجود في الواجهة مصادقة محلية بسيطة، وليس حماية لبيانات JSON على GitHub Pages. ملفات الأرشيف المنشورة يمكن طلبها مباشرة؛ لهذا لا يُعدّ الموقع مناسباً لنشر معلومات تجارية سرية أو بيانات موظفين حساسة لعامة الناس من دون نقلها إلى Backend محمي.
