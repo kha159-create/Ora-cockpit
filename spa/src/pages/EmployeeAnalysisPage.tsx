@@ -1055,11 +1055,6 @@ export default function EmployeeAnalysisPage() {
 
   return (
     <div className="space-y-5 pb-16">
-      {!empProductsRaw && (
-        <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
-          بيانات المبيعات والأهداف متاحة من الأرشيف. تفاصيل أصناف المنتجات لكل موظف غير متوفرة في ملف البيانات المحفوظ، لذا لا تُحتسب مؤشرات ربط المنتجات لحين توفر المصدر.
-        </div>
-      )}
       <div className="relative overflow-hidden rounded-2xl border border-orange-500/30 bg-gradient-to-br from-neutral-900 via-neutral-900 to-orange-700 p-5 text-white shadow-xl">
         <div className="relative flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
