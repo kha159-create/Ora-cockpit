@@ -8,6 +8,8 @@ export type LocalUser = {
 
 // Copied from repo root users.js (keep in sync)
 export const USERS: Record<string, { pin: string; role: UserRole; storeId?: string }> = {
+  // Presentation-only account: read-only auditor UI, no target administration.
+  "test": { pin: "1234", role: "Auditor" },
   "Sales Manager": { pin: "6587", role: "Admin" },
   "المنطقة الغربية": { pin: "1478", role: "Manager" },
   "اماني عسيري": { pin: "3698", role: "Manager" },
