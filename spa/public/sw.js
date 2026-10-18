@@ -1,10 +1,10 @@
 /* Service Worker - Orange Cockpit SPA
- * - cache-first for static assets (JS/CSS/fonts/icons)
  * - network-first for HTML (to get latest app shell)
+ * - never cache versioned JS/CSS bundles, to avoid stale chunks after deployment
  * - NEVER cache JSON (data must stay fresh)
  */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const STATIC_CACHE = `ora-spa-static-${CACHE_VERSION}`;
 
 // Minimal pre-cache (Vite will add hashed assets at runtime)
@@ -36,6 +36,14 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   const isSameOrigin = url.origin === self.location.origin;
   const pathname = url.pathname;
+
+  // Vite uses content-hashed JS/CSS filenames. Cache-first can keep a stale entry
+  // bundle while GitHub Pages has already removed its old lazy-loaded chunks.
+  // Always request code assets from the network for consistent deployments.
+  if (isSameOrigin && /\.(?:js|mjs|css|wasm)$/i.test(pathname)) {
+    event.respondWith(fetch(req, { cache: 'no-store' }));
+    return;
+  }
 
   // Never cache JSON (keep data fresh; avoid cache-busting explosion)
   if (isSameOrigin && pathname.endsWith('.json')) {
