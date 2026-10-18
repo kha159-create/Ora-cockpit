@@ -54,15 +54,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // 1) جلب البيانات (نفس مصدر التطبيق)
-    const UPSTREAM = 'https://raw.githubusercontent.com/ALAAWF2/orange-dashboard/main';
+    // 1) جلب البيانات من نسختنا المؤرشفة داخل مستودع ORA فقط
+    const ARCHIVE_BASE = 'https://raw.githubusercontent.com/kha159-create/Ora-cockpit/main';
     const [mgmtRes, empRes] = await Promise.all([
-      fetch(`${UPSTREAM}/management_data.json`),
-      fetch(`${UPSTREAM}/employees_data.json`),
+      fetch(`${ARCHIVE_BASE}/management_data.json`),
+      fetch(`${ARCHIVE_BASE}/employees_data.json`),
     ]);
     if (!mgmtRes.ok || !empRes.ok) {
       res.status(502).json({
-        error: 'Upstream data fetch failed',
+        error: 'Archived data fetch failed',
         management: mgmtRes.status,
         employees: empRes.status,
       });
