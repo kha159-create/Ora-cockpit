@@ -10,7 +10,7 @@ import { generateProductSummaryPDF, generateProductValueAnalysisPDF } from '../s
 import { calendarYesterday, mtdRangeThroughYesterday, toLocalYMD } from '../utils/mtdDateRange';
 import OffersPage from './OffersPage';
 
-type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest' | 'custom';
+type PeriodMode = 'mtd' | '7d' | '14d' | '30d' | 'yest' | 'month' | 'custom';
 type RepSearchMode = 'sales_stock' | 'stock_only';
 type RepStockStatus = 'all' | 'in_stock' | 'low' | 'out';
 type RepViewMode = 'product' | 'store' | 'month';
@@ -42,11 +42,16 @@ function formatSAR(val: number) {
   return val.toLocaleString('en-US', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 });
 }
 
-function getDateRangeForMode(m: PeriodMode, customStart?: string, customEnd?: string): { start: string; end: string } {
+function getDateRangeForMode(m: PeriodMode, customStart?: string, customEnd?: string, chosenMonth?: string): { start: string; end: string } {
   const nowReal = new Date();
   const yest = calendarYesterday(nowReal);
   const yestYMD = toLocalYMD(yest);
   if (m === 'yest') return { start: yestYMD, end: yestYMD };
+  if (m === 'month' && chosenMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(chosenMonth)) {
+    const [year, month] = chosenMonth.split('-').map(Number);
+    const endDay = new Date(year, month, 0).getDate();
+    return { start: `${chosenMonth}-01`, end: `${chosenMonth}-${String(endDay).padStart(2, '0')}` };
+  }
   if (m === 'custom' && customStart && customEnd) {
     return customStart <= customEnd
       ? { start: customStart, end: customEnd }
@@ -271,6 +276,10 @@ export default function ProductsPage() {
   const [productMapping, setProductMapping] = useState<Record<string, any>>({});
 
   const [mode, setMode] = useState<PeriodMode>('mtd');
+  const [chosenMonth, setChosenMonth] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
@@ -339,7 +348,7 @@ export default function ProductsPage() {
   }, []);
 
   // Reset page to 1 when filters change
-  useEffect(() => { setCurrentPage(1); }, [mode, manager, city, store, search, selectedCategory, priceMin, priceMax, customStart, customEnd]);
+  useEffect(() => { setCurrentPage(1); }, [mode, chosenMonth, manager, city, store, search, selectedCategory, priceMin, priceMax, customStart, customEnd]);
 
   const effectiveManager = useMemo(() => {
     if (isAdminOrAuditor(user?.role)) return manager;
@@ -416,8 +425,9 @@ export default function ProductsPage() {
       });
     }
 
-    const dateRange = getDateRangeForMode(mode, customStart, customEnd);
-    const isCustomMode = mode === 'custom';
+    const dateRange = getDateRangeForMode(mode, customStart, customEnd, chosenMonth);
+    // Month selection must aggregate product_daily_history, not reuse rolling MTD data.
+    const isCustomMode = mode === 'custom' || mode === 'month';
     const pData = !isCustomMode ? (raw.periods?.[mode] || null) : null;
     const dailyHistory: Record<string, any[]> = raw.product_daily_history || {};
     const pDataRange = parsePeriodDateRange(pData?.date_range);
@@ -781,7 +791,7 @@ export default function ProductsPage() {
       storeValueAnalysisReports,
       selectedStoreLabel,
     };
-  }, [city, customEnd, customStart, effectiveManager, mgmt, mode, priceMax, priceMin, productId, raw, search, selectedCategory, store, user?.name, user?.role]);
+  }, [chosenMonth, city, customEnd, customStart, effectiveManager, mgmt, mode, priceMax, priceMin, productId, raw, search, selectedCategory, store, user?.name, user?.role]);
 
   const expandedRep = useMemo(() => {
     if (!derived || !raw) return null;
@@ -1092,6 +1102,7 @@ export default function ProductsPage() {
             <PeriodButton active={mode === '14d'} label="14 يوم" onClick={() => setMode('14d')} />
             <PeriodButton active={mode === '30d'} label="30 يوم" onClick={() => setMode('30d')} />
             <PeriodButton active={mode === 'yest'} label="⏳ أمس" onClick={() => setMode('yest')} />
+            <PeriodButton active={mode === 'month'} label="شهر محدد" onClick={() => setMode('month')} />
             <PeriodButton active={mode === 'custom'} label="📆 فترة مخصصة" onClick={() => setMode('custom')} />
           </div>
 
@@ -1127,6 +1138,19 @@ export default function ProductsPage() {
           </button>
           </div>
         </div>
+        {mode === 'month' && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <label htmlFor="ora-products-month" className="text-sm font-semibold text-neutral-700">اختر الشهر والسنة</label>
+            <input
+              id="ora-products-month"
+              type="month"
+              className="input"
+              value={chosenMonth}
+              onChange={(e) => setChosenMonth(e.target.value)}
+              max={new Date().toISOString().slice(0, 7)}
+            />
+          </div>
+        )}
         {mode === 'custom' && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <input
