@@ -10,7 +10,7 @@ function repoRootUrl(path: string) {
   return `${repoPrefix}${path}`;
 }
 
-const UPSTREAM_BASE = 'https://raw.githubusercontent.com/ALAAWF2/orange-dashboard/main';
+// The archive is owned and served by this repository. No upstream GitHub dependency.
 
 // ===== Cache with staleness tracking =====
 interface CacheEntry<T = any> {
@@ -72,38 +72,16 @@ async function fetchJson<T>(file: string, forceRefresh = false): Promise<T> {
   }
 
   const promise = (async () => {
-    const ts = Date.now();
-    const upstreamUrl = `${UPSTREAM_BASE}/${file}?t=${ts}`;
-    const localUrl = repoRootUrl(`${file}?t=${ts}`);
-
-    // Try upstream first (with retry)
-    try {
-      const res = await fetchWithRetry(upstreamUrl, 2, 1000);
-      const data = (await res.json()) as T;
-      // Store resolved data + timestamp
-      if (CACHE[file]) {
-        CACHE[file].resolvedAt = Date.now();
-        CACHE[file].data = data;
-      }
-      return data;
-    } catch {
-      // ignore upstream failure
+    const localUrl = repoRootUrl(file);
+    // Load only this project's own published JSON snapshots. The browser cache
+    // is bypassed but stale snapshots are never replaced by third-party data.
+    const response = await fetchWithRetry(localUrl, 1, 500);
+    const data = (await response.json()) as T;
+    if (CACHE[file]) {
+      CACHE[file].resolvedAt = Date.now();
+      CACHE[file].data = data;
     }
-
-    // Fallback: local (with retry)
-    try {
-      const res2 = await fetchWithRetry(localUrl, 1, 500);
-      const data = (await res2.json()) as T;
-      if (CACHE[file]) {
-        CACHE[file].resolvedAt = Date.now();
-        CACHE[file].data = data;
-      }
-      return data;
-    } catch {
-      // ignore
-    }
-
-    throw new Error(`فشل تحميل ${file} — تحقق من اتصال الإنترنت أو الريبو الأصلي`);
+    return data;
   })();
 
   CACHE[file] = { promise };
@@ -144,40 +122,13 @@ export function loadEmployeeProductsData(forceRefresh = false) {
   return fetchJson<any>('employee_products_data.json', forceRefresh);
 }
 
-// Load Accurate Stock Data from ALAAWF2 Catalog
-export async function loadStockData(forceRefresh = false) {
-  const fileKey = 'ALAAWF2_products.json';
-  if (!forceRefresh && CACHE[fileKey] && (Date.now() - CACHE[fileKey].resolvedAt! < CACHE_MAX_AGE_MS)) {
-    return CACHE[fileKey].data;
-  }
-
-  const promise = (async () => {
-    try {
-      const ts = Date.now();
-      const url = `https://raw.githubusercontent.com/ALAAWF2/catalog/main/products.json?t=${ts}`;
-      const res = await fetch(url, { cache: 'no-cache' });
-      if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
-      const data = await res.json();
-
-      if (CACHE[fileKey]) {
-        CACHE[fileKey].resolvedAt = Date.now();
-        CACHE[fileKey].data = data;
-      }
-      return data;
-    } catch (err) {
-      console.warn('ALAAWF2 Catalog fetch failed, falling back to local products_stock.json', err);
-      // Fallback relies on existing fetchJson logic
-      return await fetchJson<any>('products_stock.json', forceRefresh);
-    }
-  })();
-
-  CACHE[fileKey] = { promise };
-  promise.catch(() => { delete CACHE[fileKey]; });
-  return promise;
+// Stock snapshot is published alongside the SPA, not fetched from another repository.
+export function loadStockData(forceRefresh = false) {
+  return fetchJson<any>('products_stock.json', forceRefresh);
 }
 
 export async function loadProductMapping(forceRefresh = false) {
-  // 1) ابدأ من ملف product_mapping.json (من الريبو الأصلي أو النسخة المحلية)
+  // 1) ابدأ من ملف product_mapping.json المحفوظ محلياً
   let base: any[] = [];
   try {
     const raw = await fetchJson<any[]>('product_mapping.json', forceRefresh);
@@ -198,7 +149,7 @@ export async function loadProductMapping(forceRefresh = false) {
     if (a) byAlias.set(a, m);
   }
 
-  // 2) عزّز الربط من ملف الكاتالوج products.json (stockRaw من ALAAWF2/catalog)
+  // 2) عزّز الربط من ملف المخزون المحلي products_stock.json
   try {
     const stockRaw: any[] = await loadStockData(forceRefresh);
     if (Array.isArray(stockRaw)) {
