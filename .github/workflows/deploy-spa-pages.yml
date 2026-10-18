@@ -39,6 +39,10 @@ jobs:
         working-directory: spa
         run: npm ci
 
+      - name: Verify local archive and report date coverage
+        working-directory: spa
+        run: node --max-old-space-size=4096 scripts/archive-audit.mjs
+
       - name: Build
         working-directory: spa
         env:
