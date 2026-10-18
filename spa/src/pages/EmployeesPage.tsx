@@ -686,13 +686,25 @@ export default function EmployeesPage() {
   const excelDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    Promise.all([loadEmployeesData(), loadManagementData(), loadEmployeeProductsData()])
-      .then(([e, m, ep]) => {
+    let mounted = true;
+    // Employee products are optional legacy data; do not block the employee sales page
+    // when employee_products_data.json is missing from the published snapshot.
+    Promise.all([loadEmployeesData(), loadManagementData()])
+      .then(([e, m]) => {
+        if (!mounted) return;
         setEmpRaw(e);
         setMgmtRaw(m);
-        setEmpProductsRaw(ep);
+        setErr(null);
       })
-      .catch((e) => setErr(e?.message || String(e)));
+      .catch((e) => {
+        if (mounted) setErr(e?.message || String(e));
+      });
+
+    loadEmployeeProductsData()
+      .then((ep) => { if (mounted) setEmpProductsRaw(ep); })
+      .catch(() => { /* Optional product-level employee dataset is unavailable. */ });
+
+    return () => { mounted = false; };
   }, []);
 
   const [searchParams, setSearchParams] = useSearchParams();
