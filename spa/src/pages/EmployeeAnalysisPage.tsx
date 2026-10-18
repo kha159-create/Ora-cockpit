@@ -415,14 +415,25 @@ export default function EmployeeAnalysisPage() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   useEffect(() => {
-    Promise.all([loadEmployeesData(), loadManagementData(), loadEmployeeProductsData()]).then(([e, m, ep]) => {
-      setEmpRaw(e);
-      setMgmt(m);
-      setEmpProductsRaw(ep);
-      const r = mtdRangeThroughYesterday(new Date());
-      setCustomStart(r.start);
-      setCustomEnd(r.end);
-    });
+    let mounted = true;
+    // Keep primary employee KPIs available even when the optional product-level
+    // employee snapshot has been removed from upstream / GitHub Pages.
+    Promise.all([loadEmployeesData(), loadManagementData()])
+      .then(([e, m]) => {
+        if (!mounted) return;
+        setEmpRaw(e);
+        setMgmt(m);
+        const r = mtdRangeThroughYesterday(new Date());
+        setCustomStart(r.start);
+        setCustomEnd(r.end);
+      })
+      .catch((error) => { console.error('Failed to load employee analysis core data', error); });
+
+    loadEmployeeProductsData()
+      .then((ep) => { if (mounted) setEmpProductsRaw(ep); })
+      .catch(() => { /* This legacy dataset is optional. */ });
+
+    return () => { mounted = false; };
   }, []);
 
   const applyDateMode = (nextMode: DatePeriodKey) => {
